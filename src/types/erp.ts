@@ -137,6 +137,8 @@ export interface AracBakim {
   mevcutKm: number;
   kmBakimAraligi?: number;
   yagBakimKm?: number;
+  sonYagBakimKm?: number;
+  yagBakimKmAraligi?: number;
   muayeneTarihi: string;
   sigortaTarihi: string;
   durum: 'AKTIF' | 'PASIF' | 'BAKIMDA';
@@ -264,7 +266,7 @@ export interface StokKart {
   kategori: string;
   birim: string;
   kritikSeviye: number;
-  durum: 'AKTIF' | 'PASIF';
+  durum: 'AKTIF' | 'PASIF' | 'ONAY BEKLİYOR';
   aciklama: string;
   miktar?: number;
   tarih?: string;

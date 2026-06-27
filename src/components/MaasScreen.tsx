@@ -115,10 +115,11 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
     }
 
     const baseWage = p.maas;
-    const dailyWageRate = baseWage / 30;
-    const totalBaseHakedis = hakedisDays * dailyWageRate;
+    const katsayi = hakedisDays / daysInMonth;
+    const totalBaseHakedis = katsayi * baseWage;
 
-    const hourlyOvertimeRate = (dailyWageRate / 7.5) * 1.5;
+    const hourlyWage = baseWage / daysInMonth / 7.5;
+    const hourlyOvertimeRate = hourlyWage * 1.5;
     const totalOvertimeHakedis = totalOvertimeHours * hourlyOvertimeRate;
 
     const cutAmount = avansCuts[p.id] || 0;
@@ -471,33 +472,29 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
                   <div className="border border-slate-200 p-3 rounded-xl bg-slate-50/50">
                     <span className="font-extrabold text-[#8B1E1E] tracking-wider uppercase block mb-1">1. MUHASEBE</span>
                     <span className="text-[10px] text-slate-500 block mb-6">Finansal hakediş ve banka mutabakatı</span>
-                    <div className="h-0.5 bg-slate-305 w-24 mx-auto mb-2"></div>
-                    <span className="text-[10px] font-bold text-slate-800 block">Ayşe Demir</span>
-                    <span className="text-[8px] text-slate-400 italic">Bordro Sorumlusu</span>
+                    <div className="h-10 border-b border-dashed border-slate-200 w-24 mx-auto mb-2"></div>
+                    <span className="text-[10px] font-bold text-slate-800 block">Bordro Sorumlusu</span>
                   </div>
 
                   <div className="border border-slate-200 p-3 rounded-xl bg-slate-50/50">
                     <span className="font-extrabold text-[#1E4E78] tracking-wider uppercase block mb-1">2. İDARİ İŞLER</span>
                     <span className="text-[10px] text-slate-500 block mb-6">Personel Sicil ve İK Onayı</span>
-                    <div className="h-0.5 bg-slate-305 w-24 mx-auto mb-2"></div>
-                    <span className="text-[10px] font-bold text-slate-800 block">Nuri Mutlu</span>
-                    <span className="text-[8px] text-slate-400 italic">İdari İşler Şefi</span>
+                    <div className="h-10 border-b border-dashed border-slate-200 w-24 mx-auto mb-2"></div>
+                    <span className="text-[10px] font-bold text-slate-800 block">İdari İşler Şefi</span>
                   </div>
 
                   <div className="border border-slate-200 p-3 rounded-xl bg-slate-50/50">
                     <span className="font-extrabold text-[#1E4E78] tracking-wider uppercase block mb-1">3. ŞANTİYE ŞEFİ</span>
                     <span className="text-[10px] text-slate-500 block mb-6">Saha organizasyonu ve puantaj kontrol</span>
-                    <div className="h-0.5 bg-slate-305 w-24 mx-auto mb-2"></div>
-                    <span className="text-[10px] font-bold text-slate-800 block">Ayhan Yılmaz</span>
-                    <span className="text-[8px] text-slate-400 italic">Şantiye Şefi</span>
+                    <div className="h-10 border-b border-dashed border-slate-200 w-24 mx-auto mb-2"></div>
+                    <span className="text-[10px] font-bold text-slate-800 block">Şantiye Şefi</span>
                   </div>
 
                   <div className="border border-slate-150 p-3 rounded-xl bg-slate-50">
                     <span className="font-extrabold text-[#8B1E1E] tracking-wider uppercase block mb-1">4. PROJE MÜDÜRÜ</span>
                     <span className="text-[10px] text-slate-500 block mb-6">Nihai Mali Hak Onaylama İmzası</span>
-                    <div className="h-0.5 bg-slate-305 w-24 mx-auto mb-2"></div>
-                    <span className="text-[10px] font-bold text-slate-800 block">Kuzey Samet Atak</span>
-                    <span className="text-[8px] text-slate-400 italic">Proje Müdürü</span>
+                    <div className="h-10 border-b border-dashed border-slate-200 w-24 mx-auto mb-2"></div>
+                    <span className="text-[10px] font-bold text-slate-800 block">Proje Müdürü</span>
                   </div>
 
                 </div>

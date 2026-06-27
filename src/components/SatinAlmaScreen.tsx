@@ -13,23 +13,11 @@ import { db } from '../lib/firebase';
 import { doc, deleteDoc } from 'firebase/firestore';
 
 const maskName = (name?: string): string => {
-  if (!name) return '';
-  const parts = name.trim().split(/\s+/);
-  return parts.map(part => {
-    if (part.length <= 1) return part;
-    return part[0] + '*'.repeat(part.length - 1);
-  }).join(' ');
+  return name || '';
 };
 
 const maskSignature = (sig?: string): string => {
-  if (!sig) return '';
-  const index = sig.indexOf('(');
-  if (index !== -1) {
-    const namePart = sig.substring(0, index).trim();
-    const datePart = sig.substring(index);
-    return `${maskName(namePart)} ${datePart}`;
-  }
-  return maskName(sig);
+  return sig || '';
 };
 
 

@@ -54,6 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { key: "satin_alma", label: "Satın Alma Talep", icon: ShoppingCart },
         { key: "cari_stok", label: "Cari ve Stok Kartları", icon: Package },
         { key: "evrak_aktarimi", label: "AI Belge Aktarımı", icon: BookOpen },
+        { key: "kibar_hakedis", label: "Kibar Hakediş", icon: CreditCard },
       ]
     },
     {
@@ -94,6 +95,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         // Check custom restricted pages
         if (kisitliSayfalar && kisitliSayfalar.includes(item.key)) {
           return false;
+        }
+
+        // Restrict kibar_hakedis
+        if (item.key === 'kibar_hakedis') {
+          const emailLower = currentUser?.email?.toLowerCase();
+          return emailLower === 'sametatak9@gmail.com' || emailLower === 'santiye@kibritci.com';
         }
 
         // Restrict sayfa yetkilendirme to only sametatak9@gmail.com and santiye@kibritci.com
@@ -224,7 +231,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       setActiveTab(item.key);
                       if (onClose) onClose();
                     }}
-                    className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-all duration-200 group text-left cursor-pointer ${
+                    className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-[13px] font-semibold transition-all duration-200 group text-left cursor-pointer ${
                       isActive
                         ? "bg-blue-50 text-blue-700 border-l-4 border-blue-600 shadow-xs font-semibold"
                         : "text-slate-650 hover:bg-slate-50 hover:text-slate-900"

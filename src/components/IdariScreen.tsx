@@ -34,6 +34,8 @@ interface IdariScreenProps {
   epostaGonderimleri: EpostaGonderim[];
   setEpostaGonderimleri: React.Dispatch<React.SetStateAction<EpostaGonderim[]>>;
   personeller: Personel[];
+  aracKmLoglari: any[];
+  setAracKmLoglari: (updater: any) => void;
   yoklamalar?: any;
 }
 
@@ -49,6 +51,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   stokKartlar, setStokKartlar,
   epostaGonderimleri, setEpostaGonderimleri,
   personeller,
+  aracKmLoglari,
+  setAracKmLoglari,
   yoklamalar = {}
 }) => {
 
@@ -60,17 +64,14 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [selectedAracForPdf, setSelectedAracForPdf] = useState<AracBakim | null>(null);
   const [showKampKrokiModal, setShowKampKrokiModal] = useState(false);
 
-  const [aracKmLoglari, setAracKmLoglari] = useState([
-    { id: 'log_1', tarih: '2026-06-15', plaka: '34 KBR 888', surucu: 'Ayhan Yılmaz', sabahKm: 41200, aksamKm: 41350, fark: 150 },
-    { id: 'log_2', tarih: '2026-06-16', plaka: '34 KBR 888', surucu: 'Ayhan Yılmaz', sabahKm: 41350, aksamKm: 41580, fark: 230 },
-    { id: 'log_3', tarih: '2026-06-17', plaka: '06 KBR 101', surucu: 'Mehmet Kaplan', sabahKm: 85400, aksamKm: 85920, fark: 520 },
-  ]);
+
 
   const [formKmPlaka, setFormKmPlaka] = useState("34 KBR 888");
   const [formKmTarih, setFormKmTarih] = useState(new Date().toISOString().split('T')[0]);
   const [formKmDriver, setFormKmDriver] = useState("Ayhan Yılmaz");
   const [formSabahKm, setFormSabahKm] = useState(41580);
   const [formAksamKm, setFormAksamKm] = useState(0);
+  const [formKmAciklama, setFormKmAciklama] = useState("");
 
   const [editingKmLog, setEditingKmLog] = useState<any | null>(null);
 
@@ -135,7 +136,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       surucu: formKmDriver,
       sabahKm: Number(formSabahKm),
       aksamKm: Number(formAksamKm),
-      fark: diff
+      fark: diff,
+      aciklama: formKmAciklama.trim() || 'Sabah-Akşam seyrüsefer kaydı.'
     };
 
     setAracKmLoglari(prev => [newLog, ...prev]);
@@ -157,6 +159,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
 
     setFormSabahKm(Number(formAksamKm));
     setFormAksamKm(0);
+    setFormKmAciklama("");
     alert("Sabah - Akşam kilometre takibi kaydedildi, araç sayacı güncellendi.");
   };
 
@@ -834,6 +837,177 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [editingCariId, setEditingCariId] = useState<string | null>(null);
   const [editingStokId, setEditingStokId] = useState<string | null>(null);
   const [historyModalData, setHistoryModalData] = useState<{ type: 'cari' | 'stok'; id: string; name: string } | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyList, setHistoryList] = useState<any[]>([]);
+
+  const loadHistoryData = async (type: 'cari' | 'stok', id: string, name: string, code: string) => {
+    setHistoryLoading(true);
+    setHistoryList([]);
+    try {
+      const logs: any[] = [];
+
+      // 1. Initial creation entry
+      logs.push({
+        id: 'init',
+        type: 'KART AÇILIŞI',
+        title: 'Kart Tanımlama ve Açılış Kaydı',
+        desc: `"${name}" (${code || 'KODSUZ'}) kartı sisteme tanımlandı ve açılış kaydı tamamlandı.`,
+        date: 'İlk Kayıt',
+        badgeColor: 'bg-emerald-100 text-emerald-800'
+      });
+
+      if (type === 'cari') {
+        // Fetch Purchases (satinAlmaTalepleri)
+        const purchasesSnap = await getDocs(collection(db, 'satinAlmaTalepleri'));
+        purchasesSnap.forEach(docSnap => {
+          const data = docSnap.data();
+          if (data.cariFirma?.toLowerCase() === name.toLowerCase()) {
+            logs.push({
+              id: docSnap.id,
+              type: 'SATIN ALMA',
+              title: `Satın Alma Talebi: ${data.saId || 'SA-KOD'}`,
+              desc: `${data.aciklama || 'Açıklama belirtilmedi.'} (${data.kalemler?.length || 0} kalem malzeme). Onay: ${data.onayDurumu}`,
+              date: data.tarih || '',
+              badgeColor: 'bg-blue-100 text-blue-800'
+            });
+          }
+        });
+
+        // Fetch Waybills (irsaliyeler)
+        const waybillsSnap = await getDocs(collection(db, 'irsaliyeler'));
+        waybillsSnap.forEach(docSnap => {
+          const data = docSnap.data();
+          if (data.firma?.toLowerCase() === name.toLowerCase()) {
+            logs.push({
+              id: docSnap.id,
+              type: 'İRSALİYE',
+              title: `İrsaliye Girişi: ${data.irsaliyeNo || 'İRS-KOD'}`,
+              desc: `Şantiyeye teslim alınan irsaliye. Durum: ${data.onayDurumu}`,
+              date: data.tarih || '',
+              badgeColor: 'bg-amber-100 text-amber-800'
+            });
+          }
+        });
+
+        // Fetch Invoices (faturalar)
+        const invoicesSnap = await getDocs(collection(db, 'faturalar'));
+        invoicesSnap.forEach(docSnap => {
+          const data = docSnap.data();
+          if (data.cariUnvan?.toLowerCase() === name.toLowerCase()) {
+            logs.push({
+              id: docSnap.id,
+              type: 'FATURA',
+              title: `Fatura Kaydı: ${data.faturaNo || 'FAT-KOD'}`,
+              desc: `Matrah: ₺${data.toplamTutar?.toLocaleString()} + KDV. Üçlü mutabakat: ${data.durum}`,
+              date: data.tarih || '',
+              badgeColor: 'bg-purple-100 text-purple-800'
+            });
+          }
+        });
+
+        // Fetch Lojman stays (kampKayitlari)
+        const staysSnap = await getDocs(collection(db, 'kampKayitlari'));
+        staysSnap.forEach(docSnap => {
+          const data = docSnap.data();
+          if (data.calistigiFirma?.toLowerCase() === name.toLowerCase()) {
+            logs.push({
+              id: docSnap.id,
+              type: 'LOJMAN KONAKLAMA',
+              title: `Taşeron Konaklama: ${data.personelIsim}`,
+              desc: `${data.girisTarihi} tarihli lojman oda yerleşimi (${data.durum === 'AKTIF' ? 'Hala Konaklıyor' : 'Ayrıldı'}).`,
+              date: data.girisTarihi || '',
+              badgeColor: 'bg-teal-100 text-teal-800'
+            });
+          }
+        });
+
+      } else {
+        // Stok type
+        // Fetch Purchases (satinAlmaTalepleri)
+        const purchasesSnap = await getDocs(collection(db, 'satinAlmaTalepleri'));
+        purchasesSnap.forEach(docSnap => {
+          const data = docSnap.data();
+          const hasItem = data.kalemler?.some((k: any) => 
+            k.urunAdi?.toLowerCase() === name.toLowerCase() || 
+            k.stokKartId === id
+          );
+          if (hasItem) {
+            logs.push({
+              id: docSnap.id,
+              type: 'SATIN ALMA',
+              title: `Satın Alma Talebi: ${data.saId || 'SA-KOD'}`,
+              desc: `Bu malzemeden satın alma talebi oluşturuldu. Firma: ${data.cariFirma}`,
+              date: data.tarih || '',
+              badgeColor: 'bg-blue-100 text-blue-800'
+            });
+          }
+        });
+
+        // Fetch Waybills (irsaliyeler)
+        const waybillsSnap = await getDocs(collection(db, 'irsaliyeler'));
+        waybillsSnap.forEach(docSnap => {
+          const data = docSnap.data();
+          const hasItem = data.kalemler?.some((k: any) => 
+            k.urunAdi?.toLowerCase() === name.toLowerCase() || 
+            k.stokKartId === id
+          );
+          if (hasItem) {
+            logs.push({
+              id: docSnap.id,
+              type: 'İRSALİYE GİRİŞİ',
+              title: `Depoya Giriş: ${data.irsaliyeNo || 'İRS-KOD'}`,
+              desc: `Şantiyeye teslim alınarak depoya girdi. Firma: ${data.firma}`,
+              date: data.tarih || '',
+              badgeColor: 'bg-amber-100 text-amber-800'
+            });
+          }
+        });
+
+        // Fetch Zimmers/Zimmetler (personelZimmetleri)
+        const zimmetsSnap = await getDocs(collection(db, 'personelZimmetleri'));
+        zimmetsSnap.forEach(docSnap => {
+          const data = docSnap.data();
+          if (data.stockId === id || data.urunAdi?.toLowerCase() === name.toLowerCase()) {
+            logs.push({
+              id: docSnap.id,
+              type: 'PERSONEL ZİMMET',
+              title: `Zimmetlendi: ${data.personelName || 'Personel'}`,
+              desc: `Depodan ${data.miktar} ${data.birim} malzeme personele teslim edildi. (${data.durum || 'ZİMMETLİ'})`,
+              date: data.tarih || '',
+              badgeColor: 'bg-indigo-100 text-indigo-800'
+            });
+          }
+        });
+      }
+
+      // Sort logs by date descending (push 'İlk Kayıt' to end)
+      logs.sort((a, b) => {
+        if (a.date === 'İlk Kayıt') return 1;
+        if (b.date === 'İlk Kayıt') return -1;
+        return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
+      });
+
+      setHistoryList(logs);
+    } catch (e) {
+      console.error("Geçmiş veri okuma hatası:", e);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (historyModalData) {
+      let code = '';
+      if (historyModalData.type === 'cari') {
+        const matched = cariKartlar.find(c => c.id === historyModalData.id);
+        if (matched) code = matched.kod;
+      } else {
+        const matched = stokKartlar.find(s => s.id === historyModalData.id);
+        if (matched) code = matched.stokKodu;
+      }
+      loadHistoryData(historyModalData.type, historyModalData.id, historyModalData.name, code);
+    }
+  }, [historyModalData]);
 
   const handleCreateCari = () => {
     if (!newCariUnvan) return;
@@ -963,6 +1137,16 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 <span>⏱️ Sabah / Akşam KM Girişleri</span>
                 <span className="bg-amber-100 text-amber-800 text-[9px] rounded-full px-1.5 py-0.5">Fark Raporlama</span>
               </button>
+              <button
+                onClick={() => setAracSubTab('bakim_raporu')}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition duration-150 cursor-pointer ${
+                  aracSubTab === 'bakim_raporu' 
+                    ? 'bg-[#2563EB] text-white shadow-sm' 
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                🔧 Bakım Sayaç Raporu
+              </button>
             </div>
             
             <span className="text-[10px] text-slate-400 font-mono tracking-tight font-medium mr-2">
@@ -970,7 +1154,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
             </span>
           </div>
 
-          {aracSubTab === 'liste' ? (
+          {aracSubTab === 'liste' && (
             <div className="flex-1 flex gap-6 overflow-hidden">
               
               {/* Creator form drawer */}
@@ -1186,7 +1370,9 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 </div>
               </div>
             </div>
-          ) : (
+          )}
+
+          {aracSubTab === 'km_takip' && (
             
             /* morning/evening km log tracker */
             <div className="flex-1 flex gap-6 overflow-hidden">
@@ -1264,6 +1450,17 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     </div>
                   </div>
 
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Sefer Açıklaması / Detay *</label>
+                    <input 
+                      type="text"
+                      className="w-full text-xs mt-1 p-2 bg-slate-50 border border-[#e2e8f0] focus:outline-none focus:border-blue-500 rounded-lg"
+                      placeholder="Örn: Saha beton dökümü, şantiye içi sevk vb."
+                      value={formKmAciklama}
+                      onChange={(e) => setFormKmAciklama(e.target.value)}
+                    />
+                  </div>
+
                   {formAksamKm > formSabahKm && (
                     <div className="p-3 bg-emerald-50 border border-emerald-150 rounded-xl text-center">
                       <span className="text-[9px] font-bold text-slate-400 block uppercase">HESAPLANAN GÜNLÜK FARK</span>
@@ -1305,6 +1502,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                         <th className="p-2.5 text-right">Sabah Sayaç</th>
                         <th className="p-2.5 text-right">Akşam Sayaç</th>
                         <th className="p-2.5 text-right text-indigo-700 font-bold">Günlük Sefer Farkı</th>
+                        <th className="p-2.5">Açıklama</th>
                         <th className="p-2.5 text-center">İşlemler</th>
                       </tr>
                     </thead>
@@ -1319,6 +1517,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                           <td className="p-2.5 text-right text-indigo-700 font-bold font-mono bg-indigo-50/30">
                             +{lg.fark} KM
                           </td>
+                          <td className="p-2.5 text-slate-500 font-sans italic">{lg.aciklama || 'Belirtilmedi'}</td>
                           <td className="p-2.5 text-center space-x-1 whitespace-nowrap">
                             <button
                               type="button"
@@ -1340,6 +1539,124 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {aracSubTab === 'bakim_raporu' && (
+            <div className="flex-1 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
+              <div className="p-4 border-b border-[#e2e8f0] bg-slate-50/50 flex justify-between items-center shrink-0">
+                <div>
+                  <h4 className="font-display font-bold text-sm text-slate-800 uppercase tracking-widest">
+                    🔧 Vasıta Bakım Sayaçları &amp; Muayene Raporu
+                  </h4>
+                  <p className="text-[10px] text-slate-500 mt-0.5 font-semibold">
+                    Muayenesi yaklaşan/geçen ve yağ değişim sayaçları dolmak üzere olan araçların takibi.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    const el = document.querySelector('.bakim-raporu-print-area');
+                    if (el) {
+                      const printWindow = window.open('', '_blank');
+                      printWindow?.document.write(`
+                        <html>
+                          <head>
+                            <title>Bakım Sayaç Raporu</title>
+                            <script src="https://cdn.tailwindcss.com"></script>
+                          </head>
+                          <body class="p-8 bg-white text-slate-900 font-sans">
+                            <h2 class="text-xl font-bold mb-4 uppercase">KİBRİTÇİ İNŞAAT - ARAÇ SAYAÇ & BAKIM RAPORU</h2>
+                            ${el.innerHTML}
+                          </body>
+                        </html>
+                      `);
+                      printWindow?.document.close();
+                      printWindow?.print();
+                    }
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10.5px] px-3.5 py-1.5 rounded-lg flex items-center space-x-1.5 cursor-pointer shadow-sm"
+                >
+                  <Printer size={13} />
+                  <span>Raporu Yazdır</span>
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-auto p-4 bakim-raporu-print-area">
+                <table className="w-full text-[11px] border-collapse text-left">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 uppercase text-[9px] font-bold border-b">
+                      <th className="p-2.5">Plaka</th>
+                      <th className="p-2.5">Marka &amp; Model</th>
+                      <th className="p-2.5">Tür</th>
+                      <th className="p-2.5">Sorumlu Operatör</th>
+                      <th className="p-2.5 text-right">Mevcut Sayaç</th>
+                      <th className="p-2.5 text-right">Yağ Bakımı Hedef</th>
+                      <th className="p-2.5 text-right">Bakıma Kalan KM</th>
+                      <th className="p-2.5">Muayene Tarihi</th>
+                      <th className="p-2.5 text-right">Muayene Kalan Gün</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y font-medium text-slate-700 text-xs">
+                    {araclar.map(a => {
+                      const sorumlu = personeller.find(p => p.id === a.sorumluPersonelId);
+                      const targetOil = a.yagBakimKm || 10000;
+                      const oilRemaining = targetOil - (a.mevcutKm || 0);
+                      
+                      let muayeneDays = 999;
+                      if (a.muayeneTarihi) {
+                        const muayene = new Date(a.muayeneTarihi);
+                        const today = new Date();
+                        today.setHours(0,0,0,0);
+                        const diffTime = muayene.getTime() - today.getTime();
+                        muayeneDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                      }
+
+                      let oilStatusClass = "text-slate-800";
+                      if (oilRemaining <= 0) {
+                        oilStatusClass = "text-rose-650 font-black bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 animate-pulse";
+                      } else if (oilRemaining <= 1000) {
+                        oilStatusClass = "text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-250";
+                      }
+
+                      let muayeneStatusClass = "text-slate-800";
+                      if (muayeneDays <= 0) {
+                        muayeneStatusClass = "text-rose-650 font-black bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 animate-pulse";
+                      } else if (muayeneDays <= 30) {
+                        muayeneStatusClass = "text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-250";
+                      }
+
+                      return (
+                        <tr key={a.id} className="hover:bg-slate-50/50 transition">
+                          <td className="p-2.5 font-bold font-mono text-slate-900">{a.plaka}</td>
+                          <td className="p-2.5">{a.markaModel}</td>
+                          <td className="p-2.5 text-[10px]">
+                            <span className={`px-2 py-0.5 rounded-full font-bold uppercase ${
+                              a.aracTipi === 'ARAC' ? 'bg-sky-50 text-sky-700 border border-sky-100' :
+                              a.aracTipi === 'IS_MAKINESI' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
+                              'bg-slate-100 text-slate-600'
+                            }`}>
+                              {a.aracTipi === 'ARAC' ? 'Binek/Hafif' :
+                               a.aracTipi === 'IS_MAKINESI' ? 'İş Makinesi' : 'Demirbaş'}
+                            </span>
+                          </td>
+                          <td className="p-2.5">
+                            {sorumlu ? `👤 ${sorumlu.ad} ${sorumlu.soyad}` : <span className="text-slate-400 italic">Atanmamış</span>}
+                          </td>
+                          <td className="p-2.5 text-right font-mono font-semibold text-slate-650">{(a.mevcutKm || 0).toLocaleString('tr-TR')} KM</td>
+                          <td className="p-2.5 text-right font-mono text-slate-400">{(targetOil).toLocaleString('tr-TR')} KM</td>
+                          <td className={`p-2.5 text-right font-mono ${oilStatusClass}`}>
+                            {oilRemaining <= 0 ? `GEÇTİ! (${Math.abs(oilRemaining).toLocaleString('tr-TR')} KM)` : `${oilRemaining.toLocaleString('tr-TR')} KM`}
+                          </td>
+                          <td className="p-2.5 font-mono text-slate-500">{a.muayeneTarihi || 'Belirtilmedi'}</td>
+                          <td className={`p-2.5 text-right font-mono ${muayeneStatusClass}`}>
+                            {muayeneDays <= 0 ? 'GEÇTİ!' : `${muayeneDays} Gün`}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -3485,45 +3802,33 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
               </div>
 
               <div className="space-y-3">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">📝 Sistem Log Kayıtları (Son 4 Hareket)</span>
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">📝 Sistem Log Kayıtları ({historyList.length} Hareket)</span>
                 
-                <div className="space-y-2.5">
-                  <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl flex justify-between items-center">
-                    <div>
-                      <span className="text-[8px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded uppercase">AKTİF</span>
-                      <p className="font-bold text-slate-900 mt-1">Kart Tanımlama ve Açılış Kaydı</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Sistem yöneticisi tarafından ilk açılış onayı yapıldı.</p>
-                    </div>
-                    <span className="font-mono text-[10px] text-slate-400">12.06.2026 14:32</span>
+                {historyLoading ? (
+                  <div className="flex items-center justify-center py-12 text-slate-400 space-x-2">
+                    <span className="text-sm animate-spin">🔄</span>
+                    <span className="font-semibold">İşlem geçmişi buluttan çekiliyor...</span>
                   </div>
-
-                  <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-xl flex justify-between items-center">
-                    <div>
-                      <span className="text-[8px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded uppercase">SATIN ALMA</span>
-                      <p className="font-bold text-slate-900 mt-1">Satın Alma Kalemi Eşleşmesi</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Sistem talep havuzu üzerinden cari mutabakat sorgulandı.</p>
-                    </div>
-                    <span className="font-mono text-[10px] text-slate-400">18.06.2026 10:15</span>
+                ) : historyList.length === 0 ? (
+                  <div className="text-center py-12 text-slate-450 italic font-medium">
+                    Bu kart ile ilgili herhangi bir işlem kaydı bulunamadı.
                   </div>
-
-                  <div className="p-3 bg-amber-50/70 border border-amber-100 rounded-xl flex justify-between items-center">
-                    <div>
-                      <span className="text-[8px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded uppercase">GÜNCELLEME</span>
-                      <p className="font-bold text-slate-900 mt-1">Kart Detay Revizyonu</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Firma ünvanı ve sistem entegrasyon parametreleri revize edildi.</p>
-                    </div>
-                    <span className="font-mono text-[10px] text-slate-400">22.06.2026 16:45</span>
+                ) : (
+                  <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                    {historyList.map((log, idx) => (
+                      <div key={log.id || idx} className="p-3 bg-slate-50 border border-slate-150 rounded-xl flex justify-between items-center hover:border-slate-300 transition">
+                        <div>
+                          <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase tracking-wider ${log.badgeColor || 'bg-slate-200 text-slate-800'}`}>
+                            {log.type}
+                          </span>
+                          <p className="font-bold text-slate-900 mt-1.5">{log.title}</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">{log.desc}</p>
+                        </div>
+                        <span className="font-mono text-[9px] text-slate-450 font-bold shrink-0 ml-3">{log.date}</span>
+                      </div>
+                    ))}
                   </div>
-
-                  <div className="p-3 bg-slate-50 border border-slate-150 rounded-xl flex justify-between items-center">
-                    <div>
-                      <span className="text-[8px] font-bold text-slate-600 bg-slate-200 px-1.5 py-0.5 rounded uppercase">MUTABAKAT</span>
-                      <p className="font-bold text-slate-900 mt-1">Sorgu ve Raporlama Logu</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Geçmiş dönem işlem hareket dökümü arşivlendi.</p>
-                    </div>
-                    <span className="font-mono text-[10px] text-slate-400">Bugün 10:30</span>
-                  </div>
-                </div>
+                )}
               </div>
 
               <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex gap-3 text-[11px] text-amber-800">

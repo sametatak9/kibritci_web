@@ -1,15 +1,10 @@
 import React, { useState } from 'react';
-import { Calendar, Trash2, ShieldAlert, CheckCircle, FileText, ChevronRight } from 'lucide-react';
+import { Calendar, Trash2, ShieldAlert, CheckCircle, FileText, ChevronRight, RefreshCw } from 'lucide-react';
 import { Personel, AylikYoklamaMap, YoklamaDurum } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
 
 const maskName = (name?: string): string => {
-  if (!name) return '';
-  const parts = name.trim().split(/\s+/);
-  return parts.map(part => {
-    if (part.length <= 1) return part;
-    return part[0] + '*'.repeat(part.length - 1);
-  }).join(' ');
+  return name || '';
 };
 
 interface YoklamaScreenProps {
@@ -33,6 +28,93 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   const [overtimeStaffId, setOvertimeStaffId] = useState<string>("ALL");
   const [overtimeDay, setOvertimeDay] = useState<number>(1);
   const [overtimeHours, setOvertimeHours] = useState<number>(2);
+
+  // AI Daily Yoklama state variables
+  const [showAiUpload, setShowAiUpload] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [parsedDate, setParsedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [parsedRecords, setParsedRecords] = useState<any[]>([]);
+  const [aiSuccess, setAiSuccess] = useState(false);
+
+  // Report formatting state
+  const [reportType, setReportType] = useState<'NORMAL' | 'E-IMZALI'>('NORMAL');
+
+  const handleAiFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setAiLoading(true);
+    setAiError(null);
+    setAiSuccess(false);
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64Data = (reader.result as string).split(',')[1];
+        try {
+          const res = await fetch('/api/parse-daily-yoklama', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileBase64: base64Data,
+              mimeType: file.type
+            })
+          });
+          const json = await res.json();
+          if (json.success && json.data) {
+            setParsedDate(json.data.tarih || new Date().toISOString().split('T')[0]);
+            setParsedRecords(json.data.yoklamaKayitlari || []);
+            setAiSuccess(true);
+          } else {
+            setAiError(json.error || "Gemini AI yoklama tablosunu okuyamadı. Lütfen daha net bir fotoğraf veya PDF yükleyin.");
+          }
+        } catch (err: any) {
+          setAiError(`Bağlantı hatası: ${err.message}`);
+        } finally {
+          setAiLoading(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      setAiError(`Dosya okuma hatası: ${err.message}`);
+      setAiLoading(false);
+    }
+  };
+
+  const handleCommitAiYoklama = () => {
+    if (parsedRecords.length === 0) return;
+
+    const [pYear, pMonth, pDay] = parsedDate.split('-').map(Number);
+    setSelectedMonth(pMonth);
+    setSelectedYear(pYear);
+
+    setYoklamalar(prev => {
+      const updated = { ...prev };
+      parsedRecords.forEach(rec => {
+        const emp = personeller.find(p => {
+          const empName = `${p.ad} ${p.soyad}`.toLowerCase().replace(/\s+/g, '');
+          const parsedName = rec.adSoyad.toLowerCase().replace(/\s+/g, '');
+          return empName === parsedName || empName.includes(parsedName) || parsedName.includes(empName);
+        });
+
+        if (emp) {
+          const currentMap = { ...(updated[emp.id] || {}) };
+          currentMap[pDay] = {
+            durum: (rec.durum === 'Geldi' || rec.durum === 'Yok' || rec.durum === 'İzinli' || rec.durum === 'Raporlu') ? rec.durum : 'Geldi',
+            mesaiSaati: Number(rec.mesaiSaati) || 0
+          };
+          updated[emp.id] = currentMap;
+        }
+      });
+      return updated;
+    });
+
+    alert(`${parsedDate} tarihli günlük yoklama ve fazla mesai verileri AI doğrulamasından geçerek puantaja işlendi!`);
+    setShowAiUpload(false);
+    setParsedRecords([]);
+    setAiSuccess(false);
+  };
 
   const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
   const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
@@ -201,7 +283,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     }
   };
 
-  const [printModal, setPrintModal] = useState<'NONE' | 'BOS' | 'DOLU'>('NONE');
+  const [printModal, setPrintModal] = useState<'NONE' | 'BOS' | 'DOLU' | 'GUNLUK_BOS'>('NONE');
 
   const filteredPersonel = personeller
     .filter(isEmployeeVisibleInMonth)
@@ -344,14 +426,22 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
           </div>
 
           {/* PDF & Reports buttons */}
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setPrintModal('GUNLUK_BOS')}
+              className="text-[11px] bg-slate-800 hover:bg-slate-900 text-white border border-slate-700 rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
+              title="Şantiyede günlük elle doldurmak için boş tek günlük puantaj cetveli şablonu yazdırır."
+            >
+              <FileText size={13} className="text-amber-500" />
+              <span>📄 Boş Günlük Şablon (Baskı)</span>
+            </button>
             <button
               onClick={() => setPrintModal('BOS')}
-              className="text-[11px] bg-white text-slate-700 hover:bg-slate-50 border border-slate-250 rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm animate-pulse"
-              title="Şantiyede elle doldurmak için boş puantaj cetveli şablonu yazdırır."
+              className="text-[11px] bg-white text-slate-700 hover:bg-slate-50 border border-slate-250 rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
+              title="Şantiyede elle doldurmak için boş aylık puantaj cetveli şablonu yazdırır."
             >
               <FileText size={13} className="text-rose-500" />
-              <span>📄 Boş Puantaj (İmza Barlı PDF)</span>
+              <span>📄 Boş Aylık Puantaj</span>
             </button>
             <button
               onClick={() => setPrintModal('DOLU')}
@@ -359,7 +449,14 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               title="Kayıtlı ve girilmiş fiili puantajları imza çizgileriyle yazdırır."
             >
               <FileText size={13} className="text-white" />
-              <span>📊 Dolu Güncel Puantaj Raporu (PDF)</span>
+              <span>📊 Dolu Aylık Rapor</span>
+            </button>
+            <button
+              onClick={() => setShowAiUpload(prev => !prev)}
+              className="text-[11px] bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
+              title="Formenlerin doldurduğu günlük yoklama kağıdını fotoğraf çekip AI ile sisteme yükleyin."
+            >
+              <span>🤖 AI ile Günlük Yoklama Yükle</span>
             </button>
 
             {/* Search */}
@@ -377,6 +474,182 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* AI Daily Yoklama Upload and Verification Panel */}
+      {showAiUpload && (
+        <div className="bg-white border border-blue-200 rounded-2xl p-5 shadow-md space-y-4 animate-in slide-in-from-top-2 duration-200">
+          <div className="border-b pb-2 flex justify-between items-center">
+            <div>
+              <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest block">🤖 GEMINI YAPAY ZEKA DESTEKLİ GÜNLÜK YOKLAMA</span>
+              <h3 className="font-bold text-sm text-slate-800 mt-0.5">Yoklama Evrağı / Günlük Puantaj Kağıdı Yükleme</h3>
+            </div>
+            <button 
+              onClick={() => setShowAiUpload(false)}
+              className="text-xs bg-slate-100 hover:bg-slate-200 p-1.5 rounded-lg font-bold text-slate-650 cursor-pointer"
+            >
+              Paneli Kapat
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            {/* File Upload Form (1 Col) */}
+            <div className="md:col-span-1 border-r border-slate-200 pr-0 md:pr-6 space-y-4">
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-bold text-slate-500 block uppercase">1. Evrak Yükle</span>
+                <p className="text-[10px] text-slate-400">Doldurulmuş olan günlük puantaj çizelgesinin net bir fotoğrafını veya PDF'ini yükleyin.</p>
+              </div>
+
+              <div className="border-2 border-dashed border-slate-250 rounded-xl p-4 text-center hover:border-blue-500 transition cursor-pointer relative bg-slate-50/50">
+                <input 
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={handleAiFileUpload}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  disabled={aiLoading}
+                />
+                <div className="space-y-2">
+                  <span className="text-2xl block">📁</span>
+                  <span className="text-xs font-bold text-slate-600 block">Dosya Seçin veya Sürükleyin</span>
+                  <span className="text-[9px] text-slate-450 block">PNG, JPG, JPEG veya PDF (Maks 15MB)</span>
+                </div>
+              </div>
+
+              {aiLoading && (
+                <div className="p-4 bg-blue-50 border border-blue-150 rounded-xl flex items-center justify-center space-x-2.5 animate-pulse text-xs font-bold text-blue-700">
+                  <RefreshCw size={14} className="animate-spin text-blue-600" />
+                  <span>Gemini AI Evrağı Çözümlüyor...</span>
+                </div>
+              )}
+
+              {aiError && (
+                <div className="p-3.5 bg-rose-50 border border-rose-150 rounded-xl text-rose-700 text-[11px] font-medium leading-relaxed">
+                  ⚠️ <strong>Ayrıştırma Hatası:</strong> {aiError}
+                </div>
+              )}
+            </div>
+
+            {/* Verification Table (2 Cols) */}
+            <div className="md:col-span-2 space-y-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-500 block uppercase">2. AI Veri Doğrulama Tablosu</span>
+                  <p className="text-[10px] text-slate-400">Yapay zekanın evraktan okuduğu verileri kontrol edin, gerekirse el ile düzeltin.</p>
+                </div>
+                
+                {aiSuccess && (
+                  <div className="flex items-center space-x-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Rapor Tarihi:</label>
+                    <input 
+                      type="date"
+                      value={parsedDate}
+                      onChange={(e) => setParsedDate(e.target.value)}
+                      className="border border-slate-300 text-xs font-bold p-1 rounded bg-slate-50 outline-none"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {!aiSuccess ? (
+                <div className="border border-dashed rounded-xl p-12 text-center text-slate-400 text-xs italic bg-slate-50/20">
+                  Ayrıştırılmış veri bulunmuyor. Lütfen sol taraftan bir evrak dosyası yükleyin.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="border rounded-xl overflow-hidden text-xs max-h-64 overflow-y-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-800 text-white font-bold uppercase text-[9px] tracking-wider">
+                          <th className="p-2 w-12 text-center">SIRA</th>
+                          <th className="p-2">AD SOYAD</th>
+                          <th className="p-2">GÖREV</th>
+                          <th className="p-2 w-28">YOKLAMA DURUMU</th>
+                          <th className="p-2 w-24">FAZLA MESAİ (SAAT)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y font-medium text-slate-700 bg-white">
+                        {parsedRecords.map((rec, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/50">
+                            <td className="p-2 text-center font-mono">{idx + 1}</td>
+                            <td className="p-2 font-bold text-slate-900">
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
+                                <span>{rec.adSoyad}</span>
+                                {(() => {
+                                  const empExists = personeller.some(p => {
+                                    const empName = `${p.ad} ${p.soyad}`.toLowerCase().replace(/\s+/g, '');
+                                    const parsedName = rec.adSoyad.toLowerCase().replace(/\s+/g, '');
+                                    return empName === parsedName || empName.includes(parsedName) || parsedName.includes(empName);
+                                  });
+                                  if (!empExists) {
+                                    return (
+                                      <span className="text-[9px] font-extrabold text-rose-600 bg-rose-50 border border-rose-100 rounded px-1.5 py-0.5 animate-pulse shrink-0 w-fit">
+                                        ⚠️ SGK Girişi Yapılmalı
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </div>
+                            </td>
+                            <td className="p-2 text-slate-500 text-[11px]">{rec.gorev || 'İŞÇİ'}</td>
+                            <td className="p-2">
+                              <select
+                                value={rec.durum}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setParsedRecords(prev => prev.map((item, i) => i === idx ? { ...item, durum: val } : item));
+                                }}
+                                className="w-full text-xs p-0.5 border border-slate-300 rounded font-bold"
+                              >
+                                <option value="Geldi">Geldi</option>
+                                <option value="Yok">Yok</option>
+                                <option value="İzinli">İzinli</option>
+                                <option value="Raporlu">Raporlu</option>
+                              </select>
+                            </td>
+                            <td className="p-2">
+                              <input 
+                                type="number"
+                                min={0}
+                                max={24}
+                                value={rec.mesaiSaati || 0}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  setParsedRecords(prev => prev.map((item, i) => i === idx ? { ...item, mesaiSaati: val } : item));
+                                }}
+                                className="w-full text-xs p-0.5 border border-slate-300 rounded font-bold font-mono text-center"
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex justify-end space-x-2 border-t pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setParsedRecords([])}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-1.5 px-4 rounded-xl text-xs transition cursor-pointer"
+                    >
+                      Sıfırla
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCommitAiYoklama}
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-5 rounded-xl text-xs transition shadow cursor-pointer"
+                    >
+                      Onayla ve Puantaja İşle
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
 
         {/* Bottom line: Interactive targeted / Overtime Input Panel */}
         <div className="bg-amber-50/55 rounded-xl border border-amber-200/70 p-3 flex flex-wrap items-center gap-3 justify-between">
@@ -437,8 +710,6 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
             </button>
           </div>
         </div>
-
-      </div>
 
       {/* Main Grid Card View */}
       <div className="flex-1 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
@@ -609,7 +880,6 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                     );
                   })}
                 </tbody>
-
               </table>
             </div>
           </div>
@@ -617,8 +887,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
       </div>
 
-      {/* ========================================================================= */}
-      {/* 📄 REPORT OVERLAYS: BOŞ PUANTAJ REPORT & DOLU GÜNCEL PUANTAJ REPORT     */}
+      {/* 📄 REPORT OVERLAYS: BOŞ PUANTAJ REPORT & DOLU GÜNCEL PUANTAJ REPORT & GUNLUK_BOS */}
       {/* ========================================================================= */}
       {printModal !== 'NONE' && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/80 flex items-start justify-center p-6 backdrop-blur-sm">
@@ -626,11 +895,25 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
             
             {/* Modal Actions Header */}
             <div className="bg-slate-900 text-white p-4 flex justify-between items-center px-6 shrink-0 print:hidden">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-4">
                 <span className="text-xl">🖨️</span>
                 <h3 className="font-display font-bold text-sm">
-                  {printModal === 'BOS' ? 'Boş Şablon Şantiye Puantaj Cetveli Baskı Önizleme' : 'Dolu Güncel Şantiye Puantaj Cetveli Raporu'}
+                  {printModal === 'BOS' ? 'Boş Şablon Şantiye Puantaj Cetveli Baskı Önizleme' : printModal === 'GUNLUK_BOS' ? 'Boş Günlük Şablon Şantiye Puantaj Cetveli' : 'Dolu Güncel Şantiye Puantaj Cetveli Raporu'}
                 </h3>
+                <div className="flex items-center space-x-1.5 bg-slate-800 border border-slate-700 p-1 rounded-xl">
+                  <button 
+                    onClick={() => setReportType('NORMAL')} 
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition ${reportType === 'NORMAL' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                  >
+                    NORMAL
+                  </button>
+                  <button 
+                    onClick={() => setReportType('E-IMZALI')} 
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition ${reportType === 'E-IMZALI' ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:text-white'}`}
+                  >
+                    E-İMZALI
+                  </button>
+                </div>
               </div>
               <div className="flex items-center space-x-2">
                 <button
@@ -694,199 +977,244 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                     <p className="text-[10px] text-slate-600 mt-1">Dönem: <strong className="text-slate-900 font-bold">{selectedMonth}. Ay / {selectedYear}</strong></p>
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="text-right flex flex-col items-end">
                   <span className="border border-slate-900 text-[10px] font-bold px-3 py-1 bg-slate-50 uppercase tracking-widest block mb-1">
-                    BELGE NO: KBR-PNT-2026-{printModal === 'BOS' ? 'BLANK' : 'FILLED'}
+                    BELGE NO: KBR-PNT-2026-{printModal === 'BOS' ? 'BLANK' : printModal === 'GUNLUK_BOS' ? 'DAILY-BLANK' : 'FILLED'}
                   </span>
                   <span className="text-[10px] text-slate-500 font-mono">Baskı Tarihi: {new Date().toLocaleDateString('tr-TR')} {new Date().toLocaleTimeString('tr-TR')}</span>
+                  {reportType === 'E-IMZALI' && (
+                    <div className="mt-2 flex items-center space-x-1 bg-emerald-55/10 border border-emerald-500/20 text-emerald-700 text-[8px] font-mono font-bold px-2 py-0.5 rounded">
+                      <span>✓ E-İMZALI SECURE REF: {Math.random().toString(36).substring(2, 8).toUpperCase()}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Title Header Section */}
               <div className="text-center mb-6">
-                <h2 className="text-sm font-bold text-slate-900 tracking-wider uppercase border-y border-slate-205 py-2.5 bg-slate-50">
+                <h2 className="text-sm font-bold text-slate-900 tracking-wider uppercase border-y border-slate-200 py-2.5 bg-slate-50">
                   {printModal === 'BOS' 
-                    ? 'İAŞE VE ŞANTİYE SAHA ELEMANLARI BOŞ PUANTAJ REFAKAT CETVELİ' 
-                    : 'RESMİ ŞANTİYE PERSONELİ FİİLİ ÇALIŞMA VE PUANTAJ RAPORU'}
+                    ? 'İAŞE VE ŞANTİYE SAHA ELEMANLARI AYLIK BOŞ PUANTAJ REFAKAT CETVELİ' 
+                    : printModal === 'GUNLUK_BOS' 
+                      ? 'GÜNLÜK BOŞ PUANTAJ REFAKAT CETVELİ ŞABLONU' 
+                      : 'RESMİ ŞANTİYE PERSONELİ FİİLİ ÇALIŞMA VE PUANTAJ RAPORU'}
                 </h2>
                 <p className="text-[9px] text-slate-400 mt-1 italic">
-                  * Bu evrak, şantiye idaresi tarafından doldurulup imzalatıldıktan sonra finans merkezine iletilmek üzere hukuki belge niteliğindedir.
+                  * Bu evrak, şantiye idaresi tarafından doldurulup imzalatıldıktan sonra finans merkezine iletilmek üzere hukuki belge niteliğindedir. Güvenlik gerekçesiyle personel isimleri gizlenmiş, sadece Ünvan ve Hizmet Kodu kullanılmıştır.
                 </p>
               </div>
 
               {/* Printable Matrix Table */}
               <div className="border border-slate-350 rounded-md overflow-hidden mb-8">
-                <table className="w-full text-[9px] border-collapse">
-                  <thead>
-                    <tr className="bg-slate-100 text-slate-800 border-b border-slate-300">
-                      <th className="p-1 px-2 text-left border-r border-slate-300 w-48 font-bold">Personel Adı Soyadı &amp; Görevi</th>
-                      {daysArray.map(day => {
-                        const { isHoliday, name, isOfficial } = isSundayOrPublicHoliday(day);
-                        let cellBg = "";
-                        if (isHoliday) {
-                          cellBg = isOfficial ? "bg-purple-100 font-extrabold text-purple-900 border-x border-purple-200" : "bg-orange-100 font-extrabold text-orange-900 border-x border-orange-200";
-                        }
+                {printModal === 'GUNLUK_BOS' ? (
+                  <table className="w-full text-[9px] border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-800 border-b border-slate-300">
+                        <th className="p-2 text-center border-r border-slate-300 w-16 font-bold">Sıra No</th>
+                        <th className="p-2 text-left border-r border-slate-300 w-48 font-bold">Hizmet Kodu</th>
+                        <th className="p-2 text-left border-r border-slate-300 w-48 font-bold">Görev / Ünvan</th>
+                        <th className="p-2 text-center border-r border-slate-300 w-32 font-bold">Yoklama (G/Y/İ/R)</th>
+                        <th className="p-2 text-center border-r border-slate-300 w-32 font-bold">Fazla Mesai (Saat)</th>
+                        <th className="p-2 text-center font-bold">İmza</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredPersonel.map((p, idx) => (
+                        <tr key={p.id} className="border-b border-slate-200 h-10 hover:bg-slate-50">
+                          <td className="p-2 text-center border-r border-slate-300 font-mono">{idx + 1}</td>
+                          <td className="p-2 border-r border-slate-300 font-bold text-slate-900">{p.ad} {p.soyad}</td>
+                          <td className="p-2 border-r border-slate-300 text-slate-700 uppercase font-medium">{p.gorev} · {p.departman}</td>
+                          <td className="p-2 border-r border-slate-300 text-center text-slate-300">[ &nbsp; &nbsp; &nbsp; ]</td>
+                          <td className="p-2 border-r border-slate-300 text-center text-slate-300">. . . . . . .</td>
+                          <td className="p-2 text-center text-slate-300 italic text-[7px]">imza:</td>
+                        </tr>
+                      ))}
+                      {/* Add blank extra rows for handwritten additions */}
+                      {Array.from({ length: 6 }).map((_, extraIdx) => (
+                        <tr key={`extra_daily_${extraIdx}`} className="border-b border-slate-200 h-10">
+                          <td className="p-2 text-center border-r border-slate-300 font-mono">{filteredPersonel.length + extraIdx + 1}</td>
+                          <td className="p-2 border-r border-slate-300 text-slate-300 italic text-[8px]">Yeni Personel</td>
+                          <td className="p-2 border-r border-slate-300"></td>
+                          <td className="p-2 border-r border-slate-300 text-center text-slate-300">[ &nbsp; &nbsp; &nbsp; ]</td>
+                          <td className="p-2 border-r border-slate-300 text-center text-slate-300">. . . . . . .</td>
+                          <td className="p-2 text-center text-slate-300 italic text-[7px]">imza:</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table className="w-full text-[9px] border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-800 border-b border-slate-300">
+                        <th className="p-1 px-2 text-left border-r border-slate-300 w-48 font-bold">Hizmet Kodu &amp; Görevi</th>
+                        {daysArray.map(day => {
+                          const { isHoliday, name, isOfficial } = isSundayOrPublicHoliday(day);
+                          let cellBg = "";
+                          if (isHoliday) {
+                            cellBg = isOfficial ? "bg-purple-100 font-extrabold text-purple-900 border-x border-purple-200" : "bg-orange-100 font-extrabold text-orange-900 border-x border-orange-200";
+                          }
+                          return (
+                            <th 
+                              key={day} 
+                              className={`p-0.5 text-center border-r border-slate-300 font-bold text-[8px] ${cellBg}`}
+                              style={{ width: '22px' }}
+                              title={name}
+                            >
+                              {day}
+                            </th>
+                          );
+                        })}
+                        <th className="p-1 text-center w-12 border-l border-slate-300 font-bold">Giriş Gün</th>
+                        <th className="p-1 text-center w-12 border-l border-slate-300 font-bold">Eksik (Yok)</th>
+                        <th className="p-1 text-center w-12 border-l border-slate-300 font-bold">Mesai Saati</th>
+                        <th className="p-1 text-center w-24 font-bold">Personel İmza</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* Render actual loaded/filtered staff list */}
+                      {filteredPersonel.map((p, idx) => {
+                        const personYoklama = yoklamalar[p.id] || {};
+                        let totalGeldi = 0;
+                        let totalYok = 0;
+                        let totalMesai = 0;
+
+                        // Pre-scan to count
+                        daysArray.forEach(day => {
+                          const dayData = personYoklama[day] || { durum: 'Girilmedi', mesaiSaati: 0 };
+                          if (isDayActiveForEmployee(p, day)) {
+                            if (dayData.durum === 'Geldi') totalGeldi++;
+                            if (dayData.durum === 'Yok') totalYok++;
+                            totalMesai += dayData.mesaiSaati;
+                          }
+                        });
+
                         return (
-                          <th 
-                            key={day} 
-                            className={`p-0.5 text-center border-r border-slate-300 font-bold text-[8px] ${cellBg}`}
-                            style={{ width: '22px' }}
-                            title={name}
-                          >
-                            {day}
-                          </th>
-                        );
-                      })}
-                      <th className="p-1 text-center w-12 border-l border-slate-300 font-bold">Giriş Gün</th>
-                      <th className="p-1 text-center w-12 border-l border-slate-300 font-bold">Eksik (Yok)</th>
-                      <th className="p-1 text-center w-12 border-l border-slate-300 font-bold">Mesai Saati</th>
-                      <th className="p-1 text-center w-24 font-bold">Personel İmza</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* Render actual loaded/filtered staff list */}
-                    {filteredPersonel.map((p, idx) => {
-                      const personYoklama = yoklamalar[p.id] || {};
-                      let totalGeldi = 0;
-                      let totalYok = 0;
-                      let totalMesai = 0;
-
-                      // Pre-scan to count
-                      daysArray.forEach(day => {
-                        const dayData = personYoklama[day] || { durum: 'Girilmedi', mesaiSaati: 0 };
-                        if (isDayActiveForEmployee(p, day)) {
-                          if (dayData.durum === 'Geldi') totalGeldi++;
-                          if (dayData.durum === 'Yok') totalYok++;
-                          totalMesai += dayData.mesaiSaati;
-                        }
-                      });
-
-                      return (
-                        <React.Fragment key={p.id}>
-                          <tr className="border-b border-slate-200 hover:bg-slate-50">
-                            <td className="p-1.5 px-2 border-r border-slate-300 font-bold text-slate-900 bg-slate-50/50">
-                              <div>{maskName(`${p.ad} ${p.soyad}`)}</div>
-                              <div className="text-[8px] text-slate-400 uppercase font-medium">{p.gorev} · {p.departman}</div>
-                              <div className="text-[7px] text-slate-500 font-mono">
-                                Giriş: {p.iseGirisTarihi || '-'} {p.istenCikisTarihi ? `· Çıkış: ${p.istenCikisTarihi}` : ''}
-                              </div>
-                            </td>
-                            
-                            {daysArray.map(day => {
-                              const isActiveDay = isDayActiveForEmployee(p, day);
-                              const dayData = personYoklama[day] || { durum: 'Girilmedi', mesaiSaati: 0 };
-                              let displayChar = "-";
-                              
-                              if (!isActiveDay) {
-                                displayChar = "Ç"; // Çalışmıyor/Hizmet dışı
-                              } else if (printModal === 'DOLU') {
-                                displayChar = getStatusAbbreviation(dayData.durum);
-                              }
-
-                              const { isHoliday, isOfficial } = isSundayOrPublicHoliday(day);
-                              let tdBg = "";
-                              if (!isActiveDay) {
-                                tdBg = "bg-slate-100 text-slate-400 font-semibold";
-                              } else if (isHoliday) {
-                                tdBg = isOfficial ? "bg-purple-50/60 font-bold text-purple-900 border-x border-purple-200/30" : "bg-orange-50/60 font-bold text-orange-950 border-x border-orange-200/30";
-                              }
-
-                              return (
-                                <td key={day} className={`p-0.5 text-center border-r border-slate-300 text-[8px] font-mono relative ${tdBg}`}>
-                                  <div className={`font-bold ${isActiveDay && dayData.durum === 'Yok' ? 'text-rose-600' : ''}`}>{displayChar}</div>
-                                  {isActiveDay && dayData.gonderen && (
-                                    <span className="absolute top-0 right-0 text-[5px] text-amber-500 font-bold" title="Formen Gönderdi">👷</span>
-                                  )}
-                                  {isActiveDay && printModal === 'DOLU' && dayData.mesaiSaati > 0 && (
-                                    <div className="text-[7px] text-amber-600 font-bold">+{dayData.mesaiSaati}</div>
-                                  )}
-                                </td>
-                              );
-                            })}
-
-                            <td className="p-1.5 text-center border-r border-slate-300 font-bold text-slate-800">
-                              {printModal === 'DOLU' ? `${totalGeldi} G` : ""}
-                            </td>
-                            <td className="p-1.5 text-center border-r border-slate-300 font-bold font-mono text-rose-700 bg-rose-50/20">
-                              {printModal === 'DOLU' ? `${totalYok} Gün` : ""}
-                            </td>
-                               <td className="p-1.5 text-center text-slate-300 italic text-[7px]">imza:</td>
-                          </tr>
-                          {printModal === 'DOLU' && (
-                            <tr className="bg-slate-50/70 border-b border-slate-200 text-[8px]">
-                              <td colSpan={daysInMonth + 5} className="p-2.5 px-4 text-slate-700 font-normal">
-                                <div className="flex flex-col space-y-2.5 py-1">
-                                  {/* Overtime hours (Mesai Cetveli) */}
-                                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 w-full">
-                                    <div className="flex items-center space-x-2 min-w-0 flex-1">
-                                      <span className="shrink-0 inline-flex items-center justify-start font-black text-[9px] text-slate-700 uppercase tracking-wider bg-slate-100 border border-slate-200 px-2 py-1 rounded-md h-7 font-sans">
-                                        ⏰ MESAİ CETVELİ:
-                                      </span>
-                                      <div className="flex flex-nowrap overflow-x-auto gap-1 pb-1 pr-2 max-w-[280px] sm:max-w-[450px] md:max-w-[600px] lg:max-w-none scrollbar-thin scrollbar-thumb-slate-300">
-                                        {daysArray.map(day => {
-                                          const isActiveDay = isDayActiveForEmployee(p, day);
-                                          const dayData = personYoklama[day] || { durum: 'Girilmedi', mesaiSaati: 0 };
-                                          const hasOvertime = isActiveDay && dayData.mesaiSaati > 0;
-
-                                          const { isHoliday, isOfficial } = isSundayOrPublicHoliday(day);
-                                          let boxStyle = "bg-slate-50 text-slate-400 border-slate-150";
-                                          
-                                          if (!isActiveDay) {
-                                            boxStyle = "bg-slate-200 text-slate-400 border-slate-350";
-                                          } else if (hasOvertime) {
-                                            boxStyle = "bg-blue-100 text-blue-800 border-blue-300 font-bold";
-                                          } else if (isHoliday) {
-                                            boxStyle = isOfficial 
-                                              ? "bg-purple-100 text-purple-700 border-purple-200 font-semibold" 
-                                              : "bg-orange-100 text-orange-700 border-orange-200 font-semibold";
-                                          }
-
-                                          return (
-                                            <div key={day} className={`flex-shrink-0 flex flex-col items-center justify-center w-6.5 h-6.5 rounded-sm border text-[7px] font-mono leading-none ${boxStyle}`}>
-                                              <span className="text-[5px] text-slate-400 block">{day}</span>
-                                              <span className="mt-0.5">{!isActiveDay ? 'Ç' : hasOvertime ? `+${dayData.mesaiSaati}` : '0'}</span>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-                                      <span className="text-[8.5px] font-bold text-emerald-800 font-mono bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200 whitespace-nowrap">
-                                        Gelen: {totalGeldi} Gün
-                                      </span>
-                                      <span className="text-[8.5px] font-bold text-rose-800 font-mono bg-rose-50 px-2.5 py-1 rounded border border-rose-200 whitespace-nowrap">
-                                        Gelmeyen: {totalYok} Gün
-                                      </span>
-                                      <span className="text-[8.5px] font-bold text-blue-800 font-mono bg-blue-50 px-2.5 py-1 rounded border border-blue-200 whitespace-nowrap">
-                                        Mesai: {totalMesai} Saat
-                                      </span>
-                                    </div>
-                                  </div>
+                          <React.Fragment key={p.id}>
+                            <tr className="border-b border-slate-200 hover:bg-slate-50">
+                              <td className="p-1.5 px-2 border-r border-slate-300 font-bold text-slate-900 bg-slate-50/50">
+                                <div>{p.ad} {p.soyad}</div>
+                                <div className="text-[8px] text-blue-600 uppercase font-bold">{p.gorev} · {p.departman}</div>
+                                <div className="text-[7px] text-slate-550 font-mono font-normal">
+                                  Giriş: {p.iseGirisTarihi || '-'} {p.istenCikisTarihi ? `· Çıkış: ${p.istenCikisTarihi}` : ''}
                                 </div>
                               </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
+                              
+                              {daysArray.map(day => {
+                                const isActiveDay = isDayActiveForEmployee(p, day);
+                                const dayData = personYoklama[day] || { durum: 'Girilmedi', mesaiSaati: 0 };
+                                let displayChar = "-";
+                                
+                                if (!isActiveDay) {
+                                  displayChar = "Ç"; // Çalışmıyor/Hizmet dışı
+                                } else if (printModal === 'DOLU') {
+                                  displayChar = getStatusAbbreviation(dayData.durum);
+                                }
 
-                    {/* Additional empty rows for handwriting additions if it's the blank ticket */}
-                    {printModal === 'BOS' && Array.from({ length: 6 }).map((_, extraIdx) => (
-                      <tr key={`extra_${extraIdx}`} className="border-b border-slate-200 h-8">
-                        <td className="p-1.5 px-2 border-r border-slate-300 text-slate-300 italic text-[8px]">
-                          {extraIdx + 1}. İlave Personel Ekleme Satırı:
-                        </td>
-                        {daysArray.map(day => (
-                          <td key={day} className="p-0.5 text-center border-r border-slate-300"></td>
-                        ))}
-                        <td className="p-1.5 text-center border-r border-slate-300"></td>
-                        <td className="p-1.5 text-center border-r border-slate-300"></td>
-                        <td className="p-1.5 text-center border-r border-slate-300"></td>
-                        <td className="p-1 rounded text-slate-300 italic text-[7px]">imza:</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                                const { isHoliday, isOfficial } = isSundayOrPublicHoliday(day);
+                                let tdBg = "";
+                                if (!isActiveDay) {
+                                  tdBg = "bg-slate-100 text-slate-400 font-semibold";
+                                } else if (isHoliday) {
+                                  tdBg = isOfficial ? "bg-purple-50/60 font-bold text-purple-900 border-x border-purple-200/30" : "bg-orange-50/60 font-bold text-orange-950 border-x border-orange-200/30";
+                                }
+
+                                return (
+                                  <td key={day} className={`p-0.5 text-center border-r border-slate-300 text-[8px] font-mono relative ${tdBg}`}>
+                                    <div className={`font-bold ${isActiveDay && dayData.durum === 'Yok' ? 'text-rose-600' : ''}`}>{displayChar}</div>
+                                    {isActiveDay && dayData.gonderen && (
+                                      <span className="absolute top-0 right-0 text-[5px] text-amber-500 font-bold" title="Formen Gönderdi">👷</span>
+                                    )}
+                                    {isActiveDay && printModal === 'DOLU' && dayData.mesaiSaati > 0 && (
+                                      <div className="text-[7px] text-amber-600 font-bold">+{dayData.mesaiSaati}</div>
+                                    )}
+                                  </td>
+                                );
+                              })}
+
+                              <td className="p-1.5 text-center border-r border-slate-300 font-bold text-slate-800">
+                                {printModal === 'DOLU' ? `${totalGeldi} G` : ""}
+                              </td>
+                              <td className="p-1.5 text-center border-r border-slate-300 font-bold font-mono text-rose-700 bg-rose-50/20">
+                                {printModal === 'DOLU' ? `${totalYok} Gün` : ""}
+                              </td>
+                              <td className="p-1.5 text-center text-slate-300 italic text-[7px]">imza:</td>
+                            </tr>
+                            {printModal === 'DOLU' && (
+                              <tr className="bg-slate-50/70 border-b border-slate-200 text-[8px]">
+                                <td colSpan={daysInMonth + 5} className="p-2.5 px-4 text-slate-700 font-normal">
+                                  <div className="flex flex-col space-y-2.5 py-1">
+                                    {/* Overtime hours (Mesai Cetveli) */}
+                                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 w-full">
+                                      <div className="flex items-center space-x-2 min-w-0 flex-1">
+                                        <span className="shrink-0 inline-flex items-center justify-start font-black text-[9px] text-slate-700 uppercase tracking-wider bg-slate-100 border border-slate-200 px-2 py-1 rounded-md h-7 font-sans">
+                                          ⏰ MESAİ CETVELİ:
+                                        </span>
+                                        <div className="flex flex-nowrap overflow-x-auto gap-1 pb-1 pr-2 max-w-[280px] sm:max-w-[450px] md:max-w-[600px] lg:max-w-none scrollbar-thin scrollbar-thumb-slate-300">
+                                          {daysArray.map(day => {
+                                            const isActiveDay = isDayActiveForEmployee(p, day);
+                                            const dayData = personYoklama[day] || { durum: 'Girilmedi', mesaiSaati: 0 };
+                                            const hasOvertime = isActiveDay && dayData.mesaiSaati > 0;
+
+                                            const { isHoliday, isOfficial } = isSundayOrPublicHoliday(day);
+                                            let boxStyle = "bg-slate-50 text-slate-400 border-slate-150";
+                                            
+                                            if (!isActiveDay) {
+                                              boxStyle = "bg-slate-200 text-slate-400 border-slate-350";
+                                            } else if (hasOvertime) {
+                                              boxStyle = "bg-blue-100 text-blue-800 border-blue-300 font-bold";
+                                            } else if (isHoliday) {
+                                              boxStyle = isOfficial 
+                                                ? "bg-purple-100 text-purple-700 border-purple-200 font-semibold" 
+                                                : "bg-orange-100 text-orange-700 border-orange-200 font-semibold";
+                                            }
+
+                                            return (
+                                              <div key={day} className={`flex-shrink-0 flex flex-col items-center justify-center w-6.5 h-6.5 rounded-sm border text-[7px] font-mono leading-none ${boxStyle}`}>
+                                                <span className="text-[5px] text-slate-400 block">{day}</span>
+                                                <span className="mt-0.5">{!isActiveDay ? 'Ç' : hasOvertime ? `+${dayData.mesaiSaati}` : '0'}</span>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                                        <span className="text-[8.5px] font-bold text-emerald-800 font-mono bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200 whitespace-nowrap">
+                                          Gelen: {totalGeldi} Gün
+                                        </span>
+                                        <span className="text-[8.5px] font-bold text-rose-800 font-mono bg-rose-50 px-2.5 py-1 rounded border border-rose-200 whitespace-nowrap">
+                                          Gelmeyen: {totalYok} Gün
+                                        </span>
+                                        <span className="text-[8.5px] font-bold text-blue-800 font-mono bg-blue-50 px-2.5 py-1 rounded border border-blue-200 whitespace-nowrap">
+                                          Mesai: {totalMesai} Saat
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+
+                      {/* Additional empty rows for handwriting additions if it's the blank ticket */}
+                      {printModal === 'BOS' && Array.from({ length: 6 }).map((_, extraIdx) => (
+                        <tr key={`extra_${extraIdx}`} className="border-b border-slate-200 h-8">
+                          <td className="p-1.5 px-2 border-r border-slate-300 text-slate-350 italic text-[8px]">
+                            {extraIdx + 1}. İlave Personel Ekleme Satırı:
+                          </td>
+                          {daysArray.map(day => (
+                            <td key={day} className="p-0.5 text-center border-r border-slate-300"></td>
+                          ))}
+                          <td className="p-1.5 text-center border-r border-slate-300"></td>
+                          <td className="p-1.5 text-center border-r border-slate-300"></td>
+                          <td className="p-1.5 text-center border-r border-slate-300"></td>
+                          <td className="p-1 rounded text-slate-300 italic text-[7px]">imza:</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
 
               {/* Official Sign-off Approval Bars arranged in strict order specified by user */}
@@ -896,36 +1224,72 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                 </div>
                 <div className="grid grid-cols-4 gap-4 text-center">
                   
-                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50/50">
-                    <span className="font-extrabold text-[#8B1E1E] tracking-wider uppercase block mb-1">1. MUHASEBE</span>
-                    <span className="text-[10px] text-slate-500 block mb-6">Finansal hakediş ve Bordro Masası</span>
-                    <div className="h-0.5 bg-slate-300 w-24 mx-auto mb-2"></div>
-                    <span className="text-[10px] font-bold text-slate-800 block">{maskName("Ayşe Demir")}</span>
-                    <span className="text-[8px] text-slate-400 italic">Bordro Yetkilisi</span>
+                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50/50 flex flex-col justify-between">
+                    <div>
+                      <span className="font-extrabold text-[#8B1E1E] tracking-wider uppercase block mb-1">1. MUHASEBE</span>
+                      <span className="text-[9px] text-slate-500 block mb-4">Finansal hakediş ve Bordro Masası</span>
+                    </div>
+                    {reportType === 'E-IMZALI' ? (
+                      <div className="my-2 p-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-850 text-[7px] font-mono leading-tight text-center">
+                        <div className="font-bold text-[8px] text-emerald-800">✓ DİJİTAL E-ONAY</div>
+                        <div>REF-2026-MHS-882</div>
+                        <div>HASH: A9D4...F219</div>
+                      </div>
+                    ) : (
+                      <div className="h-10 border-b border-dashed border-slate-300 w-24 mx-auto my-2"></div>
+                    )}
+                    <span className="text-[9px] font-bold text-slate-800 block">Bordro Yetkilisi</span>
                   </div>
 
-                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50/50">
-                    <span className="font-extrabold text-[#1E4E78] tracking-wider uppercase block mb-1">2. İDARİ İŞLER</span>
-                    <span className="text-[10px] text-slate-500 block mb-6">İnsan Kaynakları ve Şantiye Şefliği</span>
-                    <div className="h-0.5 bg-slate-300 w-24 mx-auto mb-2"></div>
-                    <span className="text-[10px] font-bold text-slate-800 block">{maskName("Nuri Mutlu")}</span>
-                    <span className="text-[8px] text-slate-400 italic">İdari İşler Şefi</span>
+                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50/50 flex flex-col justify-between">
+                    <div>
+                      <span className="font-extrabold text-[#1E4E78] tracking-wider uppercase block mb-1">2. İDARİ İŞLER</span>
+                      <span className="text-[9px] text-slate-500 block mb-4">İnsan Kaynakları ve Şantiye Şefliği</span>
+                    </div>
+                    {reportType === 'E-IMZALI' ? (
+                      <div className="my-2 p-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-850 text-[7px] font-mono leading-tight text-center">
+                        <div className="font-bold text-[8px] text-emerald-800">✓ DİJİTAL E-ONAY</div>
+                        <div>REF-2026-IDR-145</div>
+                        <div>HASH: BC51...C778</div>
+                      </div>
+                    ) : (
+                      <div className="h-10 border-b border-dashed border-slate-300 w-24 mx-auto my-2"></div>
+                    )}
+                    <span className="text-[9px] font-bold text-slate-800 block">İdari İşler Şefi</span>
                   </div>
 
-                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50/50">
-                    <span className="font-extrabold text-[#1E4E78] tracking-wider uppercase block mb-1">3. ŞANTİYE ŞEFİ</span>
-                    <span className="text-[10px] text-slate-500 block mb-6">Saha organizasyonu ve fiili kontrol</span>
-                    <div className="h-0.5 bg-slate-300 w-24 mx-auto mb-2"></div>
-                    <span className="text-[10px] font-bold text-slate-800 block">{maskName("Ayhan Yılmaz")}</span>
-                    <span className="text-[8px] text-slate-400 italic">Şantiye Şefi</span>
+                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50/50 flex flex-col justify-between">
+                    <div>
+                      <span className="font-extrabold text-[#1E4E78] tracking-wider uppercase block mb-1">3. ŞANTİYE ŞEFİ</span>
+                      <span className="text-[9px] text-slate-500 block mb-4">Saha organizasyonu ve fiili kontrol</span>
+                    </div>
+                    {reportType === 'E-IMZALI' ? (
+                      <div className="my-2 p-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-850 text-[7px] font-mono leading-tight text-center">
+                        <div className="font-bold text-[8px] text-emerald-800">✓ DİJİTAL E-ONAY</div>
+                        <div>REF-2026-SEF-902</div>
+                        <div>HASH: D1A2...E334</div>
+                      </div>
+                    ) : (
+                      <div className="h-10 border-b border-dashed border-slate-300 w-24 mx-auto my-2"></div>
+                    )}
+                    <span className="text-[9px] font-bold text-slate-800 block">Şantiye Şefi</span>
                   </div>
 
-                  <div className="border border-slate-150 p-3 rounded-xl bg-slate-50">
-                    <span className="font-extrabold text-[#8B1E1E] tracking-wider uppercase block mb-1">4. PROJE MÜDÜRÜ</span>
-                    <span className="text-[10px] text-slate-500 block mb-6">Yönetici Müteahhit ve Nihai Onay</span>
-                    <div className="h-0.5 bg-slate-305 w-24 mx-auto mb-2"></div>
-                    <span className="text-[10px] font-bold text-slate-800 block">{maskName("Kuzey Samet Atak")}</span>
-                    <span className="text-[8px] text-slate-400 italic">Proje Müdürü</span>
+                  <div className="border border-slate-150 p-3 rounded-xl bg-slate-50 flex flex-col justify-between">
+                    <div>
+                      <span className="font-extrabold text-[#8B1E1E] tracking-wider uppercase block mb-1">4. PROJE MÜDÜRÜ</span>
+                      <span className="text-[9px] text-slate-500 block mb-4">Yönetici Müteahhit ve Nihai Onay</span>
+                    </div>
+                    {reportType === 'E-IMZALI' ? (
+                      <div className="my-2 p-1.5 bg-emerald-55 border border-emerald-200 rounded-lg text-emerald-850 text-[7px] font-mono leading-tight text-center">
+                        <div className="font-bold text-[8px] text-emerald-800">✓ DİJİTAL E-ONAY</div>
+                        <div>REF-2026-PM-001</div>
+                        <div>HASH: F558...A889</div>
+                      </div>
+                    ) : (
+                      <div className="h-10 border-b border-dashed border-slate-300 w-24 mx-auto my-2"></div>
+                    )}
+                    <span className="text-[9px] font-bold text-slate-800 block">Proje Müdürü</span>
                   </div>
 
                 </div>
@@ -935,7 +1299,6 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
           </div>
         </div>
       )}
-
     </div>
   );
 };

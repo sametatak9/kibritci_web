@@ -36,7 +36,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   signatureStyle,
   addNotification
 }) => {
-  const [activeTab, setActiveTab] = useState<'satin_alma' | 'guvenlik_belgeleri' | 'kampci_belgeleri' | 'formen_belgeleri' | 'sofor_talepleri' | 'gecmis' | 'imzalar'>('satin_alma');
+  const [activeTab, setActiveTab] = useState<'satin_alma' | 'guvenlik_belgeleri' | 'kampci_belgeleri' | 'formen_belgeleri' | 'sofor_talepleri' | 'depocu_talepleri' | 'gecmis' | 'imzalar'>('satin_alma');
   const [selectedYoneticiEmail, setSelectedYoneticiEmail] = useState<string>('');
   const [stampText, setStampText] = useState<string>('🔵 ŞİRKET GENEL MÜDÜRÜ (E-İMZA)');
   const [customStamp, setCustomStamp] = useState<string>('');
@@ -58,6 +58,39 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
   const [aracOnayTalepleri, setAracOnayTalepleri] = useState<any[]>([]);
   const [yolHarcamalari, setYolHarcamalari] = useState<any[]>([]);
+
+  const [stokKartTalepleri, setStokKartTalepleri] = useState<any[]>([]);
+  const [depoSayimTalepleri, setDepoSayimTalepleri] = useState<any[]>([]);
+
+  // Load and subscribe to Depocu collections from Firestore
+  useEffect(() => {
+    const unsubStok = onSnapshot(collection(db, 'stokKartlar'), (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.durum === 'ONAY BEKLİYOR') {
+          list.push({ id: doc.id, ...data });
+        }
+      });
+      setStokKartTalepleri(list);
+    });
+
+    const unsubSayim = onSnapshot(collection(db, 'depoSayimlari'), (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.durum === 'ONAY BEKLİYOR') {
+          list.push({ id: doc.id, ...data });
+        }
+      });
+      setDepoSayimTalepleri(list);
+    });
+
+    return () => {
+      unsubStok();
+      unsubSayim();
+    };
+  }, []);
 
   // Load and subscribe to Chauffeur collections from Firestore
   useEffect(() => {
@@ -169,6 +202,74 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
         onayTarihi: new Date().toISOString()
       });
       alert("Harcama reddedildi.");
+    } catch (err) {
+      console.error(err);
+      alert("Reddetme işlemi başarısız.");
+    }
+  };
+
+  const handleApproveStokKart = async (item: any) => {
+    if (!window.confirm(`"${item.stokAdi}" (${item.stokKodu}) stok kartını onaylıyor musunuz?`)) return;
+    try {
+      await updateDoc(doc(db, 'stokKartlar', item.id), {
+        durum: 'AKTIF',
+        onaylayanYonetici: currentUser?.email || 'Sistem Yöneticisi',
+        onayTarihi: new Date().toISOString().split('T')[0]
+      });
+      alert("🎉 Stok kartı onaylandı ve 'AKTIF' olarak kaydedildi!");
+    } catch (err) {
+      console.error(err);
+      alert("Onaylama sırasında bir hata oluştu.");
+    }
+  };
+
+  const handleRejectStokKart = async (item: any) => {
+    if (!window.confirm(`"${item.stokAdi}" stok kartını reddetmek istiyor musunuz?`)) return;
+    try {
+      await deleteDoc(doc(db, 'stokKartlar', item.id));
+      alert("🛑 Stok kartı talebi reddedildi ve sistemden silindi.");
+    } catch (err) {
+      console.error(err);
+      alert("Reddetme işlemi başarısız.");
+    }
+  };
+
+  const handleApproveDepoSayim = async (item: any) => {
+    if (!window.confirm(`Hafta ${item.haftaNo} depo sayımını onaylıyor musunuz? Bu işlem depodaki stok miktarlarını sayım miktarlarıyla güncelleyecektir.`)) return;
+    try {
+      // 1. Update sayim status to ONAYLANDI
+      await updateDoc(doc(db, 'depoSayimlari', item.id), {
+        durum: 'ONAYLANDI',
+        onaylayanYonetici: currentUser?.email || 'Sistem Yöneticisi',
+        onayTarihi: new Date().toISOString().split('T')[0]
+      });
+
+      // 2. Update stock card quantities with count physical quantities
+      if (item.kalemler && Array.isArray(item.kalemler)) {
+        for (const k of item.kalemler) {
+          if (k.stockId) {
+            const stockRef = doc(db, 'stokKartlar', k.stockId);
+            await updateDoc(stockRef, { miktar: k.physicalQty });
+          }
+        }
+      }
+
+      alert("🎉 Depo sayımı onaylandı ve tüm stoklar fiziksel miktarlarıyla güncellendi!");
+    } catch (err) {
+      console.error(err);
+      alert("Onaylama işlemi sırasında bir hata oluştu.");
+    }
+  };
+
+  const handleRejectDepoSayim = async (item: any) => {
+    if (!window.confirm(`Hafta ${item.haftaNo} depo sayımını reddetmek istiyor musunuz?`)) return;
+    try {
+      await updateDoc(doc(db, 'depoSayimlari', item.id), {
+        durum: 'REDDEDİLDİ',
+        onaylayanYonetici: currentUser?.email || 'Sistem Yöneticisi',
+        onayTarihi: new Date().toISOString().split('T')[0]
+      });
+      alert("🛑 Depo sayımı reddedildi.");
     } catch (err) {
       console.error(err);
       alert("Reddetme işlemi başarısız.");
@@ -908,7 +1009,11 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   const pendingYolHarcamalari = yolHarcamalari.filter(x => x.durum === 'ONAY BEKLİYOR');
   const pendingSoforCount = pendingAracTalepleri.length + pendingYolHarcamalari.length;
 
-  const totalPendingCount = pendingRequests.length + pendingWaybills.length + pendingInvoices.length + pendingPersonelCount + pendingKampSayimlar.length + pendingKampFaaliyetler.length + pendingSoforCount;
+  const pendingStokCount = stokKartTalepleri.length;
+  const pendingSayimCount = depoSayimTalepleri.length;
+  const pendingDepocuCount = pendingStokCount + pendingSayimCount;
+
+  const totalPendingCount = pendingRequests.length + pendingWaybills.length + pendingInvoices.length + pendingPersonelCount + pendingKampSayimlar.length + pendingKampFaaliyetler.length + pendingSoforCount + pendingDepocuCount;
 
   // Gecmis onaylar list (approved or updated documents)
   const approvedRequests = satinAlmaTalepleri.filter(doc => doc.onayDurumu.includes('TAMAMLANDI') || doc.onayDurumu === 'ONAYLANDI' || doc.onayDurumu === 'DİJİTAL ONAYLANDI');
@@ -1116,6 +1221,10 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                 <span className="flex items-center space-x-1.5"><Truck size={11} className="text-sky-500" /> <span>Şöför Talepleri</span></span>
                 <span className="font-mono text-slate-800 text-[10px] font-bold">{pendingSoforCount}</span>
               </div>
+              <div className="flex justify-between p-1.5 bg-slate-50 rounded border border-slate-250/60">
+                <span className="flex items-center space-x-1.5"><Package size={11} className="text-indigo-500" /> <span>Depocu Talepleri</span></span>
+                <span className="font-mono text-slate-800 text-[10px] font-bold">{pendingDepocuCount}</span>
+              </div>
             </div>
           </div>
 
@@ -1160,6 +1269,14 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
             >
               <span className="flex items-center space-x-2"><Truck size={13} className={activeTab === 'sofor_talepleri' ? 'text-white' : 'text-sky-500'} /> <span>Şöför Talepleri</span></span>
               {pendingSoforCount > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'sofor_talepleri' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800'}`}>{pendingSoforCount}</span>}
+            </button>
+
+            <button 
+              onClick={() => setActiveTab('depocu_talepleri')}
+              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'depocu_talepleri' ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+              <span className="flex items-center space-x-2"><Package size={13} className={activeTab === 'depocu_talepleri' ? 'text-white' : 'text-indigo-500'} /> <span>Depocu Talepleri</span></span>
+              {pendingDepocuCount > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'depocu_talepleri' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-800'}`}>{pendingDepocuCount}</span>}
             </button>
 
             <button 
@@ -2508,6 +2625,134 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                               Onaylayan/Reddeden: <span className="font-bold">{item.onaylayanYonetici || 'Bilinmiyor'}</span>
                             </div>
                           )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'depocu_talepleri' && (
+            <div className="space-y-6">
+              <div className="border bg-slate-900 p-4.5 rounded-2xl border-slate-800 flex justify-between items-center text-xs text-white">
+                <div className="space-y-1">
+                  <span className="text-indigo-400 font-bold block text-[11px] tracking-widest uppercase">📦 DEPOCU TALEPLERİ (STOK KARTLARI &amp; HAFTALIK SAYIMLAR)</span>
+                  <p className="text-slate-400 leading-relaxed text-[11px]">
+                    Depo sorumlusundan gelen onay bekleyen yeni stok kartı açma taleplerini ve haftalık depo fiziksel sayım tutanaklarını buradan inceleyip onaylayabilirsiniz.
+                  </p>
+                </div>
+              </div>
+
+              {/* A. Pending Stock Cards */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-2">
+                  <Package size={14} className="text-indigo-500" />
+                  <span>Yeni Stok Kartı Açma Talepleri ({stokKartTalepleri.length})</span>
+                </h3>
+
+                {stokKartTalepleri.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic bg-white border p-4 rounded-xl">Onay bekleyen yeni stok kartı talebi bulunmuyor.</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {stokKartTalepleri.map(item => (
+                      <div key={item.id} className="bg-white border rounded-2xl p-4 flex flex-col justify-between hover:border-indigo-300 transition space-y-3 shadow-xs">
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between items-start">
+                            <span className="font-mono bg-indigo-50 text-indigo-700 border border-indigo-100 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                              {item.stokKodu}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono font-bold">{item.tarih}</span>
+                          </div>
+                          <h4 className="font-bold text-slate-800 text-xs mt-1">{item.stokAdi}</h4>
+                          <div className="grid grid-cols-2 gap-2 text-[10.5px] text-slate-650">
+                            <div>Kategori: <strong className="text-slate-800 font-semibold">{item.kategori}</strong></div>
+                            <div>Ölçü Birimi: <strong className="text-slate-800 font-semibold">{item.birim}</strong></div>
+                            <div>Giriş Miktar: <strong className="text-blue-600 font-black">{item.miktar} {item.birim}</strong></div>
+                            <div>Kritik Limit: <strong className="text-rose-650 font-bold">{item.kritikSeviye || 5}</strong></div>
+                          </div>
+                          {item.aciklama && <p className="text-[10px] text-slate-500 italic mt-1">Not: {item.aciklama}</p>}
+                        </div>
+
+                        <div className="flex gap-2 pt-2.5 border-t border-slate-100">
+                          <button 
+                            onClick={() => handleRejectStokKart(item)}
+                            className="flex-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-150 py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1"
+                          >
+                            <X size={11} />
+                            <span>Reddet / Sil</span>
+                          </button>
+                          <button 
+                            onClick={() => handleApproveStokKart(item)}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1 border-b-2 border-emerald-800"
+                          >
+                            <Check size={11} />
+                            <span>Kartı Onayla</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* B. Pending Sayım Counts */}
+              <div className="space-y-3 pt-6 border-t">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-2">
+                  <FileText size={14} className="text-indigo-500" />
+                  <span>Depo Fiziksel Sayım Tutanakları ({depoSayimTalepleri.length})</span>
+                </h3>
+
+                {depoSayimTalepleri.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic bg-white border p-4 rounded-xl">Onay bekleyen depo fiziksel sayım belgesi bulunmuyor.</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {depoSayimTalepleri.map(item => (
+                      <div key={item.id} className="bg-white border rounded-2xl p-4 flex flex-col justify-between hover:border-indigo-300 transition space-y-3 shadow-xs">
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-start">
+                            <span className="font-mono bg-indigo-50 text-indigo-700 border border-indigo-100 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                              Hafta {item.haftaNo || '1'} Sayımı
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono font-bold">{item.tarih}</span>
+                          </div>
+                          <p className="text-[10.5px] text-slate-650 font-medium">Sayım Yapan: <strong className="text-slate-800">{item.sayimYapan}</strong></p>
+                          {item.notlar && <p className="text-[10.5px] bg-slate-50 p-2 rounded-xl text-slate-600 border italic">" {item.notlar} "</p>}
+                          
+                          <div className="pt-2">
+                            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Tespit Edilen Farklar</span>
+                            <div className="space-y-1 text-[10px] font-mono text-slate-650 max-h-32 overflow-y-auto pr-1">
+                              {item.kalemler?.map((k: any, idx: number) => (
+                                <div key={idx} className="flex justify-between p-1 bg-slate-50 border rounded mt-0.5">
+                                  <span>{k.urunAdi} ({k.kod})</span>
+                                  <span className="font-bold flex items-center space-x-1">
+                                    <span className="text-slate-400">{k.systemQty} ➔ {k.physicalQty}</span>
+                                    <span className={k.diff < 0 ? 'text-rose-650' : k.diff > 0 ? 'text-emerald-600' : 'text-slate-500'}>
+                                      ({k.diff > 0 ? `+${k.diff}` : k.diff} {k.birim})
+                                    </span>
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 pt-2.5 border-t border-slate-105">
+                          <button 
+                            onClick={() => handleRejectDepoSayim(item)}
+                            className="flex-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-150 py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1"
+                          >
+                            <X size={11} />
+                            <span>Sayımı İptal Et / Reddet</span>
+                          </button>
+                          <button 
+                            onClick={() => handleApproveDepoSayim(item)}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1 border-b-2 border-emerald-800"
+                          >
+                            <Check size={11} />
+                            <span>Sayımı Onayla &amp; Güncelle</span>
+                          </button>
                         </div>
                       </div>
                     ))}

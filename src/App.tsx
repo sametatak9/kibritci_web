@@ -23,6 +23,7 @@ import { ProfilScreen } from './components/ProfilScreen';
 import { DepocuScreen } from './components/DepocuScreen';
 import { EvrakAktarimiScreen } from './components/EvrakAktarimiScreen';
 import { MobileManagerScreen } from './components/MobileManagerScreen';
+import { KibarHakedisScreen } from './components/KibarHakedisScreen';
 
 // Type definitions
 import { 
@@ -456,6 +457,39 @@ export default function App() {
       setKampKayitlari(list);
     });
 
+    const unsubStoklar = onSnapshot(collection(db, 'stokKartlar'), (snapshot) => {
+      const list: StokKart[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() } as any);
+      });
+      setStokKartlar(list);
+    });
+
+    const unsubAraclar = onSnapshot(collection(db, 'araclar'), (snapshot) => {
+      const list: AracBakim[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() } as any);
+      });
+      setAraclar(list);
+    });
+
+    const unsubAracKm = onSnapshot(collection(db, 'aracKmLoglari'), (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() });
+      });
+      list.sort((a, b) => new Date(b.tarih || 0).getTime() - new Date(a.tarih || 0).getTime());
+      setAracKmLoglari(list);
+    });
+
+    const unsubCari = onSnapshot(collection(db, 'cariKartlar'), (snapshot) => {
+      const list: CariKart[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() } as any);
+      });
+      setCariKartlar(list);
+    });
+
     const qNotif = query(collection(db, 'bildirimler'), orderBy('tarih', 'desc'), limit(30));
     const unsubNotif = onSnapshot(qNotif, (snapshot) => {
       const list: any[] = [];
@@ -476,6 +510,10 @@ export default function App() {
       unsubKampOdalari();
       unsubKampKayitlari();
       unsubNotif();
+      unsubStoklar();
+      unsubAraclar();
+      unsubAracKm();
+      unsubCari();
     };
   }, [dbStatus, currentUser]);
 
@@ -1046,9 +1084,9 @@ export default function App() {
           kisitliSayfalar={matchedU?.kisitliSayfalar}
           onToggleMobileMode={() => {
             setIsMobileMode(true);
-            setIsMobileDirect(true);
+            setIsMobileDirect(false);
             localStorage.setItem('kibritci_mobile_mode', 'true');
-            localStorage.setItem('kibritci_mobile_direct', 'true');
+            localStorage.setItem('kibritci_mobile_direct', 'false');
           }}
         />
       )}
@@ -1068,9 +1106,9 @@ export default function App() {
             onClearNotifications={markAllNotificationsAsRead}
             onToggleMobileMode={() => {
               setIsMobileMode(true);
-              setIsMobileDirect(true);
+              setIsMobileDirect(false);
               localStorage.setItem('kibritci_mobile_mode', 'true');
-              localStorage.setItem('kibritci_mobile_direct', 'true');
+              localStorage.setItem('kibritci_mobile_direct', 'false');
             }}
           />
         )}
@@ -1128,6 +1166,8 @@ export default function App() {
                   kampKayitlari={kampKayitlari}
                   onNavigate={handleTabNavigation}
                   currentUser={currentUser}
+                  stokKartlar={stokKartlar}
+                  bildirimler={bildirimler}
                 />
               )}
 
@@ -1359,6 +1399,17 @@ export default function App() {
                     setKullanicilar={setKullanicilarWithSync}
                     currentUser={currentUser}
                     addNotification={addNotification}
+                  />
+                ) : renderAccessDenied()
+              )}
+
+              {activeTab === "kibar_hakedis" && (
+                (currentUser?.email?.toLowerCase() === 'sametatak9@gmail.com' || currentUser?.email?.toLowerCase() === 'santiye@kibritci.com') ? (
+                  <KibarHakedisScreen 
+                    personeller={personeller}
+                    yoklamalar={yoklamalar}
+                    sahaFaaliyetleri={sahaFaaliyetleri}
+                    currentUser={currentUser}
                   />
                 ) : renderAccessDenied()
               )}

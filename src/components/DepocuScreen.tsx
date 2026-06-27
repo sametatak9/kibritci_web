@@ -70,6 +70,11 @@ export const DepocuScreen: React.FC<DepocuScreenProps> = ({
   const [loadingZimmet, setLoadingZimmet] = useState(false);
   const [zimmetlerList, setZimmetlerList] = useState<any[]>([]);
 
+  // Urgent notifications state
+  const [showUrgentForm, setShowUrgentForm] = useState(false);
+  const [urgentMessage, setUrgentMessage] = useState('');
+  const [loadingUrgent, setLoadingUrgent] = useState(false);
+
   // Real-time listener for Counts and Assignments
   useEffect(() => {
     const unsubSayim = onSnapshot(collection(db, 'depoSayimlari'), (snap) => {
@@ -129,35 +134,26 @@ export const DepocuScreen: React.FC<DepocuScreenProps> = ({
     );
 
     try {
-      if (duplicate) {
-        // Appends to the existing stock card
-        const newMiktar = (duplicate.miktar || 0) + qty;
-        await updateDoc(doc(db, 'stokKartlar', duplicate.id), { miktar: newMiktar });
-        if (addNotification) {
-          addNotification(`Mevcut ${duplicate.stokAdi} stok kartına ${qty} ${createBirim} eklendi. Yeni miktar: ${newMiktar}`);
-        }
-        showStatus('success', `Mükerrer Kayıt Engellendi! Aynı isim veya koda sahip "${duplicate.stokAdi}" kartı sistemde zaten kayıtlı. Girilen adet (${qty} ${createBirim}) mevcut miktara iliştirildi.`);
-      } else {
-        // Create a pristine new stock card
-        const cardId = `STOK-${Date.now()}`;
-        const newDoc: StokKart = {
-          id: cardId,
-          stokKodu: createStokKodu.toUpperCase().trim(),
-          stokAdi: createStokAdi.trim(),
-          kategori: createKategori,
-          birim: createBirim,
-          miktar: qty,
-          kritikSeviye: crit,
-          tarih: new Date().toISOString().slice(0, 10),
-          durum: 'AKTIF',
-          aciklama: 'Mobil Depo Paneli üzerinden eklenmiştir.'
-        };
-        await setDoc(doc(db, 'stokKartlar', cardId), newDoc);
-        if (addNotification) {
-          addNotification(`Yeni stok kartı (${createStokAdi}, Kod: ${createStokKodu}) oluşturuldu.`);
-        }
-        showStatus('success', `"${createStokAdi}" stok kartı sıfırdan başarıyla oluşturuldu!`);
+      const cardId = `STOK-${Date.now()}`;
+      const newDoc: StokKart = {
+        id: cardId,
+        stokKodu: createStokKodu.toUpperCase().trim(),
+        stokAdi: createStokAdi.trim(),
+        kategori: createKategori,
+        birim: createBirim,
+        miktar: qty,
+        kritikSeviye: crit,
+        tarih: new Date().toISOString().slice(0, 10),
+        durum: 'ONAY BEKLİYOR',
+        aciklama: duplicate 
+          ? `Mükerrer Talep (Mevcut Miktar: ${duplicate.miktar || 0} ${duplicate.birim} üzerine +${qty} ekleme talebi)`
+          : 'Mobil Depo Paneli üzerinden eklenmiştir.'
+      };
+      await setDoc(doc(db, 'stokKartlar', cardId), newDoc);
+      if (addNotification) {
+        addNotification(`Onay Bekleyen yeni stok kartı talebi (${createStokAdi}, Kod: ${createStokKodu}) oluşturuldu.`);
       }
+      showStatus('success', `"${createStokAdi}" için onay bekleyen stok kartı talebi başarıyla oluşturuldu! Yönetici onayladığında sisteme yansıyacaktır.`);
 
       // Reset Create Form fields
       setCreateStokAdi('');
@@ -184,7 +180,7 @@ export const DepocuScreen: React.FC<DepocuScreenProps> = ({
 
     try {
       const sayimId = `depo_sayim_${Date.now()}`;
-      const kalemler = stokKartlar.map(stock => {
+      const kalemler = stokKartlar.filter(s => s.durum !== 'ONAY BEKLİYOR').map(stock => {
         const physicalQty = sayimMiktarlari[stock.id] ?? 0;
         const systemQty = stock.miktar || 0;
         const diff = physicalQty - systemQty;
@@ -206,28 +202,66 @@ export const DepocuScreen: React.FC<DepocuScreenProps> = ({
         sayimYapan: currentUser?.email || 'depocu_amiri',
         notlar: sayimNot || 'Haftalık rutin depo sayımı.',
         kalemler,
-        durum: 'SAYILDI'
+        durum: 'ONAY BEKLİYOR'
       };
 
       // Save count to database
       await saveDocument('depoSayimlari', countDoc);
       if (addNotification) {
-        addNotification(`Haftalık depo sayımı (${countDoc.haftaNo}. hafta) tamamlandı.`);
-      }
-
-      // Update actual stock quantities to reflect physical quantities!
-      for (const item of kalemler) {
-        const stockRef = doc(db, 'stokKartlar', item.stockId);
-        await updateDoc(stockRef, { miktar: item.physicalQty });
+        addNotification(`Onay Bekleyen haftalık depo sayımı (${countDoc.haftaNo}. hafta) kaydedildi.`);
       }
 
       setSayimNot('');
-      showStatus('success', 'Haftalık depo sayımı başarıyla kaydedildi! Stoklar fiziksel adetlerle güncellendi.');
+      showStatus('success', 'Haftalık depo sayımı onay sırasına başarıyla gönderildi!');
     } catch (err) {
       console.error(err);
       showStatus('error', 'Sayım kaydedilirken hata oluştu!');
     } finally {
       setLoadingSayim(false);
+    }
+  };
+
+  const handleSendKritikUyarisi = async (stock: StokKart) => {
+    try {
+      const msg = `🚨 KRİTİK STOK UYARISI: "${stock.stokAdi}" (${stock.stokKodu}) kritik seviyenin altına düştü. Mevcut: ${stock.miktar} ${stock.birim} (Limit: ${stock.kritikSeviye}).`;
+      
+      const newNotif = {
+        id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        tarih: new Date().toISOString(),
+        kullanici: currentUser?.email || 'depo_sorumlusu',
+        mesaj: msg,
+        okundu: false
+      };
+      await saveDocument('bildirimler', newNotif);
+      showStatus('success', `Kritik stok uyarısı yöneticilere başarıyla iletildi!`);
+    } catch (err) {
+      console.error(err);
+      showStatus('error', 'Uyarı iletilirken hata oluştu.');
+    }
+  };
+
+  const handleSendUrgentMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!urgentMessage.trim()) return;
+    setLoadingUrgent(true);
+    try {
+      const msg = `🚨 ACİL MALZEME / DEPO BİLDİRİMİ: ${urgentMessage.trim()}`;
+      const newNotif = {
+        id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        tarih: new Date().toISOString(),
+        kullanici: currentUser?.email || 'depo_sorumlusu',
+        mesaj: msg,
+        okundu: false
+      };
+      await saveDocument('bildirimler', newNotif);
+      setUrgentMessage('');
+      setShowUrgentForm(false);
+      showStatus('success', 'Acil durum bildirimi başarıyla gönderildi!');
+    } catch (err) {
+      console.error(err);
+      showStatus('error', 'Bildirim gönderilemedi.');
+    } finally {
+      setLoadingUrgent(false);
     }
   };
 
@@ -486,14 +520,60 @@ export const DepocuScreen: React.FC<DepocuScreenProps> = ({
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">STOK KARTLARI LİSTESİ</span>
                 <span className="text-[9px] font-mono bg-slate-200/60 px-2 py-0.5 rounded border border-slate-300 font-bold">{filteredStocks.length} Kart</span>
               </div>
-              <button
-                onClick={() => setShowCreateForm(!showCreateForm)}
-                className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition flex items-center space-x-1 shadow-sm cursor-pointer"
-              >
-                {showCreateForm ? <X size={12} /> : <Plus size={12} />}
-                <span>{showCreateForm ? 'Kapat' : 'Stok Kartı Oluştur'}</span>
-              </button>
+              <div className="flex space-x-1.5">
+                <button
+                  onClick={() => setShowUrgentForm(!showUrgentForm)}
+                  className="bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition flex items-center space-x-1 shadow-sm cursor-pointer"
+                >
+                  <AlertTriangle size={12} />
+                  <span>{showUrgentForm ? 'Kapat' : 'Acil Durum Bildir'}</span>
+                </button>
+                <button
+                  onClick={() => setShowCreateForm(!showCreateForm)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition flex items-center space-x-1 shadow-sm cursor-pointer"
+                >
+                  {showCreateForm ? <X size={12} /> : <Plus size={12} />}
+                  <span>{showCreateForm ? 'Kapat' : 'Stok Kartı Oluştur'}</span>
+                </button>
+              </div>
             </div>
+
+            {/* ACİL DURUM / URGENT MESSAGE FORM */}
+            {showUrgentForm && (
+              <form onSubmit={handleSendUrgentMessage} className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-3.5 shadow-sm animate-in fade-in duration-200">
+                <div className="border-b border-amber-250 pb-1.5">
+                  <span className="text-[10px] font-black text-amber-800 block uppercase">🚨 Acil Malzeme / Depo Bildirimi Gönder</span>
+                  <p className="text-[9px] text-amber-600">Bu bildiri anında yönetici ana sayfasındaki canlı akışa ve onay havuzuna düşecektir.</p>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-amber-750">Bildirim Açıklaması *</label>
+                  <textarea
+                    required
+                    rows={3}
+                    placeholder="Örn: 1. Etap beton dökümü için acil 50 torba çimento lazım, depoda kalmadı!"
+                    value={urgentMessage}
+                    onChange={(e) => setUrgentMessage(e.target.value)}
+                    className="w-full bg-white border border-amber-200 rounded-xl p-2 px-3 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500/25 outline-none resize-none"
+                  />
+                </div>
+                <div className="flex justify-end space-x-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowUrgentForm(false)}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-650 font-bold py-1.5 px-3 rounded-xl text-[10px] transition cursor-pointer"
+                  >
+                    Vazgeç
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loadingUrgent}
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-bold py-1.5 px-4 rounded-xl text-[10px] transition cursor-pointer"
+                  >
+                    {loadingUrgent ? 'Gönderiliyor...' : 'Yöneticilere İlet'}
+                  </button>
+                </div>
+              </form>
+            )}
 
             {/* CREATE NEW STOCK CARD FORM (Appends if duplicate) */}
             {showCreateForm && (
@@ -619,18 +699,40 @@ export const DepocuScreen: React.FC<DepocuScreenProps> = ({
                 filteredStocks.map(stock => (
                   <div key={stock.id} className="bg-white border border-slate-200 p-3.5 rounded-2xl flex justify-between items-center hover:border-blue-300 transition shadow-3xs">
                     <div>
-                      <span className="text-[8px] font-mono font-black text-slate-400 uppercase tracking-wider block">{stock.kategori} | {stock.stokKodu}</span>
+                      <span className="text-[8px] font-mono font-black text-slate-400 uppercase tracking-wider block">
+                        {stock.kategori} | {stock.stokKodu}
+                        {stock.durum === 'ONAY BEKLİYOR' && (
+                          <span className="ml-2 text-[8px] bg-amber-500/10 text-amber-600 font-bold border border-amber-500/25 px-1.5 py-0.2 rounded font-sans">ONAY BEKLİYOR</span>
+                        )}
+                      </span>
                       <h4 className="text-xs font-bold text-slate-800 mt-1">{stock.stokAdi}</h4>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right flex flex-col items-end">
                       <span className="text-[8px] text-slate-400 block font-bold uppercase leading-none mb-1">Mevcut Adet</span>
-                      <span className={`text-xs font-mono font-black py-0.5 px-2.5 rounded-md ${
-                        (stock.miktar || 0) <= (stock.kritikSeviye || 5) 
-                          ? 'bg-rose-50 text-rose-700 border border-rose-200' 
-                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      }`}>
-                        {stock.miktar || 0} {stock.birim}
-                      </span>
+                      {stock.durum === 'ONAY BEKLİYOR' ? (
+                        <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          ONAY BEKLİYOR
+                        </span>
+                      ) : (
+                        <div className="flex flex-col items-end">
+                          <span className={`text-xs font-mono font-black py-0.5 px-2.5 rounded-md ${
+                            (stock.miktar || 0) <= (stock.kritikSeviye || 5) 
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200' 
+                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          }`}>
+                            {stock.miktar || 0} {stock.birim}
+                          </span>
+                          {(stock.miktar || 0) <= (stock.kritikSeviye || 5) && (
+                            <button
+                              type="button"
+                              onClick={() => handleSendKritikUyarisi(stock)}
+                              className="mt-1 text-[8px] bg-amber-500 hover:bg-amber-600 text-slate-950 px-1.5 py-0.5 rounded font-bold cursor-pointer"
+                            >
+                              ⚠️ Yöneticiye Bildir
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))
@@ -652,7 +754,7 @@ export const DepocuScreen: React.FC<DepocuScreenProps> = ({
 
               <form onSubmit={handleSaveWeeklyCount} className="space-y-4">
                 <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
-                  {stokKartlar.map(stock => {
+                  {stokKartlar.filter(s => s.durum !== 'ONAY BEKLİYOR').map(stock => {
                     const physical = sayimMiktarlari[stock.id] ?? 0;
                     const system = stock.miktar || 0;
                     const diff = physical - system;
@@ -706,7 +808,7 @@ export const DepocuScreen: React.FC<DepocuScreenProps> = ({
                   className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800/40 text-white font-bold text-xs py-3 rounded-2xl transition cursor-pointer flex items-center justify-center space-x-2 shadow-sm"
                 >
                   {loadingSayim ? <RefreshCw size={13} className="animate-spin" /> : <Check size={14} />}
-                  <span>HAFTALIK SAYIMI STOKLARA İŞLE &amp; KAYDET</span>
+                  <span>HAFTALIK SAYIMI ONAYA GÖNDER</span>
                 </button>
               </form>
             </div>
@@ -760,7 +862,7 @@ export const DepocuScreen: React.FC<DepocuScreenProps> = ({
                     className="w-full bg-white border border-slate-300 text-xs text-slate-800 p-2.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/10"
                   >
                     <option value="">-- Malzeme Seçin --</option>
-                    {stokKartlar.map(s => (
+                    {stokKartlar.filter(s => s.durum !== 'ONAY BEKLİYOR').map(s => (
                       <option key={s.id} value={s.id}>
                         {s.stokAdi} ({s.stokKodu}) - Depo: {s.miktar || 0} {s.birim}
                       </option>

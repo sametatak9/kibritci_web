@@ -198,10 +198,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           
           await saveToKullanicilarCollection(finalUid);
           
+          // Trigger simulated email verification code
+          fetch('/api/send-verification-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: emailLower })
+          }).catch(err => console.warn(err));
+          
           localStorage.setItem('kibritci_portal_session', JSON.stringify({ email: emailLower, uid: finalUid }));
           setInfoMsg(matchedPersonelId 
-            ? 'Hesap başarıyla oluşturuldu! TC No personel listesiyle eşleşti ✅ Sisteme giriş yapılıyor...'
-            : 'Hesap başarıyla oluşturuldu! Sisteme giriş yapılıyor...'
+            ? 'Hesap başarıyla oluşturuldu! Doğrulama e-postası simüle edildi ✉️ TC No personel listesiyle eşleşti ✅ Sisteme giriş yapılıyor...'
+            : 'Hesap başarıyla oluşturuldu! Doğrulama e-postası simüle edildi ✉️ Sisteme giriş yapılıyor...'
           );
           setTimeout(() => {
             onLoginSuccess(userCredential.user);
@@ -229,10 +236,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
           await saveToKullanicilarCollection(anonUid);
 
+          // Trigger simulated email verification code
+          fetch('/api/send-verification-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: emailLower })
+          }).catch(err => console.warn(err));
+
           localStorage.setItem('kibritci_portal_session', JSON.stringify({ email: emailLower, uid: anonUid }));
           setInfoMsg(matchedPersonelId 
-            ? 'Hesap başarıyla oluşturuldu! TC No personel listesiyle eşleşti ✅ Sisteme giriş yapılıyor...'
-            : 'Hesap başarıyla oluşturuldu! Sisteme giriş yapılıyor...'
+            ? 'Hesap başarıyla oluşturuldu! Doğrulama e-postası simüle edildi ✉️ TC No personel listesiyle eşleşti ✅ Sisteme giriş yapılıyor...'
+            : 'Hesap başarıyla oluşturuldu! Doğrulama e-postası simüle edildi ✉️ Sisteme giriş yapılıyor...'
           );
           setTimeout(() => {
             onLoginSuccess({ email: emailLower, uid: anonUid, isMock: true });

@@ -33,6 +33,107 @@ function getGeminiClient(): GoogleGenAI {
   return aiClient;
 }
 
+// API endpoint to simulate sending a verification email
+app.post("/api/send-verification-email", (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: "Email is required" });
+  }
+  console.log(`\n======================================================`);
+  console.log(`[MAIL SIMULATION] Verification email successfully sent to: ${email}`);
+  console.log(`[MAIL SIMULATION] Code: ${Math.floor(100000 + Math.random() * 900000)}`);
+  console.log(`======================================================\n`);
+  res.json({ success: true, message: `Verification email simulated and sent to ${email}` });
+});
+
+// API endpoint to parse Daily Yoklama / Puantaj Sheet
+app.post("/api/parse-daily-yoklama", async (req, res) => {
+  try {
+    const { fileBase64, mimeType } = req.body;
+    if (!fileBase64 || !mimeType) {
+      return res.status(400).json({ error: "Missing fileBase64 or mimeType" });
+    }
+
+    const ai = getGeminiClient();
+    const imagePart = {
+      inlineData: {
+        mimeType: mimeType,
+        data: fileBase64,
+      },
+    };
+
+    const promptText = `
+You are an expert HR and timesheet auditing assistant.
+Analyze this uploaded Daily Puantaj (Daily Attendance) Sheet.
+It contains columns for employee names (Adı Soyadı), role (Görevi), attendance status (Yoklama - Geldi/Yok/İzinli), overtime hours (Fazla Mesai), and signature (İmza).
+
+Please extract:
+1. "tarih": The date of the attendance sheet in YYYY-MM-DD format. If missing, default to the current date.
+2. "yoklamaKayitlari": An array of all workers listed on the sheet with fields:
+   - "adSoyad": Full name.
+   - "gorev": Job title/role (e.g. İŞÇİ, FORMEN, USTA, GÜVENLİK, DEPOCU, etc.).
+   - "durum": The attendance status mapped to one of: "Geldi", "Yok", "İzinli", "Raporlu".
+   - "mesaiSaati": Varsa fazla mesai saati (number, default to 0).
+
+Provide the output strictly conforming to the response schema.
+`;
+
+    const responseSchema = {
+      type: Type.OBJECT,
+      properties: {
+        tarih: { type: Type.STRING, description: "YYYY-MM-DD formatında yoklama tarihi" },
+        yoklamaKayitlari: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              adSoyad: { type: Type.STRING },
+              gorev: { type: Type.STRING },
+              durum: { type: Type.STRING, description: "'Geldi', 'Yok', 'İzinli', 'Raporlu'" },
+              mesaiSaati: { type: Type.NUMBER }
+            },
+            required: ["adSoyad", "durum"]
+          }
+        }
+      },
+      required: ["tarih", "yoklamaKayitlari"]
+    };
+
+    const models = ["gemini-2.5-flash", "gemini-3.5-flash"];
+    let response;
+    let lastError;
+
+    for (const model of models) {
+      try {
+        console.log(`Parsing daily yoklama with model: ${model}...`);
+        response = await ai.models.generateContent({
+          model: model,
+          contents: [promptText, imagePart],
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: responseSchema,
+            temperature: 0.1,
+          },
+        });
+        if (response?.text) break;
+      } catch (err) {
+        lastError = err;
+        console.warn(`Model ${model} failed for daily yoklama:`, err);
+      }
+    }
+
+    if (!response || !response.text) {
+      throw lastError || new Error("All models failed to parse daily yoklama sheet");
+    }
+
+    const parsedData = JSON.parse(response.text);
+    res.json({ success: true, data: parsedData });
+  } catch (error: any) {
+    console.error("Error in parse-daily-yoklama:", error);
+    res.status(500).json({ error: error.message || "Failed to parse daily yoklama sheet" });
+  }
+});
+
 // API endpoint to parse SGK document (PDF or Image)
 app.post("/api/parse-sgk", async (req, res) => {
   try {

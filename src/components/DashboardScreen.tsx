@@ -18,6 +18,8 @@ interface DashboardScreenProps {
   kampKayitlari?: KampKaydi[];
   onNavigate: (tab: string) => void;
   currentUser?: any;
+  stokKartlar?: any[];
+  bildirimler?: any[];
 }
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ 
@@ -30,7 +32,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   kampOdalari = [],
   kampKayitlari = [],
   onNavigate,
-  currentUser
+  currentUser,
+  stokKartlar = [],
+  bildirimler = []
 }) => {
   // Sticky notepad local state
   const [stickyNotes, setStickyNotes] = useState<string>(() => {
@@ -53,27 +57,26 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const totalPersonel = personeller.length;
   const activePersonelCount = personeller.filter(p => p.durum === true || String(p.durum) === 'true').length;
   
-  const totalIn = kasaHareketleri
-    .filter(k => k.hareketTipi === 'GİRİŞ')
-    .reduce((sum, current) => sum + current.tutar, 0);
-    
-  const totalOut = kasaHareketleri
-    .filter(k => k.hareketTipi === 'ÇIKIŞ')
-    .reduce((sum, current) => sum + current.tutar, 0);
-    
-  const netBalance = totalIn - totalOut;
-
-  // Kibar Hakedis Calculations (Present Days * 200 TL)
-  let totalPresentDaysAcrossAll = 0;
+  // Calculate attendance rate (Geldi ratio) for the current month
+  let totalCheckedDays = 0;
+  let totalPresentDays = 0;
   Object.keys(yoklamalar || {}).forEach(pId => {
     const pYoklama = yoklamalar[pId] || {};
     Object.values(pYoklama).forEach((day: any) => {
-      if (day?.durum === 'Geldi') {
-        totalPresentDaysAcrossAll++;
+      if (day?.durum && day?.durum !== 'Girilmedi') {
+        totalCheckedDays++;
+        if (day?.durum === 'Geldi') {
+          totalPresentDays++;
+        }
       }
     });
   });
-  const kibarHakedis = totalPresentDaysAcrossAll * 200;
+  const attendanceRate = totalCheckedDays > 0 ? Math.round((totalPresentDays / totalCheckedDays) * 100) : 0;
+
+  // Calculate pending manager approvals
+  const pendingStokKartCount = (stokKartlar || []).filter((s: any) => s.durum === 'ONAY BEKLİYOR').length;
+  const pendingSatinAlmaCount = (satinAlmaTalepleri || []).filter((sa: any) => sa.onayDurumu === 'BEKLİYOR').length;
+  const totalPendingApprovals = pendingStokKartCount + pendingSatinAlmaCount;
 
   // Personnel selection state for tracing history
   const [selectedPersonelId, setSelectedPersonelId] = useState<string>('');
@@ -139,30 +142,30 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       trendColor: "text-emerald-600"
     },
     {
-      title: "Toplam Kasa Gelir Akışı",
-      value: `₺${totalIn.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`,
+      title: "Lojman Doluluk Oranı",
+      value: `%${fillRatio}`,
       color: "text-emerald-600",
       bg: "bg-emerald-50/70 border-emerald-100",
-      icon: Wallet,
-      trend: "Hakedişler Alındı",
+      icon: Compass,
+      trend: `${occupiedBeds} / ${totalBeds} Yatak Dolu`,
       trendColor: "text-emerald-700"
     },
     {
-      title: "Toplam Gider Cetveli",
-      value: `₺${totalOut.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`,
-      color: "text-rose-600",
+      title: "Puantaj Katılım Oranı",
+      value: `%${attendanceRate}`,
+      color: "text-[#8B1E1E]",
       bg: "bg-rose-50/70 border-rose-100",
-      icon: ArrowDownRight,
-      trend: "Maliye ve Giderler",
+      icon: CalendarCheck2,
+      trend: "Aylık Ortalama Katılım",
       trendColor: "text-rose-700"
     },
     {
-      title: "Kasa Net Bakiyesi",
-      value: `₺${netBalance.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`,
+      title: "Bekleyen Onay Talepleri",
+      value: `${totalPendingApprovals} Adet`,
       color: "text-amber-600",
       bg: "bg-amber-50/70 border-amber-100",
-      icon: RefreshCw,
-      trend: "Proje Likit Nakit",
+      icon: ClipboardList,
+      trend: "Yönetici Kararı Bekleyen",
       trendColor: "text-amber-600"
     }
   ];
@@ -234,32 +237,72 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         })}
       </div>
 
-      {/* 🏢 Kibar Hakediş Mutabakat Detayı Banner */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative overflow-hidden bg-gradient-to-r from-amber-500/5 to-transparent">
-        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#f59e0b]" />
-        <div className="space-y-1.5">
-          <div className="flex items-center space-x-2">
-            <span className="bg-[#f59e0b]/10 text-[#d97706] text-[9px] font-black tracking-wider px-2.5 py-0.5 rounded-full border border-[#f59e0b]/10 uppercase">
-              MUTABAKAT &amp; HAKEDİŞ SÖZLEŞMESİ
-            </span>
-          </div>
+      {/* 📘 Şantiye Hızlı Kılavuz & Sistem Rehberi */}
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4 relative overflow-hidden bg-gradient-to-r from-blue-50/20 to-transparent">
+        <div className="absolute right-0 top-0 w-32 h-32 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-5 -translate-y-10 translate-x-10" />
+        <div className="space-y-1">
+          <span className="bg-blue-500/10 text-blue-700 text-[9px] font-black tracking-wider px-2.5 py-0.5 rounded-full border border-blue-500/10 uppercase">
+            EĞİTİM &amp; PRATİK KULLANIM REHBERLERİ
+          </span>
           <h3 className="font-display font-black text-slate-800 text-sm tracking-tight">
-            🏢 KİBAR HAKEDİŞ HESAPLAMA PANELİ
+            📘 Kibritçi ERP Şantiye Kullanım Kılavuzu
           </h3>
-          <p className="text-[11px] text-slate-500 max-w-2xl leading-relaxed">
-            Şirket anlaşması gereği, puantaj kayıtlarında şantiye sahasında aktif çalıştığı (<strong>"Geldi"</strong> olarak yoklama alınan) her bir personel günü için şirketimize <strong>₺200,00 TL</strong> ödeme tahakkuk edilir.
+          <p className="text-[11px] text-slate-500 max-w-2xl">
+            Aşağıdaki kartlar şantiyede sıkça yapılan operasyonların nasıl yürütüleceğini açıklar. İlgili modüle hızlıca gitmek için kılavuz başlıklarına tıklayabilirsiniz.
           </p>
         </div>
 
-        <div className="flex items-center gap-4 bg-slate-50 border border-slate-100 rounded-2xl p-3 px-5 shrink-0 shadow-inner">
-          <div className="text-right">
-            <span className="text-[9px] text-slate-400 font-bold uppercase block">Toplam Puantaj Gün Sayısı</span>
-            <span className="font-mono font-bold text-slate-700 text-xs">{totalPresentDaysAcrossAll} Personel/Gün</span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+          <div 
+            onClick={() => onNavigate("yoklama")} 
+            className="p-3.5 rounded-2xl bg-slate-50 hover:bg-blue-55/40 border border-slate-100 hover:border-blue-200 transition duration-200 cursor-pointer space-y-1.5 group"
+          >
+            <div className="flex items-center justify-between text-blue-700 font-bold text-xs">
+              <span className="group-hover:underline">1. Yoklama &amp; Puantaj</span>
+              <span>→</span>
+            </div>
+            <p className="text-[10px] text-slate-500 leading-relaxed">
+              Her sabah çalışanların şantiye durumlarını girin. AI ile yoklama kağıdının fotoğrafını çekip otomatik sisteme yükleyebilirsiniz.
+            </p>
           </div>
-          <div className="w-px h-8 bg-slate-200" />
-          <div className="text-right">
-            <span className="text-[9px] text-[#d97706] font-bold uppercase block">Kibar Hakediş Tutarı</span>
-            <span className="font-mono font-black text-amber-600 text-lg">₺{kibarHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+
+          <div 
+            onClick={() => onNavigate("satin_alma")} 
+            className="p-3.5 rounded-2xl bg-slate-50 hover:bg-amber-55/45 border border-slate-100 hover:border-amber-200 transition duration-200 cursor-pointer space-y-1.5 group"
+          >
+            <div className="flex items-center justify-between text-amber-700 font-bold text-xs">
+              <span className="group-hover:underline">2. Satın Alma Talebi</span>
+              <span>→</span>
+            </div>
+            <p className="text-[10px] text-slate-500 leading-relaxed">
+              Şantiyeye gerekli olan malzeme veya hizmet taleplerini oluşturun. Talebiniz yöneticinin Onay Havuzuna düşer.
+            </p>
+          </div>
+
+          <div 
+            onClick={() => onNavigate("kamp")} 
+            className="p-3.5 rounded-2xl bg-slate-50 hover:bg-emerald-55/40 border border-slate-100 hover:border-emerald-200 transition duration-200 cursor-pointer space-y-1.5 group"
+          >
+            <div className="flex items-center justify-between text-emerald-700 font-bold text-xs">
+              <span className="group-hover:underline">3. Lojman &amp; Kamp</span>
+              <span>→</span>
+            </div>
+            <p className="text-[10px] text-slate-500 leading-relaxed">
+              Kamp Yönetimi altından yatak atamalarını yapın. Personelin lojmana giriş-çıkış tarihlerini canlı takip edebilirsiniz.
+            </p>
+          </div>
+
+          <div 
+            onClick={() => onNavigate("arac")} 
+            className="p-3.5 rounded-2xl bg-slate-50 hover:bg-purple-55/40 border border-slate-100 hover:border-purple-200 transition duration-200 cursor-pointer space-y-1.5 group"
+          >
+            <div className="flex items-center justify-between text-purple-700 font-bold text-xs">
+              <span className="group-hover:underline">4. Şoför &amp; Araç KM</span>
+              <span>→</span>
+            </div>
+            <p className="text-[10px] text-slate-500 leading-relaxed">
+              Şoförlerin sabah/akşam KM seyrini girin. Muayene ve yağ bakımı sayaçlarını araç panelinden sürekli izleyin.
+            </p>
           </div>
         </div>
       </div>
@@ -645,33 +688,29 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                               <div class="border border-slate-200 p-3 rounded-xl bg-slate-50/50">
                                 <span class="font-extrabold text-[#8B1E1E] tracking-wider uppercase block mb-1">1. MUHASEBE</span>
                                 <span class="text-[10px] text-slate-500 block mb-6">Bordro Masası</span>
-                                <div class="h-0.5 bg-slate-300 w-24 mx-auto mb-2"></div>
-                                <span class="text-[10px] font-bold text-slate-800 block">Ayşe Demir</span>
-                                <span class="text-[8px] text-slate-400 italic">Bordro Yetkilisi</span>
+                                <div class="h-10 border-b border-dashed border-slate-350 w-24 mx-auto mb-2"></div>
+                                <span class="text-[10px] font-bold text-slate-800 block">Bordro Yetkilisi</span>
                               </div>
 
                               <div class="border border-slate-200 p-3 rounded-xl bg-slate-50/50">
                                 <span class="font-extrabold text-[#1E4E78] tracking-wider uppercase block mb-1">2. İDARİ İŞLER</span>
                                 <span class="text-[10px] text-slate-500 block mb-6">Şantiye Şefliği</span>
-                                <div class="h-0.5 bg-slate-300 w-24 mx-auto mb-2"></div>
-                                <span class="text-[10px] font-bold text-slate-800 block">Nuri Mutlu</span>
-                                <span class="text-[8px] text-slate-400 italic">İdari İşler Şefi</span>
+                                <div class="h-10 border-b border-dashed border-slate-350 w-24 mx-auto mb-2"></div>
+                                <span class="text-[10px] font-bold text-slate-800 block">İdari İşler Şefi</span>
                               </div>
 
                               <div class="border border-slate-200 p-3 rounded-xl bg-slate-50/50">
                                 <span class="font-extrabold text-[#1E4E78] tracking-wider uppercase block mb-1">3. ŞANTİYE ŞEFİ</span>
                                 <span class="text-[10px] text-slate-500 block mb-6">Fiili Saha Mühendisi</span>
-                                <div class="h-0.5 bg-slate-300 w-24 mx-auto mb-2"></div>
-                                <span class="text-[10px] font-bold text-slate-800 block">Ayhan Yılmaz</span>
-                                <span class="text-[8px] text-slate-400 italic">Şantiye Şefi</span>
+                                <div class="h-10 border-b border-dashed border-slate-350 w-24 mx-auto mb-2"></div>
+                                <span class="text-[10px] font-bold text-slate-800 block">Şantiye Şefi</span>
                               </div>
 
                               <div class="border border-slate-150 p-3 rounded-xl bg-slate-50">
                                 <span class="font-extrabold text-[#8B1E1E] tracking-wider uppercase block mb-1">4. PROJE MÜDÜRÜ</span>
                                 <span class="text-[10px] text-slate-500 block mb-6">Nihai Onaycı Müdür</span>
-                                <div class="h-0.5 bg-slate-305 w-24 mx-auto mb-2"></div>
-                                <span class="text-[10px] font-bold text-slate-800 block">Kuzey Samet Atak</span>
-                                <span class="text-[8px] text-slate-400 italic">Proje Müdürü</span>
+                                <div class="h-10 border-b border-dashed border-slate-350 w-24 mx-auto mb-2"></div>
+                                <span class="text-[10px] font-bold text-slate-800 block">Proje Müdürü</span>
                               </div>
 
                             </div>
@@ -768,41 +807,41 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         </div>
       </div>
 
-      {/* Recent Cash Flows / Recent Kadro lists */}
+      {/* Real-time Live Log Activity Stream / Recent Kadro lists */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         
-        {/* Recents Kasa */}
+        {/* Real-time Live Log Activity Stream */}
         <div className="bg-white border rounded-2xl p-5 shadow-sm space-y-4">
           <div className="border-b border-rose-100 pb-3 flex justify-between items-center">
-            <h4 className="font-display font-black text-slate-800 text-xs uppercase tracking-wider">
-              Son Kasa Gelir / Gider Girişleri
+            <h4 className="font-display font-black text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
+              🔔 Şantiye Canlı Aktivite Akışı (Live Logs)
             </h4>
-            <button 
-              onClick={() => onNavigate("kasa")}
-              className="text-[10px] text-[#1E4E78] hover:underline font-bold cursor-pointer"
-            >
-              Kasa Modülüne Git →
-            </button>
+            <span className="text-[9px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-100 font-mono animate-pulse">
+              Canlı Akış
+            </span>
           </div>
 
-          <div className="space-y-2">
-            {kasaHareketleri.slice(0, 5).map((kh, idx) => (
-              <div 
-                key={kh.id || idx} 
-                className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 transition border border-transparent hover:border-slate-100"
-              >
-                <div className="flex items-center space-x-3 text-xs">
-                  <span className={`w-2 h-2 rounded-full ${kh.hareketTipi === 'GİRİŞ' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                  <div>
-                    <p className="font-bold text-slate-800">{kh.aciklama}</p>
-                    <span className="text-[10px] text-slate-450 font-mono">{kh.tarih} · {kh.referansTipi}</span>
+          <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+            {bildirimler && bildirimler.length > 0 ? (
+              bildirimler.slice(0, 6).map((b, idx) => (
+                <div 
+                  key={b.id || idx} 
+                  className="flex items-start space-x-3 p-2.5 rounded-xl hover:bg-slate-50 transition border border-transparent hover:border-slate-100"
+                >
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0" />
+                  <div className="flex-1 min-w-0 text-xs">
+                    <p className="font-medium text-slate-700 leading-normal">{b.mesaj}</p>
+                    <span className="text-[9px] text-slate-400 font-mono block mt-0.5">
+                      {b.tarih ? new Date(b.tarih).toLocaleString('tr-TR') : 'Şimdi'}
+                    </span>
                   </div>
                 </div>
-                <span className={`font-mono font-bold text-xs ${kh.hareketTipi === 'GİRİŞ' ? 'text-emerald-700' : 'text-rose-700'}`}>
-                  {kh.hareketTipi === 'GİRİŞ' ? '+' : '-'} ₺{kh.tutar.toLocaleString('tr-TR')}
-                </span>
+              ))
+            ) : (
+              <div className="py-8 text-center text-slate-400 text-xs italic">
+                Henüz canlı aktivite kaydı bulunmuyor.
               </div>
-            ))}
+            )}
           </div>
         </div>
 
@@ -827,7 +866,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 transition border border-transparent hover:border-slate-100"
               >
                 <div className="flex items-center space-x-3 text-xs">
-                  <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-500 text-[10px]">
+                  <div className="w-8 h-8 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center font-bold text-blue-700 text-[10px]">
                     {p.ad[0]}{p.soyad[0]}
                   </div>
                   <div>
@@ -837,8 +876,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 </div>
 
                 <div className="text-right">
-                  <span className="text-emerald-700 font-bold font-mono text-xs">₺{p.maas.toLocaleString('tr-TR')}</span>
-                  <p className="text-[9px] text-slate-400 font-mono">IBAN: {p.ibanNo ? 'Kayıtlı' : 'Yok'}</p>
+                  <span className="text-blue-750 font-bold text-xs">{p.departman}</span>
+                  <p className="text-[9px] text-slate-400 font-mono">Giriş: {p.iseGirisTarihi || 'Belirtilmedi'}</p>
                 </div>
               </div>
             ))}
