@@ -23,11 +23,6 @@ function getGeminiClient(): GoogleGenAI {
     }
     aiClient = new GoogleGenAI({
       apiKey: key,
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
-      },
     });
   }
   return aiClient;
@@ -99,7 +94,7 @@ Provide the output strictly conforming to the response schema.
       required: ["tarih", "yoklamaKayitlari"]
     };
 
-    const models = ["gemini-2.5-flash", "gemini-3.5-flash"];
+    const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
     let response;
     let lastError;
 
@@ -183,7 +178,7 @@ Provide the output strictly conforming to the response schema.
 `;
 
     // Automatic retry with exponential backoff and fallback model to handle 503/429 errors gracefully
-    const modelsToTry = ["gemini-3.5-flash", "gemini-2.5-flash"];
+    const modelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
     let response;
     let success = false;
     let lastError: any = null;
@@ -312,12 +307,13 @@ app.post("/api/parse-irsaliye", async (req, res) => {
     const userPrompt = "Lütfen ekteki teslimat irsaliyesi (waybill / delivery note) belgesini analiz et. İrsaliye numarasını (irsaliyeNo), tarihini (tarih) (YYYY-MM-DD formatında), gönderen / satıcı firma adını (firma) ve teslim edilen tüm malzeme kalemlerini (kalemler listesi altında urunAdi, miktar ve birim olarak) çıkar.";
 
     // Try multiple models in order of resilience
-    const models = ["gemini-3.5-flash", "gemini-2.5-flash"];
+    const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
     let response;
     let lastError;
 
     for (const model of models) {
       try {
+        console.log(`Parsing irsaliye with model: ${model}...`);
         response = await ai.models.generateContent({
           model: model,
           contents: [userPrompt, imagePart],
@@ -394,12 +390,13 @@ app.post("/api/parse-fatura", async (req, res) => {
     const userPrompt = "Lütfen ekteki faturayı (invoice) analiz et. Fatura numarasını (faturaNo), faturanın kesildiği tarihi (tarih) (YYYY-MM-DD formatında), satıcı firma adını (firma), faturadaki tüm mal veya hizmet kalemlerini (kalemler listesi altında urunAdi, miktar, birim, birimFiyat, kdvOran yüzde olarak örn. 20, ve toplam tutarı) çıkar. Ayrıca toplam matrahı (toplamTutar), KDV tutarını (kdvTutar) ve ödenecek genel toplamı (genelToplam) çıkar.";
 
     // Try multiple models in order of resilience
-    const models = ["gemini-3.5-flash", "gemini-2.5-flash"];
+    const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
     let response;
     let lastError;
 
     for (const model of models) {
       try {
+        console.log(`Parsing fatura with model: ${model}...`);
         response = await ai.models.generateContent({
           model: model,
           contents: [userPrompt, imagePart],
@@ -478,12 +475,13 @@ Provide the response strictly conforming to the requested schema.
 `;
 
     // Try multiple models in order of resilience
-    const models = ["gemini-3.5-flash", "gemini-2.5-flash"];
+    const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
     let response;
     let lastError;
 
     for (const model of models) {
       try {
+        console.log(`Comparing 3-way with model: ${model}...`);
         response = await ai.models.generateContent({
           model: model,
           contents: promptText,
@@ -727,7 +725,7 @@ Lütfen en uygun kategoriyi 'detectedType' alanına atayıp dökümandaki ilgili
       return res.status(400).json({ error: "Invalid docType specified" });
     }
 
-    const models = ["gemini-2.5-flash", "gemini-3.5-flash"];
+    const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
     let response;
     let lastError;
 

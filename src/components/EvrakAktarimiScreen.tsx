@@ -488,117 +488,127 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="space-y-6">
           
-          {/* Controls Left panel */}
-          <div className="md:col-span-1 space-y-5">
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-4 shadow-sm">
-              <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase block">1. EVRAK TÜRÜ SEÇ</span>
-              
-              <div className="flex flex-col gap-2">
-                {[
-                  { key: 'auto', label: '🤖 OTOMATİK TESPİT (AI)', icon: Layers, desc: 'Yapay zeka belgeyi inceler ve türünü kendi algılar' },
-                  { key: 'fatura', label: 'FATURA (Invoice)', icon: Landmark, desc: 'Satıcı faturaları ve gider dökümleri' },
-                  { key: 'irsaliye', label: 'İRSALİYE (Waybill)', icon: ShoppingBag, desc: 'Malzeme giriş sevk evrakları' },
-                  { key: 'makbuz', label: 'MAKBUZ / DEKONT', icon: DollarSign, desc: 'Ödeme makbuzları, banka tediye fişleri' },
-                  { key: 'hakedis', label: 'HAKEDİŞ RAPORU', icon: FileSpreadsheet, desc: 'Yüklenici ve taşeron hakediş kapakları' },
-                  { key: 'yoklama', label: 'PUANTAJ / YOKLAMA', icon: Users, desc: 'Puantaj listeleri, yoklama çizelgeleri' },
-                  { key: 'saha_faaliyet', label: 'SAHA FAALİYET RAPORU', icon: ClipboardCheck, desc: 'Saha günlük faaliyet raporları ve logları' }
-                ].map(type => {
-                  const Icon = type.icon;
-                  return (
-                    <button
-                      key={type.key}
-                      onClick={() => {
-                        setDocType(type.key as any);
-                        setParsedData(null);
-                        setDetectedTypeMsg(null);
-                      }}
-                      className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex gap-3 items-start ${
-                        docType === type.key 
-                          ? 'bg-blue-50 border-blue-400 text-blue-700 font-semibold shadow-xs' 
-                          : 'bg-slate-50 border-slate-200 hover:border-slate-350 text-slate-600'
-                      }`}
-                    >
-                      <Icon size={16} className={`shrink-0 mt-0.5 ${docType === type.key ? 'text-blue-550' : 'text-slate-450'}`} />
-                      <div>
-                        <h4 className="text-xs font-bold leading-none">{type.label}</h4>
-                        <p className="text-[9px] text-slate-500 mt-1">{type.desc}</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-              <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase block mb-2">DOSYA DESTEĞİ</span>
-              <p className="text-[10px] text-slate-500 leading-relaxed font-sans">
-                Tüm taranmış dökümanları, PDF dosyalarını ve faturanın/yoklamanın cep telefonuyla çekilmiş net fotoğraflarını yükleyebilirsiniz. Gemini AI dökümanı inceler, doğrular ve saniyeler içinde sisteme adapte eder.
-              </p>
-            </div>
-          </div>
-
-          {/* Upload and Parsing zone Right panel */}
-          <div className="md:col-span-2 space-y-6">
-            
-            {/* Upload Area */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
-              <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase block">2. EVRAK DOSYASI YÜKLE</span>
+          {/* Step 1: Evrak Dosyası Yükleme Alanı */}
+          {!parsedData && !parsing ? (
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-4 shadow-sm">
+              <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase block">1. EVRAK DOSYASI YÜKLE</span>
               
               <div 
                 onDragEnter={handleDrag}
                 onDragOver={handleDrag}
                 onDragLeave={handleDrag}
                 onDrop={handleDrop}
-                className={`border-2 border-dashed rounded-2xl p-8 text-center flex flex-col items-center justify-center gap-3 transition ${
+                className={`border-2 border-dashed rounded-2xl p-10 text-center flex flex-col items-center justify-center gap-3 transition ${
                   dragActive ? 'border-blue-500 bg-blue-500/5' : 'border-slate-200 hover:border-slate-400 bg-slate-50'
                 }`}
               >
-                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-slate-400 border border-slate-200">
-                  <Upload size={20} />
+                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-slate-450 border border-slate-150 shadow-2xs">
+                  <Upload size={24} />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold text-slate-700">
-                    Sürükleyip Bırakın veya <label className="text-blue-600 hover:text-blue-500 cursor-pointer underline">Göz Atın<input type="file" onChange={handleFileChange} accept=".pdf,.png,.jpg,.jpeg" className="hidden" /></label>
+                  <h4 className="text-sm font-bold text-slate-705">
+                    Sürükleyip Bırakın veya <label className="text-blue-600 hover:text-blue-550 cursor-pointer underline">Göz Atın<input type="file" onChange={handleFileChange} accept=".pdf,.png,.jpg,.jpeg" className="hidden" /></label>
                   </h4>
-                  <p className="text-[9px] text-slate-500 mt-1">PDF, PNG, JPG, JPEG (Maks. 10MB)</p>
+                  <p className="text-xs text-slate-500 mt-1">PDF, PNG, JPG, JPEG (Maks. 10MB)</p>
                 </div>
               </div>
-
-              {selectedFile && (
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex justify-between items-center text-xs">
-                  <div className="flex items-center space-x-3 min-w-0">
-                    <FileText size={16} className="text-blue-500 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="font-bold text-slate-750 truncate">{selectedFile.name}</p>
-                      <p className="text-[10px] text-slate-555 font-mono mt-0.5">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                    </div>
-                  </div>
-                  
-                  <button
-                    disabled={parsing}
-                    onClick={handleStartParsing}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800/40 text-white font-black text-[10px] px-3.5 py-2 rounded-lg transition tracking-wide flex items-center space-x-1.5 shrink-0 cursor-pointer"
-                  >
-                    {parsing ? <RefreshCw size={11} className="animate-spin" /> : <Layers size={11} />}
-                    <span>YAPAY ZEKA İLE AYRIŞTIR</span>
-                  </button>
-                </div>
-              )}
-
-              {parsing && (
-                <div className="bg-blue-50/45 border border-blue-100 p-4 rounded-xl text-center space-y-2.5 animate-pulse">
-                  <div className="flex justify-center text-blue-500">
-                    <RefreshCw size={18} className="animate-spin" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs font-bold text-blue-600">Belge Analiz Ediliyor...</p>
-                    <p className="text-[10px] text-slate-555 italic">"{loadingStep}"</p>
-                  </div>
-                </div>
-              )}
             </div>
+          ) : (
+            selectedFile && (
+              <div className="bg-white border border-slate-200 rounded-3xl p-5 flex justify-between items-center text-xs shadow-sm">
+                <div className="flex items-center space-x-3 min-w-0">
+                  <div className="w-10 h-10 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-center text-blue-500 shrink-0">
+                    <FileText size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-800 truncate">{selectedFile.name}</p>
+                    <p className="text-[10px] text-slate-500 font-mono mt-0.5">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                  </div>
+                </div>
+                {!parsing && (
+                  <button
+                    onClick={() => {
+                      setSelectedFile(null);
+                      setParsedData(null);
+                      setDetectedTypeMsg(null);
+                      setDocType('auto');
+                    }}
+                    className="text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-4 py-2 rounded-xl font-bold transition duration-150 cursor-pointer"
+                  >
+                    Dosyayı Değiştir / Temizle
+                  </button>
+                )}
+              </div>
+            )
+          )}
+
+          {/* Step 2: Hangi Evrak Olduğunu Sorma ve Format Seçimi */}
+          {selectedFile && !parsedData && !parsing && (
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-5 shadow-sm animate-fade-in">
+              <div className="space-y-1">
+                <span className="text-[10px] font-black tracking-widest text-blue-600 uppercase block">2. EVRAK TÜRÜ VE FORMAT SEÇİMİ</span>
+                <h3 className="text-sm font-extrabold text-slate-800">Bu evrak hangi şantiye kategorisine aittir?</h3>
+                <p className="text-xs text-slate-500">Yapay zekanın evrakı doğru kurallarla çözmesi için formatı seçin.</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {[
+                  { key: 'auto', label: '🤖 OTOMATİK TESPİT (AI)', icon: Layers, desc: 'Dosyayı inceleyip kategoriyi kendi algılar' },
+                  { key: 'fatura', label: 'FATURA (Invoice)', icon: Landmark, desc: 'Malzeme satıcı faturaları ve nakit fişleri' },
+                  { key: 'irsaliye', label: 'İRSALİYE (Waybill)', icon: ShoppingBag, desc: 'Şantiyeye giren malzeme sevk fişleri' },
+                  { key: 'makbuz', label: 'MAKBUZ / DEKONT', icon: DollarSign, desc: 'Banka transfer dekontları, tediye makbuzları' },
+                  { key: 'hakedis', label: 'HAKEDİŞ RAPORU', icon: FileSpreadsheet, desc: 'Taşeron hakediş kapak dökümleri' },
+                  { key: 'yoklama', label: 'PUANTAJ / YOKLAMA', icon: Users, desc: 'Günlük veya aylık personel puantajları' },
+                  { key: 'saha_faaliyet', label: 'SAHA FAALİYET RAPORU', icon: ClipboardCheck, desc: 'Günlük saha imalat raporu logları' }
+                ].map(type => {
+                  const Icon = type.icon;
+                  const isSelected = docType === type.key;
+                  return (
+                    <button
+                      key={type.key}
+                      onClick={() => setDocType(type.key as any)}
+                      className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer flex gap-3 items-start ${
+                        isSelected 
+                          ? 'bg-blue-50 border-blue-500 text-blue-700 ring-2 ring-blue-500/10 font-bold shadow-xs' 
+                          : 'bg-slate-50 border-slate-200 hover:border-slate-350 text-slate-650'
+                      }`}
+                    >
+                      <Icon size={18} className={`shrink-0 mt-0.5 ${isSelected ? 'text-blue-600' : 'text-slate-400'}`} />
+                      <div>
+                        <h4 className="text-xs font-bold leading-none">{type.label}</h4>
+                        <p className="text-[9px] text-slate-500 mt-1 leading-tight">{type.desc}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  onClick={handleStartParsing}
+                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-black text-xs px-6 py-3.5 rounded-2xl transition tracking-wide flex items-center justify-center space-x-2 shadow-sm cursor-pointer"
+                >
+                  <RefreshCw size={12} className="animate-spin-slow" />
+                  <span>YAPAY ZEKA İLE AYRIŞTIRMAYA BAŞLA</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Çözümleme Loading Animasyonu */}
+          {parsing && (
+            <div className="bg-white border border-slate-200 rounded-3xl p-8 text-center space-y-4 shadow-sm">
+              <div className="flex justify-center text-blue-550">
+                <RefreshCw size={26} className="animate-spin" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-blue-600">Yapay Zeka Evrakı Çözümlüyor...</p>
+                <p className="text-xs text-slate-500 font-mono italic">"{loadingStep}"</p>
+              </div>
+            </div>
+          )}
 
             {/* AI Review Form */}
             {parsedData && (
@@ -1136,8 +1146,6 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
                 </button>
               </div>
             )}
-
-          </div>
 
         </div>
 
