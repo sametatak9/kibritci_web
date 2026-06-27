@@ -66,26 +66,29 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
 
     let updatedCariKartlar = [...(cariKartlar || [])];
     if (!existingCari) {
-      const newCariId = `ck_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-      const randomCode = `CAR-${Math.floor(100 + Math.random() * 905)}`;
-      const newCari = {
-        id: newCariId,
-        kartTipi: 'TEDARIKCI',
-        kod: randomCode,
-        unvan: normalizedSupplier,
-        yetkili: "AI Tanımlı Yetkili",
-        telefon: "",
-        eposta: "",
-        vergiNo: "",
-        vergiDairesi: "",
-        adres: "Yapay zeka faturasından otomatik oluşturuldu.",
-        iban: "",
-        durum: 'AKTIF',
-        notlar: "Yapay zeka faturasından otomatik oluşturuldu."
-      };
-      updatedCariKartlar = [newCari, ...updatedCariKartlar];
-      if (setCariKartlar) {
-        setCariKartlar(updatedCariKartlar);
+      const confirmCreate = window.confirm(`Girdiğiniz "${supplierName}" firması sistemde kayıtlı değildir. Bu firma için yeni bir Cari Kartı (Tedarikçi) oluşturmak ister misiniz?`);
+      if (confirmCreate) {
+        const newCariId = `ck_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+        const randomCode = `CAR-${Math.floor(100 + Math.random() * 905)}`;
+        const newCari = {
+          id: newCariId,
+          kartTipi: 'TEDARIKCI',
+          kod: randomCode,
+          unvan: normalizedSupplier,
+          yetkili: "Satın Alma Sorumlusu",
+          telefon: "",
+          eposta: "",
+          vergiNo: "",
+          vergiDairesi: "",
+          adres: "Satın alma işleminden otomatik oluşturuldu.",
+          iban: "",
+          durum: 'AKTIF',
+          notlar: "Satın alma işleminden otomatik oluşturuldu."
+        };
+        updatedCariKartlar = [newCari, ...updatedCariKartlar];
+        if (setCariKartlar) {
+          setCariKartlar(updatedCariKartlar);
+        }
       }
     }
 
@@ -101,20 +104,23 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
       );
 
       if (!existingStok) {
-        const newStokId = `sk_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 4)}`;
-        const randomCode = `STK-${Math.floor(1000 + Math.random() * 9000)}`;
-        const newStok = {
-          id: newStokId,
-          stokKodu: randomCode,
-          stokAdi: normalizedProduct,
-          kategori: "Yapay Zeka Girişi",
-          birim: item.birim || "ADET",
-          kritikSeviye: 0,
-          durum: 'AKTIF',
-          aciklama: "Yapay zeka belgesinden otomatik oluşturuldu."
-        };
-        updatedStokKartlar = [newStok, ...updatedStokKartlar];
-        addedAnyStok = true;
+        const confirmCreate = window.confirm(`Girdiğiniz "${item.urunAdi}" malzemesi sistemde kayıtlı değildir. Bu malzeme için yeni bir Stok Kartı oluşturmak ister misiniz?`);
+        if (confirmCreate) {
+          const newStokId = `sk_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 4)}`;
+          const randomCode = `STK-${Math.floor(1000 + Math.random() * 9000)}`;
+          const newStok = {
+            id: newStokId,
+            stokKodu: randomCode,
+            stokAdi: normalizedProduct,
+            kategori: "İnşaat Malzemesi",
+            birim: item.birim || "ADET",
+            kritikSeviye: 5,
+            durum: 'AKTIF',
+            aciklama: "Satın alma işleminden otomatik oluşturuldu."
+          };
+          updatedStokKartlar = [newStok, ...updatedStokKartlar];
+          addedAnyStok = true;
+        }
       }
     });
 
@@ -172,6 +178,34 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
       alert("Lütfen ürün adı ve geçerli miktar girin.");
       return;
     }
+
+    const normalizedProduct = tempItem.urunAdi.trim();
+    const existingStok = (stokKartlar || []).find(
+      s => (s.stokAdi && s.stokAdi.toLowerCase().trim() === normalizedProduct.toLowerCase()) || 
+           (s.urunAdi && s.urunAdi.toLowerCase().trim() === normalizedProduct.toLowerCase())
+    );
+
+    if (!existingStok) {
+      const confirmCreate = window.confirm(`Girdiğiniz "${tempItem.urunAdi}" malzemesi sistemde kayıtlı değildir. Bu malzeme için yeni bir Stok Kartı oluşturmak ister misiniz?`);
+      if (confirmCreate) {
+        const newStokId = `sk_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+        const randomCode = `STK-${Math.floor(1000 + Math.random() * 9000)}`;
+        const newStok = {
+          id: newStokId,
+          stokKodu: randomCode,
+          stokAdi: normalizedProduct,
+          kategori: "İnşaat Malzemesi",
+          birim: tempItem.birim || "ADET",
+          kritikSeviye: 5,
+          durum: 'AKTIF',
+          aciklama: "Satın alma talebi oluşturulurken otomatik eklendi."
+        };
+        if (setStokKartlar) {
+          setStokKartlar(prev => [newStok, ...prev]);
+        }
+      }
+    }
+
     const newItem: SatinAlmaItem = {
       ...tempItem,
       id: `sai_${Date.now()}`
@@ -243,6 +277,9 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
       setSaAttachmentUrl(null);
       alert("Satın alma talep kaydı başarıyla oluşturuldu.");
     }
+    
+    // Automatically check and prompt for new Cari/Stok Cards
+    ensureCariAndStokCards(saSupplier, cartItems);
   };
 
   const handleStartEditSa = (sa: SatinAlmaTalebi) => {

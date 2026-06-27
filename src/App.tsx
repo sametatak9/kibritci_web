@@ -1368,7 +1368,9 @@ export default function App() {
                 isYonetici ? (
                   <EvrakAktarimiScreen 
                     cariKartlar={cariKartlar}
+                    setCariKartlar={setCariKartlarWithSync}
                     stokKartlar={stokKartlar}
+                    setStokKartlar={setStokKartlarWithSync}
                     currentUser={currentUser}
                     setFaturalar={setFaturalarWithSync}
                     setIrsaliyeler={setIrsaliyelerWithSync}

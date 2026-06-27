@@ -8,7 +8,9 @@ import { CariKart, StokKart, Personel, AylikYoklamaMap, SahaFaaliyeti } from '..
 
 interface EvrakAktarimiScreenProps {
   cariKartlar: CariKart[];
+  setCariKartlar?: React.Dispatch<React.SetStateAction<CariKart[]>>;
   stokKartlar: StokKart[];
+  setStokKartlar?: React.Dispatch<React.SetStateAction<StokKart[]>>;
   currentUser: any;
   setFaturalar: React.Dispatch<React.SetStateAction<any[]>>;
   setIrsaliyeler: React.Dispatch<React.SetStateAction<any[]>>;
@@ -22,7 +24,9 @@ interface EvrakAktarimiScreenProps {
 
 export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
   cariKartlar,
+  setCariKartlar,
   stokKartlar,
+  setStokKartlar,
   currentUser,
   setFaturalar,
   setIrsaliyeler,
@@ -272,12 +276,96 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
     }
   };
 
+  const ensureCariAndStokFromImport = (supplierName: string, items: { urunAdi: string, birim?: string }[]) => {
+    if (!supplierName) return;
+    
+    // 1. Ensure Cari Kart
+    const normalizedSupplier = supplierName.trim();
+    const existingCari = (cariKartlar || []).find(
+      c => c.unvan && c.unvan.toLowerCase().trim() === normalizedSupplier.toLowerCase()
+    );
+
+    let updatedCariKartlar = [...(cariKartlar || [])];
+    if (!existingCari) {
+      const confirmCreate = window.confirm(`AI tarafından çözümlenen "${supplierName}" firması sistemde kayıtlı değildir. Bu firma için yeni bir Cari Kartı (Tedarikçi) oluşturmak ister misiniz?`);
+      if (confirmCreate) {
+        const newCariId = `ck_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+        const randomCode = `CAR-${Math.floor(100 + Math.random() * 905)}`;
+        const newCari = {
+          id: newCariId,
+          kartTipi: 'TEDARIKCI' as const,
+          kod: randomCode,
+          unvan: normalizedSupplier,
+          yetkili: "Evrak Aktarımı",
+          telefon: "",
+          eposta: "",
+          vergiNo: "",
+          vergiDairesi: "",
+          adres: "AI evrak aktarımından otomatik oluşturuldu.",
+          iban: "",
+          durum: 'AKTIF' as const,
+          notlar: "AI evrak aktarımından otomatik oluşturuldu."
+        };
+        updatedCariKartlar = [newCari, ...updatedCariKartlar];
+        if (setCariKartlar) {
+          setCariKartlar(updatedCariKartlar);
+        }
+      }
+    }
+
+    // 2. Ensure Stok Kartlar
+    let updatedStokKartlar = [...(stokKartlar || [])];
+    let addedAnyStok = false;
+
+    items.forEach((item, idx) => {
+      const normalizedProduct = item.urunAdi.trim();
+      const existingStok = (stokKartlar || []).find(
+        s => (s.stokAdi && s.stokAdi.toLowerCase().trim() === normalizedProduct.toLowerCase()) || 
+             (s.urunAdi && s.urunAdi.toLowerCase().trim() === normalizedProduct.toLowerCase())
+      );
+
+      if (!existingStok) {
+        const confirmCreate = window.confirm(`AI tarafından çözümlenen "${item.urunAdi}" malzemesi sistemde kayıtlı değildir. Bu malzeme için yeni bir Stok Kartı oluşturmak ister misiniz?`);
+        if (confirmCreate) {
+          const newStokId = `sk_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 4)}`;
+          const randomCode = `STK-${Math.floor(1000 + Math.random() * 9000)}`;
+          const newStok = {
+            id: newStokId,
+            stokKodu: randomCode,
+            stokAdi: normalizedProduct,
+            kategori: "İnşaat Malzemesi",
+            birim: item.birim || "ADET",
+            kritikSeviye: 5,
+            durum: 'AKTIF' as const,
+            aciklama: "AI evrak aktarımından otomatik oluşturuldu."
+          };
+          updatedStokKartlar = [newStok, ...updatedStokKartlar];
+          addedAnyStok = true;
+        }
+      }
+    });
+
+    if (addedAnyStok && setStokKartlar) {
+      setStokKartlar(updatedStokKartlar);
+    }
+  };
+
   // Import parsed data to Firestore and state
   const handleImportToSystem = async () => {
     if (!parsedData) return;
     setImporting(true);
 
     try {
+      // Prompt user to verify and create Cari / Stok cards before importing
+      if (docType === 'fatura') {
+        ensureCariAndStokFromImport(parsedData.cariUnvan || '', parsedData.kalemler || []);
+      } else if (docType === 'irsaliye') {
+        ensureCariAndStokFromImport(parsedData.firma || '', parsedData.kalemler || []);
+      } else if (docType === 'hakedis') {
+        ensureCariAndStokFromImport(parsedData.cariUnvan || '', []);
+      } else if (docType === 'makbuz') {
+        ensureCariAndStokFromImport(parsedData.firma || '', []);
+      }
       const systemId = `${docType.toUpperCase()}-${Date.now()}`;
       
       if (docType === 'fatura') {
