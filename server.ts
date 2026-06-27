@@ -760,6 +760,24 @@ Lütfen en uygun kategoriyi 'detectedType' alanına atayıp dökümandaki ilgili
   }
 });
 
+app.post("/api/chat", async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message) {
+      return res.status(400).json({ error: "Message is required" });
+    }
+    const ai = getGeminiClient();
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `Sen Kibritçi İnşaat ERP sisteminin akıllı yapay zeka şantiye asistanısın. Kullanıcıya şantiye yönetimi, personel, stok ve genel inşaat ERP süreçleri hakkında yardımcı oluyorsun. Lütfen kısa, anlaşılır, kibar ve çözüm odaklı bir yanıt ver. Kullanıcı mesajı: ${message}`
+    });
+    res.json({ text: response.text });
+  } catch (error: any) {
+    console.error("Error in chat assistant endpoint:", error);
+    res.status(500).json({ error: error.message || "Failed to process message" });
+  }
+});
+
 // Vite & Static file handler
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {

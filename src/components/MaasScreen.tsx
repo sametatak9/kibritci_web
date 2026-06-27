@@ -405,15 +405,12 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
                   KİBRİTÇİ İNŞAAT ŞANTİYESİ {[
                     "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
                     "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
-                  ][selectedMonth - 1]?.toUpperCase()} AYI RAPORU
+                  ][selectedMonth - 1]?.toUpperCase()} AYI MAAŞ RAPORU
                 </h2>
-                <p className="text-[9px] text-slate-400 mt-1 italic">
-                  * Bu ödeme listesi banka entegrasyonu virman şablonu olup, toplam hakediş mutabakatları için ıslak imzalı yetkili onayı içermektedir.
-                </p>
               </div>
 
               {/* Data Table */}
-              <div className="border border-slate-350 rounded-md overflow-hidden mb-8 font-sans">
+              <div className="border border-slate-355 rounded-md overflow-hidden mb-8 font-sans">
                 <table className="w-full text-[9px] border-collapse bg-white">
                   <thead>
                     <tr className="bg-slate-100 text-slate-800 border-b border-slate-300 font-bold">
@@ -430,22 +427,59 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
                     </tr>
                   </thead>
                   <tbody>
-                    {calculatedSalaries.map(({ personel, hakedisDays, totalOvertimeHours, totalBaseHakedis, totalOvertimeHakedis, cutAmount, netPayable }) => (
-                      <tr key={personel.id} className="border-b border-slate-200 hover:bg-slate-50 font-medium">
-                        <td className="p-2 border-r border-slate-300 font-mono text-slate-500">{personel.tcNo}</td>
-                        <td className="p-2 border-r border-slate-300 font-bold text-slate-850">{personel.ad} {personel.soyad}</td>
-                        <td className="p-2 border-r border-slate-300 uppercase text-[8px] font-bold text-slate-600">{personel.gorev}</td>
-                        <td className="p-2 text-center border-r border-slate-300">{hakedisDays} Gün</td>
-                        <td className="p-2 text-center border-r border-slate-300 font-mono text-blue-700">{totalOvertimeHours} st</td>
-                        <td className="p-2 text-right border-r border-slate-300 font-mono">₺{totalBaseHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
-                        <td className="p-2 text-right border-r border-slate-300 font-mono text-blue-700">₺{totalOvertimeHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
-                        <td className="p-2 text-right border-r border-slate-300 text-rose-700 font-mono">-₺{cutAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
-                        <td className="p-2 border-r border-slate-300 text-slate-500 text-[8px] truncate max-w-[120px]">{personel.bankaAdi} · {personel.ibanNo || "IBAN_YOK"}</td>
-                        <td className="p-2 text-right text-emerald-750 font-bold bg-emerald-50/40 font-mono">
-                          ₺{netPayable.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                    ))}
+                    {calculatedSalaries.map(({ personel, hakedisDays, totalOvertimeHours, totalBaseHakedis, totalOvertimeHakedis, cutAmount, netPayable }) => {
+                      const personYoklama = yoklamalar[personel.id] || {};
+                      return (
+                        <React.Fragment key={personel.id}>
+                          <tr className="border-b border-slate-100 hover:bg-slate-50 font-medium">
+                            <td className="p-2 border-r border-slate-300 font-mono text-slate-500">{personel.tcNo}</td>
+                            <td className="p-2 border-r border-slate-300 font-bold text-slate-850">{personel.ad} {personel.soyad}</td>
+                            <td className="p-2 border-r border-slate-300 uppercase text-[8px] font-bold text-slate-600">{personel.gorev}</td>
+                            <td className="p-2 text-center border-r border-slate-300">{hakedisDays} Gün</td>
+                            <td className="p-2 text-center border-r border-slate-300 font-mono text-blue-700">{totalOvertimeHours} st</td>
+                            <td className="p-2 text-right border-r border-slate-300 font-mono">₺{totalBaseHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-2 text-right border-r border-slate-300 font-mono text-blue-700">₺{totalOvertimeHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-2 text-right border-r border-slate-300 text-rose-700 font-mono">-₺{cutAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-2 border-r border-slate-300 text-slate-500 text-[8px] truncate max-w-[120px]">{personel.bankaAdi} · {personel.ibanNo || "IBAN_YOK"}</td>
+                            <td className="p-2 text-right text-emerald-755 font-bold bg-emerald-50/40 font-mono">
+                              ₺{netPayable.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                          {/* Mini visual calendar for days to save page space */}
+                          <tr className="border-b border-slate-300 bg-slate-50/40 text-[7px] text-slate-500">
+                            <td colSpan={10} className="p-1 px-3">
+                              <div className="flex items-center space-x-2">
+                                <span className="font-bold text-[8px] uppercase tracking-wider text-slate-400">GÜN DETAYI:</span>
+                                <div className="flex flex-wrap gap-1">
+                                  {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
+                                    const dayData = personYoklama[day] || { durum: 'Girilmedi', mesaiSaati: 0 };
+                                    let letter = "•";
+                                    let color = "text-slate-450 bg-slate-100";
+                                    if (dayData.durum === 'Geldi') { letter = "G"; color = "text-emerald-700 bg-emerald-100/50 font-bold"; }
+                                    else if (dayData.durum === 'Yok') { letter = "Y"; color = "text-rose-700 bg-rose-100/50 font-bold"; }
+                                    else if (dayData.durum === 'İzinli') { letter = "İ"; color = "text-blue-700 bg-blue-100/50"; }
+                                    else if (dayData.durum === 'Raporlu') { letter = "R"; color = "text-violet-700 bg-violet-100/50"; }
+                                    else if (dayData.durum === 'Pazar') { letter = "P"; color = "text-amber-700 bg-amber-100/50 font-bold"; }
+                                    else if (dayData.durum === 'Tatil') { letter = "T"; color = "text-indigo-700 bg-indigo-100/50"; }
+                                    
+                                    const mesai = dayData.mesaiSaati > 0 ? ` (+${dayData.mesaiSaati})` : "";
+                                    
+                                    return (
+                                      <span 
+                                        key={day} 
+                                        className={`px-1 py-0.5 rounded border border-slate-200/50 flex items-center justify-center font-mono ${color}`}
+                                      >
+                                        {day}:{letter}{mesai}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        </React.Fragment>
+                      );
+                    })}
                     {/* Grand Total Row */}
                     <tr className="bg-slate-100 font-extrabold border-t-2 border-slate-900 text-slate-800">
                       <td colSpan={3} className="p-2.5 text-left uppercase text-[10px]">TOPLAM ÖDEME PORTFÖYÜ</td>
@@ -464,37 +498,26 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
 
               {/* Corporate Sign-off Area arranged in user specified order */}
               <div className="mt-12 text-xs">
-                <div className="bg-[#1E4E78] text-white p-2 text-[9px] font-bold uppercase tracking-wider mb-6 rounded-md">
-                  📌 HAKEDİŞ ONAY VE SENKRONİZE LİKİDİTE YÖNETİM MERCİLERİ
-                </div>
                 <div className="grid grid-cols-4 gap-4 text-center">
                   
-                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50/50">
-                    <span className="font-extrabold text-[#8B1E1E] tracking-wider uppercase block mb-1">1. MUHASEBE</span>
-                    <span className="text-[10px] text-slate-500 block mb-6">Finansal hakediş ve banka mutabakatı</span>
-                    <div className="h-10 border-b border-dashed border-slate-200 w-24 mx-auto mb-2"></div>
-                    <span className="text-[10px] font-bold text-slate-800 block">Bordro Sorumlusu</span>
+                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50 flex flex-col justify-between h-28">
+                    <span className="font-extrabold text-slate-800 tracking-wider uppercase text-[10px] block">MUHASEBE</span>
+                    <div className="h-10 border-b border-dashed border-slate-350 w-24 mx-auto my-2"></div>
                   </div>
 
-                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50/50">
-                    <span className="font-extrabold text-[#1E4E78] tracking-wider uppercase block mb-1">2. İDARİ İŞLER</span>
-                    <span className="text-[10px] text-slate-500 block mb-6">Personel Sicil ve İK Onayı</span>
-                    <div className="h-10 border-b border-dashed border-slate-200 w-24 mx-auto mb-2"></div>
-                    <span className="text-[10px] font-bold text-slate-800 block">İdari İşler Şefi</span>
+                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50 flex flex-col justify-between h-28">
+                    <span className="font-extrabold text-slate-800 tracking-wider uppercase text-[10px] block">İDARİ İŞLER</span>
+                    <div className="h-10 border-b border-dashed border-slate-350 w-24 mx-auto my-2"></div>
                   </div>
 
-                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50/50">
-                    <span className="font-extrabold text-[#1E4E78] tracking-wider uppercase block mb-1">3. ŞANTİYE ŞEFİ</span>
-                    <span className="text-[10px] text-slate-500 block mb-6">Saha organizasyonu ve puantaj kontrol</span>
-                    <div className="h-10 border-b border-dashed border-slate-200 w-24 mx-auto mb-2"></div>
-                    <span className="text-[10px] font-bold text-slate-800 block">Şantiye Şefi</span>
+                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50 flex flex-col justify-between h-28">
+                    <span className="font-extrabold text-slate-800 tracking-wider uppercase text-[10px] block">ŞANTİYE ŞEFİ</span>
+                    <div className="h-10 border-b border-dashed border-slate-350 w-24 mx-auto my-2"></div>
                   </div>
 
-                  <div className="border border-slate-150 p-3 rounded-xl bg-slate-50">
-                    <span className="font-extrabold text-[#8B1E1E] tracking-wider uppercase block mb-1">4. PROJE MÜDÜRÜ</span>
-                    <span className="text-[10px] text-slate-500 block mb-6">Nihai Mali Hak Onaylama İmzası</span>
-                    <div className="h-10 border-b border-dashed border-slate-200 w-24 mx-auto mb-2"></div>
-                    <span className="text-[10px] font-bold text-slate-800 block">Proje Müdürü</span>
+                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50 flex flex-col justify-between h-28">
+                    <span className="font-extrabold text-slate-800 tracking-wider uppercase text-[10px] block">PROJE MÜDÜRÜ</span>
+                    <div className="h-10 border-b border-dashed border-slate-350 w-24 mx-auto my-2"></div>
                   </div>
 
                 </div>

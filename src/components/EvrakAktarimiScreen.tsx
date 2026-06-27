@@ -234,8 +234,28 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
       });
 
       if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Döküman yapay zeka tarafından ayrıştırılamadı.');
+        let errMsg = 'Döküman yapay zeka tarafından ayrıştırılamadı.';
+        try {
+          const text = await response.clone().text();
+          try {
+            const errData = JSON.parse(text);
+            let innerMsg = errData.error || errMsg;
+            try {
+              const innerObj = JSON.parse(innerMsg);
+              if (innerObj && innerObj.error && innerObj.error.message) {
+                innerMsg = innerObj.error.message;
+              }
+            } catch (innerErr) {
+              // Not a JSON string inside, keep innerMsg as is
+            }
+            errMsg = innerMsg;
+          } catch {
+            errMsg = text || errMsg;
+          }
+        } catch (e) {
+          // ignore
+        }
+        throw new Error(errMsg);
       }
 
       const result = await response.json();
@@ -581,7 +601,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           {/* Step 1: Evrak Dosyası Yükleme Alanı */}
           {!parsedData && !parsing ? (
             <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-4 shadow-sm">
-              <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase block">1. EVRAK DOSYASI YÜKLE</span>
+              <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase block">1. EVRAK DOSYASI YÜKLE</span>
               
               <div 
                 onDragEnter={handleDrag}
@@ -663,7 +683,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
                           : 'bg-slate-50 border-slate-200 hover:border-slate-350 text-slate-650'
                       }`}
                     >
-                      <Icon size={18} className={`shrink-0 mt-0.5 ${isSelected ? 'text-blue-600' : 'text-slate-400'}`} />
+                      <Icon size={18} className={`shrink-0 mt-0.5 ${isSelected ? 'text-blue-600' : 'text-slate-500'}`} />
                       <div>
                         <h4 className="text-xs font-bold leading-none">{type.label}</h4>
                         <p className="text-[9px] text-slate-500 mt-1 leading-tight">{type.desc}</p>
@@ -676,7 +696,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
               <div className="pt-2 flex justify-end">
                 <button
                   onClick={handleStartParsing}
-                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-black text-xs px-6 py-3.5 rounded-2xl transition tracking-wide flex items-center justify-center space-x-2 shadow-sm cursor-pointer"
+                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-slate-800 font-black text-xs px-6 py-3.5 rounded-2xl transition tracking-wide flex items-center justify-center space-x-2 shadow-sm cursor-pointer"
                 >
                   <RefreshCw size={12} className="animate-spin-slow" />
                   <span>YAPAY ZEKA İLE AYRIŞTIRMAYA BAŞLA</span>
@@ -702,7 +722,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
             {parsedData && (
               <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
                 <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-                  <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase block">3. YAPAY ZEKA DOĞRULAMA FORMU</span>
+                  <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase block">3. YAPAY ZEKA DOĞRULAMA FORMU</span>
                   <span className="bg-blue-50 text-blue-700 font-bold font-mono text-[9px] px-2 py-0.5 rounded border border-blue-100">GEMINI OKUMA SONUCU</span>
                 </div>
 
@@ -1088,7 +1108,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
                           className="w-full bg-slate-50 border border-slate-200 p-2 text-xs rounded-xl text-slate-800 outline-none"
                         />
                       </div>
-                      <div className="flex items-end text-[10px] text-slate-400 italic">
+                      <div className="flex items-end text-[10px] text-slate-500 italic">
                         * Tespit edilen isimler sistemdeki personellerle eşleştirilir.
                       </div>
                     </div>
@@ -1227,7 +1247,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
                 <button
                   disabled={importing}
                   onClick={handleImportToSystem}
-                  className="w-full mt-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-blue-800/40 text-white font-black text-xs py-3.5 rounded-xl transition tracking-wide flex items-center justify-center space-x-2 shadow-lg shadow-blue-500/10 cursor-pointer"
+                  className="w-full mt-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-blue-800/40 text-slate-800 font-black text-xs py-3.5 rounded-xl transition tracking-wide flex items-center justify-center space-x-2 shadow-lg shadow-blue-500/10 cursor-pointer"
                 >
                   {importing ? <RefreshCw size={13} className="animate-spin" /> : <Check size={14} />}
                   <span>DOĞRULANAN VERİLERİ ŞANTİYE SİSTEMİNE AKTAR</span>

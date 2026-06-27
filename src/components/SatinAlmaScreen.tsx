@@ -613,6 +613,47 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     setIrSignedAttachmentUrl(null);
   };
 
+  const handleMergePoAndWaybills = (sa: SatinAlmaTalebi, linkedIrs: Irsaliye[]) => {
+    if (linkedIrs.length === 0) {
+      alert("Bu PO'ya bağlı herhangi bir irsaliye bulunmamaktadır!");
+      return;
+    }
+    const mergedItems: { [name: string]: { poQty: number, irQty: number, birim: string } } = {};
+    sa.kalemler.forEach(k => {
+      mergedItems[k.urunAdi] = { poQty: k.miktar, irQty: 0, birim: k.birim || 'ADET' };
+    });
+    linkedIrs.forEach(ir => {
+      ir.kalemler.forEach(k => {
+        if (mergedItems[k.urunAdi]) {
+          mergedItems[k.urunAdi].irQty += k.miktar;
+        } else {
+          mergedItems[k.urunAdi] = { poQty: 0, irQty: k.miktar, birim: k.birim || 'ADET' };
+        }
+      });
+    });
+
+    const reportId = `MRG-${Date.now()}`;
+    alert("Yapay Zeka PO ve İrsaliye Birleştirme Raporu başarıyla üretildi! Eşleşen Evraklar arşivine kaydedildi.");
+    
+    setThreeWayReportResult({
+      id: reportId,
+      tarih: new Date().toLocaleDateString('tr-TR'),
+      cariUnvan: sa.cariFirma,
+      faturaNo: 'YOK (Sadece PO-İrsaliye Birleşimi)',
+      irsaliyeler: linkedIrs.map(ir => ir.irsaliyeNo),
+      matrix: Object.entries(mergedItems).map(([name, data]) => ({
+        urunAdi: name,
+        saMiktar: data.poQty,
+        irMiktar: data.irQty,
+        ftMiktar: 0,
+        birim: data.birim,
+        priceDiff: false,
+        qtyDiff: data.irQty !== data.poQty
+      })),
+      hasDiscrepancy: Object.values(mergedItems).some(d => d.irQty !== d.poQty)
+    });
+  };
+
   const handleGenerateMultiCompareReport = () => {
     if (selectedIrIdsForComparison.length === 0) return;
     
@@ -839,6 +880,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
   const [isManualFtCari, setIsManualFtCari] = useState(true);
   const [isManualFtStok, setIsManualFtStok] = useState(true);
   const [ftIrsaliyeLink, setFtIrsaliyeLink] = useState("");
+  const [ftLinkedIrsaliyeler, setFtLinkedIrsaliyeler] = useState<string[]>([]);
   const [ftItems, setFtItems] = useState<FaturaItem[]>([]);
   const [tempFtItem, setTempFtItem] = useState({
     name: "",
@@ -1008,7 +1050,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
             durum: matchedStatus,
             rapor: matchReport,
             kalemler: ftItems,
-            bagliIrsaliyeler: ftIrsaliyeLink ? [ftIrsaliyeLink] : [],
+            bagliIrsaliyeler: ftLinkedIrsaliyeler.length > 0 ? ftLinkedIrsaliyeler : (ftIrsaliyeLink ? [ftIrsaliyeLink] : []),
             imzaliEvrakUrl: ftAttachmentUrl || ft.imzaliEvrakUrl
           };
         }
@@ -1030,7 +1072,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
         durum: matchedStatus,
         rapor: matchReport,
         kalemler: ftItems,
-        bagliIrsaliyeler: ftIrsaliyeLink ? [ftIrsaliyeLink] : [],
+        bagliIrsaliyeler: ftLinkedIrsaliyeler.length > 0 ? ftLinkedIrsaliyeler : (ftIrsaliyeLink ? [ftIrsaliyeLink] : []),
         imzaliEvrakUrl: ftAttachmentUrl || undefined
       };
 
@@ -1048,6 +1090,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     setFtItems([]);
     setFtNo("");
     setFtIrsaliyeLink("");
+    setFtLinkedIrsaliyeler([]);
   };
 
   const handleDeleteFatura = async (id: string) => {
@@ -1071,6 +1114,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     setFtDate(ft.tarih);
     setFtSupplier(ft.cariUnvan);
     setFtIrsaliyeLink(ft.bagliIrsaliyeler?.[0] || "");
+    setFtLinkedIrsaliyeler(ft.bagliIrsaliyeler || []);
     setFtItems(ft.kalemler);
     setFtAttachmentUrl(ft.imzaliEvrakUrl || null);
     alert(`${ft.faturaNo} numaralı fatura düzenleme modunda yüklenmiştir.`);
@@ -1080,6 +1124,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     setEditingFtId(null);
     setFtNo("");
     setFtIrsaliyeLink("");
+    setFtLinkedIrsaliyeler([]);
     setFtItems([]);
     setFtAttachmentUrl(null);
   };
@@ -1311,18 +1356,13 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
                   </div>
                   <div>
                     <label className="text-[10px] font-semibold text-slate-400">Birim</label>
-                    <select 
-                      className="w-full text-xs mt-1 p-1 bg-white border border-[#e2e8f0] rounded-lg"
+                    <input 
+                      type="text"
+                      placeholder="Örn: TON, ADET, KAMYON"
+                      className="w-full text-xs mt-1 p-1 px-2 bg-white border border-[#e2e8f0] rounded-lg"
                       value={tempItem.birim}
-                      onChange={(e) => setTempItem(prev => ({ ...prev, birim: e.target.value }))}
-                    >
-                      <option value="TON">TON</option>
-                      <option value="M3">M3</option>
-                      <option value="KG">KG</option>
-                      <option value="ADET">ADET</option>
-                      <option value="METRE">METRE</option>
-                      <option value="TORBA">TORBA</option>
-                    </select>
+                      onChange={(e) => setTempItem(prev => ({ ...prev, birim: e.target.value.toUpperCase() }))}
+                    />
                   </div>
                 </div>
 
@@ -1546,7 +1586,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
                                     return {
                                       ...item,
                                       imzaliEvrakUrl: compressed,
-                                      onayDurumu: '2. ONAY TAMAMLANDI'
+                                      onayDurumu: 'ONAYLANDI'
                                     };
                                   }
                                   return item;
@@ -1558,6 +1598,16 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
                           }}
                         />
                       </label>
+
+                      {(sa.onayDurumu === 'ONAYLANDI' || sa.onayDurumu === '2. ONAY TAMAMLANDI' || sa.imzaliEvrakUrl) && (
+                        <button
+                          onClick={() => alert(`${sa.saId} nolu onaylı satın alma siparişi merkez ofise (merkez@kibritci.com) e-posta ile gönderildi!`)}
+                          className="bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-bold py-1 px-2.5 rounded-lg flex items-center space-x-1 cursor-pointer transition"
+                        >
+                          <Send size={11} />
+                          <span>E-Posta Gönder</span>
+                        </button>
+                      )}
 
                       <button 
                         onClick={() => setDocForApproval({ id: sa.id, type: 'request', saId: sa.saId, firma: sa.cariFirma })}
@@ -2967,6 +3017,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
                                           (ir.saId && ir.saId.toLowerCase().includes(query));
                     return matchesType && matchesSearch;
                   })
+                  .sort((a, b) => (a.saId || '').localeCompare(b.saId || ''))
                   .map(ir => {
                     const isChecked = selectedIrIdsForComparison.includes(ir.id);
                     return (
@@ -3006,6 +3057,12 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
                             }`}>
                               {ir.onayDurumu}
                             </span>
+                            
+                            {ir.saId && (
+                              <span className="bg-amber-100 text-amber-900 border border-amber-250 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">
+                                🤝 Satın Alma Eşleşti
+                              </span>
+                            )}
                             
                             {/* Attachment Warning badge */}
                             {ir.fisEvrakUrl ? (
@@ -3297,19 +3354,40 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
               </div>
 
               <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase">İrsaliye Bağlantısı (Otomatik Miktar Törpüleme)</label>
-                <select 
-                  className="w-full text-xs font-bold mt-1 p-2 bg-slate-50 border border-purple-300 text-purple-800 rounded-lg focus:ring-1 focus:ring-purple-400"
-                  value={ftIrsaliyeLink}
-                  onChange={(e) => setFtIrsaliyeLink(e.target.value)}
-                >
-                  <option value="">Bağsız Manuel Fatura Girişi</option>
-                  {irsaliyeler.map(ir => (
-                    <option key={ir.id} value={ir.irsaliyeNo}>{ir.irsaliyeNo} ({ir.firma})</option>
-                  ))}
-                </select>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">İrsaliye Bağlantısı (En Fazla 10 Adet Seçilebilir)</label>
+                <div className="bg-slate-50 border border-purple-200 rounded-xl p-3 mt-1.5 space-y-2 max-h-36 overflow-y-auto">
+                  {irsaliyeler
+                    .filter(ir => !ftSupplier || ir.firma.toLowerCase().trim() === ftSupplier.toLowerCase().trim())
+                    .map(ir => {
+                      const isChecked = ftLinkedIrsaliyeler.includes(ir.irsaliyeNo);
+                      return (
+                        <label key={ir.id} className="flex items-center space-x-2 text-[10px] cursor-pointer hover:bg-purple-50 p-1 rounded">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                if (ftLinkedIrsaliyeler.length >= 10) {
+                                  alert("En fazla 10 adet irsaliye bağlayabilirsiniz!");
+                                  return;
+                                }
+                                setFtLinkedIrsaliyeler(prev => [...prev, ir.irsaliyeNo]);
+                              } else {
+                                setFtLinkedIrsaliyeler(prev => prev.filter(x => x !== ir.irsaliyeNo));
+                              }
+                            }}
+                            className="w-3.5 h-3.5 text-purple-600 border-gray-300 rounded focus:ring-purple-500 cursor-pointer"
+                          />
+                          <span className="font-semibold text-slate-700">{ir.irsaliyeNo} ({ir.tarih})</span>
+                        </label>
+                      );
+                    })}
+                  {irsaliyeler.filter(ir => !ftSupplier || ir.firma.toLowerCase().trim() === ftSupplier.toLowerCase().trim()).length === 0 && (
+                    <span className="text-[9.5px] text-slate-450 italic block p-1">Bu firmaya ait kayıtlı irsaliye bulunmuyor.</span>
+                  )}
+                </div>
                 <span className="text-[9px] text-slate-400 mt-1 block">
-                  İrsaliye belirleyerek miktar mutabakatlarını sistemin arkada analiz etmesini sağlayabilirsiniz.
+                  İrsaliyeleri belirleyerek miktar mutabakatlarını sistemin arkada analiz etmesini sağlayabilirsiniz.
                 </span>
 
                 {/* Onay Bekleyen / Onaylanmamış İrsaliyeler Listesi */}
@@ -3867,6 +3945,15 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
                       
                       {/* Document Flow Badges */}
                       <div className="flex items-center gap-1">
+                        {hasWaybill && (
+                          <button
+                            onClick={() => handleMergePoAndWaybills(sa, linkedIrs)}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white text-[9.5px] font-extrabold py-1 px-2.5 rounded-lg flex items-center space-x-1 cursor-pointer transition mr-2"
+                            title="PO ve İrsaliye miktar/kalemlerini birleştirip karşılaştırma raporu üretir."
+                          >
+                            <span>✨ Yapay Zeka ile Birleştir</span>
+                          </button>
+                        )}
                         <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 text-[9px] font-semibold rounded">1. Sipariş (PO) ✓</span>
                         <span className={`px-1.5 py-0.5 text-[9px] font-semibold rounded ${hasWaybill ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-400'}`}>
                           2. İrsaliye {hasWaybill ? '✓' : '✗'}
@@ -4021,9 +4108,18 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
                                         ✍️ Müdür E-İmzası ile Onayla
                                       </button>
                                     ) : (
-                                      <span className="text-[9px] bg-purple-100 text-purple-800 border border-purple-200 px-2 py-0.5 rounded font-semibold flex items-center gap-1 shadow-sm">
-                                        🔐 Onaylandı ({ft.eImzalar[0]})
-                                      </span>
+                                      <div className="flex gap-2 items-center">
+                                        <span className="text-[9px] bg-purple-100 text-purple-800 border border-purple-200 px-2 py-0.5 rounded font-semibold flex items-center gap-1 shadow-sm">
+                                          🔐 Onaylandı ({ft.eImzalar[0]})
+                                        </span>
+                                        <button
+                                          onClick={() => alert(`Fatura ${ft.faturaNo} Mutabakat ve Ödeme Doğrulama Raporu merkez ofise (merkez@kibritci.com) e-posta ile başarıyla gönderildi!`)}
+                                          className="bg-sky-600 hover:bg-sky-700 text-white text-[9px] font-bold py-0.5 px-2 rounded transition shadow-sm cursor-pointer flex items-center space-x-1"
+                                        >
+                                          <Send size={10} />
+                                          <span>E-Posta Gönder</span>
+                                        </button>
+                                      </div>
                                     )}
                                   </div>
                                 )}

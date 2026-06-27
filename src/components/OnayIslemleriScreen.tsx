@@ -1172,11 +1172,18 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           </div>
         </div>
 
-        <div className="bg-slate-50 border border-slate-250 rounded-xl p-2 px-4 flex items-center space-x-3 border-slate-200">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Kullanıcı Rolünüz:</span>
-          <span className="bg-blue-100 text-blue-800 text-[9px] font-mono font-black py-1 px-2 rounded-lg uppercase tracking-widest">
-            {currentUser?.email === 'sametatak9@gmail.com' ? '👑 PROJE MÜDÜRÜ / YÖNETİCİ' : '👥 ŞANTİYE YETKİLİSİ'}
-          </span>
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-2 px-4 flex items-center space-x-4">
+          <div className="text-right">
+            <span className="text-[9px] text-slate-405 font-bold uppercase tracking-wider block">Aktif Kullanıcı</span>
+            <strong className="text-[11px] text-slate-800 font-bold">{currentUser?.name || currentUser?.displayName || currentUser?.email || 'Bilinmeyen Kullanıcı'}</strong>
+          </div>
+          <div className="h-6 w-px bg-slate-200" />
+          <div>
+            <span className="text-[9px] text-slate-405 font-bold uppercase tracking-wider block">Kullanıcı Rolü</span>
+            <span className="bg-blue-100 text-blue-800 text-[9px] font-mono font-black py-0.5 px-2 rounded-lg uppercase tracking-widest block mt-0.5">
+              {currentUser?.email === 'sametatak9@gmail.com' ? '👑 PROJE MÜDÜRÜ / YÖNETİCİ' : '👥 ŞANTİYE YETKİLİSİ'}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -1922,6 +1929,71 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                 {filteredApprovedRequests.length === 0 && filteredApprovedWaybills.length === 0 && filteredApprovedInvoices.length === 0 && (
                   <div className="text-center p-10 text-slate-500 font-bold italic">Aranan kriterlere uygun onaylanmış belge kaydı bulunamadı.</div>
                 )}
+
+                {/* 📋 UNIFIED İŞLEM KAYITLARI AUDIT LOG */}
+                <div className="mt-8 bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 text-xs text-slate-350">
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                    <span className="font-display font-black text-xs text-white uppercase tracking-widest block">📋 Tesis Onaylı İşlem Kayıtları (Audit Log)</span>
+                    <span className="bg-slate-800 text-slate-400 font-mono text-[9px] px-2 py-0.5 rounded">SİSTEM DENETİMİ</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Sistemde onaylanan evrakların mali ve idari işlem kayıtları (Audit Trail):
+                  </p>
+                  
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-slate-300">
+                      <thead>
+                        <tr className="border-b border-slate-800 text-left font-bold text-slate-500">
+                          <th className="py-2 pr-4">Tarih</th>
+                          <th className="py-2 pr-4">Belge Tipi</th>
+                          <th className="py-2 pr-4">Belge Referansı</th>
+                          <th className="py-2 pr-4">Cari / Sorumlu</th>
+                          <th className="py-2 pr-4">Kaşe / İmza</th>
+                          <th className="py-2 text-right">Tutar/Miktar</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/50 font-mono text-[11px]">
+                        {satinAlmaTalepleri.filter(doc => doc.onayDurumu === 'ONAYLANDI' || doc.onayDurumu === '2. ONAY TAMAMLANDI').map(doc => (
+                          <tr key={doc.id} className="hover:bg-slate-800/25 transition">
+                            <td className="py-2 pr-4">{doc.tarih}</td>
+                            <td className="py-2 pr-4 text-amber-400 font-bold">PO (Satın Alma)</td>
+                            <td className="py-2 pr-4">{doc.saId}</td>
+                            <td className="py-2 pr-4 text-slate-400 truncate max-w-[120px]">{doc.cariFirma}</td>
+                            <td className="py-2 pr-4 text-emerald-400">{doc.onayStamp || 'Islak İmzalı / E-İmzalı'}</td>
+                            <td className="py-2 text-right text-slate-400">{doc.kalemler?.length || 0} Kalem</td>
+                          </tr>
+                        ))}
+                        {irsaliyeler.filter(doc => doc.onayDurumu === 'ONAYLANDI' || doc.onayDurumu.includes('TAMAMLANDI')).map(doc => (
+                          <tr key={doc.id} className="hover:bg-slate-800/25 transition">
+                            <td className="py-2 pr-4">{doc.tarih}</td>
+                            <td className="py-2 pr-4 text-emerald-400 font-bold">İRSALİYE</td>
+                            <td className="py-2 pr-4">{doc.irsaliyeNo}</td>
+                            <td className="py-2 pr-4 text-slate-400 truncate max-w-[120px]">{doc.firma}</td>
+                            <td className="py-2 pr-4 text-emerald-400">{doc.onayStamp || 'Müdür Onaylı'}</td>
+                            <td className="py-2 text-right text-slate-400">{doc.kalemler?.length || 0} Kalem</td>
+                          </tr>
+                        ))}
+                        {faturalar.filter(doc => doc.durum === 'ONAYLANDI' || doc.durum === 'UYUMLU').map(doc => (
+                          <tr key={doc.id} className="hover:bg-slate-800/25 transition">
+                            <td className="py-2 pr-4">{doc.tarih}</td>
+                            <td className="py-2 pr-4 text-purple-400 font-bold">FATURA</td>
+                            <td className="py-2 pr-4">{doc.faturaNo}</td>
+                            <td className="py-2 pr-4 text-slate-400 truncate max-w-[120px]">{doc.cariUnvan}</td>
+                            <td className="py-2 pr-4 text-emerald-400">{doc.onayStamp || doc.eImzalar?.[0] || 'Kaşeli Onay'}</td>
+                            <td className="py-2 text-right text-purple-300 font-bold">₺{doc.genelToplam?.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                        {satinAlmaTalepleri.filter(doc => doc.onayDurumu === 'ONAYLANDI' || doc.onayDurumu === '2. ONAY TAMAMLANDI').length === 0 && 
+                         irsaliyeler.filter(doc => doc.onayDurumu === 'ONAYLANDI' || doc.onayDurumu.includes('TAMAMLANDI')).length === 0 && 
+                         faturalar.filter(doc => doc.durum === 'ONAYLANDI' || doc.durum === 'UYUMLU').length === 0 && (
+                          <tr>
+                            <td colSpan={6} className="py-4 text-center text-slate-500 italic">Henüz onaylanmış herhangi bir işlem kaydı loglanmadı.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </div>
           )}

@@ -130,6 +130,8 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const [aciklama, setAciklama] = useState('');
   const [fotoUrl, setFotoUrl] = useState<string | null>(null);
   const [faaliyetPersonelIds, setFaaliyetPersonelIds] = useState<string[]>([]);
+  const [sahaUstaSayisi, setSahaUstaSayisi] = useState<number>(0);
+  const [sahaIsciSayisi, setSahaIsciSayisi] = useState<number>(0);
 
   // 3. PERSONEL GİRİŞE YOLLA STATE
   const [yeniAd, setYeniAd] = useState('');
@@ -575,7 +577,8 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
       blok,
       aciklama,
       fotoUrl: fotoUrl || undefined,
-      aktifPersonelListesi: faaliyetPersonelIds
+      ustaSayisi: sahaUstaSayisi,
+      isciSayisi: sahaIsciSayisi
     };
 
     setSahaFaaliyetleri(prev => [newFaaliyet, ...prev]);
@@ -586,6 +589,8 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     setIsNiteligi('');
     setAciklama('');
     setFotoUrl(null);
+    setSahaUstaSayisi(0);
+    setSahaIsciSayisi(0);
   };
 
   const handleSaveGunlukRapor = async () => {
@@ -1277,48 +1282,27 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                       </div>
                     </div>
 
-                    {/* Sahada çalışan ekip selection list */}
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between items-center">
-                        <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">Bu İmalatta Çalışan Ekip ({faaliyetPersonelIds.length} Personel)</label>
-                        <button
-                          type="button"
-                          onClick={() => setFaaliyetPersonelIds(presentIds)}
-                          className="text-amber-600 hover:text-amber-700 font-extrabold text-[8px] uppercase tracking-wider"
-                        >
-                          ✓ Gelenleri Al
-                        </button>
+                    {/* WORKER COUNT INPUTS */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">Çalışan Usta Sayısı</label>
+                        <input 
+                          type="number" 
+                          min={0}
+                          className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-[10px] font-bold text-slate-800 mt-1"
+                          value={sahaUstaSayisi}
+                          onChange={(e) => setSahaUstaSayisi(parseInt(e.target.value) || 0)}
+                        />
                       </div>
-
-                      <div className="border rounded-2xl p-2 max-h-32 overflow-y-auto space-y-1 bg-slate-50">
-                        {activeStaff.length === 0 ? (
-                          <p className="text-[8px] text-slate-400 italic text-center py-2">Aktif personel bulunmuyor.</p>
-                        ) : (
-                          activeStaff.map(p => {
-                            const isSelected = faaliyetPersonelIds.includes(p.id);
-                            return (
-                              <button
-                                type="button"
-                                key={p.id}
-                                onClick={() => {
-                                  if (isSelected) {
-                                    setFaaliyetPersonelIds(prev => prev.filter(x => x !== p.id));
-                                  } else {
-                                    setFaaliyetPersonelIds(prev => [...prev, p.id]);
-                                  }
-                                }}
-                                className={`w-full flex items-center justify-between p-1.5 rounded-lg text-[9px] font-bold transition ${
-                                  isSelected 
-                                    ? 'bg-amber-100/60 border border-amber-300/40 text-slate-900' 
-                                    : 'hover:bg-slate-100 text-slate-600'
-                                }`}
-                              >
-                                <span className="truncate">{p.ad} {p.soyad} ({p.gorev})</span>
-                                <span className="text-[9px]">{isSelected ? '✓' : '+'}</span>
-                              </button>
-                            );
-                          })
-                        )}
+                      <div>
+                        <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">Çalışan Düz İşçi Sayısı</label>
+                        <input 
+                          type="number" 
+                          min={0}
+                          className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-[10px] font-bold text-slate-800 mt-1"
+                          value={sahaIsciSayisi}
+                          onChange={(e) => setSahaIsciSayisi(parseInt(e.target.value) || 0)}
+                        />
                       </div>
                     </div>
 
@@ -1560,7 +1544,22 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                                 )}
 
                                 {/* Workers count if any */}
-                                {sf.aktifPersonelListesi && sf.aktifPersonelListesi.length > 0 && (
+                                {(sf.ustaSayisi !== undefined || sf.isciSayisi !== undefined) && (
+                                  <div className="flex gap-2.5 items-center bg-slate-50 p-1.5 rounded-lg border border-slate-100 mt-1">
+                                    {sf.ustaSayisi !== undefined && (
+                                      <span className="text-[8.5px] font-semibold text-blue-800">
+                                        👷 Usta: <strong>{sf.ustaSayisi} Kişi</strong>
+                                      </span>
+                                    )}
+                                    {sf.isciSayisi !== undefined && (
+                                      <span className="text-[8.5px] font-semibold text-slate-700">
+                                        👷 Düz İşçi: <strong>{sf.isciSayisi} Kişi</strong>
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+
+                                {(!sf.ustaSayisi && !sf.isciSayisi && sf.aktifPersonelListesi && sf.aktifPersonelListesi.length > 0) && (
                                   <div className="flex flex-wrap gap-1 items-center">
                                     <span className="text-[8px] font-bold text-slate-400">Çalışanlar ({sf.aktifPersonelListesi.length}):</span>
                                     {sf.aktifPersonelListesi.map((pId) => {

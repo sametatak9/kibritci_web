@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Truck, Tent, Building2, FileText, Users, Mail, Package,
   Plus, Trash2, ShieldAlert, Award, FileUp, CheckCircle, Check, HelpCircle, ClipboardList,
-  Printer, Download
+  Printer, Download, Upload, Send
 } from 'lucide-react';
 import { KibritciLogo } from './KibritciLogo';
 import { 
@@ -491,6 +491,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [sahaParsel, setSahaParsel] = useState("GENEL SAHA");
   const [sahaBlok, setSahaBlok] = useState("");
   const [sahaAciklama, setSahaAciklama] = useState("");
+  const [sahaUstaSayisi, setSahaUstaSayisi] = useState<number>(0);
+  const [sahaIsciSayisi, setSahaIsciSayisi] = useState<number>(0);
   const [sahaFotoBase64, setSahaFotoBase64] = useState<string | undefined>(undefined);
   const [photoSelectedSim, setPhotoSelectedSim] = useState(false);
   
@@ -670,7 +672,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
             blok: sahaBlok,
             aciklama: sahaAciklama,
             fotoUrl: sahaFotoBase64 !== undefined ? (sahaFotoBase64 || undefined) : sf.fotoUrl,
-            aktifPersonelListesi: selectedFieldStaff.length > 0 ? selectedFieldStaff : sf.aktifPersonelListesi
+            ustaSayisi: sahaUstaSayisi,
+            isciSayisi: sahaIsciSayisi
           };
         }
         return sf;
@@ -680,7 +683,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       setSahaNitelik("");
       setSahaFotoBase64(undefined);
       setPhotoSelectedSim(false);
-      setSelectedFieldStaff([]);
+      setSahaUstaSayisi(0);
+      setSahaIsciSayisi(0);
       alert("Saha faaliyeti başarıyla güncellendi.");
     } else {
       const newLog: SahaFaaliyeti = {
@@ -692,7 +696,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
         blok: sahaBlok,
         aciklama: sahaAciklama,
         fotoUrl: sahaFotoBase64 || (photoSelectedSim ? "saha_foto_example.jpg" : undefined),
-        aktifPersonelListesi: selectedFieldStaff.length > 0 ? selectedFieldStaff : ["Ayhan Yılmaz", "Mustafa Savaş"] // fallback if none checked
+        ustaSayisi: sahaUstaSayisi,
+        isciSayisi: sahaIsciSayisi
       };
 
       setSahaFaaliyetleri(prev => [newLog, ...prev]);
@@ -700,8 +705,9 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       setSahaNitelik("");
       setSahaFotoBase64(undefined);
       setPhotoSelectedSim(false);
-      setSelectedFieldStaff([]);
-      alert("Günlük saha imalat raporu ve aktif kadro faaliyeti başarıyla kaydedildi.");
+      setSahaUstaSayisi(0);
+      setSahaIsciSayisi(0);
+      alert("Günlük saha imalat raporu başarıyla kaydedildi.");
     }
   };
 
@@ -711,7 +717,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     setSahaParsel(sf.parsel);
     setSahaBlok(sf.blok);
     setSahaAciklama(sf.aciklama);
-    setSelectedFieldStaff(sf.aktifPersonelListesi || []);
+    setSahaUstaSayisi(sf.ustaSayisi || 0);
+    setSahaIsciSayisi(sf.isciSayisi || 0);
   };
 
   const handleCancelEditSaha = () => {
@@ -720,7 +727,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     setSahaNitelik("");
     setSahaFotoBase64(undefined);
     setPhotoSelectedSim(false);
-    setSelectedFieldStaff([]);
+    setSahaUstaSayisi(0);
+    setSahaIsciSayisi(0);
   };
 
   const handleDeleteSahaFaaliyeti = (id: string) => {
@@ -741,10 +749,12 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   // ─────────────────────────────────────────────────────────────
   // 📜 4. HAZIR TUTANAKLAR STATES & EVENTS
   // ─────────────────────────────────────────────────────────────
-  const [tutanakType, setTutanakType] = useState<'TAHSİS' | 'TESLİM' | 'SEVK' | 'HASAR' | 'GENEL'>("TAHSİS");
+  const [tutanakType, setTutanakType] = useState<'TAHSİS' | 'TESLİM' | 'SEVK' | 'HASAR' | 'GENEL' | 'CEZA'>("TAHSİS");
   const [tutanakSubject, setTutanakSubject] = useState("");
   const [tutanakPerson, setTutanakPerson] = useState("p1");
   const [tutanakText, setTutanakText] = useState("");
+  const [taseronAdi, setTaseronAdi] = useState("");
+  const [cezaTutari, setCezaTutari] = useState<number>(0);
 
   const [tutanakSearch, setTutanakSearch] = useState("");
   const [editingTutanakId, setEditingTutanakId] = useState<string | null>(null);
@@ -764,7 +774,9 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
             tutanakTipi: tutanakType,
             personelId: tutanakPerson,
             konu: tutanakSubject,
-            icerik: tutanakText
+            icerik: tutanakText,
+            taseronAdi: taseronAdi,
+            cezaTutari: cezaTutari
           };
         }
         return ht;
@@ -772,6 +784,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       setEditingTutanakId(null);
       setTutanakSubject("");
       setTutanakText("");
+      setTaseronAdi("");
+      setCezaTutari(0);
       alert("Tutanak başarıyla güncellendi.");
     } else {
       const docNo = `TUT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -784,12 +798,16 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
         tarih: new Date().toISOString().split('T')[0],
         icerik: tutanakText,
         durum: "TASLAK",
-        aciklama: "Yeni tutanak taslağı açıldı."
+        aciklama: "Yeni tutanak taslağı açıldı.",
+        taseronAdi: taseronAdi,
+        cezaTutari: cezaTutari
       };
 
       setHazirTutanaklar(prev => [newDoc, ...prev]);
       setTutanakSubject("");
       setTutanakText("");
+      setTaseronAdi("");
+      setCezaTutari(0);
       alert(`${docNo} numaralı resmi tutanak taslağı başarıyla kaydedildi.`);
     }
   };
@@ -798,14 +816,18 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     setEditingTutanakId(ht.id);
     setTutanakType(ht.tutanakTipi);
     setTutanakSubject(ht.konu);
-    setTutanakPerson(ht.personelId);
+    setTutanakPerson(ht.personelId || "p1");
     setTutanakText(ht.icerik);
+    setTaseronAdi(ht.taseronAdi || "");
+    setCezaTutari(ht.cezaTutari || 0);
   };
 
   const handleCancelEditTutanak = () => {
     setEditingTutanakId(null);
     setTutanakSubject("");
     setTutanakText("");
+    setTaseronAdi("");
+    setCezaTutari(0);
   };
 
   const handleDeleteTutanak = (id: string) => {
@@ -1359,10 +1381,73 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                             <span>Sorumlu: <strong className="text-slate-800">{sorumluUser ? `${sorumluUser.ad} ${sorumluUser.soyad}` : "Teknisyen Yok"}</strong></span>
                             <span>Ağır Bakım: <strong className="text-blue-700 font-mono font-bold text-[9px]">{heavyRemaining > 0 ? `${heavyRemaining} KM` : "HEMEN BAKIMA SOK!"}</strong></span>
                           </div>
-                          <div className="flex justify-between items-center text-slate-400 text-[9px]">
+                          <div className="flex justify-between items-center text-slate-400 text-[9px] pb-2">
                             <span>Muayene Tarihi: <strong>{ar.muayeneTarihi || "Girilmedi"}</strong></span>
                             <span>Yağ Hedefi: <strong>{ar.yagBakimKm || 10000} KM</strong></span>
                           </div>
+                        </div>
+
+                        <div className="flex gap-2 border-t pt-2.5 text-[9.5px]">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              alert(`Araç Detay Kartı\n-----------------------\nPlaka: ${ar.plaka}\nMarka/Model: ${ar.markaModel}\nTip: ${ar.aracTipi}\nMevcut KM: ${ar.mevcutKm} KM\nSon Muayene: ${ar.muayeneTarihi || 'Yok'}\nYağ Bakım Hedef: ${ar.yagBakimKm || 10000} KM\nSorumlu Personel: ${sorumluUser ? `${sorumluUser.ad} ${sorumluUser.soyad} (${sorumluUser.gorev})` : "Teknisyen Yok"}`);
+                            }}
+                            className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 py-1 rounded font-bold transition flex items-center justify-center space-x-1 cursor-pointer"
+                          >
+                            <span>ℹ️ Detay Gör</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const vLogs = aracKmLoglari.filter(l => l.plaka === ar.plaka);
+                              const txtLines = [
+                                `KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.`,
+                                `ARAÇ GEÇMİŞ RAPORU (TEKNİK VE HAREKET)`,
+                                `---------------------------------------------`,
+                                `Plaka: ${ar.plaka}`,
+                                `Marka/Model: ${ar.markaModel}`,
+                                `Araç Tipi: ${ar.aracTipi}`,
+                                `Mevcut KM Sayacı: ${ar.mevcutKm} KM`,
+                                `Sorumlu Sürücü/Personel: ${sorumluUser ? `${sorumluUser.ad} ${sorumluUser.soyad}` : "Belirtilmemiş"}`,
+                                `Son Muayene Tarihi: ${ar.muayeneTarihi || "Belirtilmemiş"}`,
+                                `Bir Sonraki Muayene Kalan: ${daysRemaining} Gün`,
+                                `Yağ Değişimi Hedef: ${ar.yagBakimKm} KM (Kalan: ${oilRemaining} KM)`,
+                                `Ağır Bakım Hedef: ${nextHeavyService} KM (Kalan: ${heavyRemaining} KM)`,
+                                `---------------------------------------------`,
+                                `KM VE SAYAÇ HAREKET LOGLARI (${vLogs.length} Adet):`,
+                                ...vLogs.map((l, idx) =>
+                                  `[${idx + 1}] Tarih: ${l.tarih} | Sürücü: ${l.surucu} | Sabah: ${l.sabahKm} KM | Akşam: ${l.aksamKm} KM | Yapılan Yol: ${l.fark || 0} KM`
+                                )
+                              ];
+                              const blob = new Blob([txtLines.join('\n')], { type: 'text/plain;charset=utf-8' });
+                              const url = URL.createObjectURL(blob);
+                              const link = document.createElement('a');
+                              link.href = url;
+                              link.download = `Kibritci_Arac_Gecmis_Raporu_${ar.plaka}.txt`;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                              URL.revokeObjectURL(url);
+                              alert(`${ar.plaka} plakalı aracın teknik geçmiş raporu başarıyla indirildi.`);
+                            }}
+                            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 py-1 rounded font-bold transition flex items-center justify-center space-x-1 cursor-pointer"
+                          >
+                            <span>📊 Geçmiş Raporla</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`${ar.plaka} plakalı aracı silmek istediğinize emin misiniz?`)) {
+                                setAraclar(prev => prev.filter(a => a.id !== ar.id));
+                                alert("Araç başarıyla silindi.");
+                              }
+                            }}
+                            className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 py-1 px-2 rounded font-bold transition flex items-center justify-center cursor-pointer"
+                            title="Aracı Sil"
+                          >
+                            <span>🗑️ Sil</span>
+                          </button>
                         </div>
                       </div>
                     );
@@ -2172,33 +2257,27 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 />
               </div>
 
-              {/* DYNAMIC FIELD ACTIVE WORKER MULTISELECT */}
-              <div className="space-y-1.5 border-t pt-3">
-                <span className="font-bold text-[10px] text-blue-700 uppercase block">👷 Sahanın Aktif Kadrosu</span>
-                <span className="text-[9px] text-slate-400 block">Sahada o gün görev alan personelleri işaretleyin:</span>
-                
-                <div className="max-h-36 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 bg-slate-50 p-2 space-y-1">
-                  {personeller.map(p => {
-                    const fullName = `${p.ad} ${p.soyad}`;
-                    const isChecked = selectedFieldStaff.includes(fullName);
-                    return (
-                      <label key={p.id} className="flex items-center space-x-2 py-1 px-1 hover:bg-slate-100 rounded cursor-pointer text-[10px] text-slate-700 font-semibold">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => {
-                            if (isChecked) {
-                              setSelectedFieldStaff(prev => prev.filter(name => name !== fullName));
-                            } else {
-                              setSelectedFieldStaff(prev => [...prev, fullName]);
-                            }
-                          }}
-                          className="rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer"
-                        />
-                        <span>👤 {fullName} ({p.gorev})</span>
-                      </label>
-                    );
-                  })}
+              {/* WORKER COUNT INPUTS */}
+              <div className="grid grid-cols-2 gap-3 border-t pt-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Çalışan Usta Sayısı</label>
+                  <input 
+                    type="number" 
+                    min={0}
+                    className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
+                    value={sahaUstaSayisi}
+                    onChange={(e) => setSahaUstaSayisi(parseInt(e.target.value) || 0)}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Çalışan Düz İşçi Sayısı</label>
+                  <input 
+                    type="number" 
+                    min={0}
+                    className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
+                    value={sahaIsciSayisi}
+                    onChange={(e) => setSahaIsciSayisi(parseInt(e.target.value) || 0)}
+                  />
                 </div>
               </div>
 
@@ -2308,8 +2387,26 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     {sf.aciklama}
                   </p>
 
+                  {/* Render worker count badges */}
+                  {(sf.ustaSayisi !== undefined || sf.isciSayisi !== undefined) && (
+                    <div className="mt-3 bg-slate-50 p-2.5 rounded-xl border border-slate-150 flex gap-4">
+                      {sf.ustaSayisi !== undefined && (
+                        <div className="text-[10px]">
+                          <span className="text-slate-400 font-bold block text-[8px] uppercase">Çalışan Usta</span>
+                          <strong className="text-blue-800">{sf.ustaSayisi} Kişi</strong>
+                        </div>
+                      )}
+                      {sf.isciSayisi !== undefined && (
+                        <div className="text-[10px]">
+                          <span className="text-slate-400 font-bold block text-[8px] uppercase">Çalışan Düz İşçi</span>
+                          <strong className="text-slate-800">{sf.isciSayisi} Kişi</strong>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Render checked field labor staff tags */}
-                  {sf.aktifPersonelListesi && sf.aktifPersonelListesi.length > 0 && (
+                  {(!sf.ustaSayisi && !sf.isciSayisi && sf.aktifPersonelListesi && sf.aktifPersonelListesi.length > 0) && (
                     <div className="mt-3 bg-slate-50 p-2.5 rounded-xl border border-slate-150">
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">👷 Aktif Sahadaki Kadro:</span>
                       <div className="flex flex-wrap gap-1">
@@ -2395,8 +2492,48 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   <option value="SEVK">Sevk / Sevkiyat Tutanağı</option>
                   <option value="HASAR">Zarar / Hasar Tespit Protokolü</option>
                   <option value="GENEL">Normal Şantiye Genel Tutanağı</option>
+                  <option value="CEZA">Ceza İhtar Tutanağı</option>
                 </select>
               </div>
+
+              {tutanakType === 'CEZA' && (
+                <div className="space-y-4 bg-red-50/50 p-3.5 rounded-xl border border-red-200 animate-in fade-in duration-150">
+                  <span className="font-bold text-[9px] text-red-800 uppercase tracking-widest block">⚠️ CEZA UYGULAMA BİLGİLERİ</span>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Ceza Kesilecek Taşeron Firma</label>
+                    <div className="flex gap-2 mt-1">
+                      <select 
+                        className="flex-1 text-xs font-semibold p-2 bg-white border border-[#e2e8f0] rounded-lg"
+                        value={taseronAdi}
+                        onChange={(e) => setTaseronAdi(e.target.value)}
+                      >
+                        <option value="">-- Taşeron Seç (Cari Rehber) --</option>
+                        {cariKartlar.map(c => (
+                          <option key={c.id} value={c.unvan}>{c.unvan}</option>
+                        ))}
+                      </select>
+                      <input 
+                        type="text"
+                        placeholder="Veya manuel yazın"
+                        className="w-1/2 text-xs font-semibold p-2 bg-white border border-[#e2e8f0] rounded-lg"
+                        value={taseronAdi}
+                        onChange={(e) => setTaseronAdi(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Uygulanacak Ceza Tutarı (₺)</label>
+                    <input 
+                      type="number" 
+                      min={0}
+                      className="w-full text-xs font-semibold mt-1 p-2 bg-white border border-[#e2e8f0] rounded-lg"
+                      placeholder="₺0.00"
+                      value={cezaTutari || ""}
+                      onChange={(e) => setCezaTutari(parseFloat(e.target.value) || 0)}
+                    />
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Tutanak Konusu / Başlığı *</label>
@@ -2514,10 +2651,69 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                       "{ht.icerik}"
                     </p>
 
-                    <div className="flex justify-end gap-2 pt-2 border-t text-[10px]">
+                    {ht.tutanakTipi === 'CEZA' && (
+                      <div className="bg-red-50 border border-red-200 p-3 rounded-xl text-[10.5px] space-y-1">
+                        <span className="font-bold text-red-800 uppercase block">⚠️ CEZA DETAYLARI:</span>
+                        <p><strong>Cezalı Taşeron:</strong> {ht.taseronAdi || 'Belirtilmemiş'}</p>
+                        <p><strong>Uygulanan Para Cezası:</strong> ₺{(ht.cezaTutari || 0).toLocaleString('tr-TR')}</p>
+                      </div>
+                    )}
+
+                    {ht.imzaliEvrakUrl && (
+                      <div className="border border-slate-200 rounded-xl overflow-hidden max-h-32">
+                        <img src={ht.imzaliEvrakUrl} alt="İmzalı Belge Görseli" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap justify-end gap-2 pt-2 border-t text-[10px]">
+                      {/* Physical Signed Doc Upload */}
+                      <label className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-1 px-2.5 rounded-lg flex items-center space-x-1 cursor-pointer transition">
+                        <Upload size={11} />
+                        <span>{ht.imzaliEvrakUrl ? "İmza Güncelle" : "İmzalı Belge Yükle"}</span>
+                        <input 
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = async () => {
+                                const rawBase64 = reader.result as string;
+                                const compressed = await compressImage(rawBase64);
+                                setHazirTutanaklar(prev => prev.map(item => {
+                                  if (item.id === ht.id) {
+                                    return {
+                                      ...item,
+                                      imzaliEvrakUrl: compressed,
+                                      durum: 'ONAYLANDI'
+                                    };
+                                  }
+                                  return item;
+                                }));
+                                alert("Islak imzalı tutanak başarıyla sisteme yüklendi!");
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+
+                      {/* E-Posta Gönder button if signed */}
+                      {(ht.imzaliEvrakUrl || ht.durum === 'ONAYLANDI') && (
+                        <button
+                          type="button"
+                          onClick={() => alert(`${ht.belgeNo} nolu ıslak imzalı ${ht.tutanakTipi} tutanağı merkez ofise (merkez@kibritci.com) e-posta ile başarıyla gönderildi!`)}
+                          className="bg-sky-600 hover:bg-sky-700 text-white font-bold py-1 px-2.5 rounded-lg transition cursor-pointer flex items-center space-x-1"
+                        >
+                          <Send size={11} />
+                          <span>E-Posta Gönder</span>
+                        </button>
+                      )}
+
                       <button 
                         onClick={() => handleStartEditTutanak(ht)}
-                        className="bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold py-1 px-2.5 rounded-lg transition cursor-pointer"
+                        className="bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold py-1 px-2.5 rounded-lg transition cursor-pointer"
                       >
                         ✏️ Düzenle
                       </button>
@@ -3839,10 +4035,45 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
               </div>
             </div>
 
-            <div className="p-4 border-t bg-slate-50 flex justify-end">
+            <div className="p-4 border-t bg-slate-50 flex justify-between">
+              <button 
+                onClick={() => {
+                  if (historyList.length === 0) {
+                    alert("İndirilecek herhangi bir işlem geçmişi bulunmamaktadır.");
+                    return;
+                  }
+                  const txtLines = [
+                    `KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.`,
+                    `KART GEÇMİŞ HAREKET RAPORU`,
+                    `---------------------------------------------`,
+                    `Kart Tipi: ${historyModalData.type === 'cari' ? 'Cari Firma' : 'Stok Malzeme'}`,
+                    `Kart Adı: ${historyModalData.name}`,
+                    `Kart ID: ${historyModalData.id}`,
+                    `Rapor Tarihi: ${new Date().toLocaleString('tr-TR')}`,
+                    `---------------------------------------------`,
+                    `HAREKET LOGLARI:`,
+                    ...historyList.map((log, idx) => 
+                      `[${idx + 1}] Tarih: ${log.date} | Tip: ${log.type}\n    Başlık: ${log.title}\n    Açıklama: ${log.desc}\n`
+                    )
+                  ];
+                  const blob = new Blob([txtLines.join('\n')], { type: 'text/plain;charset=utf-8' });
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = `Kibritci_${historyModalData.type === 'cari' ? 'Cari' : 'Stok'}_Gecmis_Raporu_${historyModalData.id}.txt`;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  URL.revokeObjectURL(url);
+                  alert("İşlem geçmişi raporu başarıyla .txt dosyası olarak indirildi.");
+                }}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2 px-5 rounded-xl transition cursor-pointer flex items-center space-x-1.5"
+              >
+                <span>💾 Raporu İndir (.txt)</span>
+              </button>
               <button 
                 onClick={() => setHistoryModalData(null)}
-                className="bg-slate-900 hover:bg-black text-white font-bold py-2 px-5 rounded-xl transition cursor-pointer"
+                className="bg-slate-900 hover:bg-black text-white font-bold text-xs py-2 px-5 rounded-xl transition cursor-pointer"
               >
                 Kapat
               </button>

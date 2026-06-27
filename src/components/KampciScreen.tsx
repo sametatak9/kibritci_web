@@ -518,7 +518,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
     <>
       
       {/* ⛺ Header Block */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-800 pb-5">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
           <div className="flex items-center space-x-2">
             <span className="p-1.5 bg-blue-600/10 rounded-lg text-blue-500">
@@ -526,12 +526,12 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
             </span>
             <span className="text-[10px] font-bold text-blue-400 tracking-wider uppercase">Lojman &amp; Kamp İşlemleri</span>
           </div>
-          <h1 className="text-xl md:text-2xl font-black text-white mt-1">⛺ KAMP AMİRLİĞİ MOBİL PANELİ</h1>
-          <p className="text-[11px] text-slate-400 mt-0.5">Oda açılışı, personel yerleşimleri, depo sayımları ve günlük kamp faaliyet raporları</p>
+          <h1 className="text-xl md:text-2xl font-black text-slate-800 mt-1">⛺ KAMP AMİRLİĞİ MOBİL PANELİ</h1>
+          <p className="text-[11px] text-slate-500 mt-0.5">Oda açılışı, personel yerleşimleri, depo sayımları ve günlük kamp faaliyet raporları</p>
         </div>
 
         <div className="flex items-center space-x-2.5">
-          <div className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-right">
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-right">
             <span className="text-[8px] text-slate-500 block font-bold uppercase">Giriş Yapan Yetkili</span>
             <span className="text-xs font-bold text-emerald-400 font-mono">{currentUser?.email || 'kampci@kibritci.com'}</span>
           </div>
@@ -558,13 +558,13 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       )}
 
       {/* 🧭 Panel Navigation Tabs */}
-      <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-1">
+      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-1">
         <button
           onClick={() => setActiveSubTab('placement')}
           className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center space-x-2 border cursor-pointer ${
             activeSubTab === 'placement' 
               ? 'bg-blue-650 border-blue-600 text-white shadow-md shadow-blue-500/10' 
-              : 'bg-slate-950 border-slate-800/80 text-slate-400 hover:bg-slate-900'
+              : 'bg-white border-slate-200/80 text-slate-500 hover:bg-slate-50'
           }`}
         >
           <UserPlus size={14} />
@@ -576,7 +576,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center space-x-2 border cursor-pointer ${
             activeSubTab === 'rooms' 
               ? 'bg-blue-650 border-blue-600 text-white shadow-md shadow-blue-500/10' 
-              : 'bg-slate-950 border-slate-800/80 text-slate-400 hover:bg-slate-900'
+              : 'bg-white border-slate-200/80 text-slate-500 hover:bg-slate-50'
           }`}
         >
           <Layers size={14} />
@@ -588,7 +588,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center space-x-2 border cursor-pointer ${
             activeSubTab === 'warehouse' 
               ? 'bg-blue-650 border-blue-600 text-white shadow-md shadow-blue-500/10' 
-              : 'bg-slate-950 border-slate-800/80 text-slate-400 hover:bg-slate-900'
+              : 'bg-white border-slate-200/80 text-slate-500 hover:bg-slate-50'
           }`}
         >
           <Package size={14} />
@@ -600,7 +600,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center space-x-2 border cursor-pointer ${
             activeSubTab === 'activities' 
               ? 'bg-blue-650 border-blue-600 text-white shadow-md shadow-blue-500/10' 
-              : 'bg-slate-950 border-slate-800/80 text-slate-400 hover:bg-slate-900'
+              : 'bg-white border-slate-200/80 text-slate-500 hover:bg-slate-50'
           }`}
         >
           <ClipboardList size={14} />
@@ -615,7 +615,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           {/* Check-In Form (Left Panel) */}
-          <div className="lg:col-span-1 bg-slate-950 border border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+          <div className="lg:col-span-1 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
             <div>
               <span className="font-extrabold text-[10px] text-blue-400 uppercase tracking-wider">Lojmana Personel Yerleştir</span>
               <h3 className="font-bold text-sm text-white mt-0.5">🔑 Check-In Giriş İşlemi</h3>
@@ -624,12 +624,12 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
             <form onSubmit={handlePlacementSubmit} className="space-y-4">
               {/* Target Room Selection */}
               <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Yerleşim Yapılacak Oda *</label>
+                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Yerleşim Yapılacak Oda *</label>
                 <select
                   required
                   value={selectedRoomId}
                   onChange={(e) => setSelectedRoomId(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 text-xs font-bold text-white rounded-xl p-3 outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-white rounded-xl p-3 outline-none"
                 >
                   <option value="">-- Oda Seçiniz --</option>
                   {kampOdalari.map(r => {
@@ -645,13 +645,13 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
 
               {/* Source Type Toggle */}
               <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Giriş Türü</label>
-                <div className="grid grid-cols-2 gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-800">
+                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Giriş Türü</label>
+                <div className="grid grid-cols-2 gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
                   <button
                     type="button"
                     onClick={() => setPlacementType('DB')}
                     className={`py-1.5 rounded-lg text-[10px] font-bold text-center transition ${
-                      placementType === 'DB' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'
+                      placementType === 'DB' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-white'
                     }`}
                   >
                     Kayıtlı Personel
@@ -660,7 +660,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                     type="button"
                     onClick={() => setPlacementType('MANUAL')}
                     className={`py-1.5 rounded-lg text-[10px] font-bold text-center transition ${
-                      placementType === 'MANUAL' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'
+                      placementType === 'MANUAL' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-white'
                     }`}
                   >
                     Elle Giriş (Misafir/Taşeron)
@@ -675,7 +675,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                 {placementType === 'DB' ? (
                   <div className="space-y-3 animate-in fade-in duration-100">
                     <div className="space-y-1.5">
-                      <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Personel Filtrele / Ara</label>
+                      <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Personel Filtrele / Ara</label>
                       <div className="relative">
                         <Search size={14} className="absolute left-3 top-3 text-slate-500" />
                         <input
@@ -683,13 +683,13 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                           placeholder="Personel adı veya görevi..."
                           value={searchPersonelQuery}
                           onChange={(e) => setSearchPersonelQuery(e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-800 text-xs text-white pl-9 pr-3 py-2.5 rounded-xl outline-none"
+                          className="w-full bg-slate-50 border border-slate-200 text-xs text-white pl-9 pr-3 py-2.5 rounded-xl outline-none"
                         />
                       </div>
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Kayıtlı Personel Listesinden Seçin *</label>
+                      <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Kayıtlı Personel Listesinden Seçin *</label>
                       <select
                         required={placementType === 'DB'}
                         value={selectedPersonelId}
@@ -707,7 +707,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                             }
                           }
                         }}
-                        className="w-full bg-slate-900 border border-slate-800 text-xs font-bold text-white rounded-xl p-3 outline-none"
+                        className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-white rounded-xl p-3 outline-none"
                       >
                         <option value="">-- Personel Seçin --</option>
                         {filteredPersonel.slice(0, 30).map(p => (
@@ -723,14 +723,14 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                   </div>
                 ) : (
                   <div className="space-y-1.5 animate-in fade-in duration-100">
-                    <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Personel Adı Soyadı *</label>
+                    <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Personel Adı Soyadı *</label>
                     <input
                       type="text"
                       required={placementType === 'MANUAL'}
                       placeholder="Örn: Ahmet Yılmaz"
                       value={manualPersonelIsim}
                       onChange={(e) => setManualPersonelIsim(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 text-xs text-white p-3 rounded-xl outline-none"
+                      className="w-full bg-slate-50 border border-slate-200 text-xs text-white p-3 rounded-xl outline-none"
                     />
                   </div>
                 )}
@@ -740,7 +740,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
               <div className="border-t border-slate-850 pt-3 space-y-3">
                 <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest block">ADIM 2: Firma Bilgisi</span>
                 
-                <div className="grid grid-cols-2 gap-2 bg-slate-900 p-1 rounded-lg border border-slate-800/60">
+                <div className="grid grid-cols-2 gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200/60">
                   <button
                     type="button"
                     onClick={() => setFirmaType('DB')}
@@ -763,12 +763,12 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
 
                 {firmaType === 'DB' ? (
                   <div className="space-y-1.5 animate-in fade-in duration-100">
-                    <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Kayıtlı Firmalardan Seçin *</label>
+                    <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Kayıtlı Firmalardan Seçin *</label>
                     <select
                       required={firmaType === 'DB'}
                       value={selectedFirma}
                       onChange={(e) => setSelectedFirma(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 text-xs font-bold text-white rounded-xl p-3 outline-none"
+                      className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-white rounded-xl p-3 outline-none"
                     >
                       <option value="">-- Firma Seçin --</option>
                       <option value="Özdemir Hafriyat A.Ş.">Özdemir Hafriyat A.Ş.</option>
@@ -780,14 +780,14 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                   </div>
                 ) : (
                   <div className="space-y-1.5 animate-in fade-in duration-100">
-                    <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Firma Adını Yazın *</label>
+                    <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Firma Adını Yazın *</label>
                     <input
                       type="text"
                       required={firmaType === 'MANUAL'}
                       placeholder="Örn: Özdemir Hafriyat Ltd. Şti."
                       value={manualFirma}
                       onChange={(e) => setManualFirma(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 text-xs text-white p-3 rounded-xl outline-none"
+                      className="w-full bg-slate-50 border border-slate-200 text-xs text-white p-3 rounded-xl outline-none"
                     />
                   </div>
                 )}
@@ -806,8 +806,8 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           </div>
 
           {/* Rooms and Occupants Directory (Right Panel - taking 2 cols) */}
-          <div className="lg:col-span-2 bg-slate-950 border border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-800 pb-3 gap-2">
+          <div className="lg:col-span-2 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-200 pb-3 gap-2">
               <div>
                 <span className="font-extrabold text-[10px] text-blue-400 uppercase tracking-wider">Mevcut Kamp Odaları &amp; Doluluk Durumu</span>
                 <h3 className="font-bold text-sm text-white mt-0.5">🏡 Lojman Odaları Listesi</h3>
@@ -819,7 +819,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                   placeholder="Blok veya oda ara..."
                   value={searchRoomQuery}
                   onChange={(e) => setSearchRoomQuery(e.target.value)}
-                  className="bg-slate-900 border border-slate-800 text-[10px] text-white pl-7 pr-2.5 py-1.5 rounded-lg outline-none w-44"
+                  className="bg-slate-50 border border-slate-200 text-[10px] text-white pl-7 pr-2.5 py-1.5 rounded-lg outline-none w-44"
                 />
               </div>
             </div>
@@ -838,7 +838,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                 );
 
                 return (
-                  <div key={room.id} className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col justify-between space-y-3">
+                  <div key={room.id} className="bg-slate-50 border border-slate-200 p-4 rounded-xl flex flex-col justify-between space-y-3">
                     <div className="space-y-2 flex-grow flex flex-col justify-between">
                       <div>
                         <div className="flex justify-between items-start">
@@ -857,8 +857,8 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                           </span>
                         </div>
 
-                        <div className="pt-2 border-t border-slate-800/40 space-y-1.5">
-                          <div className="flex justify-between items-center text-[9px] text-slate-400 font-bold uppercase tracking-wider">
+                        <div className="pt-2 border-t border-slate-200/40 space-y-1.5">
+                          <div className="flex justify-between items-center text-[9px] text-slate-500 font-bold uppercase tracking-wider">
                             <span>Kalan Personeller</span>
                             <span>{occupants.length} / {room.kapasite} Yatak</span>
                           </div>
@@ -868,10 +868,10 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                           ) : (
                             <div className="space-y-1">
                               {occupants.map(occ => (
-                                <div key={occ.id} className="flex justify-between items-center bg-slate-950 p-1.5 rounded-lg border border-slate-850">
+                                <div key={occ.id} className="flex justify-between items-center bg-white p-1.5 rounded-lg border border-slate-850">
                                   <div className="flex items-center space-x-1.5">
                                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
-                                    <span className="text-[10px] font-bold text-slate-200">{occ.personelIsim}</span>
+                                    <span className="text-[10px] font-bold text-slate-700">{occ.personelIsim}</span>
                                   </div>
                                   <button
                                     onClick={() => handleCheckOut(occ)}
@@ -888,7 +888,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                       </div>
 
                       {/* 🚀 QUICK ACTIONS FOR ROOMS */}
-                      <div className="pt-2.5 border-t border-slate-800/60 flex items-center justify-between gap-2 mt-auto">
+                      <div className="pt-2.5 border-t border-slate-200/60 flex items-center justify-between gap-2 mt-auto">
                         <button
                           onClick={() => handleSelectRoomForPlacement(room.id)}
                           className="flex-grow bg-blue-600/15 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/20 hover:border-blue-600 rounded-lg py-1.5 text-[9px] font-black uppercase tracking-wider cursor-pointer transition text-center"
@@ -920,7 +920,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       {activeSubTab === 'rooms' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Create Room Form */}
-          <div className="lg:col-span-1 bg-slate-950 border border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+          <div className="lg:col-span-1 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
             <div>
               <span className="font-extrabold text-[10px] text-blue-400 uppercase tracking-wider">Yeni Kamp Lojman Odası Ekle</span>
               <h3 className="font-bold text-sm text-white mt-0.5">🏢 Oda / Koğuş Tanımla</h3>
@@ -928,7 +928,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
 
             <form onSubmit={handleCreateRoom} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Yerleşke Adı *</label>
+                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Yerleşke Adı *</label>
                 <select
                   required
                   value={yerleskeAdi}
@@ -941,7 +941,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                       setShowCustomYerleske(false);
                     }
                   }}
-                  className="w-full bg-slate-900 border border-slate-800 text-xs font-bold text-white rounded-xl p-3 outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-white rounded-xl p-3 outline-none"
                 >
                   <option value="Merkez Konteyner Kampı">Merkez Konteyner Kampı</option>
                   <option value="Kuzey Lojman Sahası">Kuzey Lojman Sahası</option>
@@ -955,13 +955,13 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                     placeholder="Yeni Yerleşke Adını Yazınız"
                     value={customYerleskeAdi}
                     onChange={(e) => setCustomYerleskeAdi(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 text-xs text-white p-3 rounded-xl outline-none mt-1.5 animate-in slide-in-from-top-1 duration-150"
+                    className="w-full bg-slate-50 border border-slate-200 text-xs text-white p-3 rounded-xl outline-none mt-1.5 animate-in slide-in-from-top-1 duration-150"
                   />
                 )}
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Kat / Blok Tanımı *</label>
+                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Kat / Blok Tanımı *</label>
                 <select
                   required
                   value={kogusNo}
@@ -974,7 +974,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                       setShowCustomKogus(false);
                     }
                   }}
-                  className="w-full bg-slate-900 border border-slate-800 text-xs font-bold text-white rounded-xl p-3 outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-white rounded-xl p-3 outline-none"
                 >
                   <option value="A Blok (Zemin Kat)">A Blok (Zemin Kat)</option>
                   <option value="A Blok (1. Kat)">A Blok (1. Kat)</option>
@@ -991,25 +991,25 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                     placeholder="Yeni Kat / Blok Tanımını Yazınız"
                     value={customKogusNo}
                     onChange={(e) => setCustomKogusNo(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 text-xs text-white p-3 rounded-xl outline-none mt-1.5 animate-in slide-in-from-top-1 duration-150"
+                    className="w-full bg-slate-50 border border-slate-200 text-xs text-white p-3 rounded-xl outline-none mt-1.5 animate-in slide-in-from-top-1 duration-150"
                   />
                 )}
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Oda Numarası *</label>
+                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Oda Numarası *</label>
                 <input
                   type="text"
                   required
                   placeholder="Örn: 104"
                   value={odaNo}
                   onChange={(e) => setOdaNo(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 text-xs text-white p-3 rounded-xl outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 text-xs text-white p-3 rounded-xl outline-none"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Kapasite (Yatak Sayısı) *</label>
+                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Kapasite (Yatak Sayısı) *</label>
                 <input
                   type="number"
                   required
@@ -1017,17 +1017,17 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                   max={20}
                   value={kapasite}
                   onChange={(e) => setKapasite(Number(e.target.value))}
-                  className="w-full bg-slate-900 border border-slate-800 text-xs text-white p-3 rounded-xl outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 text-xs text-white p-3 rounded-xl outline-none"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Atanan Firma Türü *</label>
+                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Atanan Firma Türü *</label>
                 <select
                   required
                   value={firmaTipi}
                   onChange={(e) => setFirmaTipi(e.target.value as any)}
-                  className="w-full bg-slate-900 border border-slate-800 text-xs font-bold text-white rounded-xl p-3 outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-white rounded-xl p-3 outline-none"
                 >
                   <option value="ANA_FIRMA">Kibritçi İnşaat (Ana Firma)</option>
                   <option value="TASERON">Alt Yüklenici / Taşeron</option>
@@ -1046,7 +1046,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           </div>
 
           {/* Rooms Table List */}
-          <div className="lg:col-span-2 bg-slate-950 border border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+          <div className="lg:col-span-2 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
             <div>
               <span className="font-extrabold text-[10px] text-blue-400 uppercase tracking-wider">Şantiye Kamp Altyapısı</span>
               <h3 className="font-bold text-sm text-white mt-0.5">📋 Tanımlı Odaların Listesi</h3>
@@ -1055,7 +1055,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-300 border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-800 text-slate-500 font-extrabold text-[10px] uppercase tracking-wider">
+                  <tr className="border-b border-slate-200 text-slate-500 font-extrabold text-[10px] uppercase tracking-wider">
                     <th className="pb-3">Yerleşke</th>
                     <th className="pb-3">Blok / Kat</th>
                     <th className="pb-3">Oda No</th>
@@ -1066,8 +1066,8 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                 </thead>
                 <tbody>
                   {kampOdalari.map(r => (
-                    <tr key={r.id} className="border-b border-slate-800/50 hover:bg-slate-900/30 transition">
-                      <td className="py-3 font-mono text-slate-400">{r.yerleskeAdi}</td>
+                    <tr key={r.id} className="border-b border-slate-200/50 hover:bg-slate-900/30 transition">
+                      <td className="py-3 font-mono text-slate-500">{r.yerleskeAdi}</td>
                       <td className="py-3 font-bold text-white">{r.kogusNo}</td>
                       <td className="py-3 font-bold text-amber-400">{r.odaNo}</td>
                       <td className="py-3 font-bold font-mono">{r.kapasite} Yatak</td>
@@ -1107,27 +1107,27 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       {activeSubTab === 'warehouse' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* New Audit Form */}
-          <div className="lg:col-span-1 bg-slate-950 border border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+          <div className="lg:col-span-1 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
             <div>
               <span className="font-extrabold text-[10px] text-blue-400 uppercase tracking-wider">Aylık / Haftalık Kamp Depo Sayımı</span>
               <h3 className="font-bold text-sm text-white mt-0.5">📦 Yeni Depo Sayımı Gir</h3>
             </div>
 
             <form onSubmit={handleSaveAudit} className="space-y-4">
-              <div className="space-y-2 border border-slate-800 rounded-xl p-3 bg-slate-900/40">
-                <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Depo Malzeme Kalemleri Sayım Listesi</span>
+              <div className="space-y-2 border border-slate-200 rounded-xl p-3 bg-slate-900/40">
+                <span className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Depo Malzeme Kalemleri Sayım Listesi</span>
                 
                 <div className="space-y-3 divide-y divide-slate-800/40">
                   {Object.entries(sayimMiktarlari).map(([item, val]) => (
                     <div key={item} className="flex justify-between items-center pt-2.5 first:pt-0">
-                      <span className="text-[11px] font-bold text-slate-200">{item}</span>
+                      <span className="text-[11px] font-bold text-slate-700">{item}</span>
                       <input
                         type="number"
                         min={0}
                         required
                         value={val}
                         onChange={(e) => handleQuantityChange(item, e.target.value)}
-                        className="w-20 bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-right text-emerald-400 font-bold font-mono outline-none"
+                        className="w-20 bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-right text-emerald-400 font-bold font-mono outline-none"
                       />
                     </div>
                   ))}
@@ -1135,12 +1135,12 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Sayım Notları / Açıklama</label>
+                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Sayım Notları / Açıklama</label>
                 <textarea
                   placeholder="Sayım hakkında eklemek istediğiniz bir durum var mı?"
                   value={sayimNotlar}
                   onChange={(e) => setSayimNotlar(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 text-xs text-white p-2.5 rounded-xl outline-none h-16 resize-none"
+                  className="w-full bg-slate-50 border border-slate-200 text-xs text-white p-2.5 rounded-xl outline-none h-16 resize-none"
                 />
               </div>
 
@@ -1156,7 +1156,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           </div>
 
           {/* Past Audits List */}
-          <div className="lg:col-span-2 bg-slate-950 border border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+          <div className="lg:col-span-2 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
             <div>
               <span className="font-extrabold text-[10px] text-blue-400 uppercase tracking-wider">Kayıtlı Depo Sayım Arşivi</span>
               <h3 className="font-bold text-sm text-white mt-0.5">📋 Sayım Kayıtları ve Onay Durumları</h3>
@@ -1168,8 +1168,8 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                 const rejected = sayim.durum === 'REDDEDİLDİ';
 
                 return (
-                  <div key={sayim.id} className="bg-slate-900 border border-slate-800 p-4 rounded-xl space-y-3 hover:border-slate-700 transition">
-                    <div className="flex justify-between items-start border-b border-slate-800/60 pb-2">
+                  <div key={sayim.id} className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-3 hover:border-slate-700 transition">
+                    <div className="flex justify-between items-start border-b border-slate-200/60 pb-2">
                       <div>
                         <span className="text-[10px] text-slate-500 font-mono font-bold block">{sayim.tarih}</span>
                         <span className="text-xs font-bold text-white block mt-0.5">Sorumlu: {sayim.sayimYapan}</span>
@@ -1191,10 +1191,10 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                         </span>
                         
                         <div className="flex gap-1.5 mt-1.5">
-                          <span className={`text-[8px] font-mono font-semibold px-1 rounded ${sayim.onaylayanIdariIsler ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-950 text-slate-600'}`}>
+                          <span className={`text-[8px] font-mono font-semibold px-1 rounded ${sayim.onaylayanIdariIsler ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white text-slate-600'}`}>
                             İdari: {sayim.onaylayanIdariIsler ? '✓' : '⌛'}
                           </span>
-                          <span className={`text-[8px] font-mono font-semibold px-1 rounded ${sayim.onaylayanMuhasebe ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-950 text-slate-600'}`}>
+                          <span className={`text-[8px] font-mono font-semibold px-1 rounded ${sayim.onaylayanMuhasebe ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white text-slate-600'}`}>
                             Muhasebe: {sayim.onaylayanMuhasebe ? '✓' : '⌛'}
                           </span>
                         </div>
@@ -1204,7 +1204,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                     {/* Stock Counts Grid */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 pt-1">
                       {sayim.kalemler?.map((k: any, idx: number) => (
-                        <div key={idx} className="bg-slate-950 p-2 rounded-lg border border-slate-850/60 text-center">
+                        <div key={idx} className="bg-white p-2 rounded-lg border border-slate-850/60 text-center">
                           <span className="text-[9px] text-slate-500 block truncate">{k.urunAdi}</span>
                           <span className="font-black text-xs text-amber-400 block mt-0.5 font-mono">{k.miktar} {k.birim}</span>
                         </div>
@@ -1212,7 +1212,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                     </div>
 
                     {sayim.notlar && (
-                      <p className="text-[10px] text-slate-400 italic bg-slate-950/40 p-2 rounded-lg border border-slate-850/30">
+                      <p className="text-[10px] text-slate-500 italic bg-white/40 p-2 rounded-lg border border-slate-850/30">
                         {sayim.notlar}
                       </p>
                     )}
@@ -1234,7 +1234,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       {activeSubTab === 'activities' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* New Activity Form */}
-          <div className="lg:col-span-1 bg-slate-950 border border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+          <div className="lg:col-span-1 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
             <div>
               <span className="font-extrabold text-[10px] text-blue-400 uppercase tracking-wider">Günlük Rutin &amp; İş Bildirimi</span>
               <h3 className="font-bold text-sm text-white mt-0.5">🧹 Yeni Faaliyet Raporu</h3>
@@ -1242,12 +1242,12 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
 
             <form onSubmit={handleSaveActivity} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Faaliyet Kategorisi *</label>
+                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Faaliyet Kategorisi *</label>
                 <select
                   required
                   value={faaliyetTipi}
                   onChange={(e) => setFaaliyetTipi(e.target.value as any)}
-                  className="w-full bg-slate-900 border border-slate-800 text-xs font-bold text-white rounded-xl p-3 outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-white rounded-xl p-3 outline-none"
                 >
                   <option value="TEMİZLİK">🧹 TEMİZLİK (Koğuş, Banyo, Çamaşır)</option>
                   <option value="YEMEK">🍲 YEMEK (Yemekhane, Aşevi)</option>
@@ -1258,12 +1258,12 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Kamp Yerleşkesi *</label>
+                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Kamp Yerleşkesi *</label>
                 <select
                   required
                   value={faaliyetYerleske}
                   onChange={(e) => setFaaliyetYerleske(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 text-xs font-bold text-white rounded-xl p-3 outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-white rounded-xl p-3 outline-none"
                 >
                   <option value="Merkez Konteyner Kampı">Merkez Konteyner Kampı</option>
                   <option value="Kuzey Lojman Sahası">Kuzey Lojman Sahası</option>
@@ -1272,21 +1272,21 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Yapılan İşin Detayı *</label>
+                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Yapılan İşin Detayı *</label>
                 <textarea
                   required
                   placeholder="Yapılan rutin işlerin ayrıntısını yazınız..."
                   value={faaliyetAciklama}
                   onChange={(e) => setFaaliyetAciklama(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 text-xs text-white p-3 rounded-xl outline-none h-24 resize-none"
+                  className="w-full bg-slate-50 border border-slate-200 text-xs text-white p-3 rounded-xl outline-none h-24 resize-none"
                 />
               </div>
 
               {/* Photo Upload Attachment */}
-              <div className="space-y-1.5 bg-slate-900 p-3 rounded-xl border border-slate-800 space-y-2">
-                <span className="text-[9px] font-extrabold text-slate-400 uppercase block tracking-wider">📷 Çalışma Görseli / Fotoğraf Ekle</span>
+              <div className="space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                <span className="text-[9px] font-extrabold text-slate-500 uppercase block tracking-wider">📷 Çalışma Görseli / Fotoğraf Ekle</span>
                 <div className="flex items-center gap-3">
-                  <label className="bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-300 font-bold text-[10px] py-2 px-4 rounded-lg flex items-center justify-center space-x-2 cursor-pointer transition shrink-0">
+                  <label className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-300 font-bold text-[10px] py-2 px-4 rounded-lg flex items-center justify-center space-x-2 cursor-pointer transition shrink-0">
                     <Camera size={13} className="text-amber-500" />
                     <span>{faaliyetFoto ? '✓ Görsel Seçildi' : 'Fotoğraf Çek / Seç'}</span>
                     <input 
@@ -1321,7 +1321,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                 </div>
 
                 {faaliyetFoto && (
-                  <div className="mt-2 border border-slate-850 rounded bg-slate-950 p-1">
+                  <div className="mt-2 border border-slate-850 rounded bg-white p-1">
                     <img src={faaliyetFoto} alt="Activity Preview" className="max-h-24 mx-auto object-contain rounded" />
                   </div>
                 )}
@@ -1339,7 +1339,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           </div>
 
           {/* Activity List */}
-          <div className="lg:col-span-2 bg-slate-950 border border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+          <div className="lg:col-span-2 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
             <div>
               <span className="font-extrabold text-[10px] text-blue-400 uppercase tracking-wider">Günlük Kamp Faaliyetleri</span>
               <h3 className="font-bold text-sm text-white mt-0.5">📋 Son Raporlanan Aktiviteler</h3>
@@ -1351,7 +1351,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                 const rejected = act.durum === 'REDDEDİLDİ';
 
                 return (
-                  <div key={act.id} className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col justify-between space-y-3 hover:border-slate-700 transition">
+                  <div key={act.id} className="bg-slate-50 border border-slate-200 p-4 rounded-xl flex flex-col justify-between space-y-3 hover:border-slate-700 transition">
                     <div className="space-y-2.5">
                       <div className="flex justify-between items-start">
                         <div>
@@ -1360,7 +1360,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                             act.faaliyetTipi === 'YEMEK' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
                             act.faaliyetTipi === 'GÜVENLİK' ? 'bg-red-500/10 border-red-500/20 text-red-400' :
                             act.faaliyetTipi === 'BAKIM' ? 'bg-purple-500/10 border-purple-500/20 text-purple-400' :
-                            'bg-slate-500/10 border-slate-500/20 text-slate-400'
+                            'bg-slate-500/10 border-slate-500/20 text-slate-500'
                           }`}>
                             {act.faaliyetTipi}
                           </span>
@@ -1379,22 +1379,22 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                           </span>
                           
                           <div className="flex gap-1 justify-end mt-1">
-                            <span className={`text-[7px] font-mono px-1 rounded ${act.onaylayanIdariIsler ? 'bg-emerald-500/25 text-emerald-400' : 'bg-slate-950 text-slate-650'}`}>
+                            <span className={`text-[7px] font-mono px-1 rounded ${act.onaylayanIdariIsler ? 'bg-emerald-500/25 text-emerald-400' : 'bg-white text-slate-650'}`}>
                               İd: {act.onaylayanIdariIsler ? '✓' : '⌛'}
                             </span>
-                            <span className={`text-[7px] font-mono px-1 rounded ${act.onaylayanMuhasebe ? 'bg-emerald-500/25 text-emerald-400' : 'bg-slate-950 text-slate-650'}`}>
+                            <span className={`text-[7px] font-mono px-1 rounded ${act.onaylayanMuhasebe ? 'bg-emerald-500/25 text-emerald-400' : 'bg-white text-slate-650'}`}>
                               Mu: {act.onaylayanMuhasebe ? '✓' : '⌛'}
                             </span>
                           </div>
                         </div>
                       </div>
 
-                      <p className="text-xs text-slate-200 mt-1 line-clamp-3 leading-relaxed">
+                      <p className="text-xs text-slate-700 mt-1 line-clamp-3 leading-relaxed">
                         {act.aciklama}
                       </p>
 
                       {act.fotoUrl && (
-                        <div className="border border-slate-800 rounded bg-slate-950 p-1 max-h-24 overflow-hidden flex items-center justify-center">
+                        <div className="border border-slate-200 rounded bg-white p-1 max-h-24 overflow-hidden flex items-center justify-center">
                           <img src={act.fotoUrl} alt="Activity" className="max-h-20 object-contain rounded" />
                         </div>
                       )}
@@ -1424,17 +1424,17 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
 
   if (!isStandalone && viewMode === 'mobile') {
     return (
-      <div className="flex-grow min-h-full bg-slate-950 flex justify-center py-6 px-4">
-        <div className="w-full max-w-[420px] h-[720px] max-h-[82vh] bg-slate-900 rounded-[3rem] border-[10px] border-slate-800 shadow-2xl overflow-hidden flex flex-col relative">
+      <div className="flex-grow min-h-full bg-white flex justify-center py-6 px-4">
+        <div className="w-full max-w-[420px] h-[720px] max-h-[82vh] bg-slate-50 rounded-[3rem] border-[10px] border-slate-200 shadow-2xl overflow-hidden flex flex-col relative">
           {/* Notch / Dynamic Island */}
           <div className="absolute top-2 left-1/2 transform -translate-x-1/2 w-28 h-5 bg-black rounded-full z-50 flex items-center justify-center">
             <div className="w-1.5 h-1.5 rounded-full bg-slate-800 mr-2"></div>
-            <div className="w-10 h-0.5 bg-slate-900 rounded"></div>
+            <div className="w-10 h-0.5 bg-slate-50 rounded"></div>
           </div>
           <div className="flex-grow overflow-y-auto pt-6 pb-4 flex flex-col">
             {/* View switcher control at the top of phone */}
-            <div className="px-5 py-3 border-b border-slate-800/60 flex justify-between items-center bg-slate-950/80 sticky top-0 z-40 backdrop-blur-md">
-              <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase">📱 Mobil Sürüm</span>
+            <div className="px-5 py-3 border-b border-slate-200/60 flex justify-between items-center bg-white/80 sticky top-0 z-40 backdrop-blur-md">
+              <span className="text-[10px] font-black tracking-wider text-slate-500 uppercase">📱 Mobil Sürüm</span>
               <button 
                 onClick={() => setViewMode('web')}
                 className="text-[9px] bg-blue-600/20 border border-blue-500/30 text-blue-400 px-2.5 py-1 rounded-lg font-bold hover:bg-blue-500/30 transition cursor-pointer"

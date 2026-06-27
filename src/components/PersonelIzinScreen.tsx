@@ -24,8 +24,9 @@ interface IzinFormu {
 
 interface Personel {
   id: string;
-  adSoyad: string;
-  unvan: string;
+  ad: string;
+  soyad: string;
+  gorev: string;
 }
 
 interface PersonelIzinScreenProps {
@@ -86,8 +87,8 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({ personel
             id: 'sample_1',
             tarih: '2026-06-18',
             personelId: personeller[0]?.id || 'p_1',
-            personelIsim: personeller[0]?.adSoyad || 'Ayhan Yılmaz',
-            unvan: personeller[0]?.unvan || 'Kule Vinç Operatörü',
+            personelIsim: personeller[0] ? `${personeller[0].ad} ${personeller[0].soyad}` : 'Ayhan Yılmaz',
+            unvan: personeller[0]?.gorev || 'Kule Vinç Operatörü',
             izinTipi: 'YILLIK_IZIN',
             baslangicTarihi: '2026-07-01',
             bitisTarihi: '2026-07-07',
@@ -108,8 +109,8 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({ personel
             id: 'sample_1',
             tarih: '2026-06-18',
             personelId: personeller[0]?.id || 'p_1',
-            personelIsim: personeller[0]?.adSoyad || 'Ayhan Yılmaz',
-            unvan: personeller[0]?.unvan || 'Kule Vinç Operatörü',
+            personelIsim: personeller[0] ? `${personeller[0].ad} ${personeller[0].soyad}` : 'Ayhan Yılmaz',
+            unvan: personeller[0]?.gorev || 'Kule Vinç Operatörü',
             izinTipi: 'YILLIK_IZIN',
             baslangicTarihi: '2026-07-01',
             bitisTarihi: '2026-07-07',
@@ -151,8 +152,8 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({ personel
     } else {
       const matchedPers = personeller.find(p => p.id === selectedPersonelId);
       if (!matchedPers) return;
-      pName = matchedPers.adSoyad;
-      pUnvan = matchedPers.unvan;
+      pName = `${matchedPers.ad} ${matchedPers.soyad}`;
+      pUnvan = matchedPers.gorev;
     }
 
     const todayStr = new Date().toISOString().split('T')[0];
@@ -296,7 +297,7 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({ personel
                 >
                   <option value="">Lütfen listeden çalışan seçin</option>
                   {personeller.map(p => (
-                    <option key={p.id} value={p.id}>{p.adSoyad} ({p.unvan})</option>
+                    <option key={p.id} value={p.id}>{p.ad} {p.soyad} ({p.gorev})</option>
                   ))}
                 </select>
               ) : (

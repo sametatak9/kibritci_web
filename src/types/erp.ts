@@ -227,14 +227,19 @@ export interface SahaFaaliyeti {
   aciklama: string;
   fotoUrl?: string;
   aktifPersonelListesi?: string[]; // Aktif sahaya çıkan personel listesi
+  ustaSayisi?: number;
+  isciSayisi?: number;
 }
 
 export interface HazirTutanak {
   id: string;
-  tutanakTipi: 'TAHSİS' | 'TESLİM' | 'SEVK' | 'HASAR' | 'GENEL';
+  tutanakTipi: 'TAHSİS' | 'TESLİM' | 'SEVK' | 'HASAR' | 'GENEL' | 'CEZA';
   belgeNo: string;
   personelId?: string;
   cariKartId?: string;
+  taseronAdi?: string;
+  cezaTutari?: number;
+  imzaliEvrakUrl?: string;
   konu: string;
   tarih: string;
   icerik: string;
@@ -282,4 +287,39 @@ export interface EpostaGonderim {
   durum: 'HAZIR' | 'GONDERILDI' | 'HATA';
   notlar: string;
   tarih: string;
+}
+
+export interface OperatorFaaliyet {
+  id: string;
+  aracId: string; // Plaka / Machine id
+  operatorIsim: string; // Operator personnel name
+  operatorTipi: 'JCB' | 'KATO' | 'KİRALIK' | 'DİĞER';
+  tarih: string;
+  baslangicSaat: string;
+  bitisSaat: string;
+  calismaSuresi: number; // Hours
+  yapilanIs: string;
+  firmaAdi: string; // Client/Subcontractor
+  isManualFirma?: boolean;
+  fotoUrl?: string;
+  temsilciAdSoyad?: string;
+  temsilciTc?: string;
+  operatorTc?: string;
+  kesintiYansitildi?: boolean;
+  onayDurumu: 'BEKLEMEDE' | 'ONAYLANDI' | 'REDDEDİLDİ';
+}
+
+export interface YapayZekaEslesme {
+  id: string;
+  tarih: string;
+  saId: string; // Satin alma Talep ID
+  irsaliyeNo: string;
+  faturaNo?: string;
+  cariFirma: string;
+  saBirim: string;
+  irsaliyeBirim: string;
+  faturaBirim?: string;
+  eslesmeRaporu: string;
+  imzaliEvrakUrl?: string;
+  durum: 'ONAYLANDI' | 'FARK VAR' | 'BEKLEMEDE';
 }

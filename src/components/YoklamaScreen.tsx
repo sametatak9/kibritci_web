@@ -40,6 +40,12 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   // Report formatting state
   const [reportType, setReportType] = useState<'NORMAL' | 'E-IMZALI'>('NORMAL');
 
+  // Bireysel Yoklama modal states
+  const [showBireyselModal, setShowBireyselModal] = useState(false);
+  const [bireyselStaffId, setBireyselStaffId] = useState("");
+  const [bireyselMonth, setBireyselMonth] = useState(selectedMonth);
+  const [bireyselYear, setBireyselYear] = useState(selectedYear);
+
   const handleAiFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -457,6 +463,18 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               title="Formenlerin doldurduğu günlük yoklama kağıdını fotoğraf çekip AI ile sisteme yükleyin."
             >
               <span>🤖 AI ile Günlük Yoklama Yükle</span>
+            </button>
+            <button
+              onClick={() => {
+                setShowBireyselModal(true);
+                if (personeller.length > 0 && !bireyselStaffId) {
+                  setBireyselStaffId(personeller[0].id);
+                }
+              }}
+              className="text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
+              title="Bireysel aylık puantaj kartını pop-up olarak görüntüler ve düzenler."
+            >
+              <span>👤 Bireysel Yoklama</span>
             </button>
 
             {/* Search */}
@@ -993,15 +1011,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               {/* Title Header Section */}
               <div className="text-center mb-6">
                 <h2 className="text-sm font-bold text-slate-900 tracking-wider uppercase border-y border-slate-200 py-2.5 bg-slate-50">
-                  {printModal === 'BOS' 
-                    ? 'İAŞE VE ŞANTİYE SAHA ELEMANLARI AYLIK BOŞ PUANTAJ REFAKAT CETVELİ' 
-                    : printModal === 'GUNLUK_BOS' 
-                      ? 'GÜNLÜK BOŞ PUANTAJ REFAKAT CETVELİ ŞABLONU' 
-                      : 'RESMİ ŞANTİYE PERSONELİ FİİLİ ÇALIŞMA VE PUANTAJ RAPORU'}
+                  KİBRİTÇİ İNŞAAT {selectedMonth}. AY / {selectedYear} YOKLAMA PUANTAJ RAPORU
                 </h2>
-                <p className="text-[9px] text-slate-400 mt-1 italic">
-                  * Bu evrak, şantiye idaresi tarafından doldurulup imzalatıldıktan sonra finans merkezine iletilmek üzere hukuki belge niteliğindedir. Güvenlik gerekçesiyle personel isimleri gizlenmiş, sadece Ünvan ve Hizmet Kodu kullanılmıştır.
-                </p>
               </div>
 
               {/* Printable Matrix Table */}
@@ -1216,86 +1227,216 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                   </table>
                 )}
               </div>
-
-              {/* Official Sign-off Approval Bars arranged in strict order specified by user */}
+                                {/* Official Sign-off Approval Bars arranged in strict order specified by user */}
               <div className="mt-12 text-xs">
-                <div className="bg-[#1E4E78] text-white p-2 text-[9px] font-bold uppercase tracking-wider mb-6 rounded-md">
-                  📌 RESMİ ŞANTİYE PUANTAJ DENETİM VE KANUNİ ONAY MERCİLERİ
-                </div>
-                <div className="grid grid-cols-4 gap-4 text-center">
+                <div className="grid grid-cols-5 gap-3 text-center">
                   
-                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50/50 flex flex-col justify-between">
-                    <div>
-                      <span className="font-extrabold text-[#8B1E1E] tracking-wider uppercase block mb-1">1. MUHASEBE</span>
-                      <span className="text-[9px] text-slate-500 block mb-4">Finansal hakediş ve Bordro Masası</span>
-                    </div>
-                    {reportType === 'E-IMZALI' ? (
-                      <div className="my-2 p-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-850 text-[7px] font-mono leading-tight text-center">
-                        <div className="font-bold text-[8px] text-emerald-800">✓ DİJİTAL E-ONAY</div>
-                        <div>REF-2026-MHS-882</div>
-                        <div>HASH: A9D4...F219</div>
-                      </div>
-                    ) : (
-                      <div className="h-10 border-b border-dashed border-slate-300 w-24 mx-auto my-2"></div>
-                    )}
-                    <span className="text-[9px] font-bold text-slate-800 block">Bordro Yetkilisi</span>
+                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50 flex flex-col justify-between h-28">
+                    <span className="font-extrabold text-slate-800 tracking-wider uppercase text-[10px] block">HAZIRLAYAN</span>
+                    <div className="h-10 border-b border-dashed border-slate-300 w-16 mx-auto my-2"></div>
                   </div>
 
-                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50/50 flex flex-col justify-between">
-                    <div>
-                      <span className="font-extrabold text-[#1E4E78] tracking-wider uppercase block mb-1">2. İDARİ İŞLER</span>
-                      <span className="text-[9px] text-slate-500 block mb-4">İnsan Kaynakları ve Şantiye Şefliği</span>
-                    </div>
-                    {reportType === 'E-IMZALI' ? (
-                      <div className="my-2 p-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-850 text-[7px] font-mono leading-tight text-center">
-                        <div className="font-bold text-[8px] text-emerald-800">✓ DİJİTAL E-ONAY</div>
-                        <div>REF-2026-IDR-145</div>
-                        <div>HASH: BC51...C778</div>
-                      </div>
-                    ) : (
-                      <div className="h-10 border-b border-dashed border-slate-300 w-24 mx-auto my-2"></div>
-                    )}
-                    <span className="text-[9px] font-bold text-slate-800 block">İdari İşler Şefi</span>
+                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50 flex flex-col justify-between h-28">
+                    <span className="font-extrabold text-slate-800 tracking-wider uppercase text-[10px] block">MUHASEBE</span>
+                    <div className="h-10 border-b border-dashed border-slate-300 w-16 mx-auto my-2"></div>
                   </div>
 
-                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50/50 flex flex-col justify-between">
-                    <div>
-                      <span className="font-extrabold text-[#1E4E78] tracking-wider uppercase block mb-1">3. ŞANTİYE ŞEFİ</span>
-                      <span className="text-[9px] text-slate-500 block mb-4">Saha organizasyonu ve fiili kontrol</span>
-                    </div>
-                    {reportType === 'E-IMZALI' ? (
-                      <div className="my-2 p-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-850 text-[7px] font-mono leading-tight text-center">
-                        <div className="font-bold text-[8px] text-emerald-800">✓ DİJİTAL E-ONAY</div>
-                        <div>REF-2026-SEF-902</div>
-                        <div>HASH: D1A2...E334</div>
-                      </div>
-                    ) : (
-                      <div className="h-10 border-b border-dashed border-slate-300 w-24 mx-auto my-2"></div>
-                    )}
-                    <span className="text-[9px] font-bold text-slate-800 block">Şantiye Şefi</span>
+                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50 flex flex-col justify-between h-28">
+                    <span className="font-extrabold text-slate-800 tracking-wider uppercase text-[10px] block">İDARİ İŞLER</span>
+                    <div className="h-10 border-b border-dashed border-slate-300 w-16 mx-auto my-2"></div>
                   </div>
 
-                  <div className="border border-slate-150 p-3 rounded-xl bg-slate-50 flex flex-col justify-between">
-                    <div>
-                      <span className="font-extrabold text-[#8B1E1E] tracking-wider uppercase block mb-1">4. PROJE MÜDÜRÜ</span>
-                      <span className="text-[9px] text-slate-500 block mb-4">Yönetici Müteahhit ve Nihai Onay</span>
-                    </div>
-                    {reportType === 'E-IMZALI' ? (
-                      <div className="my-2 p-1.5 bg-emerald-55 border border-emerald-200 rounded-lg text-emerald-850 text-[7px] font-mono leading-tight text-center">
-                        <div className="font-bold text-[8px] text-emerald-800">✓ DİJİTAL E-ONAY</div>
-                        <div>REF-2026-PM-001</div>
-                        <div>HASH: F558...A889</div>
-                      </div>
-                    ) : (
-                      <div className="h-10 border-b border-dashed border-slate-300 w-24 mx-auto my-2"></div>
-                    )}
-                    <span className="text-[9px] font-bold text-slate-800 block">Proje Müdürü</span>
+                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50 flex flex-col justify-between h-28">
+                    <span className="font-extrabold text-slate-800 tracking-wider uppercase text-[10px] block">ŞANTİYE ŞEFİ</span>
+                    <div className="h-10 border-b border-dashed border-slate-300 w-16 mx-auto my-2"></div>
+                  </div>
+
+                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50 flex flex-col justify-between h-28">
+                    <span className="font-extrabold text-slate-800 tracking-wider uppercase text-[10px] block">PROJE MÜDÜRÜ</span>
+                    <div className="h-10 border-b border-dashed border-slate-300 w-16 mx-auto my-2"></div>
                   </div>
 
                 </div>
               </div>
 
             </div>
+          </div>
+        </div>
+      )}
+      {/* 👤 BİREYSEL YOKLAMA PANELİ (POP-UP MODAL) */}
+      {showBireyselModal && (
+        <div className="fixed inset-0 bg-slate-950/75 flex items-center justify-center z-50 p-4 animate-in fade-in duration-150 font-sans">
+          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
+            
+            {/* Header */}
+            <div className="bg-slate-900 border-b p-5 text-white flex justify-between items-center">
+              <div className="flex items-center space-x-2.5">
+                <span className="text-xl">👤</span>
+                <div>
+                  <h3 className="font-display font-semibold text-sm">Bireysel Aylık Puantaj Kartı</h3>
+                  <p className="text-[10px] text-slate-400">Seçili personelin ilgili aya ait tüm puantaj ve mesai kayıtları</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowBireyselModal(false)}
+                className="text-slate-400 hover:text-white font-bold cursor-pointer text-sm"
+              >
+                ✖
+              </button>
+            </div>
+
+            {/* Selectors */}
+            <div className="p-4 border-b bg-slate-50 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div>
+                <label className="font-bold text-slate-500 uppercase text-[9px] block mb-1">Personel Seçin</label>
+                <select
+                  value={bireyselStaffId}
+                  onChange={(e) => setBireyselStaffId(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 font-semibold text-slate-800 focus:outline-none"
+                >
+                  {personeller.map(p => (
+                    <option key={p.id} value={p.id}>{p.ad} {p.soyad} ({p.gorev})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="font-bold text-slate-500 uppercase text-[9px] block mb-1">Yıl</label>
+                <select
+                  value={bireyselYear}
+                  onChange={(e) => setBireyselYear(Number(e.target.value))}
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 font-semibold text-slate-800 focus:outline-none"
+                >
+                  {[2024, 2025, 2026, 2027].map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="font-bold text-slate-500 uppercase text-[9px] block mb-1">Ay</label>
+                <select
+                  value={bireyselMonth}
+                  onChange={(e) => setBireyselMonth(Number(e.target.value))}
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 font-semibold text-slate-800 focus:outline-none"
+                >
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                    <option key={m} value={m}>{m}. Ay</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Monthly Day List Grid */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+              {(() => {
+                const selectedEmp = personeller.find(emp => emp.id === bireyselStaffId);
+                if (!selectedEmp) {
+                  return <p className="text-center text-slate-400 text-xs py-10">Lütfen bir personel seçin.</p>;
+                }
+
+                const daysInMonth = new Date(bireyselYear, bireyselMonth, 0).getDate();
+                const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {days.map(day => {
+                      const isActive = isDayActiveForEmployee(selectedEmp, day);
+                      if (!isActive) return null;
+
+                      const currentMap = yoklamalar[bireyselStaffId] || {};
+                      const dayData = currentMap[day] || { durum: 'Girilmedi', mesaiSaati: 0 };
+
+                      // Style maps
+                      const statusStyles: Record<string, string> = {
+                        'Geldi': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+                        'Yok': 'bg-rose-100 text-rose-800 border-rose-200',
+                        'İzinli': 'bg-blue-100 text-blue-800 border-blue-200',
+                        'Raporlu': 'bg-violet-100 text-violet-800 border-violet-200',
+                        'Pazar': 'bg-amber-100 text-amber-800 border-amber-200',
+                        'Tatil': 'bg-indigo-100 text-indigo-800 border-indigo-200',
+                        'Girilmedi': 'bg-slate-100 text-slate-500 border-slate-200',
+                      };
+
+                      return (
+                        <div 
+                          key={day}
+                          className="bg-white border border-slate-150 rounded-xl p-3 flex items-center justify-between shadow-xs hover:border-slate-300 transition"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <span className="font-mono font-bold text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded-lg">
+                              {day < 10 ? `0${day}` : day}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-medium">Gün</span>
+                          </div>
+
+                          <div className="flex items-center space-x-3">
+                            {/* Status selector */}
+                            <select
+                              value={dayData.durum}
+                              onChange={(e) => {
+                                const newStatus = e.target.value as any;
+                                setYoklamalar(prev => ({
+                                  ...prev,
+                                  [bireyselStaffId]: {
+                                    ...currentMap,
+                                    [day]: {
+                                      ...dayData,
+                                      durum: newStatus
+                                    }
+                                  }
+                                }));
+                              }}
+                              className={`text-[10px] font-bold border rounded-lg px-2.5 py-1 ${statusStyles[dayData.durum] || 'bg-slate-100'}`}
+                            >
+                              {['Geldi', 'Yok', 'İzinli', 'Raporlu', 'Pazar', 'Tatil', 'Girilmedi'].map(st => (
+                                <option key={st} value={st}>{st}</option>
+                              ))}
+                            </select>
+
+                            {/* Overtime input */}
+                            <div className="flex items-center space-x-1">
+                              <span className="text-[9px] text-slate-400 font-bold uppercase">Mesai:</span>
+                              <input 
+                                type="number"
+                                min={0}
+                                max={24}
+                                step={0.5}
+                                value={dayData.mesaiSaati || 0}
+                                onChange={(e) => {
+                                  const hours = parseFloat(e.target.value) || 0;
+                                  setYoklamalar(prev => ({
+                                    ...prev,
+                                    [bireyselStaffId]: {
+                                      ...currentMap,
+                                      [day]: {
+                                        ...dayData,
+                                        mesaiSaati: hours
+                                      }
+                                    }
+                                  }));
+                                }}
+                                className="w-12 text-center bg-slate-50 border rounded-lg p-1 text-[10px] font-mono font-bold"
+                              />
+                              <span className="text-[9px] text-slate-400">sa</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-50 border-t flex justify-end">
+              <button
+                onClick={() => setShowBireyselModal(false)}
+                className="bg-slate-900 hover:bg-slate-950 text-white font-bold text-xs py-2.5 px-6 rounded-xl transition duration-150 cursor-pointer shadow-md"
+              >
+                Kapat &amp; Uygula
+              </button>
+            </div>
+
           </div>
         </div>
       )}
