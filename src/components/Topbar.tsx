@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Bell, CheckCircle, Clock, Smartphone, User, Shield, Activity, TrendingUp } from 'lucide-react';
+import { KibritciLogo } from './KibritciLogo';
 
 interface TopbarProps {
   currentTab: string;
@@ -134,7 +135,10 @@ export const Topbar: React.FC<TopbarProps> = ({
           </svg>
         </button>
         <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2">
-          <span className="text-amber-500 font-extrabold tracking-wider text-[11px] uppercase">KİBRİTÇİ ERP</span>
+          <div className="flex items-center space-x-1.5">
+            <KibritciLogo size="sm" showText={false} className="h-5" />
+            <span className="text-slate-200 font-black tracking-wider text-[11px] uppercase">KİBRİTÇİ ERP</span>
+          </div>
           <span className="text-slate-650 hidden sm:inline">/</span>
           <span className="font-bold text-white tracking-wide text-xs">
             {formatTabName(currentTab)}

@@ -176,13 +176,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       {/* Welcome Banner */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-slate-900 text-white rounded-3xl p-6 shadow-md relative overflow-hidden border border-slate-800 gap-4">
         <div className="absolute right-0 top-0 w-64 h-64 bg-slate-800 rounded-full mix-blend-multiply filter blur-xl opacity-30 -translate-y-20 translate-x-10" />
-        <div className="absolute right-10 bottom-0 w-48 h-48 bg-amber-500 rounded-full mix-blend-multiply filter blur-2xl opacity-10 translate-y-10" />
+        <div className="absolute right-10 bottom-0 w-48 h-48 bg-[#1E4E78] rounded-full mix-blend-multiply filter blur-2xl opacity-15 translate-y-10" />
         
         <div className="relative z-10 space-y-2 flex items-center space-x-4">
           <KibritciLogo size="lg" className="mr-2" />
           <div className="space-y-1">
-            <span className="bg-amber-500/20 text-amber-400 text-[10px] font-bold tracking-widest px-2.5 py-0.5 rounded-full border border-amber-500/20 uppercase block w-fit">
-              BULUT YÖNETSSEL ÖZET PANELİ
+            <span className="bg-[#1E4E78]/25 text-blue-300 text-[10px] font-bold tracking-widest px-2.5 py-0.5 rounded-full border border-[#1E4E78]/30 uppercase block w-fit">
+              BULUT YÖNETSEL ÖZET PANELİ
             </span>
             <h2 className="font-display font-black text-xl tracking-tight text-white">
               Şantiye Kontrol &amp; Raporlama Merkezi
@@ -196,7 +196,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         <div className="relative z-10 flex space-x-2 shrink-0">
           <button 
             onClick={() => onNavigate("satin_alma")} 
-            className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-bold text-[11px] px-4 py-2.5 rounded-xl transition shadow-md cursor-pointer"
+            className="bg-gradient-to-r from-[#1E4E78] to-[#B91C1C] hover:from-[#153a5c] hover:to-[#991b1b] active:scale-95 text-white font-bold text-[11px] px-4 py-2.5 rounded-xl transition shadow-md cursor-pointer"
           >
             + Yeni Satın Alma Talebi
           </button>
