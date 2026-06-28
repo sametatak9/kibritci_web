@@ -78,6 +78,12 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
 
   const handleCreateCari = () => {
     if (!suggestedCariName) return;
+    const exists = cariKartlar.some(c => c.unvan.toLowerCase().trim() === suggestedCariName.toLowerCase().trim());
+    if (exists) {
+      alert("Hata: Bu isimde bir cari zaten bulunmaktadır.");
+      setShowCariSuggest(false);
+      return;
+    }
     const newC: CariKart = {
       id: `ck_${Date.now()}`,
       kartTipi: suggestedCariType,
@@ -102,6 +108,12 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
 
   const handleCreateStok = () => {
     if (!suggestedStokName) return;
+    const exists = stokKartlar.some(s => s.stokAdi.toLowerCase().trim() === suggestedStokName.toLowerCase().trim());
+    if (exists) {
+      alert("Hata: Bu isimde bir stok zaten bulunmaktadır.");
+      setShowStokSuggest(false);
+      return;
+    }
     const newS: StokKart = {
       id: `sk_${Date.now()}`,
       stokKodu: `STK-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -242,38 +254,64 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
       <html>
         <head>
           <meta charset="utf-8">
-          <title>Satın Alma Talebi - ${sa.saId}</title>
+          <title>Kibritçi İnşaat - PO: ${sa.saId}</title>
           <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #1e293b; }
-            .header { text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 15px; margin-bottom: 30px; }
-            .header h1 { margin: 0; color: #1e3a8a; }
-            .details { margin-bottom: 25px; font-size: 13px; }
-            .items-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-            .items-table th, .items-table td { border: 1px solid #cbd5e1; padding: 10px; text-align: left; font-size: 13px; }
-            .items-table th { background-color: #f1f5f9; }
-            .signatures { margin-top: 50px; display: flex; justify-content: space-between; }
-            .sig-box { border-top: 1px solid #94a3b8; width: 220px; text-align: center; padding-top: 8px; font-size: 12px; }
+            body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #1e293b; line-height: 1.5; }
+            .corporate-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #1e3a8a; padding-bottom: 15px; margin-bottom: 25px; }
+            .logo-placeholder { font-weight: 900; font-size: 24px; color: #1e3a8a; display: flex; align-items: center; gap: 8px; }
+            .logo-placeholder svg { fill: #1e3a8a; }
+            .title-area { text-align: right; }
+            .title-area h2 { margin: 0; font-size: 18px; color: #0f172a; }
+            .title-area p { margin: 2px 0 0 0; font-size: 11px; font-weight: bold; color: #64748b; }
+            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px; }
+            .info-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; font-size: 11px; }
+            .info-card h4 { margin: 0 0 8px 0; color: #1e3a8a; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; font-size: 12px; }
+            .info-card p { margin: 4px 0; font-weight: 500; }
+            .items-table { width: 100%; border-collapse: collapse; margin-top: 10px; border-radius: 8px; overflow: hidden; }
+            .items-table th { background-color: #1e3a8a; color: white; padding: 10px; text-align: left; font-size: 11px; text-transform: uppercase; }
+            .items-table td { border-bottom: 1px solid #e2e8f0; padding: 10px; font-size: 11px; font-weight: 500; }
+            .items-table tr:nth-child(even) { background-color: #f8fafc; }
+            .signatures-title { margin-top: 40px; font-size: 11px; font-weight: bold; color: #1e3a8a; border-bottom: 2px dashed #cbd5e1; padding-bottom: 5px; text-transform: uppercase; }
+            .signatures-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 15px; }
+            .sig-col { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center; font-size: 10px; background: #fff; min-height: 90px; display: flex; flex-direction: column; justify-content: space-between; }
+            .sig-title { font-weight: bold; color: #475569; border-bottom: 1px solid #f1f5f9; padding-bottom: 4px; }
+            .sig-status { font-weight: 800; color: #10b981; font-size: 8px; margin-top: 10px; word-break: break-all; }
+            .e-imza-bar { margin-top: 20px; font-size: 9px; color: #059669; font-weight: bold; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 8px; border-radius: 8px; }
           </style>
         </head>
         <body>
-          <div class="header">
-            <h1>KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h1>
-            <p>RESMİ SATIN ALMA TALEBİ / PO FORMU</p>
+          <div class="corporate-header">
+            <div class="logo-placeholder">
+              <svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2L2 22h20L12 2zm0 3.5L18.5 19H5.5L12 5.5z"/></svg>
+              KİBRİTÇİ İNŞAAT A.Ş.
+            </div>
+            <div class="title-area">
+              <h2>SATIN ALMA SİPARİŞİ / PO FORMU</h2>
+              <p>BELGE NO: ${sa.saId}</p>
+            </div>
           </div>
-          <div class="details">
-            <p><strong>Talep Kodu:</strong> ${sa.saId}</p>
-            <p><strong>Tarih:</strong> ${sa.tarih}</p>
-            <p><strong>Talep Eden:</strong> ${sa.talepEden}</p>
-            <p><strong>Tedarikçi Firma:</strong> ${sa.cariFirma}</p>
-            <p><strong>Notlar/Açıklama:</strong> ${sa.aciklama || "Yok"}</p>
+
+          <div class="info-grid">
+            <div class="info-card">
+              <h4>📋 SİPARİŞ BİLGİLERİ</h4>
+              <p><strong>Belge Tarihi:</strong> ${sa.tarih}</p>
+              <p><strong>Talep Eden:</strong> ${sa.talepEden}</p>
+              <p><strong>Onay Durumu:</strong> ${sa.onayDurumu}</p>
+            </div>
+            <div class="info-card">
+              <h4>🏢 TEDARİKÇİ CARİ KART</h4>
+              <p><strong>Firma Ünvanı:</strong> ${sa.cariFirma}</p>
+              <p><strong>Açıklama/Not:</strong> ${sa.aciklama || 'Belirtilmemiş'}</p>
+            </div>
           </div>
+
           <table class="items-table">
             <thead>
               <tr>
                 <th>Malzeme / Ürün Adı</th>
-                <th>Miktar</th>
-                <th>Marka/Model</th>
-                <th>Kullanım Yeri</th>
+                <th>Sipariş Miktarı</th>
+                <th>Marka / Üretici</th>
+                <th>Kullanılacak Yer</th>
               </tr>
             </thead>
             <tbody>
@@ -287,18 +325,41 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
               `).join('')}
             </tbody>
           </table>
-          <div class="signatures">
-            <div class="sig-box">
-              <p>Talep Eden</p>
-              <p style="font-weight: bold; margin-top:15px;">${sa.talepEden}</p>
+
+          <div class="signatures-title">🖋️ ONAY VE İMZA KANALLARI (ÇİFT METOT GEÇERLİDİR)</div>
+          <div class="signatures-grid">
+            <div class="sig-col">
+              <span class="sig-title">Talep Eden</span>
+              <span style="font-weight:bold; color:#0f172a;">${sa.talepEden}</span>
             </div>
-            <div class="sig-box">
-              <p>E-İmza Onayları</p>
-              <p style="font-size:10px; color:#16a34a; margin-top:10px;">
-                ${sa.eImzalar && sa.eImzalar.length > 0 ? sa.eImzalar.join('<br/>') : 'Islak İmza veya Dijital İmza Bekleniyor'}
-              </p>
+            <div class="sig-col">
+              <span class="sig-title">Muhasebe</span>
+              <span style="color:#94a3b8; font-style:italic;">İmza Yetkisi</span>
+            </div>
+            <div class="sig-col">
+              <span class="sig-title">Satın Alma Md.</span>
+              <span style="color:#94a3b8; font-style:italic;">İmza Yetkisi</span>
+            </div>
+            <div class="sig-col">
+              <span class="sig-title">Şantiye Şefi</span>
+              <span class="${sa.onayDurumu === 'ONAYLANDI' ? 'sig-status' : 'color:#94a3b8'}">
+                ${sa.onayDurumu === 'ONAYLANDI' ? '✓ FİİLİ/DİJİTAL ONAYLANDI' : 'İmza Bekleniyor'}
+              </span>
+            </div>
+            <div class="sig-col">
+              <span class="sig-title">Proje Müdürü</span>
+              <span class="${sa.onayDurumu === 'ONAYLANDI' ? 'sig-status' : 'color:#94a3b8'}">
+                ${sa.onayDurumu === 'ONAYLANDI' ? '✓ FİİLİ/DİJİTAL ONAYLANDI' : 'İmza Bekleniyor'}
+              </span>
             </div>
           </div>
+
+          ${sa.eImzalar && sa.eImzalar.length > 0 ? `
+            <div class="e-imza-bar">
+              🛡️ DİJİTAL E-İMZA KANIT ZİNCİRİ:<br/>
+              ${sa.eImzalar.map(im => `• ${im}`).join('<br/>')}
+            </div>
+          ` : ''}
         </body>
       </html>
     `;
@@ -323,7 +384,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
         <div className="bg-slate-900 text-white p-4 shrink-0 flex items-center gap-2">
           <ShoppingCart size={18} className="text-amber-500" />
           <div>
-            <h3 className="font-display font-semibold text-sm">🛒 Satın Alma Talep Girişi</h3>
+            <h3 className="font-display font-semibold text-sm">🛒 Satın Alma Sipariş Talebi</h3>
             <p className="text-[10px] text-slate-400">Yeni bir malzeme tedarik sipariş talebi oluşturun.</p>
           </div>
         </div>
@@ -333,11 +394,17 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
             <label className="text-[10px] font-bold text-slate-500 uppercase">Tedarikçi Cari Firma *</label>
             <input 
               type="text"
+              list="cari-datalist"
               placeholder="Örn: ABC İnşaat Ltd."
               value={saSupplier}
               onChange={(e) => setSaSupplier(e.target.value)}
               className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
             />
+            <datalist id="cari-datalist">
+              {cariKartlar.map(c => (
+                <option key={c.id} value={c.unvan} />
+              ))}
+            </datalist>
           </div>
 
           <div>
@@ -356,11 +423,17 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
             <div className="grid grid-cols-3 gap-2">
               <input 
                 type="text"
+                list="stok-datalist"
                 placeholder="Malzeme Adı"
                 value={tempItem.urunAdi}
                 onChange={(e) => setTempItem(prev => ({ ...prev, urunAdi: e.target.value }))}
                 className="col-span-2 p-1.5 border border-slate-200 bg-white rounded-lg text-[10px]"
               />
+              <datalist id="stok-datalist">
+                {stokKartlar.map(s => (
+                  <option key={s.id} value={s.stokAdi} />
+                ))}
+              </datalist>
               <input 
                 type="number"
                 placeholder="Miktar"

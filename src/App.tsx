@@ -1389,6 +1389,8 @@ export default function App() {
                 <IrsaliyeGirisScreen 
                   irsaliyeler={irsaliyeler}
                   setIrsaliyeler={setIrsaliyelerWithSync}
+                  faturalar={faturalar}
+                  setFaturalar={setFaturalarWithSync}
                   satinAlmaTalepleri={satinAlmaTalepleri}
                   cariKartlar={cariKartlar}
                   setCariKartlar={setCariKartlarWithSync}
@@ -1418,6 +1420,7 @@ export default function App() {
                 <TaseronKesintiScreen 
                   cariKartlar={cariKartlar}
                   operatorFaaliyetleri={operatorFaaliyetleri}
+                  setOperatorFaaliyetleri={setOperatorFaaliyetleriWithSync}
                   hazirTutanaklar={hazirTutanaklar}
                   taseronKesintiRaporlari={taseronKesintiRaporlari}
                   setTaseronKesintiRaporlari={setTaseronKesintiRaporlariWithSync}

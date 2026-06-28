@@ -2605,10 +2605,56 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 </select>
               </div>
 
+              <div className="bg-gradient-to-tr from-purple-50 to-indigo-50 border border-indigo-150 rounded-xl p-3.5 space-y-2">
+                <span className="font-extrabold text-indigo-900 tracking-wide text-[9px] uppercase block">🧙‍♂️ YAPAY ZEKA TUTANAK SİHİRBAZI</span>
+                <p className="text-[10px] text-indigo-700 font-medium">Olayı kısaca anlatıp yapay zekaya resmi hukuk dilinde tutanak yazdırın.</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    id="ai-tutanak-prompt"
+                    placeholder="Örn: Hasan Usta baret takmadığı için uyarıldı"
+                    className="flex-grow p-1.5 border border-indigo-250 bg-white rounded-lg text-[10px]"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const promptInput = document.getElementById('ai-tutanak-prompt') as HTMLInputElement;
+                      if (!promptInput || !promptInput.value.trim()) {
+                        alert("Lütfen olay detaylarını yazınız.");
+                        return;
+                      }
+                      try {
+                        const response = await fetch('/api/generate-tutanak', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            konu: tutanakSubject || "Şantiye Durum Tespit",
+                            detaylar: promptInput.value,
+                            muhatap: tutanakPerson ? personeller.find(p => p.id === tutanakPerson)?.ad : ""
+                          })
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                          setTutanakText(data.text);
+                          alert("Tutanak taslağı başarıyla oluşturuldu!");
+                        } else {
+                          throw new Error(data.error);
+                        }
+                      } catch (err: any) {
+                        alert("Yapay zeka hatası: " + err.message);
+                      }
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] px-3.5 py-1.5 rounded-lg transition cursor-pointer"
+                  >
+                    Yazdır
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Tutanak Metin İçeriği *</label>
                 <textarea 
-                  className="w-full text-xs mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg resize-none"
+                  className="w-full text-xs mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg resize-none font-sans"
                   rows={6}
                   placeholder="Hukuki dili koruyarak şantiye kurallarına göre tutanak detaylarını yazın..."
                   value={tutanakText}

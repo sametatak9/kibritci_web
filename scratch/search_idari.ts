@@ -5,7 +5,7 @@ const content = fs.readFileSync(filePath, "utf-8");
 const lines = content.split("\n");
 
 lines.forEach((line, idx) => {
-  if (line.includes("setEditingCariId") || line.includes("setEditingStokId")) {
+  if (line.includes("currentSubTab === 'tutanak'")) {
     console.log(`Line ${idx + 1}: ${line.trim()}`);
   }
 });

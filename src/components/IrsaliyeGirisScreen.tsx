@@ -9,6 +9,8 @@ import { compressImage } from '../lib/imageCompress';
 interface IrsaliyeGirisScreenProps {
   irsaliyeler: Irsaliye[];
   setIrsaliyeler: React.Dispatch<React.SetStateAction<Irsaliye[]>>;
+  faturalar?: any[];
+  setFaturalar?: any;
   satinAlmaTalepleri: SatinAlmaTalebi[];
   cariKartlar: CariKart[];
   setCariKartlar?: React.Dispatch<React.SetStateAction<CariKart[]>>;
@@ -21,6 +23,8 @@ interface IrsaliyeGirisScreenProps {
 export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
   irsaliyeler,
   setIrsaliyeler,
+  faturalar = [],
+  setFaturalar,
   satinAlmaTalepleri,
   cariKartlar,
   setCariKartlar,
@@ -168,6 +172,12 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
 
   const handleCreateCari = () => {
     if (!suggestedCariName) return;
+    const exists = cariKartlar.some(c => c.unvan.toLowerCase().trim() === suggestedCariName.toLowerCase().trim());
+    if (exists) {
+      alert("Hata: Bu isimde bir cari zaten bulunmaktadır.");
+      setShowCariSuggest(false);
+      return;
+    }
     const newCari: CariKart = {
       id: `ck_${Date.now()}`,
       kartTipi: suggestedCariType,
@@ -201,6 +211,12 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
 
   const handleCreateStok = () => {
     if (!suggestedStokName) return;
+    const exists = stokKartlar.some(s => s.stokAdi.toLowerCase().trim() === suggestedStokName.toLowerCase().trim());
+    if (exists) {
+      alert("Hata: Bu isimde bir stok zaten bulunmaktadır.");
+      setShowStokSuggest(false);
+      return;
+    }
     const newStok: StokKart = {
       id: `sk_${Date.now()}`,
       stokKodu: `STK-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -413,11 +429,17 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                   <label className="text-[10px] font-bold text-slate-500 uppercase">Satıcı Firma Ünvanı *</label>
                   <input 
                     type="text"
+                    list="cari-datalist"
                     placeholder="Firma Adı"
                     value={irSupplier}
                     onChange={(e) => setIrSupplier(e.target.value)}
                     className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
                   />
+                  <datalist id="cari-datalist">
+                    {cariKartlar.map(c => (
+                      <option key={c.id} value={c.unvan} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
@@ -441,11 +463,17 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                 <div className="grid grid-cols-3 gap-2">
                   <input 
                     type="text"
+                    list="stok-datalist"
                     placeholder="Malzeme Adı"
                     value={tempProduct.name}
                     onChange={(e) => setTempProduct(prev => ({ ...prev, name: e.target.value }))}
                     className="col-span-2 p-1.5 border border-slate-200 rounded-lg text-[10px]"
                   />
+                  <datalist id="stok-datalist">
+                    {stokKartlar.map(s => (
+                      <option key={s.id} value={s.stokAdi} />
+                    ))}
+                  </datalist>
                   <input 
                     type="number"
                     placeholder="Miktar"
@@ -585,6 +613,44 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                       <p className="text-[10px] text-slate-400 font-semibold">
                         Kalemler: {ir.kalemler.map(x => `${x.urunAdi} (${x.miktar} ${x.birim})`).join(', ')}
                       </p>
+                      <div className="mt-1 flex items-center space-x-1">
+                        <span className="text-[9px] text-slate-400 font-bold uppercase">Fatura Eşleme:</span>
+                        <select
+                          value={ir.faturaNo || ""}
+                          onChange={(e) => {
+                            const selectedFaturaNo = e.target.value;
+                            setIrsaliyeler(prev => prev.map(item => {
+                              if (item.id === ir.id) {
+                                return { ...item, faturaNo: selectedFaturaNo || undefined };
+                              }
+                              return item;
+                            }));
+                            if (setFaturalar) {
+                              setFaturalar((prev: any[]) => prev.map(ft => {
+                                if (ft.faturaNo === selectedFaturaNo) {
+                                  const alreadyHas = ft.bagliIrsaliyeler.includes(ir.irsaliyeNo);
+                                  if (!alreadyHas) {
+                                    return { ...ft, bagliIrsaliyeler: [...ft.bagliIrsaliyeler, ir.irsaliyeNo] };
+                                  }
+                                } else {
+                                  return {
+                                    ...ft,
+                                    bagliIrsaliyeler: ft.bagliIrsaliyeler.filter((id: string) => id !== ir.irsaliyeNo)
+                                  };
+                                }
+                                return ft;
+                              }));
+                            }
+                            alert(`İrsaliye fatura eşlemesi güncellendi (${selectedFaturaNo || 'Bağlantı Kaldırıldı'}).`);
+                          }}
+                          className="text-[10px] font-semibold border rounded px-1 py-0.5 bg-slate-50/50"
+                        >
+                          <option value="">-- Fatura Seç --</option>
+                          {faturalar.map((ft: any) => (
+                            <option key={ft.id} value={ft.faturaNo}>Fatura: {ft.faturaNo} ({ft.cariUnvan})</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
 
                     <div className="flex items-center space-x-3">
@@ -634,6 +700,45 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
 
                     <div className="text-[10px] text-slate-500 font-semibold">
                       Kalemler: {ir.kalemler.map(x => `${x.urunAdi} (${x.miktar} ${x.birim})`).join(', ')}
+                    </div>
+
+                    <div className="mt-1 flex items-center space-x-1 text-xs">
+                      <span className="text-[9px] text-slate-450 font-bold uppercase">Fatura Eşleme:</span>
+                      <select
+                        value={ir.faturaNo || ""}
+                        onChange={(e) => {
+                          const selectedFaturaNo = e.target.value;
+                          setIrsaliyeler(prev => prev.map(item => {
+                            if (item.id === ir.id) {
+                              return { ...item, faturaNo: selectedFaturaNo || undefined };
+                            }
+                            return item;
+                          }));
+                          if (setFaturalar) {
+                            setFaturalar((prev: any[]) => prev.map(ft => {
+                              if (ft.faturaNo === selectedFaturaNo) {
+                                const alreadyHas = ft.bagliIrsaliyeler.includes(ir.irsaliyeNo);
+                                if (!alreadyHas) {
+                                  return { ...ft, bagliIrsaliyeler: [...ft.bagliIrsaliyeler, ir.irsaliyeNo] };
+                                }
+                              } else {
+                                return {
+                                  ...ft,
+                                  bagliIrsaliyeler: ft.bagliIrsaliyeler.filter((id: string) => id !== ir.irsaliyeNo)
+                                };
+                              }
+                              return ft;
+                            }));
+                          }
+                          alert(`İrsaliye fatura eşlemesi güncellendi (${selectedFaturaNo || 'Bağlantı Kaldırıldı'}).`);
+                        }}
+                        className="text-[10px] font-semibold border rounded px-1 py-0.5 bg-slate-50/50"
+                      >
+                        <option value="">-- Fatura Seç --</option>
+                        {faturalar.map((ft: any) => (
+                          <option key={ft.id} value={ft.faturaNo}>Fatura: {ft.faturaNo} ({ft.cariUnvan})</option>
+                        ))}
+                      </select>
                     </div>
 
                     <div className="flex gap-2 border-t pt-2.5 text-[10px]">
@@ -786,8 +891,72 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                 <div className="p-4 bg-slate-50 border-t flex justify-end shrink-0">
                   <button
                     onClick={() => {
-                      // print simulated
-                      window.print();
+                      const htmlContent = `
+                        <html>
+                          <head>
+                            <meta charset="utf-8">
+                            <title>Kibritçi İnşaat - Eşleştirme Raporu</title>
+                            <style>
+                              body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #1e293b; line-height: 1.6; }
+                              .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #1e3a8a; padding-bottom: 15px; margin-bottom: 25px; }
+                              .logo { font-weight: 950; font-size: 22px; color: #1e3a8a; display: flex; align-items: center; gap: 8px; }
+                              .logo svg { fill: #1e3a8a; }
+                              .title { text-align: right; }
+                              .title h2 { margin: 0; font-size: 16px; color: #0f172a; }
+                              .title p { margin: 2px 0 0 0; font-size: 10px; font-weight: bold; color: #64748b; }
+                              .status-badge { display: inline-block; padding: 6px 12px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase; margin-bottom: 20px; }
+                              .status-ok { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+                              .status-err { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+                              .report-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; font-family: monospace; font-size: 11px; white-space: pre-wrap; margin-bottom: 30px; border-left: 5px solid #1e3a8a; }
+                              .sig-title { margin-top: 40px; font-size: 11px; font-weight: bold; color: #1e3a8a; border-bottom: 2px dashed #cbd5e1; padding-bottom: 5px; text-transform: uppercase; }
+                              .sig-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-top: 15px; }
+                              .sig-col { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; text-align: center; font-size: 10px; min-height: 80px; display: flex; flex-direction: column; justify-content: space-between; background: #fff; }
+                            </style>
+                          </head>
+                          <body>
+                            <div class="header">
+                              <div class="logo">
+                                <svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 2L2 22h20L12 2zm0 3.5L18.5 19H5.5L12 5.5z"/></svg>
+                                KİBRİTÇİ İNŞAAT A.Ş.
+                              </div>
+                              <div class="title">
+                                <h2>PO & İRSALİYE EŞLEŞTİRME RAPORU</h2>
+                                <p>SİPARİŞ NO: ${compareReportResult.saId}</p>
+                              </div>
+                            </div>
+
+                            <div class="status-badge ${compareReportResult.status === 'SORUNSUZ ONAY' ? 'status-ok' : 'status-err'}">
+                              DURUM: ${compareReportResult.status}
+                            </div>
+
+                            <div class="report-box">${compareReportResult.report}</div>
+
+                            <div class="sig-title">🖋️ YETKİLİ ONAY VE İMZA KANALLARI</div>
+                            <div class="sig-grid">
+                              <div class="sig-col">
+                                <span style="font-weight:bold; color:#475569;">Hazırlayan</span>
+                                <span style="font-weight:bold; margin-top:10px;">${currentUser?.email ? currentUser.email.split('@')[0].toUpperCase() : 'ŞANTİYE'}</span>
+                              </div>
+                              <div class="sig-col">
+                                <span style="font-weight:bold; color:#475569;">Muhasebe</span>
+                                <span style="color:#94a3b8; font-style:italic;">İmza Yetkisi</span>
+                              </div>
+                              <div class="sig-col">
+                                <span style="font-weight:bold; color:#475569;">Şantiye Şefi</span>
+                                <span style="color:#10b981; font-weight:850; margin-top:10px;">✓ ONAYLANDI</span>
+                              </div>
+                              <div class="sig-col">
+                                <span style="font-weight:bold; color:#475569;">Proje Müdürü</span>
+                                <span style="color:#10b981; font-weight:850; margin-top:10px;">✓ ONAYLANDI</span>
+                              </div>
+                            </div>
+                          </body>
+                        </html>
+                      `;
+                      const blob = new Blob([htmlContent], { type: 'text/html' });
+                      const url = URL.createObjectURL(blob);
+                      const win = window.open(url, '_blank');
+                      if (win) win.print();
                     }}
                     className="bg-slate-900 hover:bg-slate-950 text-white font-bold text-xs py-2.5 px-6 rounded-xl transition cursor-pointer"
                   >

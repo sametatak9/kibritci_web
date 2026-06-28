@@ -58,7 +58,7 @@ export interface SatinAlmaTalebi {
   talepEden: string;
   cariFirma: string;
   aciklama: string;
-  onayDurumu: 'ONAY BEKLİYOR' | '1. ONAY TAMAMLANDI' | '2. ONAY TAMAMLANDI' | 'REDDEDİLDİ' | 'KAPATILDI';
+  onayDurumu: 'ONAY BEKLİYOR' | '1. ONAY TAMAMLANDI' | '2. ONAY TAMAMLANDI' | 'REDDEDİLDİ' | 'KAPATILDI' | 'ONAYLANDI';
   imzaliEvrakUrl?: string;
   gonderimTarihi?: string;
   kalemler: SatinAlmaItem[];
@@ -79,6 +79,7 @@ export interface Irsaliye {
   irsaliyeId: string;
   irsaliyeNo: string;
   saId?: string;
+  faturaNo?: string;
   firma: string;
   tarih: string;
   onayDurumu: 'ONAY BEKLİYOR' | '1. ONAY TAMAMLANDI' | '2. ONAY TAMAMLANDI' | 'FARK VAR — YÖNETİCİ BİLDİRİLDİ';
@@ -333,6 +334,7 @@ export interface TaseronKesintiRaporu {
   epostaGonderildi?: boolean;
   epostaKonusu?: string;
   epostaIcerik?: string;
+  eImzalar?: string[];
 }
 
 export interface MaaşOdeme {

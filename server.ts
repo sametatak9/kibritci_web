@@ -462,9 +462,18 @@ ${JSON.stringify(irsaliyeler || "No waybills linked", null, 2)}
 ${JSON.stringify(fatura, null, 2)}
 
 Perform a comparison of:
-- Item names / categories (normalize differences like typo variants, e.g. "Stablize" vs "Stabilize").
+- Item names / categories (normalize differences like typo variants, e.g. "Stablize" vs "Stabilize", "Mıcır", "Grovak", "Taş Tozu").
 - Quantities ordered in PO vs quantities delivered in waybills vs quantities billed in invoice.
 - Any price discrepancies if unit prices are specified.
+
+CRITICAL UNIT CONVERSION RULE:
+- For construction bulk materials like "Mıcır", "Stabilize" (or "Stablize"), "Grovak", and "Taş Tozu":
+  - The PO might specify quantity in "TIR" (Trucks) (e.g., 2 TIR).
+  - The Waybills specify weight in "KG" (e.g., 50000 KG total).
+  - The Invoice specifies weight in "TON" (e.g., 50 TON).
+  - Standard shantiye conversion rate: 1 TIR is approximately 25 TON (25,000 KG).
+  - Add up the Waybill weights (in KG) and convert to TON (KG / 1000). Compare it with the TON billed in the Invoice, and ensure they match the TIR ordered in the PO (allowing a +/- 5% scale tolerance).
+  - If the math matches within tolerance, treat this as a perfect match ("SORUNSUZ ONAY") and detail the math clearly in your report.
 
 Audit Rules:
 - If all quantities and items match perfectly (meaning what was ordered matches what was delivered, which in turn matches what was billed), return status as "SORUNSUZ ONAY".
@@ -507,6 +516,36 @@ Provide the response strictly conforming to the requested schema.
   } catch (error: any) {
     console.error("Error in AI 3-Way Match:", error);
     res.status(500).json({ error: error.message || "Failed to perform 3-way comparison" });
+  }
+});
+
+// Surprise AI Document Tutanak Creator
+app.post("/api/generate-tutanak", async (req, res) => {
+  try {
+    const { konu, detaylar, muhatap } = req.body;
+    if (!konu || !detaylar) {
+      return res.status(400).json({ error: "Missing konu or detaylar in request body" });
+    }
+
+    const ai = getGeminiClient();
+    const prompt = `
+Lütfen şantiye yönetimi için resmi ve hukuki açıdan geçerli Türkçe bir tutanak taslağı hazırla.
+- Tutanak Konusu: ${konu}
+- Olay / Durum Detayları: ${detaylar}
+- Muhatap / İlgili Taraf: ${muhatap || "Belirtilmemiş"}
+
+Tutanak içeriğini resmi, ağırbaşlı ve şantiye mevzuatlarına uygun hukuk diliyle yaz. En altta "Hazırlayan / Şantiye Şefi" ve "Muhatap / Teslim Alan" imza bölümleri olsun. HTML veya Markdown formatında yazma, düz metin olsun.
+`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt
+    });
+
+    res.json({ success: true, text: response.text });
+  } catch (error: any) {
+    console.error("Error in generate-tutanak:", error);
+    res.status(500).json({ error: error.message || "Failed to generate tutanak" });
   }
 });
 

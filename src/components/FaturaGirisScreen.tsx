@@ -169,6 +169,12 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
 
   const handleCreateCari = () => {
     if (!suggestedCariName) return;
+    const exists = cariKartlar.some(c => c.unvan.toLowerCase().trim() === suggestedCariName.toLowerCase().trim());
+    if (exists) {
+      alert("Hata: Bu isimde bir cari zaten bulunmaktadır.");
+      setShowCariSuggest(false);
+      return;
+    }
     const newCari: CariKart = {
       id: `ck_${Date.now()}`,
       kartTipi: suggestedCariType,
@@ -202,6 +208,12 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
 
   const handleCreateStok = () => {
     if (!suggestedStokName) return;
+    const exists = stokKartlar.some(s => s.stokAdi.toLowerCase().trim() === suggestedStokName.toLowerCase().trim());
+    if (exists) {
+      alert("Hata: Bu isimde bir stok zaten bulunmaktadır.");
+      setShowStokSuggest(false);
+      return;
+    }
     const newStok: StokKart = {
       id: `sk_${Date.now()}`,
       stokKodu: `STK-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -309,28 +321,59 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
       <html>
         <head>
           <meta charset="utf-8">
-          <title>Fatura Raporu - ${ft.faturaNo}</title>
+          <title>Kibritçi İnşaat - Fatura Raporu: ${ft.faturaNo}</title>
           <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #1e293b; line-height: 1.6; }
-            .header { text-align: center; border-bottom: 3px solid #0f172a; padding-bottom: 20px; margin-bottom: 30px; }
-            .header h1 { margin: 0; color: #2563eb; font-size: 24px; }
-            .header p { margin: 5px 0; color: #64748b; font-size: 13px; font-weight: bold; }
-            .summary-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-            .summary-table th, .summary-table td { border: 1px solid #cbd5e1; padding: 12px; text-align: left; font-size: 13px; }
-            .summary-table th { background-color: #f8fafc; font-weight: bold; }
-            .total-section { float: right; width: 300px; margin-top: 20px; font-size: 13px; }
-            .total-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #e2e8f0; }
-            .grand-total { font-weight: bold; color: #2563eb; border-bottom: 2px double #2563eb; }
+            body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #1e293b; line-height: 1.5; }
+            .corporate-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #1e3a8a; padding-bottom: 15px; margin-bottom: 25px; }
+            .logo { font-weight: 900; font-size: 22px; color: #1e3a8a; display: flex; align-items: center; gap: 8px; }
+            .logo svg { fill: #1e3a8a; }
+            .title-area { text-align: right; }
+            .title-area h2 { margin: 0; font-size: 16px; color: #0f172a; }
+            .title-area p { margin: 2px 0 0 0; font-size: 10px; font-weight: bold; color: #64748b; }
+            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px; }
+            .info-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; font-size: 11px; }
+            .info-card h4 { margin: 0 0 8px 0; color: #1e3a8a; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; font-size: 12px; }
+            .info-card p { margin: 4px 0; font-weight: 500; }
+            .items-table { width: 100%; border-collapse: collapse; margin-top: 10px; border-radius: 8px; overflow: hidden; }
+            .items-table th { background-color: #1e3a8a; color: white; padding: 10px; text-align: left; font-size: 11px; text-transform: uppercase; }
+            .items-table td { border-bottom: 1px solid #e2e8f0; padding: 10px; font-size: 11px; font-weight: 500; }
+            .items-table tr:nth-child(even) { background-color: #f8fafc; }
+            .total-section { float: right; width: 280px; margin-top: 20px; font-size: 11px; }
+            .total-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #e2e8f0; font-weight: 500; }
+            .grand-total { font-weight: bold; color: #1e3a8a; border-bottom: 2px double #1e3a8a; font-size: 12px; }
+            .signatures-title { margin-top: 180px; font-size: 11px; font-weight: bold; color: #1e3a8a; border-bottom: 2px dashed #cbd5e1; padding-bottom: 5px; text-transform: uppercase; }
+            .signatures-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 15px; }
+            .sig-col { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center; font-size: 10px; background: #fff; min-height: 80px; display: flex; flex-direction: column; justify-content: space-between; }
+            .sig-title { font-weight: bold; color: #475569; border-bottom: 1px solid #f1f5f9; padding-bottom: 4px; }
           </style>
         </head>
         <body>
-          <div class="header">
-            <h1>KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h1>
-            <p>RESMİ FATURA YAZDIRMA FORMU / RAPOR</p>
-            <p>Firma: ${ft.cariUnvan} · Fatura No: ${ft.faturaNo} · Tarih: ${ft.tarih}</p>
+          <div class="corporate-header">
+            <div class="logo">
+              <svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 2L2 22h20L12 2zm0 3.5L18.5 19H5.5L12 5.5z"/></svg>
+              KİBRİTÇİ İNŞAAT A.Ş.
+            </div>
+            <div class="title-area">
+              <h2>RESMİ FATURA İNCELEME FORMU</h2>
+              <p>FATURA NO: ${ft.faturaNo}</p>
+            </div>
           </div>
-          
-          <table class="summary-table">
+
+          <div class="info-grid">
+            <div class="info-card">
+              <h4>📋 FATURA DETAYI</h4>
+              <p><strong>Tarih:</strong> ${ft.tarih}</p>
+              <p><strong>Cari Ünvan:</strong> ${ft.cariUnvan}</p>
+              <p><strong>Bağlı Sipariş (PO):</strong> ${ft.saId || 'BAĞLANTI YOK'}</p>
+            </div>
+            <div class="info-card">
+              <h4>🚛 SEVKİYAT İLİŞKİLERİ</h4>
+              <p><strong>Bağlı İrsaliye Sayısı:</strong> ${ft.bagliIrsaliyeler ? ft.bagliIrsaliyeler.length : 0}</p>
+              <p><strong>Bağlı Belgeler:</strong> ${ft.bagliIrsaliyeler ? ft.bagliIrsaliyeler.join(', ') : 'Yok'}</p>
+            </div>
+          </div>
+
+          <table class="items-table">
             <thead>
               <tr>
                 <th>Malzeme / Hizmet Adı</th>
@@ -363,8 +406,32 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
               <span>${ft.kdvTutar.toLocaleString('tr-TR')} TL</span>
             </div>
             <div class="total-row grand-total">
-              <span>GENEL TOPLAM:</span>
+              <span>GENEL TOPLAM (KDV Dahil):</span>
               <span>${ft.genelToplam.toLocaleString('tr-TR')} TL</span>
+            </div>
+          </div>
+
+          <div class="signatures-title">🖋️ ONAY VE İMZA KANALLARI</div>
+          <div class="signatures-grid">
+            <div class="sig-col">
+              <span class="sig-title">Hazırlayan</span>
+              <span style="font-weight:bold; color:#0f172a; margin-top:10px;">${currentUser?.email ? currentUser.email.split('@')[0].toUpperCase() : 'ŞANTİYE'}</span>
+            </div>
+            <div class="sig-col">
+              <span class="sig-title">Muhasebe</span>
+              <span style="color:#94a3b8; font-style:italic;">İmza Yetkisi</span>
+            </div>
+            <div class="sig-col">
+              <span class="sig-title">Satın Alma Md.</span>
+              <span style="color:#94a3b8; font-style:italic;">İmza Yetkisi</span>
+            </div>
+            <div class="sig-col">
+              <span class="sig-title">Şantiye Şefi</span>
+              <span style="color:#10b981; font-weight:850; margin-top:10px;">✓ ONAYLANDI</span>
+            </div>
+            <div class="sig-col">
+              <span class="sig-title">Proje Müdürü</span>
+              <span style="color:#10b981; font-weight:850; margin-top:10px;">✓ ONAYLANDI</span>
             </div>
           </div>
         </body>
@@ -517,11 +584,17 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
                   <label className="text-[10px] font-bold text-slate-500 uppercase">Firma / Cari Ünvan *</label>
                   <input 
                     type="text"
+                    list="cari-datalist"
                     placeholder="Tedarikçi Adı"
                     value={ftSupplier}
                     onChange={(e) => setFtSupplier(e.target.value)}
                     className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
                   />
+                  <datalist id="cari-datalist">
+                    {cariKartlar.map(c => (
+                      <option key={c.id} value={c.unvan} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
@@ -554,6 +627,23 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
                       <option key={ir.id} value={ir.id}>{ir.irsaliyeNo} ({ir.tarih})</option>
                     ))}
                   </select>
+
+                  {/* Waybill Items Live Preview */}
+                  {selectedIrsIds.length > 0 && (
+                    <div className="mt-2 p-2.5 bg-slate-50 border border-slate-150 rounded-xl max-h-32 overflow-y-auto space-y-2">
+                      <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block">Seçilen İrsaliye Kalemleri Önizleme:</span>
+                      {irsaliyeler.filter(ir => selectedIrsIds.includes(ir.id)).map(ir => (
+                        <div key={ir.id} className="text-[10px] border-b border-slate-200/60 pb-1 mb-1 last:border-0 last:pb-0">
+                          <p className="font-bold text-slate-700">İrsaliye No: {ir.irsaliyeNo}</p>
+                          <ul className="list-disc pl-4 text-slate-500 font-semibold space-y-0.5 mt-0.5">
+                            {ir.kalemler.map((x, idx) => (
+                              <li key={idx}>{x.urunAdi}: {x.miktar} {x.birim}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -563,11 +653,17 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
                 <div className="grid grid-cols-3 gap-2">
                   <input 
                     type="text"
+                    list="stok-datalist"
                     placeholder="Kalem Adı"
                     value={tempItem.name}
                     onChange={(e) => setTempItem(prev => ({ ...prev, name: e.target.value }))}
                     className="col-span-2 p-1.5 border border-slate-200 rounded-lg text-[10px]"
                   />
+                  <datalist id="stok-datalist">
+                    {stokKartlar.map(s => (
+                      <option key={s.id} value={s.stokAdi} />
+                    ))}
+                  </datalist>
                   <input 
                     type="number"
                     placeholder="Miktar"
@@ -817,8 +913,75 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
                   <div className="flex gap-2 justify-end pt-1">
                     <button
                       onClick={() => {
+                        const htmlContent = `
+                          <html>
+                            <head>
+                              <meta charset="utf-8">
+                              <title>Kibritçi İnşaat - Karşılaştırma Raporu</title>
+                              <style>
+                                body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #1e293b; line-height: 1.6; }
+                                .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #1e3a8a; padding-bottom: 15px; margin-bottom: 25px; }
+                                .logo { font-weight: 950; font-size: 22px; color: #1e3a8a; display: flex; align-items: center; gap: 8px; }
+                                .logo svg { fill: #1e3a8a; }
+                                .title { text-align: right; }
+                                .title h2 { margin: 0; font-size: 16px; color: #0f172a; }
+                                .title p { margin: 2px 0 0 0; font-size: 10px; font-weight: bold; color: #64748b; }
+                                .status-badge { display: inline-block; padding: 6px 12px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase; margin-bottom: 20px; }
+                                .status-ok { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+                                .status-err { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+                                .report-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; font-family: monospace; font-size: 11px; white-space: pre-wrap; margin-bottom: 30px; border-left: 5px solid #1e3a8a; }
+                                .sig-title { margin-top: 40px; font-size: 11px; font-weight: bold; color: #1e3a8a; border-bottom: 2px dashed #cbd5e1; padding-bottom: 5px; text-transform: uppercase; }
+                                .sig-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 15px; }
+                                .sig-col { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center; font-size: 10px; min-height: 80px; display: flex; flex-direction: column; justify-content: space-between; background: #fff; }
+                                .sig-title-block { font-weight: bold; color: #475569; border-bottom: 1px solid #f1f5f9; padding-bottom: 4px; }
+                              </style>
+                            </head>
+                            <body>
+                              <div class="header">
+                                <div class="logo">
+                                  <svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 2L2 22h20L12 2zm0 3.5L18.5 19H5.5L12 5.5z"/></svg>
+                                  KİBRİTÇİ İNŞAAT A.Ş.
+                                </div>
+                                <div class="title">
+                                  <h2>3 YÖNLÜ DENETİM & KARŞILAŞTIRMA RAPORU</h2>
+                                  <p>FATURA NO: ${rep.faturaNo}</p>
+                                </div>
+                              </div>
+
+                              <div class="status-badge ${rep.status === 'SORUNSUZ ONAY' ? 'status-ok' : 'status-err'}">
+                                DURUM: ${rep.status}
+                              </div>
+
+                              <div class="report-box">${rep.report}</div>
+
+                              <div class="sig-title">🖋️ YETKİLİ ONAY VE İMZA KANALLARI</div>
+                              <div class="sig-grid">
+                                <div class="sig-col">
+                                  <span class="sig-title-block">Hazırlayan</span>
+                                  <span style="font-weight:bold; margin-top:10px;">ŞANTİYE</span>
+                                </div>
+                                <div class="sig-col">
+                                  <span class="sig-title-block">Muhasebe</span>
+                                  <span style="color:#94a3b8; font-style:italic;">İmza Yetkisi</span>
+                                </div>
+                                <div class="sig-col">
+                                  <span class="sig-title-block">Satın Alma Md.</span>
+                                  <span style="color:#94a3b8; font-style:italic;">İmza Yetkisi</span>
+                                </div>
+                                <div class="sig-col">
+                                  <span class="sig-title-block">Şantiye Şefi</span>
+                                  <span style="color:#10b981; font-weight:850; margin-top:10px;">✓ ONAYLANDI</span>
+                                </div>
+                                <div class="sig-col">
+                                  <span class="sig-title-block">Proje Müdürü</span>
+                                  <span style="color:#10b981; font-weight:850; margin-top:10px;">✓ ONAYLANDI</span>
+                                </div>
+                              </div>
+                            </body>
+                          </html>
+                        `;
                         const win = window.open("", "_blank");
-                        win?.document.write(`<html><body style="font-family:sans-serif;padding:30px;line-height:1.6;"><h1 style="color:#2563eb;">KİBRİTÇİ KARSILASTIRMA RAPORU</h1><p>Fatura: ${rep.faturaNo} · Firma: ${rep.cariUnvan} · Tarih: ${rep.tarih}</p><hr/><pre style="font-family:monospace;white-space:pre-wrap;background:#f8fafc;padding:15px;border-radius:10px;">${rep.report}</pre></body></html>`);
+                        win?.document.write(htmlContent);
                         win?.print();
                       }}
                       className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2 rounded-xl font-bold transition cursor-pointer"
