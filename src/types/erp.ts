@@ -252,7 +252,7 @@ export interface HazirTutanak {
 
 export interface CariKart {
   id: string;
-  kartTipi: 'CARI' | 'TEDARIKCI' | 'TASERON' | 'MUSTERI';
+  kartTipi: 'TEDARIKCI' | 'TASERON' | 'ALICI' | 'SATICI' | 'PERSONEL' | 'ORTAKLAR' | 'CARI';
   kod: string;
   unvan: string;
   yetkili: string;

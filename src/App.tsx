@@ -11,6 +11,11 @@ import { YoklamaScreen } from './components/YoklamaScreen';
 import { MaasScreen } from './components/MaasScreen';
 import { PersonelIzinScreen } from './components/PersonelIzinScreen';
 import { SatinAlmaScreen } from './components/SatinAlmaScreen';
+import { IrsaliyeGirisScreen } from './components/IrsaliyeGirisScreen';
+import { FaturaGirisScreen } from './components/FaturaGirisScreen';
+import { TaseronKesintiScreen } from './components/TaseronKesintiScreen';
+import { PlanliOrganizasyonScreen } from './components/PlanliOrganizasyonScreen';
+import { PersonelKartlariScreen } from './components/PersonelKartlariScreen';
 import { KasaScreen } from './components/KasaScreen';
 import { IdariScreen } from './components/IdariScreen';
 import { OnayIslemleriScreen } from './components/OnayIslemleriScreen';
@@ -1370,10 +1375,6 @@ export default function App() {
                 <SatinAlmaScreen 
                   satinAlmaTalepleri={satinAlmaTalepleri}
                   setSatinAlmaTalepleri={setSatinAlmaTalepleriWithSync}
-                  irsaliyeler={irsaliyeler}
-                  setIrsaliyeler={setIrsaliyelerWithSync}
-                  faturalar={faturalar}
-                  setFaturalar={setFaturalarWithSync}
                   cariKartlar={cariKartlar}
                   setCariKartlar={setCariKartlarWithSync}
                   stokKartlar={stokKartlar}
@@ -1381,6 +1382,63 @@ export default function App() {
                   kullanicilar={kullanicilar}
                   currentUser={currentUser}
                   addNotification={addNotification}
+                />
+              )}
+
+              {activeTab === "irsaliye_giris" && (
+                <IrsaliyeGirisScreen 
+                  irsaliyeler={irsaliyeler}
+                  setIrsaliyeler={setIrsaliyelerWithSync}
+                  satinAlmaTalepleri={satinAlmaTalepleri}
+                  cariKartlar={cariKartlar}
+                  setCariKartlar={setCariKartlarWithSync}
+                  stokKartlar={stokKartlar}
+                  setStokKartlar={setStokKartlarWithSync}
+                  currentUser={currentUser}
+                  addNotification={addNotification}
+                />
+              )}
+
+              {activeTab === "fatura_giris" && (
+                <FaturaGirisScreen 
+                  faturalar={faturalar}
+                  setFaturalar={setFaturalarWithSync}
+                  irsaliyeler={irsaliyeler}
+                  satinAlmaTalepleri={satinAlmaTalepleri}
+                  cariKartlar={cariKartlar}
+                  setCariKartlar={setCariKartlarWithSync}
+                  stokKartlar={stokKartlar}
+                  setStokKartlar={setStokKartlarWithSync}
+                  currentUser={currentUser}
+                  addNotification={addNotification}
+                />
+              )}
+
+              {activeTab === "taseron_kesinti" && (
+                <TaseronKesintiScreen 
+                  cariKartlar={cariKartlar}
+                  operatorFaaliyetleri={operatorFaaliyetleri}
+                  hazirTutanaklar={hazirTutanaklar}
+                  taseronKesintiRaporlari={taseronKesintiRaporlari}
+                  setTaseronKesintiRaporlari={setTaseronKesintiRaporlariWithSync}
+                  addNotification={addNotification}
+                  currentUser={currentUser}
+                />
+              )}
+
+              {activeTab === "planli_organizasyon" && (
+                <PlanliOrganizasyonScreen />
+              )}
+
+              {activeTab === "personel_kartlari" && (
+                <PersonelKartlariScreen 
+                  personeller={personeller}
+                  yoklamalar={yoklamalar}
+                  araclar={araclar}
+                  kampKayitlari={kampKayitlari}
+                  kampOdalari={kampOdalari}
+                  hazirTutanaklar={hazirTutanaklar}
+                  kasaHareketleri={kasaHareketleri}
                 />
               )}
 

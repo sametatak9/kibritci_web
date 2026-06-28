@@ -39,6 +39,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       group: "PERSONEL",
       items: [
         { key: "personel", label: "Personel Yönetimi", icon: Users },
+        { key: "personel_kartlari", label: "Personel Detay Kartları", icon: Users },
         { key: "yoklama", label: "Yoklama ve Puantaj", icon: CalendarCheck2 },
         { key: "maas", label: "Maaş Hesaplama", icon: CreditCard },
         { key: "maas_odeme", label: "Maaş Ödeme", icon: Banknote },
@@ -49,10 +50,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       group: "FINANS & ENVENTER",
       items: [
         { key: "kasa", label: "Haftalık Kasa", icon: Wallet },
-        { key: "satin_alma", label: "Satın Alma Talep", icon: ShoppingCart },
+        { key: "satin_alma", label: "Satın Alma Talebi", icon: ShoppingCart },
+        { key: "irsaliye_giris", label: "İrsaliye ve Fiş Girişi", icon: Truck },
+        { key: "fatura_giris", label: "Fatura Girişi", icon: CreditCard },
+        { key: "taseron_kesinti", label: "Taşeron Kesintileri", icon: Wallet },
         { key: "cari_stok", label: "Cari ve Stok Kartları", icon: Package },
         { key: "evrak_aktarimi", label: "AI Belge Aktarımı", icon: BookOpen },
         { key: "kibar_hakedis", label: "Kibar Hakediş", icon: CreditCard },
+        { key: "planli_organizasyon", label: "Planlı Organizasyon", icon: CalendarCheck2 },
       ]
     },
     {

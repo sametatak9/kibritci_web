@@ -850,10 +850,20 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   // ─────────────────────────────────────────────────────────────
   const [csTab, setCsTab] = useState<'cari' | 'stok'>('cari');
   const [newCariUnvan, setNewCariUnvan] = useState("");
-  const [newCariType, setNewCariType] = useState<'CARI' | 'TEDARIKCI' | 'TASERON' | 'MUSTERI'>("TEDARIKCI");
+  const [newCariType, setNewCariType] = useState<CariKart['kartTipi']>("TEDARIKCI");
+  const [newCariYetkili, setNewCariYetkili] = useState("");
+  const [newCariTelefon, setNewCariTelefon] = useState("");
+  const [newCariEposta, setNewCariEposta] = useState("");
+  const [newCariVergiNo, setNewCariVergiNo] = useState("");
+  const [newCariVergiDairesi, setNewCariVergiDairesi] = useState("");
+  const [newCariAdres, setNewCariAdres] = useState("");
+  const [newCariIban, setNewCariIban] = useState("");
+  const [newCariNotlar, setNewCariNotlar] = useState("");
   
   const [newStokAdi, setNewStokAdi] = useState("");
   const [newStokBirim, setNewStokBirim] = useState("TON");
+  const [newStokKategori, setNewStokKategori] = useState("Kaba İnşaat İmalatı");
+  const [newStokAciklama, setNewStokAciklama] = useState("");
 
   // Cari & Stok Edit, Delete, History state
   const [editingCariId, setEditingCariId] = useState<string | null>(null);
@@ -1034,9 +1044,29 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const handleCreateCari = () => {
     if (!newCariUnvan) return;
     if (editingCariId) {
-      setCariKartlar(prev => prev.map(c => c.id === editingCariId ? { ...c, unvan: newCariUnvan, kartTipi: newCariType } : c));
+      setCariKartlar(prev => prev.map(c => c.id === editingCariId ? { 
+        ...c, 
+        unvan: newCariUnvan, 
+        kartTipi: newCariType,
+        yetkili: newCariYetkili,
+        telefon: newCariTelefon,
+        eposta: newCariEposta,
+        vergiNo: newCariVergiNo,
+        vergiDairesi: newCariVergiDairesi,
+        adres: newCariAdres,
+        iban: newCariIban,
+        notlar: newCariNotlar
+      } : c));
       setEditingCariId(null);
       setNewCariUnvan("");
+      setNewCariYetkili("");
+      setNewCariTelefon("");
+      setNewCariEposta("");
+      setNewCariVergiNo("");
+      setNewCariVergiDairesi("");
+      setNewCariAdres("");
+      setNewCariIban("");
+      setNewCariNotlar("");
       alert("Cari kart başarıyla güncellendi.");
       return;
     }
@@ -1045,27 +1075,42 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       kartTipi: newCariType,
       kod: `CARI-${Math.floor(100+Math.random()*900)}`,
       unvan: newCariUnvan,
-      yetkili: "Yetkili Tanımsız",
-      telefon: "",
-      eposta: "",
-      vergiNo: "",
-      vergiDairesi: "",
-      adres: "",
-      iban: "",
+      yetkili: newCariYetkili || "Yetkili Tanımsız",
+      telefon: newCariTelefon,
+      eposta: newCariEposta,
+      vergiNo: newCariVergiNo,
+      vergiDairesi: newCariVergiDairesi,
+      adres: newCariAdres,
+      iban: newCariIban,
       durum: "AKTIF",
-      notlar: "Şantiye cari kartı."
+      notlar: newCariNotlar || "Şantiye cari kartı."
     };
     setCariKartlar(prev => [...prev, newC]);
     setNewCariUnvan("");
+    setNewCariYetkili("");
+    setNewCariTelefon("");
+    setNewCariEposta("");
+    setNewCariVergiNo("");
+    setNewCariVergiDairesi("");
+    setNewCariAdres("");
+    setNewCariIban("");
+    setNewCariNotlar("");
     alert("Yeni cari kart başarıyla eklendi.");
   };
 
   const handleCreateStok = () => {
     if (!newStokAdi) return;
     if (editingStokId) {
-      setStokKartlar(prev => prev.map(s => s.id === editingStokId ? { ...s, stokAdi: newStokAdi, birim: newStokBirim } : s));
+      setStokKartlar(prev => prev.map(s => s.id === editingStokId ? { 
+        ...s, 
+        stokAdi: newStokAdi, 
+        birim: newStokBirim,
+        kategori: newStokKategori,
+        aciklama: newStokAciklama
+      } : s));
       setEditingStokId(null);
       setNewStokAdi("");
+      setNewStokAciklama("");
       alert("Stok kartı başarıyla güncellendi.");
       return;
     }
@@ -1073,14 +1118,15 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       id: `s_${Date.now()}`,
       stokKodu: `STK-${Math.random().toString(16).substring(2,6).toUpperCase()}`,
       stokAdi: newStokAdi,
-      kategori: "İnşaat Malzemesi",
+      kategori: newStokKategori,
       birim: newStokBirim,
       kritikSeviye: 10,
       durum: "AKTIF",
-      aciklama: ""
+      aciklama: newStokAciklama
     };
     setStokKartlar(prev => [...prev, newS]);
     setNewStokAdi("");
+    setNewStokAciklama("");
     alert("Yeni stok kartı başarıyla eklendi.");
   };
 
@@ -2799,15 +2845,108 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     </div>
 
                     <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Firma Yetkilisi</label>
+                      <input 
+                        type="text" 
+                        className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
+                        placeholder="Adı Soyadı"
+                        value={newCariYetkili}
+                        onChange={(e) => setNewCariYetkili(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Telefon No</label>
+                        <input 
+                          type="text" 
+                          className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
+                          placeholder="05..."
+                          value={newCariTelefon}
+                          onChange={(e) => setNewCariTelefon(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">E-Posta</label>
+                        <input 
+                          type="email" 
+                          className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
+                          placeholder="info@firma.com"
+                          value={newCariEposta}
+                          onChange={(e) => setNewCariEposta(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Vergi No</label>
+                        <input 
+                          type="text" 
+                          className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
+                          placeholder="10 Haneli"
+                          value={newCariVergiNo}
+                          onChange={(e) => setNewCariVergiNo(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Vergi Dairesi</label>
+                        <input 
+                          type="text" 
+                          className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
+                          placeholder="Vergi Dairesi"
+                          value={newCariVergiDairesi}
+                          onChange={(e) => setNewCariVergiDairesi(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Banka IBAN</label>
+                      <input 
+                        type="text" 
+                        className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
+                        placeholder="TR..."
+                        value={newCariIban}
+                        onChange={(e) => setNewCariIban(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Firma Adresi</label>
+                      <textarea 
+                        rows={2}
+                        className="w-full text-xs mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg resize-none"
+                        placeholder="Açık adres..."
+                        value={newCariAdres}
+                        onChange={(e) => setNewCariAdres(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Özel Notlar</label>
+                      <input 
+                        type="text" 
+                        className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
+                        placeholder="Notlar..."
+                        value={newCariNotlar}
+                        onChange={(e) => setNewCariNotlar(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
                       <label className="text-[10px] font-bold text-slate-500 uppercase">Kart Tipi</label>
                       <select 
-                        className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
+                        className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg font-bold"
                         value={newCariType}
                         onChange={(e) => setNewCariType(e.target.value as any)}
                       >
-                        <option value="TEDARIKCI">Tedarikçi Filtresi</option>
-                        <option value="TASERON">Altyüklenici Taşeron</option>
-                        <option value="MUSTERI">Müşteri / Malik</option>
+                        <option value="TEDARIKCI">Tedarikçi</option>
+                        <option value="TASERON">Taşeron</option>
+                        <option value="ALICI">Alıcı</option>
+                        <option value="SATICI">Satıcı</option>
+                        <option value="PERSONEL">Personel</option>
+                        <option value="ORTAKLAR">Ortaklar</option>
                         <option value="CARI">Diğer Cari</option>
                       </select>
                     </div>
@@ -2853,6 +2992,14 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                               setEditingCariId(cr.id);
                               setNewCariUnvan(cr.unvan);
                               setNewCariType(cr.kartTipi);
+                              setNewCariYetkili(cr.yetkili || "");
+                              setNewCariTelefon(cr.telefon || "");
+                              setNewCariEposta(cr.eposta || "");
+                              setNewCariVergiNo(cr.vergiNo || "");
+                              setNewCariVergiDairesi(cr.vergiDairesi || "");
+                              setNewCariAdres(cr.adres || "");
+                              setNewCariIban(cr.iban || "");
+                              setNewCariNotlar(cr.notlar || "");
                             }}
                             className="flex-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 py-1.5 rounded-lg font-bold transition flex items-center justify-center space-x-1 cursor-pointer"
                           >
@@ -2903,6 +3050,22 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     </div>
 
                     <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Stok Türü / Kategori</label>
+                      <select 
+                        className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg font-bold"
+                        value={newStokKategori}
+                        onChange={(e) => setNewStokKategori(e.target.value)}
+                      >
+                        <option value="Kaba İnşaat İmalatı">Kaba İnşaat İmalatı</option>
+                        <option value="Dış Cephe İmalatı">Dış Cephe İmalatı</option>
+                        <option value="İnce İşler İmalatı">İnce İşler İmalatı</option>
+                        <option value="Elektrik Tesisat Malzemesi">Elektrik Tesisat Malzemesi</option>
+                        <option value="Mekanik Tesisat Malzemesi">Mekanik Tesisat Malzemesi</option>
+                        <option value="Diğer Malzeme">Diğer Malzeme</option>
+                      </select>
+                    </div>
+
+                    <div>
                       <label className="text-[10px] font-bold text-slate-500 uppercase">Birim</label>
                       <select 
                         className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
@@ -2915,6 +3078,17 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                         <option value="ADET">ADET</option>
                         <option value="TORBA">TORBA</option>
                       </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Malzeme Açıklaması</label>
+                      <input 
+                        type="text" 
+                        className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
+                        placeholder="Ek bilgiler..."
+                        value={newStokAciklama}
+                        onChange={(e) => setNewStokAciklama(e.target.value)}
+                      />
                     </div>
                   </div>
 
@@ -2956,6 +3130,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                               setEditingStokId(st.id);
                               setNewStokAdi(st.stokAdi);
                               setNewStokBirim(st.birim);
+                              setNewStokKategori(st.kategori || "Kaba İnşaat İmalatı");
+                              setNewStokAciklama(st.aciklama || "");
                             }}
                             className="flex-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 py-1.5 rounded-lg font-bold transition flex items-center justify-center space-x-1 cursor-pointer"
                           >
