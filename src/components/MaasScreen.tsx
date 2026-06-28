@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CreditCard, Copy, Check, DollarSign, Download, Building } from 'lucide-react';
+import { CreditCard, Copy, Check, DollarSign, Download, Building, Search, Clock } from 'lucide-react';
 import { Personel, AylikYoklamaMap } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
 
@@ -14,6 +14,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
   const [avansCuts, setAvansCuts] = useState<{ [personelId: string]: number }>({});
   const [paidStatus, setPaidStatus] = useState<{ [personelId: string]: boolean }>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
 
@@ -45,16 +46,16 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
     if (p.iseGirisTarihi) {
       const [hireY, hireM] = p.iseGirisTarihi.split('-').map(Number);
       if (hireY > selectedYear || (hireY === selectedYear && hireM > selectedMonth)) {
-        return false; // Not hired yet in this period
+        return false;
       }
     }
     if (p.istenCikisTarihi) {
       const [exitY, exitM] = p.istenCikisTarihi.split('-').map(Number);
       if (exitY < selectedYear || (exitY === selectedYear && exitM < selectedMonth)) {
-        return false; // Already left before this period
+        return false;
       }
     } else if (!isAktif) {
-      return false; // Fully passive and no exit date
+      return false;
     }
     return true;
   };
@@ -85,14 +86,28 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
   let grandKesinti = 0;
   let grandNetPayment = 0;
 
-  const calculatedSalaries = personeller.filter(isEmployeeVisibleInMonth).map(p => {
+  const calculatedSalaries = personeller
+    .filter(isEmployeeVisibleInMonth)
+    .filter(p => {
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      return `${p.ad} ${p.soyad}`.toLowerCase().includes(q) ||
+        (p.tcNo || '').includes(q) ||
+        (p.gorev || '').toLowerCase().includes(q) ||
+        (p.departman || '').toLowerCase().includes(q);
+    })
+    .map(p => {
     const personYoklama = yoklamalar[p.id] || {};
     
-    // Count "Geldi" days
     let hakedisDays = 0;
     let totalOvertimeHours = 0;
+    let geldiGun = 0;
+    let izinliGun = 0;
+    let pazarGun = 0;
+    let tatilGun = 0;
+    let yokGun = 0;
+    let raporluGun = 0;
 
-    // If there is recorded data
     if (Object.keys(personYoklama).length > 0) {
       Object.keys(personYoklama).forEach(dayStr => {
         const day = parseInt(dayStr);
@@ -101,14 +116,20 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
           if (dayData.durum === 'Geldi' || dayData.durum === 'İzinli' || dayData.durum === 'Pazar' || dayData.durum === 'Tatil') {
             hakedisDays++;
           }
+          if (dayData.durum === 'Geldi') geldiGun++;
+          if (dayData.durum === 'İzinli') izinliGun++;
+          if (dayData.durum === 'Pazar') pazarGun++;
+          if (dayData.durum === 'Tatil') tatilGun++;
+          if (dayData.durum === 'Yok') yokGun++;
+          if (dayData.durum === 'Raporlu') raporluGun++;
           totalOvertimeHours += dayData.mesaiSaati;
         }
       });
     } else {
-      // Fallback: calculate total active days in this month
       for (let day = 1; day <= daysInMonth; day++) {
         if (isDayActiveForEmployee(p, day)) {
           hakedisDays++;
+          geldiGun++;
         }
       }
       totalOvertimeHours = 0;
@@ -125,7 +146,6 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
     const cutAmount = avansCuts[p.id] || 0;
     const netPayable = (totalBaseHakedis + totalOvertimeHakedis) - cutAmount;
 
-    // Accumulate grand totals
     grandBaseHakedis += totalBaseHakedis;
     grandOvertimeHakedis += totalOvertimeHakedis;
     grandKesinti += cutAmount;
@@ -138,7 +158,15 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
       totalBaseHakedis,
       totalOvertimeHakedis,
       cutAmount,
-      netPayable
+      netPayable,
+      geldiGun,
+      izinliGun,
+      pazarGun,
+      tatilGun,
+      yokGun,
+      raporluGun,
+      hourlyWage,
+      hourlyOvertimeRate
     };
   });
 
@@ -170,7 +198,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
       <div className="flex-1 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
         
         {/* Header bar controls */}
-        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center shrink-0">
+        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center shrink-0 gap-3">
           <div className="flex items-center space-x-2">
             <CreditCard size={16} className="text-[#f59e0b]" />
             <h4 className="font-display font-bold text-sm text-slate-800 uppercase tracking-widest">
@@ -179,11 +207,21 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
           </div>
 
           <div className="flex items-center space-x-3 text-xs">
+            <div className="relative">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input 
+                type="text" 
+                value={searchQuery} 
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Personel ara..."
+                className="pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 outline-none focus:border-amber-500 w-44"
+              />
+            </div>
             <button
               onClick={() => setShowMaasRaporu(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] px-3 py-1.5 rounded-lg transition shadow-sm cursor-pointer mr-2 flex items-center space-x-1"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] px-3 py-1.5 rounded-lg transition shadow-sm cursor-pointer flex items-center space-x-1"
             >
-              <span>📄 Maaş Raporu (PDF / Yazdır)</span>
+              <span>📄 Maaş Raporu</span>
             </button>
             <span>Dönem:</span>
             <select 
@@ -200,113 +238,159 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
 
         {/* Scrollable list items panel */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {calculatedSalaries.map(({ personel, hakedisDays, totalOvertimeHours, totalBaseHakedis, totalOvertimeHakedis, cutAmount, netPayable }) => {
+          {calculatedSalaries.map(({ personel, hakedisDays, totalOvertimeHours, totalBaseHakedis, totalOvertimeHakedis, cutAmount, netPayable, geldiGun, izinliGun, pazarGun, tatilGun, yokGun, raporluGun, hourlyWage, hourlyOvertimeRate }) => {
             const isPaid = paidStatus[personel.id] || false;
             
             return (
               <div 
                 key={personel.id}
-                className={`border rounded-xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4 transition duration-200 ${
+                className={`border rounded-xl p-4 flex flex-col gap-4 transition duration-200 ${
                   isPaid 
                     ? 'bg-emerald-50/20 border-emerald-500/30' 
                     : 'bg-white border-slate-150 hover:border-slate-200'
                 }`}
               >
                 
-                {/* Personel Avatar and Identity */}
-                <div className="flex items-center gap-3 w-64 shrink-0">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs ring-1 ${
-                    isPaid ? 'bg-emerald-100 text-emerald-800 ring-emerald-200' : 'bg-slate-100 text-slate-500 ring-slate-200'
-                  }`}>
-                    {personel.ad[0]}{personel.soyad[0]}
+                {/* Top row: Avatar, Identity, Stats, Payment */}
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  {/* Personel Avatar and Identity */}
+                  <div className="flex items-center gap-3 w-64 shrink-0">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs ring-1 ${
+                      isPaid ? 'bg-emerald-100 text-emerald-800 ring-emerald-200' : 'bg-slate-100 text-slate-500 ring-slate-200'
+                    }`}>
+                      {personel.ad[0]}{personel.soyad[0]}
+                    </div>
+                    <div>
+                      <h5 className="font-bold text-slate-800 text-xs">
+                        {personel.ad} {personel.soyad}
+                      </h5>
+                      <p className="text-[10px] text-slate-400 font-medium">
+                        {personel.gorev} · Base: <span className="font-bold">₺{personel.maas.toLocaleString('tr-TR')}</span>
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h5 className="font-bold text-slate-800 text-xs">
-                      {personel.ad} {personel.soyad}
-                    </h5>
-                    <p className="text-[10px] text-slate-400 font-medium">
-                      {personel.gorev} · Base: <span className="font-bold">₺{personel.maas.toLocaleString('tr-TR')}</span>
-                    </p>
-                  </div>
-                </div>
 
-                {/* Days and Overtime analysis stats */}
-                <div className="flex items-center space-x-6 shrink-0">
-                  <div className="text-center">
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block">Hakediş Gün</span>
-                    <span className="text-xs font-semibold text-slate-800">{hakedisDays} Gün</span>
+                  {/* Days and Overtime analysis stats */}
+                  <div className="flex items-center space-x-6 shrink-0">
+                    <div className="text-center">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block">Hakediş Gün</span>
+                      <span className="text-xs font-semibold text-slate-800">{hakedisDays} Gün</span>
+                    </div>
+                    <div className="text-center">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block">Ört. Mesai</span>
+                      <span className="text-xs font-semibold text-blue-600">{totalOvertimeHours} Saat</span>
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block">Ört. Mesai</span>
-                    <span className="text-xs font-semibold text-blue-600">{totalOvertimeHours} Saat</span>
-                  </div>
-                </div>
 
-                {/* Hakediş breakdown components */}
-                <div className="flex items-center space-x-6 text-[11px] font-medium text-slate-500 shrink-0">
-                  <div>
-                    <span>Maaş:</span> <span className="font-bold text-slate-800">₺{totalBaseHakedis.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</span>
+                  {/* Hakediş breakdown components */}
+                  <div className="flex items-center space-x-6 text-[11px] font-medium text-slate-500 shrink-0">
+                    <div>
+                      <span>Maaş:</span> <span className="font-bold text-slate-800">₺{totalBaseHakedis.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</span>
+                    </div>
+                    <div>
+                      <span>Mesai:</span> <span className="font-bold text-slate-800">₺{totalOvertimeHakedis.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</span>
+                    </div>
+                    
+                    {/* Cuts input field */}
+                    <div className="flex items-center space-x-1.5">
+                      <span>Kesinti/Avans:</span>
+                      <input 
+                        type="number"
+                        value={cutAmount || ""}
+                        placeholder="0"
+                        onChange={(e) => handleCutChange(personel.id, e.target.value)}
+                        className="w-16 bg-slate-50 border border-slate-200 focus:outline-none focus:border-red-400 font-bold font-mono text-center rounded py-0.5 text-red-600 text-[10px]"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <span>Mesai:</span> <span className="font-bold text-slate-800">₺{totalOvertimeHakedis.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</span>
-                  </div>
-                  
-                  {/* Cuts input field - allows dynamic writes */}
-                  <div className="flex items-center space-x-1.5">
-                    <span>Kesinti/Avans:</span>
-                    <input 
-                      type="number"
-                      value={cutAmount || ""}
-                      placeholder="0"
-                      onChange={(e) => handleCutChange(personel.id, e.target.value)}
-                      className="w-16 bg-slate-50 border border-slate-200 focus:outline-none focus:border-red-400 font-bold font-mono text-center rounded py-0.5 text-red-600 text-[10px]"
-                    />
-                  </div>
-                </div>
 
-                {/* Banking details */}
-                <div className="flex items-center space-x-2 border-l pl-4 border-slate-100 shrink-0">
-                  <div className="text-right">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Banka / IBAN</p>
-                    <p className="text-[10px] font-semibold text-slate-700 font-mono truncate w-36">
-                      {personel.ibanNo ? personel.ibanNo : "IBAN GİRİLMEMİŞ"}
-                    </p>
+                  {/* Banking details */}
+                  <div className="flex items-center space-x-2 border-l pl-4 border-slate-100 shrink-0">
+                    <div className="text-right">
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Banka / IBAN</p>
+                      <p className="text-[10px] font-semibold text-slate-700 font-mono truncate w-36">
+                        {personel.ibanNo ? personel.ibanNo : "IBAN GİRİLMEMİŞ"}
+                      </p>
+                    </div>
+                    
+                    {personel.ibanNo && (
+                      <button
+                        onClick={() => handleCopyIban(personel.id, personel.ibanNo)}
+                        className="p-1 px-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                        title="IBAN Kopyala"
+                      >
+                        {copiedId === personel.id ? (
+                          <Check size={12} className="text-emerald-600 stroke-[3]" />
+                        ) : (
+                          <Copy size={12} />
+                        )}
+                      </button>
+                    )}
                   </div>
-                  
-                  {personel.ibanNo && (
+
+                  {/* NET PAYABLE AMOUNT & TOGGLE STATUS */}
+                  <div className="flex items-center gap-4 shrink-0 justify-between md:justify-start">
+                    <div className="text-right">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block">Ödenecek Net Tutar</span>
+                      <span className="text-xs font-bold text-emerald-600 font-mono">
+                        ₺{netPayable.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
                     <button
-                      onClick={() => handleCopyIban(personel.id, personel.ibanNo)}
-                      className="p-1 px-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600 transition cursor-pointer"
-                      title="IBAN Kopyala"
+                      onClick={() => togglePaidStatus(personel.id)}
+                      className={`px-3 py-1.5 rounded-xl font-bold text-[10px] uppercase cursor-pointer transition active:scale-95 shadow-sm border ${
+                        isPaid 
+                          ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border-emerald-200' 
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                      }`}
                     >
-                      {copiedId === personel.id ? (
-                        <Check size={12} className="text-emerald-600 stroke-[3]" />
-                      ) : (
-                        <Copy size={12} />
-                      )}
+                      {isPaid ? "✖ Ödeme Kaldır" : "💵 Ödeme Tamam"}
                     </button>
-                  )}
+                  </div>
                 </div>
 
-                {/* NET PAYABLE AMOUNT & TOGGLE STATUS */}
-                <div className="flex items-center gap-4 shrink-0 justify-between md:justify-start">
-                  <div className="text-right">
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block">Ödenecek Net Tutar</span>
-                    <span className="text-xs font-bold text-emerald-600 font-mono">
-                      ₺{netPayable.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
-                    </span>
+                {/* Mesai Detayı & Gün Özeti */}
+                <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Clock size={12} className="text-amber-500" />
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Mesai Detayı & Gün Özeti</span>
                   </div>
-
-                  <button
-                    onClick={() => togglePaidStatus(personel.id)}
-                    className={`px-3 py-1.5 rounded-xl font-bold text-[10px] uppercase cursor-pointer transition active:scale-95 shadow-sm border ${
-                      isPaid 
-                        ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border-emerald-200' 
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                    }`}
-                  >
-                    {isPaid ? "✖ Ödeme Kaldır" : "💵 Ödeme Tamam"}
-                  </button>
+                  <div className="grid grid-cols-2 md:grid-cols-7 gap-2 text-[10px]">
+                    <div className="bg-white rounded-lg p-2 border border-slate-100 text-center">
+                      <span className="text-slate-400 block">Geldi</span>
+                      <span className="font-bold text-emerald-700">{geldiGun} gün</span>
+                    </div>
+                    <div className="bg-white rounded-lg p-2 border border-slate-100 text-center">
+                      <span className="text-slate-400 block">İzinli</span>
+                      <span className="font-bold text-blue-700">{izinliGun} gün</span>
+                    </div>
+                    <div className="bg-white rounded-lg p-2 border border-slate-100 text-center">
+                      <span className="text-slate-400 block">Pazar</span>
+                      <span className="font-bold text-amber-700">{pazarGun} gün</span>
+                    </div>
+                    <div className="bg-white rounded-lg p-2 border border-slate-100 text-center">
+                      <span className="text-slate-400 block">Tatil</span>
+                      <span className="font-bold text-indigo-700">{tatilGun} gün</span>
+                    </div>
+                    <div className="bg-white rounded-lg p-2 border border-slate-100 text-center">
+                      <span className="text-slate-400 block">Yok</span>
+                      <span className="font-bold text-rose-700">{yokGun} gün</span>
+                    </div>
+                    <div className="bg-white rounded-lg p-2 border border-slate-100 text-center">
+                      <span className="text-slate-400 block">Raporlu</span>
+                      <span className="font-bold text-violet-700">{raporluGun} gün</span>
+                    </div>
+                    <div className="bg-blue-50 rounded-lg p-2 border border-blue-100 text-center">
+                      <span className="text-blue-400 block">Toplam Mesai</span>
+                      <span className="font-bold text-blue-800">{totalOvertimeHours} saat</span>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-[9px] text-slate-400 flex gap-4">
+                    <span>Saatlik Ücret: <strong className="text-slate-600">₺{hourlyWage.toFixed(2)}</strong></span>
+                    <span>Mesai Katsayısı: <strong className="text-slate-600">x1.5</strong></span>
+                    <span>Mesai Saat Ücreti: <strong className="text-slate-600">₺{hourlyOvertimeRate.toFixed(2)}</strong></span>
+                  </div>
                 </div>
 
               </div>
@@ -315,9 +399,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* 📄 LANDSCAPE PDF / PRINT MODAL: MAAŞ BANKA ÖDEME DEKONT CETVELİ          */}
-      {/* ========================================================================= */}
+      {/* PDF / PRINT MODAL */}
       {showMaasRaporu && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/80 flex items-start justify-center p-6 backdrop-blur-sm">
           <div className="bg-white rounded-2xl w-full max-w-7xl shadow-2xl flex flex-col overflow-hidden my-4">
@@ -378,7 +460,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
               </div>
             </div>
 
-            {/* Document Body (Landcaped styled report) */}
+            {/* Document Body */}
             <div className="flex-1 overflow-auto bg-white p-12 text-slate-900 printable-document font-sans">
               
               {/* Report Header */}
@@ -402,10 +484,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
               {/* Document Subtitle */}
               <div className="text-center mb-6">
                 <h2 className="text-sm font-bold text-slate-900 tracking-wider uppercase border-y border-slate-205 py-2.5 bg-slate-50">
-                  KİBRİTÇİ İNŞAAT ŞANTİYESİ {[
-                    "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
-                    "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
-                  ][selectedMonth - 1]?.toUpperCase()} AYI MAAŞ RAPORU
+                  KİBRİTÇİ İNŞAAT ŞANTİYESİ {["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"][selectedMonth - 1]?.toUpperCase()} AYI MAAŞ RAPORU
                 </h2>
               </div>
 
@@ -427,7 +506,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
                     </tr>
                   </thead>
                   <tbody>
-                    {calculatedSalaries.map(({ personel, hakedisDays, totalOvertimeHours, totalBaseHakedis, totalOvertimeHakedis, cutAmount, netPayable }) => {
+                    {calculatedSalaries.map(({ personel, hakedisDays, totalOvertimeHours, totalBaseHakedis, totalOvertimeHakedis, cutAmount, netPayable, geldiGun, izinliGun, pazarGun, tatilGun, yokGun, raporluGun }) => {
                       const personYoklama = yoklamalar[personel.id] || {};
                       return (
                         <React.Fragment key={personel.id}>
@@ -445,10 +524,10 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
                               ₺{netPayable.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                             </td>
                           </tr>
-                          {/* Mini visual calendar for days to save page space */}
+                          {/* Gün Detayı + Mesai Detayı */}
                           <tr className="border-b border-slate-300 bg-slate-50/40 text-[7px] text-slate-500">
                             <td colSpan={10} className="p-1 px-3">
-                              <div className="flex items-center space-x-2">
+                              <div className="flex items-center space-x-2 mb-1">
                                 <span className="font-bold text-[8px] uppercase tracking-wider text-slate-400">GÜN DETAYI:</span>
                                 <div className="flex flex-wrap gap-1">
                                   {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
@@ -475,6 +554,15 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
                                   })}
                                 </div>
                               </div>
+                              <div className="flex items-center space-x-4 text-[8px]">
+                                <span><strong>Geldi:</strong> {geldiGun} gün</span>
+                                <span><strong>İzinli:</strong> {izinliGun} gün</span>
+                                <span><strong>Pazar:</strong> {pazarGun} gün</span>
+                                <span><strong>Tatil:</strong> {tatilGun} gün</span>
+                                <span><strong>Yok:</strong> {yokGun} gün</span>
+                                <span><strong>Raporlu:</strong> {raporluGun} gün</span>
+                                <span className="text-blue-600"><strong>Toplam Mesai:</strong> {totalOvertimeHours} saat</span>
+                              </div>
                             </td>
                           </tr>
                         </React.Fragment>
@@ -496,7 +584,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
                 </table>
               </div>
 
-              {/* Corporate Sign-off Area arranged in user specified order */}
+              {/* Corporate Sign-off Area */}
               <div className="mt-12 text-xs">
                 <div className="grid grid-cols-4 gap-4 text-center">
                   

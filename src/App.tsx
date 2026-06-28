@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { CircleAlert as AlertCircle, RefreshCw } from 'lucide-react';
 
 // Core Screens
 import { AdminPanelScreen, Kullanici } from './components/AdminPanelScreen';
@@ -29,7 +29,8 @@ import { KibarHakedisScreen } from './components/KibarHakedisScreen';
 import { 
   Personel, AylikYoklamaMap, SatinAlmaTalebi, Irsaliye, Fatura, 
   KasaHareketi, AracBakim, Demisbas, KampOdasi, KampKaydi, 
-  HazirTutanak, CariKart, StokKart, EpostaGonderim, SahaFaaliyeti as SahaFaaliyetiType
+  HazirTutanak, CariKart, StokKart, EpostaGonderim, SahaFaaliyeti as SahaFaaliyetiType,
+  OperatorFaaliyet, TaseronKesintiRaporu, MaaşOdeme, PersonelIslemGecmisi, CariKartIslem, StokKartIslem
 } from './types/erp';
 
 // Initial Mock Data
@@ -37,7 +38,9 @@ import {
   INITIAL_PERSONEL, INITIAL_YOKLAMA, INITIAL_CARI, INITIAL_STOK, 
   INITIAL_SATIN_ALMA, INITIAL_IRSALIYE, INITIAL_FATURA, INITIAL_KASA, 
   INITIAL_ARAC, INITIAL_KAMP, INITIAL_KAMP_KAYDI, 
-  INITIAL_SAHA, INITIAL_TUTANAK, INITIAL_EPOSTA 
+  INITIAL_SAHA, INITIAL_TUTANAK, INITIAL_EPOSTA,
+  INITIAL_OPERATOR_FAALIYET, INITIAL_TASERON_KESINTI, INITIAL_MAAS_ODEME,
+  INITIAL_PERSONEL_ISLEM, INITIAL_CARI_ISLEM, INITIAL_STOK_ISLEM
 } from './data/mockData';
 
 // Cloud Connection Modules
@@ -54,6 +57,8 @@ import { collection, onSnapshot, doc, getDoc, query, orderBy, limit } from 'fire
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { LoginScreen } from './components/LoginScreen';
 import { YetkiVermeScreen } from './components/YetkiVermeScreen';
+import { OperatorScreen } from './components/OperatorScreen';
+import { MaasOdeScreen } from './components/MaasOdeScreen';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>("ana_sayfa");
@@ -103,10 +108,22 @@ export default function App() {
   const [cariKartlar, setCariKartlar] = useState<CariKart[]>([]);
   const [stokKartlar, setStokKartlar] = useState<StokKart[]>([]);
   const [epostaGonderimleri, setEpostaGonderimleri] = useState<EpostaGonderim[]>([]);
-  
+
   // Realtime user accounts & vehicle logs
   const [kullanicilar, setKullanicilar] = useState<Kullanici[]>([]);
   const [aracKmLoglari, setAracKmLoglari] = useState<any[]>([]);
+
+  // Operator & Heavy Equipment Activity Logs
+  const [operatorFaaliyetleri, setOperatorFaaliyetleri] = useState<OperatorFaaliyet[]>([]);
+  const [taseronKesintiRaporlari, setTaseronKesintiRaporlari] = useState<TaseronKesintiRaporu[]>([]);
+
+  // Salary Payment Records
+  const [maasOdemeleri, setMaasOdemeleri] = useState<MaaşOdeme[]>([]);
+
+  // Personnel / Cari / Stock History Logs
+  const [personelIslemGecmisi, setPersonelIslemGecmisi] = useState<PersonelIslemGecmisi[]>([]);
+  const [cariIslemGecmisi, setCariIslemGecmisi] = useState<CariKartIslem[]>([]);
+  const [stokIslemGecmisi, setStokIslemGecmisi] = useState<StokKartIslem[]>([]);
 
   // Public Personnel Boarding Document Viewer (WhatsApp link handler)
   const [publicViewGiris, setPublicViewGiris] = useState<any>(null);
@@ -326,6 +343,30 @@ export default function App() {
         const loadedKmLogs = await seedCollectionIfEmpty('aracKmLoglari', initialKmLogs);
         setAracKmLoglari(loadedKmLogs);
 
+        setLoadingMsg('İş makinesi operatör faaliyet kayıtları yükleniyor...');
+        const loadedOperator = await seedCollectionIfEmpty('operatorFaaliyetleri', INITIAL_OPERATOR_FAALIYET);
+        setOperatorFaaliyetleri(loadedOperator);
+
+        setLoadingMsg('Taşeron kesinti raporları arşivleniyor...');
+        const loadedTaseron = await seedCollectionIfEmpty('taseronKesintiRaporlari', INITIAL_TASERON_KESINTI);
+        setTaseronKesintiRaporlari(loadedTaseron);
+
+        setLoadingMsg('Maaş ödeme kayıtları senkronize ediliyor...');
+        const loadedMaasOde = await seedCollectionIfEmpty('maasOdemeleri', INITIAL_MAAS_ODEME);
+        setMaasOdemeleri(loadedMaasOde);
+
+        setLoadingMsg('Personel işlem geçmişi kayıtları yükleniyor...');
+        const loadedPersIslem = await seedCollectionIfEmpty('personelIslemGecmisi', INITIAL_PERSONEL_ISLEM);
+        setPersonelIslemGecmisi(loadedPersIslem);
+
+        setLoadingMsg('Cari kart işlem geçmişi kayıtları yükleniyor...');
+        const loadedCariIslem = await seedCollectionIfEmpty('cariIslemGecmisi', INITIAL_CARI_ISLEM);
+        setCariIslemGecmisi(loadedCariIslem);
+
+        setLoadingMsg('Stok kart işlem geçmişi kayıtları yükleniyor...');
+        const loadedStokIslem = await seedCollectionIfEmpty('stokIslemGecmisi', INITIAL_STOK_ISLEM);
+        setStokIslemGecmisi(loadedStokIslem);
+
         setDbStatus('synced');
       } catch (err) {
         console.error('Firebase synchronisation error: ', err);
@@ -355,6 +396,12 @@ export default function App() {
           { id: 'log_2', tarih: '2026-06-16', plaka: '34 KBR 888', surucu: 'Ayhan Yılmaz', sabahKm: 41350, aksamKm: 41580, fark: 230 },
           { id: 'log_3', tarih: '2026-06-17', plaka: '06 KBR 101', surucu: 'Mehmet Kaplan', sabahKm: 85400, aksamKm: 85920, fark: 520 },
         ]);
+        setOperatorFaaliyetleri(INITIAL_OPERATOR_FAALIYET);
+        setTaseronKesintiRaporlari(INITIAL_TASERON_KESINTI);
+        setMaasOdemeleri(INITIAL_MAAS_ODEME);
+        setPersonelIslemGecmisi(INITIAL_PERSONEL_ISLEM);
+        setCariIslemGecmisi(INITIAL_CARI_ISLEM);
+        setStokIslemGecmisi(INITIAL_STOK_ISLEM);
       }
     }
 
@@ -497,6 +544,30 @@ export default function App() {
       setCariKartlar(list);
     });
 
+    const unsubOperator = onSnapshot(collection(db, 'operatorFaaliyetleri'), (snapshot) => {
+      const list: OperatorFaaliyet[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() } as any);
+      });
+      setOperatorFaaliyetleri(list);
+    });
+
+    const unsubTaseronKesinti = onSnapshot(collection(db, 'taseronKesintiRaporlari'), (snapshot) => {
+      const list: TaseronKesintiRaporu[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() } as any);
+      });
+      setTaseronKesintiRaporlari(list);
+    });
+
+    const unsubMaasOde = onSnapshot(collection(db, 'maasOdemeleri'), (snapshot) => {
+      const list: MaaşOdeme[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() } as any);
+      });
+      setMaasOdemeleri(list);
+    });
+
     const qNotif = query(collection(db, 'bildirimler'), orderBy('tarih', 'desc'), limit(30));
     const unsubNotif = onSnapshot(qNotif, (snapshot) => {
       const list: any[] = [];
@@ -521,6 +592,9 @@ export default function App() {
       unsubAraclar();
       unsubAracKm();
       unsubCari();
+      unsubOperator();
+      unsubTaseronKesinti();
+      unsubMaasOde();
     };
   }, [dbStatus, currentUser]);
 
@@ -756,6 +830,54 @@ export default function App() {
     setAracKmLoglari(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
       setTimeout(() => syncArrayToFirestore('aracKmLoglari', prev, next), 0);
+      return next;
+    });
+  };
+
+  const setOperatorFaaliyetleriWithSync = (updater: OperatorFaaliyet[] | ((o: OperatorFaaliyet[]) => OperatorFaaliyet[])) => {
+    setOperatorFaaliyetleri(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setTimeout(() => syncArrayToFirestore('operatorFaaliyetleri', prev, next), 0);
+      return next;
+    });
+  };
+
+  const setTaseronKesintiRaporlariWithSync = (updater: TaseronKesintiRaporu[] | ((t: TaseronKesintiRaporu[]) => TaseronKesintiRaporu[])) => {
+    setTaseronKesintiRaporlari(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setTimeout(() => syncArrayToFirestore('taseronKesintiRaporlari', prev, next), 0);
+      return next;
+    });
+  };
+
+  const setMaasOdemeleriWithSync = (updater: MaaşOdeme[] | ((m: MaaşOdeme[]) => MaaşOdeme[])) => {
+    setMaasOdemeleri(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setTimeout(() => syncArrayToFirestore('maasOdemeleri', prev, next), 0);
+      return next;
+    });
+  };
+
+  const setPersonelIslemGecmisiWithSync = (updater: PersonelIslemGecmisi[] | ((p: PersonelIslemGecmisi[]) => PersonelIslemGecmisi[])) => {
+    setPersonelIslemGecmisi(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setTimeout(() => syncArrayToFirestore('personelIslemGecmisi', prev, next), 0);
+      return next;
+    });
+  };
+
+  const setCariIslemGecmisiWithSync = (updater: CariKartIslem[] | ((c: CariKartIslem[]) => CariKartIslem[])) => {
+    setCariIslemGecmisi(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setTimeout(() => syncArrayToFirestore('cariIslemGecmisi', prev, next), 0);
+      return next;
+    });
+  };
+
+  const setStokIslemGecmisiWithSync = (updater: StokKartIslem[] | ((s: StokKartIslem[]) => StokKartIslem[])) => {
+    setStokIslemGecmisi(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setTimeout(() => syncArrayToFirestore('stokIslemGecmisi', prev, next), 0);
       return next;
     });
   };
@@ -1439,13 +1561,37 @@ export default function App() {
 
               {activeTab === "kibar_hakedis" && (
                 (currentUser?.email?.toLowerCase() === 'sametatak9@gmail.com' || currentUser?.email?.toLowerCase() === 'santiye@kibritci.com') ? (
-                  <KibarHakedisScreen 
+                  <KibarHakedisScreen
                     personeller={personeller}
                     yoklamalar={yoklamalar}
                     sahaFaaliyetleri={sahaFaaliyetleri}
                     currentUser={currentUser}
                   />
                 ) : renderAccessDenied()
+              )}
+
+              {activeTab === "operator" && (
+                <OperatorScreen
+                  araclar={araclar}
+                  personeller={personeller}
+                  cariKartlar={cariKartlar}
+                  operatorFaaliyetleri={operatorFaaliyetleri}
+                  setOperatorFaaliyetleri={setOperatorFaaliyetleriWithSync}
+                  taseronKesintiRaporlari={taseronKesintiRaporlari}
+                  setTaseronKesintiRaporlari={setTaseronKesintiRaporlariWithSync}
+                  currentUser={currentUser}
+                  addNotification={addNotification}
+                />
+              )}
+
+              {activeTab === "maas_odeme" && (
+                <MaasOdeScreen
+                  personeller={personeller}
+                  yoklamalar={yoklamalar}
+                  maasOdemeleri={maasOdemeleri}
+                  setMaasOdemeleri={setMaasOdemeleriWithSync}
+                  currentUser={currentUser}
+                />
               )}
             </>
           )}

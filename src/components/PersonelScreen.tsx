@@ -1,25 +1,25 @@
 import React, { useState } from 'react';
-import { 
-  Users, UserPlus, Trash2, Edit3, Camera, 
-  Search, ShieldCheck, Mail, Phone, MapPin, DollarSign, UserX,
-  FileText, UploadCloud, CheckCircle2, AlertCircle, Loader2
-} from 'lucide-react';
+import { Users, UserPlus, Trash2, CreditCard as Edit3, Camera, Search, ShieldCheck, Mail, Phone, MapPin, DollarSign, UserX, FileText, CloudUpload as UploadCloud, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, Loader as Loader2, Building2, History, Download } from 'lucide-react';
 import { Personel } from '../types/erp';
 
 interface PersonelScreenProps {
   personeller: Personel[];
   setPersoneller: React.Dispatch<React.SetStateAction<Personel[]>>;
+  cariKartlar?: any[];
 }
 
-export const PersonelScreen: React.FC<PersonelScreenProps> = ({ 
-  personeller, 
-  setPersoneller 
+export const PersonelScreen: React.FC<PersonelScreenProps> = ({
+  personeller,
+  setPersoneller,
+  cariKartlar = []
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPersonel, setSelectedPersonel] = useState<Personel | null>(null);
   const [dismissingPersonel, setDismissingPersonel] = useState<Personel | null>(null);
   const [dismissDateStr, setDismissDateStr] = useState<string>("");
-  
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyPersonel, setHistoryPersonel] = useState<Personel | null>(null);
+
   // SGK PDF parsing states
   const [regMethod, setRegMethod] = useState<'manual' | 'sgk_pdf'>('manual');
   const [isParsing, setIsParsing] = useState(false);
@@ -85,7 +85,6 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
 
         const parsed = resData.data;
 
-        // Populate formData and automatically switch back to manual registration so they can see and complete it
         setFormData(prev => ({
           ...prev,
           tcNo: parsed.tcNo || prev.tcNo,
@@ -122,7 +121,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     };
     reader.readAsDataURL(file);
   };
-  
+
   // Form States (for creating/updating)
   const emptyForm: Omit<Personel, 'id'> = {
     tcNo: "",
@@ -146,6 +145,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     subeAdi: "",
     ibanNo: "TR",
     durum: true,
+    firmaTipi: 'ANA_FIRMA',
+    firmaAdi: 'Kibritçi İnşaat',
   };
 
   const [formData, setFormData] = useState<Omit<Personel, 'id'> | Personel>(emptyForm);
@@ -226,12 +227,51 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     return fullName.includes(term) || p.tcNo.includes(term) || p.gorev.toLowerCase().includes(term);
   });
 
+  const handleShowHistory = (p: Personel) => {
+    setHistoryPersonel(p);
+    setShowHistoryModal(true);
+  };
+
+  const generateHistoryReport = () => {
+    if (!historyPersonel) return;
+    const html = `
+      <html>
+        <head><meta charset="utf-8"><title>Personel Geçmiş Raporu</title></head>
+        <body style="font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto;">
+          <div style="text-align: center; border-bottom: 3px solid #1e3a5f; padding-bottom: 20px; margin-bottom: 30px;">
+            <h1 style="color: #1e3a5f; margin: 0; font-size: 24px;">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h1>
+            <p style="color: #666; margin: 5px 0; font-size: 12px;">PERSONEL GEÇMİŞ RAPORU</p>
+            <p style="color: #999; font-size: 11px;">${historyPersonel.ad} ${historyPersonel.soyad} - ${historyPersonel.tcNo}</p>
+          </div>
+          <div style="font-size: 12px; line-height: 1.8;">
+            <p><strong>Ad Soyad:</strong> ${historyPersonel.ad} ${historyPersonel.soyad}</p>
+            <p><strong>TC No:</strong> ${historyPersonel.tcNo}</p>
+            <p><strong>Görev:</strong> ${historyPersonel.gorev}</p>
+            <p><strong>Departman:</strong> ${historyPersonel.departman}</p>
+            <p><strong>İşe Giriş:</strong> ${historyPersonel.iseGirisTarihi || '-'}</p>
+            <p><strong>Durum:</strong> ${historyPersonel.durum ? 'Aktif' : 'Pasif'} ${historyPersonel.istenCikisTarihi ? '(Çıkış: ' + historyPersonel.istenCikisTarihi + ')' : ''}</p>
+            <p><strong>Firma:</strong> ${historyPersonel.firmaAdi || 'Kibritçi İnşaat'} ${historyPersonel.firmaTipi === 'TASERON' ? '(Taşeron)' : '(Ana Firma)'}</p>
+            <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;" />
+            <p><em>Bu rapor personel kartı üzerinden otomatik oluşturulmuştur. İlişkili işlemler (izin, maaş, araç KM, kamp kaydı vb.) burada listelenecektir.</em></p>
+          </div>
+        </body>
+      </html>
+    `;
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Personel_Gecmisi_${historyPersonel.tcNo}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="flex-grow p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col lg:flex-row font-sans gap-6 select-none bg-slate-50/50">
-      
+
       {/* SOLID 40% LEFT PANEL: Dynamic Drawer for Create/Edit */}
       <div className="w-[430px] shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
-        
+
         {/* Header card indicator */}
         <div className="bg-[#2563EB] text-slate-100 p-4 shrink-0 flex items-center justify-between">
           <div className="space-y-1">
@@ -371,18 +411,18 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                 </button>
               </div>
             )}
-          
+
           {/* Kimlik block */}
           <div className="space-y-3">
             <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">
               Genel Künye
             </h4>
-            
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">TC Kimlik No *</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   name="tcNo"
                   maxLength={11}
                   value={formData.tcNo}
@@ -393,7 +433,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Cinsiyet</label>
-                <select 
+                <select
                   name="cinsiyet"
                   value={formData.cinsiyet}
                   onChange={handleInputChange}
@@ -408,8 +448,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Adı *</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   name="ad"
                   value={formData.ad}
                   onChange={handleInputChange}
@@ -419,8 +459,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Soyadı *</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   name="soyad"
                   value={formData.soyad}
                   onChange={handleInputChange}
@@ -433,8 +473,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Baba Adı</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   name="babaAdi"
                   value={formData.babaAdi}
                   onChange={handleInputChange}
@@ -443,8 +483,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Doğum Tarihi</label>
-                <input 
-                  type="date" 
+                <input
+                  type="date"
                   name="dogumTarihi"
                   value={formData.dogumTarihi}
                   onChange={handleInputChange}
@@ -462,8 +502,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Telefon No</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   name="telefonNo"
                   value={formData.telefonNo}
                   onChange={handleInputChange}
@@ -473,8 +513,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">E-Posta</label>
-                <input 
-                  type="email" 
+                <input
+                  type="email"
                   name="eposta"
                   value={formData.eposta}
                   onChange={handleInputChange}
@@ -486,7 +526,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
 
             <div>
               <label className="text-[10px] font-bold text-slate-500 uppercase">Açık Adres</label>
-              <textarea 
+              <textarea
                 name="adres"
                 value={formData.adres}
                 onChange={handleInputChange}
@@ -499,8 +539,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">İkamet İl</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   name="il"
                   value={formData.il}
                   onChange={handleInputChange}
@@ -509,8 +549,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">İkamet İlçe</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   name="ilce"
                   value={formData.ilce}
                   onChange={handleInputChange}
@@ -520,16 +560,75 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
             </div>
           </div>
 
+          {/* Firma Seçimi */}
+          <div className="space-y-3 pt-2">
+            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">
+              Firma Bağlılığı
+            </h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Firma Tipi</label>
+                <select
+                  name="firmaTipi"
+                  value={formData.firmaTipi || 'ANA_FIRMA'}
+                  onChange={handleInputChange}
+                  className="w-full text-xs border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50"
+                >
+                  <option value="ANA_FIRMA">Ana Firma (Kibritçi)</option>
+                  <option value="TASERON">Taşeron Firma</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Firma Adı</label>
+                {formData.firmaTipi === 'TASERON' ? (
+                  <select
+                    name="firmaAdi"
+                    value={formData.firmaAdi || ''}
+                    onChange={handleInputChange}
+                    className="w-full text-xs border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50"
+                  >
+                    <option value="">Taşeron Seçin</option>
+                    {cariKartlar.filter(c => c.tur === 'TASERON').map(c => (
+                      <option key={c.id} value={c.unvan}>{c.unvan}</option>
+                    ))}
+                    <option value="MANUEL">Manuel Giriş (Diğer)</option>
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    name="firmaAdi"
+                    value={formData.firmaAdi || 'Kibritçi İnşaat'}
+                    readOnly
+                    className="w-full text-xs border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-100 text-slate-500"
+                  />
+                )}
+              </div>
+            </div>
+            {formData.firmaTipi === 'TASERON' && formData.firmaAdi === 'MANUEL' && (
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Firma Adı (Manuel)</label>
+                <input
+                  type="text"
+                  name="firmaAdi"
+                  value={formData.firmaAdi === 'MANUEL' ? '' : (formData.firmaAdi || '')}
+                  onChange={handleInputChange}
+                  className="w-full text-xs border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50"
+                  placeholder="Taşeron firma adı..."
+                />
+              </div>
+            )}
+          </div>
+
           {/* Görev & Finansal block */}
           <div className="space-y-3 pt-2">
             <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">
               Görev &amp; Hak Ediş Bilgileri
             </h4>
-            
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Departman</label>
-                <select 
+                <select
                   name="departman"
                   value={formData.departman}
                   onChange={handleInputChange}
@@ -541,7 +640,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Görev/Ünvan</label>
-                <select 
+                <select
                   name="gorev"
                   value={formData.gorev}
                   onChange={handleInputChange}
@@ -562,8 +661,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">İşe Giriş Tarihi</label>
-                <input 
-                  type="date" 
+                <input
+                  type="date"
                   name="iseGirisTarihi"
                   value={formData.iseGirisTarihi}
                   onChange={handleInputChange}
@@ -572,7 +671,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">SGK Durumu</label>
-                <select 
+                <select
                   name="sgkDurumu"
                   value={formData.sgkDurumu}
                   onChange={handleInputChange}
@@ -588,8 +687,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Maaş (Brüt) *</label>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   name="maas"
                   value={formData.maas}
                   onChange={handleInputChange}
@@ -599,7 +698,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Ücret Tipi</label>
-                <select 
+                <select
                   name="ucretTipi"
                   value={formData.ucretTipi}
                   onChange={handleInputChange}
@@ -621,8 +720,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Banka Adı</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   name="bankaAdi"
                   value={formData.bankaAdi}
                   onChange={handleInputChange}
@@ -632,8 +731,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Şube Adı</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   name="subeAdi"
                   value={formData.subeAdi}
                   onChange={handleInputChange}
@@ -645,8 +744,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
 
             <div>
               <label className="text-[10px] font-bold text-slate-500 uppercase">IBAN Numarası</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 name="ibanNo"
                 value={formData.ibanNo}
                 onChange={handleInputChange}
@@ -660,18 +759,18 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
           <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100 my-4">
             <span className="text-xs font-bold text-slate-700">İstihdam Durumu:</span>
             <label className="relative inline-flex items-center cursor-pointer">
-              <input 
-                type="checkbox" 
-                className="sr-only peer" 
+              <input
+                type="checkbox"
+                className="sr-only peer"
                 checked={formData.durum}
                 onChange={(e) => {
                   const isChecked = e.target.checked;
-                  setFormData(prev => ({ 
-                    ...prev, 
+                  setFormData(prev => ({
+                    ...prev,
                     durum: isChecked,
                     istenCikisTarihi: isChecked ? undefined : (prev.istenCikisTarihi || new Date().toISOString().split('T')[0])
                   }));
-                }} 
+                }}
               />
               <div className="w-11 h-6 bg-red-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
               <span className={`ml-2 text-xs font-bold ${formData.durum ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -683,9 +782,9 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
           {!formData.durum && (
             <div className="p-3 bg-rose-50 border border-rose-100 rounded-lg space-y-1.5 animate-fade-in my-3">
               <label className="text-[10px] font-bold text-rose-800 uppercase block">İşten Çıkış / Ayrılma Tarihi *</label>
-              <input 
+              <input
                 required
-                type="date" 
+                type="date"
                 name="istenCikisTarihi"
                 value={formData.istenCikisTarihi || ''}
                 onChange={handleInputChange}
@@ -702,13 +801,13 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
         {/* Action button bar */}
         {(regMethod === 'manual' || ('id' in formData)) && (
           <div className="p-4 border-t border-slate-100 flex gap-2 bg-slate-50/50">
-            <button 
+            <button
               onClick={handleSave}
               className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] transition cursor-pointer text-white font-bold text-xs py-2.5 rounded-xl shadow-md"
             >
               { 'id' in formData ? "Verileri Güncelle" : "Kaydı Tamamla" }
             </button>
-            <button 
+            <button
               type="button"
               onClick={handleClearForm}
               className="bg-slate-500 hover:bg-slate-600 text-white font-bold text-xs py-2.5 px-4 rounded-xl transition active:scale-[0.98]"
@@ -721,7 +820,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
 
       {/* SOLID 60% RIGHT PANEL: Quick filter table list */}
       <div className="flex-1 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
-        
+
         {/* Search header bar */}
         <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-4 bg-slate-550/10">
           <div className="flex items-center space-x-2">
@@ -730,7 +829,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               Kayıtlı Personel Kadrosu
             </h4>
           </div>
-          
+
           <div className="relative w-64">
             <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
               <span className="text-xs">🔍</span>
@@ -756,14 +855,14 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
             filteredPersonel.map((p) => {
               const isActive = p.durum;
               const isSelected = selectedPersonel?.id === p.id;
-              
+
               return (
-                <div 
+                <div
                   key={p.id}
                   onClick={() => handleSelectPersonel(p)}
                   className={`p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs transition duration-200 cursor-pointer ${
-                    isSelected 
-                      ? 'bg-blue-50/70 border-blue-500/50 shadow-sm' 
+                    isSelected
+                      ? 'bg-blue-50/70 border-blue-500/50 shadow-sm'
                       : 'bg-white border-slate-100 hover:border-slate-200 hover:bg-slate-50/50'
                   }`}
                 >
@@ -786,6 +885,11 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                         {!is_aktif_status(p.durum) && p.istenCikisTarihi && (
                           <span className="text-[10px] bg-red-50 text-rose-700 border border-rose-100 px-2 py-0.5 rounded-full font-bold">
                             Ayrılış: {p.istenCikisTarihi}
+                          </span>
+                        )}
+                        {p.firmaTipi === 'TASERON' && (
+                          <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-100 px-2 py-0.5 rounded-full font-bold">
+                            {p.firmaAdi || 'Taşeron'}
                           </span>
                         )}
                       </h4>
@@ -817,6 +921,17 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2 border-l pl-3 border-slate-100">
+                      <button
+                        title="Geçmiş Raporu"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleShowHistory(p);
+                        }}
+                        className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg cursor-pointer transition active:scale-95"
+                      >
+                        <History size={13} />
+                      </button>
+
                       <button
                         title="Bilgileri Düzenle"
                         onClick={(e) => {
@@ -869,14 +984,14 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               <UserX size={20} />
               <h3 className="font-display font-bold text-sm uppercase tracking-wider">Personel İşten Çıkarma</h3>
             </div>
-            
+
             <p className="text-xs text-slate-600 leading-relaxed">
               <strong>{dismissingPersonel.ad} {dismissingPersonel.soyad}</strong> isimli personelin işten çıkış kaydı yapılacaktır. Lütfen ayrılma tarihini belirleyin:
             </p>
 
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-slate-500 uppercase block">İşten Çıkış/Ayrılma Tarihi *</label>
-              <input 
+              <input
                 type="date"
                 required
                 value={dismissDateStr}
@@ -893,7 +1008,6 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                     alert("Lütfen geçerli bir tarih seçin.");
                     return;
                   }
-                  // Perform the dismissal save
                   setPersoneller(prev => prev.map(p => {
                     if (p.id === dismissingPersonel.id) {
                       return {
@@ -905,7 +1019,6 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                     return p;
                   }));
 
-                  // If this personnel is currently selected in form, update form data as well
                   if (formData && 'id' in formData && formData.id === dismissingPersonel.id) {
                     setFormData(prev => ({
                       ...prev,
@@ -927,6 +1040,62 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                 className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-2 px-4 rounded-xl transition cursor-pointer select-none"
               >
                 Vazgeç
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* GEÇMİŞ RAPORU MODALİ */}
+      {showHistoryModal && historyPersonel && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl border border-slate-150 p-6 w-[500px] max-w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 text-blue-600">
+                <History size={20} />
+                <h3 className="font-display font-bold text-sm uppercase tracking-wider">Personel Geçmiş Raporu</h3>
+              </div>
+              <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-slate-600 text-lg">×</button>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-xs">
+              <p><strong>Ad Soyad:</strong> {historyPersonel.ad} {historyPersonel.soyad}</p>
+              <p><strong>TC No:</strong> {historyPersonel.tcNo}</p>
+              <p><strong>Görev:</strong> {historyPersonel.gorev}</p>
+              <p><strong>Departman:</strong> {historyPersonel.departman}</p>
+              <p><strong>İşe Giriş:</strong> {historyPersonel.iseGirisTarihi || '-'}</p>
+              <p><strong>Durum:</strong> {historyPersonel.durum ? 'Aktif' : 'Pasif'} {historyPersonel.istenCikisTarihi ? `(Çıkış: ${historyPersonel.istenCikisTarihi})` : ''}</p>
+              <p><strong>Firma:</strong> {historyPersonel.firmaAdi || 'Kibritçi İnşaat'} {historyPersonel.firmaTipi === 'TASERON' ? '(Taşeron)' : '(Ana Firma)'}</p>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">İlişkili İşlemler</p>
+              <div className="space-y-1 text-[10px] text-slate-500">
+                <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                  <FileText size={12} className="text-blue-500" />
+                  <span>İzin Dilekçeleri (bu modül entegrasyonu sonraki aşamada eklenecektir)</span>
+                </div>
+                <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                  <FileText size={12} className="text-amber-500" />
+                  <span>Araç KM Girişleri (bu modül entegrasyonu sonraki aşamada eklenecektir)</span>
+                </div>
+                <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                  <FileText size={12} className="text-emerald-500" />
+                  <span>Kamp Kayıtları (bu modül entegrasyonu sonraki aşamada eklenecektir)</span>
+                </div>
+                <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                  <FileText size={12} className="text-rose-500" />
+                  <span>Maaş Hakedişleri (bu modül entegrasyonu sonraki aşamada eklenecektir)</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button onClick={generateHistoryReport} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2 rounded-xl transition cursor-pointer flex items-center justify-center gap-1">
+                <Download size={12} /> Raporu İndir
+              </button>
+              <button onClick={() => setShowHistoryModal(false)} className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-2 px-4 rounded-xl transition cursor-pointer">
+                Kapat
               </button>
             </div>
           </div>

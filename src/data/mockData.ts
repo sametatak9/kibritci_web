@@ -269,3 +269,58 @@ export const INITIAL_EPOSTA: EpostaGonderim[] = [
     tarih: "2026-06-18"
   }
 ];
+
+import { OperatorFaaliyet, TaseronKesintiRaporu, MaaşOdeme, PersonelIslemGecmisi, CariKartIslem, StokKartIslem, IzinDilekcesi, IhbarTutanagi } from '../types/erp';
+
+export const INITIAL_OPERATOR_FAALIYET: OperatorFaaliyet[] = [
+  {
+    id: "of_1",
+    aracId: "a2",
+    aracPlaka: "EXC-CAT-320",
+    operatorPersonelId: "p1",
+    operatorIsim: "Ahmet Yılmaz",
+    operatorTipi: "JCB",
+    tarih: "2026-06-20",
+    baslangicSaat: "08:00",
+    bitisSaat: "17:00",
+    calismaSuresi: 9,
+    yapilanIs: "Parsel B zemin kazma ve hafriyat",
+    firmaAdi: "Yıldız Elektrik Tesisat",
+    firmaId: "c2",
+    onayDurumu: "ONAYLANDI",
+    kaydedenKullanici: "santiye@kibritci.com",
+    kayitTarihi: "2026-06-20T17:30:00"
+  },
+  {
+    id: "of_2",
+    aracId: "a2",
+    aracPlaka: "EXC-CAT-320",
+    operatorPersonelId: "p1",
+    operatorIsim: "Ahmet Yılmaz",
+    operatorTipi: "JCB",
+    tarih: "2026-06-21",
+    baslangicSaat: "08:00",
+    bitisSaat: "16:00",
+    calismaSuresi: 8,
+    yapilanIs: "Parsel B temel kazısı",
+    firmaAdi: "Demir A.Ş.",
+    firmaId: "c1",
+    onayDurumu: "ONAYLANDI",
+    kaydedenKullanici: "santiye@kibritci.com",
+    kayitTarihi: "2026-06-21T16:30:00"
+  }
+];
+
+export const INITIAL_TASERON_KESINTI: TaseronKesintiRaporu[] = [];
+
+export const INITIAL_MAAS_ODEME: MaaşOdeme[] = [];
+
+export const INITIAL_PERSONEL_ISLEM: PersonelIslemGecmisi[] = [];
+
+export const INITIAL_CARI_ISLEM: CariKartIslem[] = [];
+
+export const INITIAL_STOK_ISLEM: StokKartIslem[] = [];
+
+export const INITIAL_IZIN_DILEKCE: IzinDilekcesi[] = [];
+
+export const INITIAL_IHBAR_TUTANAK: IhbarTutanagi[] = [];

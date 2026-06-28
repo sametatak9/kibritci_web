@@ -24,6 +24,8 @@ export interface Personel {
   durum: boolean;
   fotografUrl?: string;
   sigortaEvrakUrl?: string;
+  firmaTipi?: 'ANA_FIRMA' | 'TASERON';
+  firmaAdi?: string;
 }
 
 export type YoklamaDurum = 'Geldi' | 'Yok' | 'İzinli' | 'Raporlu' | 'Pazar' | 'Tatil' | 'Girilmedi';
@@ -51,10 +53,10 @@ export interface SatinAlmaItem {
 
 export interface SatinAlmaTalebi {
   id: string;
-  saId: string; // e.g. SA-20260619-A3DE
+  saId: string;
   tarih: string;
   talepEden: string;
-  cariFirma: string; // e.g. Demir A.Ş.
+  cariFirma: string;
   aciklama: string;
   onayDurumu: 'ONAY BEKLİYOR' | '1. ONAY TAMAMLANDI' | '2. ONAY TAMAMLANDI' | 'REDDEDİLDİ' | 'KAPATILDI';
   imzaliEvrakUrl?: string;
@@ -74,14 +76,14 @@ export interface IrsaliyeItem {
 
 export interface Irsaliye {
   id: string;
-  irsaliyeId: string; // IR-20260619-3EF2
+  irsaliyeId: string;
   irsaliyeNo: string;
-  saId?: string; // Links back to Purchases (SA ID)
+  saId?: string;
   firma: string;
   tarih: string;
   onayDurumu: 'ONAY BEKLİYOR' | '1. ONAY TAMAMLANDI' | '2. ONAY TAMAMLANDI' | 'FARK VAR — YÖNETİCİ BİLDİRİLDİ';
   imzaliEvrakUrl?: string;
-  fisEvrakUrl?: string; // Attachment Waybill Photo
+  fisEvrakUrl?: string;
   karsilastirmaRaporu?: string;
   kalemler: IrsaliyeItem[];
   eImzalar?: string[];
@@ -93,7 +95,7 @@ export interface FaturaItem {
   miktar: number;
   birim: string;
   birimFiyat: number;
-  kdvOran: number; // e.g. 20
+  kdvOran: number;
   toplam: number;
   stokKartId?: string;
 }
@@ -105,7 +107,7 @@ export interface Fatura {
   cariKartId: string;
   cariUnvan: string;
   saId?: string;
-  toplamTutar: number; // sum(kalemler * fiyat)
+  toplamTutar: number;
   kdvTutar: number;
   genelToplam: number;
   durum: 'KONTROL BEKLEYOR' | 'UYUMLU' | 'FARK VAR' | 'ONAYLANDI';
@@ -113,7 +115,7 @@ export interface Fatura {
   evrakUrl?: string;
   imzaliEvrakUrl?: string;
   kalemler: FaturaItem[];
-  bagliIrsaliyeler: string[]; // irsaliyeId list
+  bagliIrsaliyeler: string[];
   eImzalar?: string[];
 }
 
@@ -167,7 +169,7 @@ export interface Demisbas {
 export interface Tahsis {
   id: string;
   tahsisTipi: 'ARAC' | 'DEMIRBAS';
-  kaynakId: string; // aracId or demirbasId
+  kaynakId: string;
   personelId?: string;
   cariKartId?: string;
   tahsisTarihi: string;
@@ -221,12 +223,12 @@ export interface SahaFaaliyeti {
   id: string;
   personelId: string;
   tarih: string;
-  isNiteligi: string; // e.g. Anahtarcı, Beton döküm
-  parsel: string; // e.g. Parsel A
-  blok: string; // e.g. Blok 3
+  isNiteligi: string;
+  parsel: string;
+  blok: string;
   aciklama: string;
   fotoUrl?: string;
-  aktifPersonelListesi?: string[]; // Aktif sahaya çıkan personel listesi
+  aktifPersonelListesi?: string[];
   ustaSayisi?: number;
   isciSayisi?: number;
 }
@@ -291,15 +293,18 @@ export interface EpostaGonderim {
 
 export interface OperatorFaaliyet {
   id: string;
-  aracId: string; // Plaka / Machine id
-  operatorIsim: string; // Operator personnel name
+  aracId: string;
+  aracPlaka?: string;
+  operatorPersonelId?: string;
+  operatorIsim: string;
   operatorTipi: 'JCB' | 'KATO' | 'KİRALIK' | 'DİĞER';
   tarih: string;
   baslangicSaat: string;
   bitisSaat: string;
-  calismaSuresi: number; // Hours
+  calismaSuresi: number;
   yapilanIs: string;
-  firmaAdi: string; // Client/Subcontractor
+  firmaAdi: string;
+  firmaId?: string;
   isManualFirma?: boolean;
   fotoUrl?: string;
   temsilciAdSoyad?: string;
@@ -307,12 +312,128 @@ export interface OperatorFaaliyet {
   operatorTc?: string;
   kesintiYansitildi?: boolean;
   onayDurumu: 'BEKLEMEDE' | 'ONAYLANDI' | 'REDDEDİLDİ';
+  kaydedenKullanici?: string;
+  kayitTarihi?: string;
+}
+
+export interface TaseronKesintiRaporu {
+  id: string;
+  taseronFirmaAdi: string;
+  taseronFirmaId?: string;
+  donemAy: string;
+  donemYil: string;
+  toplamSaat: number;
+  kesintiTutari: number;
+  saatlikUcret: number;
+  faaliyetler: OperatorFaaliyet[];
+  onayDurumu: 'TASLAK' | 'ONAYLANDI' | 'GONDERILDI';
+  olusturanKullanici: string;
+  olusturmaTarihi: string;
+  gonderimTarihi?: string;
+  epostaGonderildi?: boolean;
+  epostaKonusu?: string;
+  epostaIcerik?: string;
+}
+
+export interface MaaşOdeme {
+  id: string;
+  personelId: string;
+  personelAdSoyad: string;
+  ay: number;
+  yil: number;
+  brutMaas: number;
+  mesaiUcreti: number;
+  toplamHakedis: number;
+  kesintiToplami: number;
+  netOdeme: number;
+  odendi: boolean;
+  odemeTarihi?: string;
+  odemeYapanKullanici?: string;
+  iban: string;
+  bankaAdi: string;
+  tcNo: string;
+  kesintiler: MaasKesinti[];
+  notlar?: string;
+}
+
+export interface MaasKesinti {
+  id: string;
+  tur: 'AVANS' | 'CEZA' | 'DAMGA_VERGISI' | 'SGK_PRIMI' | 'GELIR_VERGISI' | 'DIGER';
+  aciklama: string;
+  tutar: number;
+  tarih: string;
+}
+
+export interface PersonelIslemGecmisi {
+  id: string;
+  personelId: string;
+  islemTipi: 'IZIN' | 'MAAS_ODEME' | 'ARAC_KM' | 'KAMP_KAYIT' | 'TUTANAK' | 'OPERATOR_FAALIYET' | 'SATIN_ALMA' | 'YOKLAMA' | 'DIGER';
+  islemId: string;
+  islemBaslik: string;
+  islemDetay: string;
+  tarih: string;
+  ilgiliKisi?: string;
+}
+
+export interface CariKartIslem {
+  id: string;
+  cariKartId: string;
+  islemTipi: 'SATIN_ALMA' | 'IRSALIYE' | 'FATURA' | 'KASA_HAREKETI' | 'OPERATOR_KESINTI' | 'DIGER';
+  islemId: string;
+  islemBaslik: string;
+  islemDetay: string;
+  tutar?: number;
+  tarih: string;
+  belgeNo?: string;
+}
+
+export interface StokKartIslem {
+  id: string;
+  stokKartId: string;
+  islemTipi: 'GIRIS' | 'CIKIS' | 'SAYIM' | 'DEGISIM' | 'DIGER';
+  islemId: string;
+  islemBaslik: string;
+  islemDetay: string;
+  miktarDegisimi: number;
+  tarih: string;
+  belgeNo?: string;
+}
+
+export interface IzinDilekcesi {
+  id: string;
+  personelId: string;
+  personelAdSoyad: string;
+  izinTipi: 'YILLIK_IZIN' | 'HASTALIK' | 'DOGUM' | 'OLUM' | 'EVLILIK' | 'DIGER';
+  baslangicTarihi: string;
+  bitisTarihi: string;
+  gunSayisi: number;
+  aciklama: string;
+  onayDurumu: 'BEKLEMEDE' | 'ONAYLANDI' | 'REDDEDILDI';
+  talepTarihi: string;
+  onaylayanKullanici?: string;
+  onayTarihi?: string;
+}
+
+export interface IhbarTutanagi {
+  id: string;
+  personelId: string;
+  personelAdSoyad: string;
+  ihbarTipi: 'FIILI_AYRILMA' | 'SOZLESME_FESIH' | 'ISTIFA' | 'DIGER';
+  ihbarTarihi: string;
+  sonCalismaTarihi: string;
+  ihbarSuresiGun: number;
+  aciklama: string;
+  temlikEdilenMalzemeler?: string;
+  imzaliEvrakUrl?: string;
+  durum: 'TASLAK' | 'ONAYLANDI' | 'ARŞIV';
+  olusturanKullanici: string;
+  olusturmaTarihi: string;
 }
 
 export interface YapayZekaEslesme {
   id: string;
   tarih: string;
-  saId: string; // Satin alma Talep ID
+  saId: string;
   irsaliyeNo: string;
   faturaNo?: string;
   cariFirma: string;
