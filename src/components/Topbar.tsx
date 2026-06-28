@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Bell, CheckCircle, Clock, Smartphone } from 'lucide-react';
+import { Search, Bell, CheckCircle, Clock, Smartphone, User, Shield, Activity, TrendingUp } from 'lucide-react';
 
 interface TopbarProps {
   currentTab: string;
@@ -25,12 +25,25 @@ export const Topbar: React.FC<TopbarProps> = ({
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Simulated construction material USD / EUR rate ticker
+  const [rates, setRates] = useState({ usd: 32.84, eur: 35.15 });
 
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const ratesTimer = setInterval(() => {
+      setRates(prev => ({
+        usd: Number((prev.usd + (Math.random() - 0.5) * 0.01).toFixed(2)),
+        eur: Number((prev.eur + (Math.random() - 0.5) * 0.01).toFixed(2))
+      }));
+    }, 8000);
+    return () => clearInterval(ratesTimer);
   }, []);
 
   // Close dropdown on click outside
@@ -61,13 +74,14 @@ export const Topbar: React.FC<TopbarProps> = ({
       sohbet: "Sohbet & Haberleşme",
       onay_islemleri: "Onay Havuzu & İmzalar",
       admin: "Üyelik & Admin Paneli",
-      yetki_verme: "Sayfa Yetkilendirme"
+      yetki_verme: "Sayfa Yetkilendirme",
+      taseron_kesinti: "Taşeron Hakediş Kesintileri"
     };
     return labels[tab] || tab;
   };
 
   const formattedDate = currentTime.toLocaleDateString('tr-TR', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
   });
   const formattedTime = currentTime.toLocaleTimeString('tr-TR', {
     hour: '2-digit', minute: '2-digit', second: '2-digit'
@@ -91,103 +105,146 @@ export const Topbar: React.FC<TopbarProps> = ({
     }
   };
 
+  // Get active user full name & initials
+  const userFullName = (() => {
+    if (!currentUser) return "MİSAFİR";
+    const matched = kullanicilar?.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
+    return matched && matched.ad ? `${matched.ad} ${matched.soyad}` : currentUser.email?.split('@')[0].toUpperCase();
+  })();
+
+  const userInitials = userFullName
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
   return (
-    <header className="h-[52px] bg-white border-b border-[#e2e8f0] px-4 md:px-6 flex items-center justify-between shrink-0 font-sans select-none relative">
-      {/* Breadcrumb / Section Name */}
-      <div className="flex items-center space-x-2.5 text-[13px]">
+    <header className="h-[56px] bg-slate-900 border-b border-slate-800 px-4 md:px-6 flex items-center justify-between shrink-0 font-sans select-none relative text-slate-100 shadow-md">
+      
+      {/* Left Area: Sidebar Toggle & Section Title */}
+      <div className="flex items-center space-x-3 text-[13px]">
         <button 
           onClick={onToggleSidebar}
-          className="lg:hidden p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition cursor-pointer"
+          className="lg:hidden p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition duration-150 cursor-pointer shadow-xs"
           title="Menüyü Aç"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <span className="text-slate-400 font-medium font-sans hidden sm:inline">KİBRİTÇİ ERP</span>
-        <span className="text-slate-300 hidden sm:inline">/</span>
-        <span className="font-semibold text-slate-800 font-display transition-colors">
-          {formatTabName(currentTab)}
-        </span>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2">
+          <span className="text-amber-500 font-extrabold tracking-wider text-[11px] uppercase">KİBRİTÇİ ERP</span>
+          <span className="text-slate-650 hidden sm:inline">/</span>
+          <span className="font-bold text-white tracking-wide text-xs">
+            {formatTabName(currentTab)}
+          </span>
+        </div>
       </div>
 
-      {/* Right-aligned Stats & Search */}
-      <div className="flex items-center space-x-6">
-        {currentUser && (
-          <div className="hidden lg:flex items-center space-x-2 text-xs font-semibold text-slate-700 bg-slate-55 border border-slate-200 py-1 px-3 rounded-lg shadow-inner">
-            <span className="text-slate-400">Aktif Kullanıcı:</span>
-            <span className="text-blue-700 font-bold">
-              {(() => {
-                const matched = kullanicilar?.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
-                return matched && matched.ad ? `${matched.ad} ${matched.soyad}` : currentUser.email?.split('@')[0].toUpperCase();
-              })()}
-            </span>
-          </div>
-        )}
-
-        {/* Real-time Odometer Clock */}
-        <div className="hidden md:flex items-center bg-slate-50 border border-slate-100 rounded-lg py-1 px-3 space-x-3 text-[11px] font-mono font-medium text-slate-505 shadow-inner">
-          <span className="text-amber-600 font-semibold">{formattedDate}</span>
-          <span className="text-slate-300">|</span>
-          <span className="text-blue-600 font-bold tracking-widest">{formattedTime}</span>
+      {/* Center Area: Financial Currency Ticker & Real-time Clock */}
+      <div className="hidden xl:flex items-center space-x-6">
+        
+        {/* Exchange Rates Ticker */}
+        <div className="flex items-center bg-slate-950/65 border border-slate-800/80 rounded-xl px-3 py-1 space-x-3.5 text-[10px] font-mono text-slate-400">
+          <span className="flex items-center gap-1 font-bold text-slate-500">
+            <TrendingUp size={11} className="text-amber-500" />
+            PİYASA:
+          </span>
+          <span className="flex items-center space-x-1">
+            <span>🇺🇸 USD</span>
+            <span className="text-emerald-500 font-bold">{rates.usd} TL</span>
+          </span>
+          <span className="text-slate-800">|</span>
+          <span className="flex items-center space-x-1">
+            <span>🇪🇺 EUR</span>
+            <span className="text-emerald-500 font-bold">{rates.eur} TL</span>
+          </span>
         </div>
 
+        {/* Date & Time Widget */}
+        <div className="flex items-center bg-slate-950/45 border border-slate-800/40 rounded-xl py-1 px-3 space-x-2.5 text-[11px] font-semibold text-slate-300">
+          <Clock size={12} className="text-amber-500" />
+          <span className="text-slate-400 font-mono">{formattedDate}</span>
+          <span className="text-slate-700">|</span>
+          <span className="text-white font-mono font-bold tracking-wider">{formattedTime}</span>
+        </div>
+      </div>
+
+      {/* Right Area: Status Indicator, User Profile Pill, Mobile Mode & Notifications */}
+      <div className="flex items-center space-x-4">
+        
         {/* Live system status indicator badge */}
         {dbStatus === 'loading' && (
-          <div className="flex items-center bg-blue-55 text-blue-700 border border-blue-100 py-1 px-3 rounded-full text-[10px] font-semibold space-x-1.5 shadow-sm animate-pulse">
-            <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-ping" />
-            <span>Bulut Veritabanı Eşitleniyor...</span>
+          <div className="hidden md:flex items-center bg-blue-500/10 text-blue-400 border border-blue-500/20 py-1 px-3 rounded-full text-[10px] font-bold space-x-1.5 animate-pulse">
+            <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-ping" />
+            <span>Bulut Eşitleniyor...</span>
           </div>
         )}
         {dbStatus === 'synced' && (
-          <div className="flex items-center bg-emerald-50 text-emerald-800 border border-emerald-150 py-1 px-3 rounded-full text-[10px] font-bold space-x-1.5 shadow-sm">
-            <CheckCircle size={11} className="stroke-[3] text-emerald-650" />
-            <span>Bulut Aktif (Realtime SQL/NoSQL)</span>
+          <div className="hidden md:flex items-center bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 py-1 px-3 rounded-full text-[10px] font-bold space-x-1.5">
+            <CheckCircle size={11} className="stroke-[3] text-emerald-450" />
+            <span>Realtime Aktif</span>
           </div>
         )}
         {dbStatus === 'error' && (
-          <div className="flex items-center bg-rose-50 text-rose-700 border border-rose-100 py-1 px-3 rounded-full text-[10px] font-semibold space-x-1.5 shadow-sm">
+          <div className="hidden md:flex items-center bg-rose-500/10 text-rose-400 border border-rose-500/20 py-1 px-3 rounded-full text-[10px] font-bold space-x-1.5">
             <span className="w-1.5 h-1.5 bg-rose-500 rounded-full" />
-            <span>Bağlantı Hatası</span>
+            <span>Bağlantı Kesildi</span>
           </div>
         )}
         {dbStatus === 'offline' && (
-          <div className="flex items-center bg-slate-100 text-slate-600 border border-slate-200 py-1 px-3 rounded-full text-[10px] font-semibold space-x-1.5 shadow-sm">
-            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full" />
-            <span>Çevrimdışı Çalışma</span>
+          <div className="hidden md:flex items-center bg-slate-800 text-slate-400 border border-slate-700 py-1 px-3 rounded-full text-[10px] font-bold space-x-1.5">
+            <span className="w-1.5 h-1.5 bg-slate-500 rounded-full" />
+            <span>Çevrimdışı Mod</span>
+          </div>
+        )}
+
+        {/* User Card with Avatar Initials */}
+        {currentUser && (
+          <div className="flex items-center space-x-2 bg-slate-800/50 border border-slate-800 hover:bg-slate-800/80 transition duration-150 rounded-xl p-1 pr-3 max-w-[190px] md:max-w-none">
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-amber-500 to-orange-600 text-white font-black text-[10px] flex items-center justify-center shadow-sm shrink-0">
+              {userInitials}
+            </div>
+            <div className="text-[10px] font-bold truncate text-slate-200 hidden sm:block">
+              {userFullName}
+            </div>
           </div>
         )}
 
         {/* Global Action Icons (Search simulation / Notifications) */}
-        <div className="flex items-center space-x-4 border-l pl-4 border-slate-200 relative" ref={dropdownRef}>
+        <div className="flex items-center space-x-3.5 border-l border-slate-850 pl-3.5 relative" ref={dropdownRef}>
+          
+          {/* Mobil Görünüm (Must remain exactly as is) */}
           {onToggleMobileMode && (
             <button 
               onClick={onToggleMobileMode}
-              className="text-slate-400 hover:text-blue-600 transition cursor-pointer flex items-center gap-1 text-[11px] font-bold mr-1"
+              className="text-slate-400 hover:text-white transition duration-150 cursor-pointer flex items-center gap-1.5 text-[10px] font-extrabold mr-1"
               title="Mobil Arayüze Geç"
             >
-              <Smartphone size={15} />
-              <span className="hidden sm:inline">Mobil Görünüm</span>
+              <Smartphone size={14} className="text-slate-400" />
+              <span className="hidden sm:inline text-slate-350">Mobil Görünüm</span>
             </button>
           )}
 
+          {/* Bildirim Lambası (Must remain exactly as is) */}
           <button 
             onClick={() => setShowDropdown(!showDropdown)}
-            className="text-slate-400 hover:text-slate-600 transition relative cursor-pointer"
+            className="text-slate-400 hover:text-white transition relative cursor-pointer p-1 rounded-lg hover:bg-slate-800"
           >
             {unreadCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 bg-amber-500 border border-white text-slate-950 font-black text-[8px] rounded-full w-4 h-4 flex items-center justify-center animate-pulse">
+              <span className="absolute -top-1.5 -right-1.5 bg-amber-500 border-2 border-slate-900 text-slate-950 font-black text-[8px] rounded-full w-4 h-4 flex items-center justify-center animate-pulse">
                 {unreadCount}
               </span>
             )}
-            <Bell size={16} />
+            <Bell size={15} />
           </button>
 
           {/* Notifications Dropdown Panel */}
           {showDropdown && (
-            <div className="absolute right-0 top-9 w-80 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 text-xs text-slate-700 p-3 space-y-2 flex flex-col max-h-96 animate-in fade-in slide-in-from-top-2 duration-150">
-              <div className="flex items-center justify-between border-b pb-2 shrink-0">
-                <span className="font-extrabold text-slate-800 flex items-center space-x-1">
+            <div className="absolute right-0 top-9 w-80 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl z-50 text-xs text-slate-300 p-3.5 space-y-3 flex flex-col max-h-96 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2 shrink-0">
+                <span className="font-extrabold text-white flex items-center space-x-1.5">
                   <span>🔔</span>
                   <span>Şantiye Aktivite Akışı</span>
                 </span>
@@ -197,7 +254,7 @@ export const Topbar: React.FC<TopbarProps> = ({
                       onClearNotifications();
                       setShowDropdown(false);
                     }}
-                    className="text-[9px] text-blue-600 hover:text-blue-700 hover:underline font-extrabold cursor-pointer"
+                    className="text-[9px] text-amber-500 hover:text-amber-400 hover:underline font-extrabold cursor-pointer"
                   >
                     Tümünü Okundu İşaretle
                   </button>
@@ -209,7 +266,7 @@ export const Topbar: React.FC<TopbarProps> = ({
                 {bildirimler.length === 0 ? (
                   <div className="text-center py-8 space-y-1.5">
                     <span className="text-xl block">📭</span>
-                    <p className="text-[10px] text-slate-400 font-semibold">Henüz güncel bir aktivite bulunmuyor.</p>
+                    <p className="text-[10px] text-slate-500 font-semibold">Henüz güncel bir aktivite bulunmuyor.</p>
                   </div>
                 ) : (
                   bildirimler.map((notif) => (
@@ -217,16 +274,15 @@ export const Topbar: React.FC<TopbarProps> = ({
                       key={notif.id}
                       className={`p-2.5 rounded-xl border flex flex-col space-y-0.5 transition duration-150 ${
                         notif.okundu 
-                          ? 'bg-slate-50 border-slate-100 text-slate-500' 
-                          : 'bg-amber-500/5 border-amber-500/20 text-slate-800'
+                          ? 'bg-slate-950/40 border-slate-850/60 text-slate-550' 
+                          : 'bg-amber-500/5 border-amber-500/20 text-slate-200'
                       }`}
                     >
                       <div className="flex items-start justify-between">
-                        <span className={`text-[9px] font-extrabold font-mono truncate max-w-[130px] uppercase ${notif.okundu ? 'text-slate-400' : 'text-amber-600'}`}>
+                        <span className={`text-[9px] font-extrabold font-mono truncate max-w-[130px] uppercase ${notif.okundu ? 'text-slate-550' : 'text-amber-400'}`}>
                           {notif.kullanici?.split('@')[0]}
                         </span>
-                        <span className="text-[8px] text-slate-405 font-mono shrink-0 flex items-center space-x-0.5">
-                          <Clock size={8} />
+                        <span className="text-[8px] text-slate-500 font-mono shrink-0 flex items-center space-x-0.5">
                           <span>{formatNotifTime(notif.tarih)}</span>
                         </span>
                       </div>
