@@ -140,7 +140,7 @@ export async function seedYoklamaIfEmpty(initialYoklama: any): Promise<any> {
 
 export async function saveYoklamaDocument(yoklamaMap: any): Promise<void> {
   const docRef = doc(db, 'yoklamalar', 'global_yoklama_map');
-  await setDoc(docRef, cleanUndefined({ data: yoklamaMap }));
+  await withTimeout(setDoc(docRef, cleanUndefined({ data: yoklamaMap })), 45000);
 }
 
 /**

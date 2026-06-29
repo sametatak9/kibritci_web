@@ -284,17 +284,27 @@ export default function App() {
         if (legacyMerge) {
           personnelData = legacyMerge.personeller;
           attData = legacyMerge.yoklamalar;
-          await saveYoklamaDocument(attData);
-          for (const p of personnelData) {
-            if (!personnelIdsBefore.has(p.id)) {
-              await saveDocument('personeller', p);
+          console.log(`Legacy yoklama bellekte birleştirildi: ${legacyMerge.importedDays} gün`);
+          // Firestore kaydı arka planda — açılışı bloklamasın
+          const mergedPersonel = personnelData;
+          const mergedYoklama = attData;
+          const idsBefore = personnelIdsBefore;
+          void (async () => {
+            try {
+              await saveYoklamaDocument(mergedYoklama);
+              for (const p of mergedPersonel) {
+                if (!idsBefore.has(p.id)) {
+                  await saveDocument('personeller', p);
+                }
+              }
+              if (!mayis2026NeedsBootstrap(mergedYoklama)) {
+                markLegacyYoklamaBootstrapped();
+              }
+              console.log('Legacy yoklama Firestore arka plan kaydı tamamlandı');
+            } catch (bgErr) {
+              console.error('Legacy yoklama arka plan kaydı başarısız (uygulama yine de açık):', bgErr);
             }
-          }
-          if (!mayis2026NeedsBootstrap(attData)) {
-            markLegacyYoklamaBootstrapped();
-          }
-          setLoadingMsg(`Excel yoklamaları Firestore'a kaydedildi (${legacyMerge.importedDays} gün)...`);
-          console.log(`Legacy yoklama birleştirildi: ${legacyMerge.importedDays} gün`);
+          })();
         }
 
         setPersoneller(personnelData);
@@ -342,14 +352,22 @@ export default function App() {
         } = await import('./lib/legacySahaFaaliyetBootstrap');
         const sahaMerge = bootstrapLegacySahaFaaliyet(reportData);
         if (sahaMerge) {
-          for (const sf of sahaMerge.filter(s => s.id.startsWith('SF-MAY26-'))) {
-            await saveDocument('sahaFaaliyetleri', sf);
-          }
           reportData = sahaMerge;
-          if (!mayis2026SahaNeedsBootstrap(reportData)) {
-            markLegacySahaFaaliyetBootstrapped();
-          }
-          console.log(`Mayıs 2026 saha faaliyetleri yüklendi: ${sahaMerge.filter(s => s.id.startsWith('SF-MAY26-')).length} kayıt`);
+          const toSave = sahaMerge.filter(s => s.id.startsWith('SF-MAY26-'));
+          void (async () => {
+            try {
+              for (const sf of toSave) {
+                await saveDocument('sahaFaaliyetleri', sf);
+              }
+              if (!mayis2026SahaNeedsBootstrap(reportData)) {
+                markLegacySahaFaaliyetBootstrapped();
+              }
+              console.log(`Legacy saha faaliyet Firestore kaydı: ${toSave.length} kayıt`);
+            } catch (bgErr) {
+              console.error('Legacy saha faaliyet arka plan kaydı başarısız:', bgErr);
+            }
+          })();
+          console.log(`Legacy saha faaliyet bellekte: ${toSave.length} kayıt`);
         }
 
         setSahaFaaliyetleri(reportData);
@@ -450,6 +468,21 @@ export default function App() {
 
     setupCloudDatabase();
   }, [authLoading, currentUser]);
+
+  /** Açılış 35 sn'den uzun sürerse takılmayı önle */
+  useEffect(() => {
+    if (authLoading || !currentUser || dbStatus !== 'loading') return;
+    const failSafe = setTimeout(() => {
+      setDbStatus(prev => {
+        if (prev === 'loading') {
+          console.warn('Başlangıç zaman aşımı — kısmi veri ile devam ediliyor');
+          return 'synced';
+        }
+        return prev;
+      });
+    }, 35000);
+    return () => clearTimeout(failSafe);
+  }, [authLoading, currentUser, dbStatus]);
 
   const switchToOfflineMode = () => {
     setDbStatus('offline');
