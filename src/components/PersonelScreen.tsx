@@ -270,7 +270,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     <div className="flex-grow p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col lg:flex-row font-sans gap-6 select-none bg-slate-50/50">
 
       {/* SOLID 40% LEFT PANEL: Dynamic Drawer for Create/Edit */}
-      <div className="w-[430px] shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
+      <div className="w-[430px] shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm max-h-[calc(100vh-3rem)] lg:sticky lg:top-6 lg:self-start">
 
         {/* Header card indicator */}
         <div className="bg-[#2563EB] text-slate-100 p-4 shrink-0 flex items-center justify-between">
@@ -324,24 +324,24 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
         )}
 
         {regMethod === 'sgk_pdf' && !('id' in formData) ? (
-          <div className="flex-1 flex flex-col p-5 space-y-4 overflow-y-auto">
-            <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-3.5 space-y-1.5 text-slate-700">
+          <div className="p-5 space-y-3 overflow-y-auto min-h-0">
+            <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-3 space-y-1 text-slate-700">
               <h5 className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
                 <ShieldCheck size={14} className="text-blue-600" />
                 Yapay Zeka Destekli SGK & Dekont Girişi
               </h5>
-              <p className="text-[11px] leading-relaxed text-blue-800">
-                Resmi SGK İşe Giriş Bildirgesi veya Banka Transfer Dekontu (DEKONT.PDF) belgesini aşağıdaki alana yükleyerek; personelin Adı, Soyadı, TC No, IBAN No, Banka Adı ve diğer tüm bilgilerini yapay zeka aracılığıyla saniyeler içinde otomatik doldurabilirsiniz.
+              <p className="text-[10px] leading-relaxed text-blue-800">
+                SGK İşe Giriş Bildirgesi veya banka dekontunu yükleyin; ad, soyad, TC, IBAN ve banka bilgileri otomatik doldurulur.
               </p>
             </div>
 
-            {/* Drag and Drop Zone */}
+            {/* Drag and Drop Zone — sabit yükseklik, ekranın altına kaymaz */}
             <div
               onDragEnter={handleDrag}
               onDragOver={handleDrag}
               onDragLeave={handleDrag}
               onDrop={handleDrop}
-              className={`flex-grow min-h-[220px] border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-6 text-center transition relative ${
+              className={`h-44 border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-4 text-center transition relative ${
                 dragActive
                   ? "border-blue-500 bg-blue-50/30"
                   : "border-slate-200 hover:border-slate-300 bg-slate-50/30"
@@ -395,7 +395,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
           </div>
         ) : (
           /* Scrollable Form Body */
-          <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-5 space-y-4">
+          <form onSubmit={handleSave} className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
             {parseSuccess && (
               <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 flex gap-2 text-emerald-950 mb-3 animate-fade-in relative">
                 <CheckCircle2 size={16} className="shrink-0 text-emerald-600 mt-0.5" />
@@ -798,9 +798,9 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
         </form>
       )}
 
-        {/* Action button bar */}
+        {/* Action button bar — panel altında sabit */}
         {(regMethod === 'manual' || ('id' in formData)) && (
-          <div className="p-4 border-t border-slate-100 flex gap-2 bg-slate-50/50">
+          <div className="shrink-0 p-4 border-t border-slate-100 flex gap-2 bg-white shadow-[0_-4px_12px_rgba(0,0,0,0.06)] z-10">
             <button
               onClick={handleSave}
               className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] transition cursor-pointer text-white font-bold text-xs py-2.5 rounded-xl shadow-md"
