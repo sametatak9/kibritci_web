@@ -1,8 +1,30 @@
 import { Express } from 'express';
 import { Type } from '@google/genai';
-import { getGeminiClient } from './gemini';
+import { getGeminiClient, formatGeminiKeyHint, testGeminiConnection } from './gemini';
 
 export function registerApiRoutes(app: Express): void {
+
+app.get("/api/gemini-health", async (_req, res) => {
+  const result = await testGeminiConnection();
+  if (result.ok) {
+    return res.json({
+      success: true,
+      keyFormat: result.keyInfo.format,
+      keyPreview: result.keyInfo.preview,
+      keyHint: formatGeminiKeyHint(result.keyInfo.format),
+      modelResponse: result.modelResponse,
+      message: 'Gemini API bağlantısı çalışıyor.',
+    });
+  }
+  return res.status(503).json({
+    success: false,
+    keyFormat: result.keyInfo.format,
+    keyPreview: result.keyInfo.preview,
+    keyHint: formatGeminiKeyHint(result.keyInfo.format),
+    error: result.error,
+  });
+});
+
 app.post("/api/send-verification-email", (req, res) => {
   const { email } = req.body;
   if (!email) {
