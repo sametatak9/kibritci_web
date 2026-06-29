@@ -7,6 +7,7 @@ import {
 import { Personel, Irsaliye, IrsaliyeItem, Fatura } from '../types/erp';
 import { db } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
+import { fetchApiJson } from '../lib/apiClient';
 import { collection, doc, setDoc, onSnapshot, addDoc, getDocs, deleteDoc } from 'firebase/firestore';
 
 interface GuvenlikScreenProps {
@@ -71,20 +72,16 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         // Use parse-fatura or parse-irsaliye based on selected type
         const endpoint = (evrakTuru === 'FATURA') ? '/api/parse-fatura' : '/api/parse-irsaliye';
         
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            fileBase64: base64Data,
-            mimeType: file.type
-          })
-        });
-
-        const resData = await response.json();
-        if (!response.ok || !resData.success) {
-          throw new Error(resData.error || "Evrak yapay zeka tarafından çözümlenirken bir sorun oluştu.");
+        const resData = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
+          endpoint,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileBase64: base64Data, mimeType: file.type }),
+          }
+        );
+        if (!resData.success) {
+          throw new Error(resData.error || 'Evrak yapay zeka tarafından çözümlenirken bir sorun oluştu.');
         }
 
         const parsed = resData.data;

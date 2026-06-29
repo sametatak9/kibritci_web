@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { Irsaliye, IrsaliyeItem, SatinAlmaTalebi, CariKart, StokKart } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
+import { fetchApiJson } from '../lib/apiClient';
 
 interface IrsaliyeGirisScreenProps {
   irsaliyeler: Irsaliye[];
@@ -125,14 +126,16 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
     reader.onload = async () => {
       try {
         const rawBase64 = (reader.result as string).split(',')[1];
-        const response = await fetch('/api/parse-irsaliye', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileBase64: rawBase64, mimeType: file.type })
-        });
-        const resData = await response.json();
-        if (!response.ok || !resData.success) {
-          throw new Error(resData.error || "İrsaliye belgesi çözümlenirken hata oluştu.");
+        const resData = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
+          '/api/parse-irsaliye',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileBase64: rawBase64, mimeType: file.type }),
+          }
+        );
+        if (!resData.success) {
+          throw new Error(resData.error || 'İrsaliye belgesi çözümlenirken hata oluştu.');
         }
 
         const parsed = resData.data;
@@ -307,17 +310,19 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
   const handleMergeAndCompare = async (sa: SatinAlmaTalebi, linkedIrs: Irsaliye[]) => {
     setIsComparing(true);
     try {
-      const response = await fetch('/api/compare-3way', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          saTalebi: sa,
-          irsaliyeler: linkedIrs,
-          fatura: { faturaNo: "ON-DEMAND-MERGE", kalemler: [], toplamTutar: 0, kdvTutar: 0, genelToplam: 0 }
-        })
-      });
-      const res = await response.json();
-      if (!response.ok || !res.success) {
+      const res = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
+        '/api/compare-3way',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            saTalebi: sa,
+            irsaliyeler: linkedIrs,
+            fatura: { faturaNo: 'ON-DEMAND-MERGE', kalemler: [], toplamTutar: 0, kdvTutar: 0, genelToplam: 0 },
+          }),
+        }
+      );
+      if (!res.success) {
         throw new Error(res.error || "Yapay zeka karşılaştırması başarısız oldu.");
       }
       setCompareReportResult({

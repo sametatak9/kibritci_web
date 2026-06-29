@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { Fatura, FaturaItem, Irsaliye, CariKart, StokKart, SatinAlmaTalebi } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
+import { fetchApiJson } from '../lib/apiClient';
 
 interface FaturaGirisScreenProps {
   faturalar: Fatura[];
@@ -119,14 +120,16 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
     reader.onload = async () => {
       try {
         const rawBase64 = (reader.result as string).split(',')[1];
-        const response = await fetch('/api/parse-fatura', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileBase64: rawBase64, mimeType: file.type })
-        });
-        const resData = await response.json();
-        if (!response.ok || !resData.success) {
-          throw new Error(resData.error || "Fatura belgesi çözümlenirken hata oluştu.");
+        const resData = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
+          '/api/parse-fatura',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileBase64: rawBase64, mimeType: file.type }),
+          }
+        );
+        if (!resData.success) {
+          throw new Error(resData.error || 'Fatura belgesi çözümlenirken hata oluştu.');
         }
 
         const parsed = resData.data;
@@ -449,17 +452,19 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
       const linkedIrs = irsaliyeler.filter(ir => ft.bagliIrsaliyeler.includes(ir.id));
       const saTalebi = satinAlmaTalepleri.find(sa => sa.saId === ft.saId);
 
-      const response = await fetch('/api/compare-3way', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          saTalebi: saTalebi || { saId: "BAĞLANTI YOK", kalemler: [] },
-          irsaliyeler: linkedIrs,
-          fatura: ft
-        })
-      });
-      const res = await response.json();
-      if (!response.ok || !res.success) {
+      const res = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
+        '/api/compare-3way',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            saTalebi: saTalebi || { saId: 'BAĞLANTI YOK', kalemler: [] },
+            irsaliyeler: linkedIrs,
+            fatura: ft,
+          }),
+        }
+      );
+      if (!res.success) {
         throw new Error(res.error || "Yapay zeka karşılaştırması başarısız oldu.");
       }
 
