@@ -35,6 +35,43 @@ interface StaffHakedisRow {
 
 const ZER_YAPI_GUNLUK = 200;
 
+/** Ekran önizleme + yazdırma için ortak tablo stilleri */
+const REPORT_TABLE_CSS = `
+  .rpt-staff-table, .rpt-act-table {
+    width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 7.5pt;
+  }
+  .rpt-staff-table th, .rpt-staff-table td,
+  .rpt-act-table th, .rpt-act-table td {
+    padding: 3px 5px; vertical-align: middle;
+    border-bottom: 1px solid #e2e8f0; line-height: 1.25;
+  }
+  .rpt-staff-table thead th, .rpt-act-table thead th {
+    font-size: 6.5pt; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.03em; white-space: nowrap;
+  }
+  .rpt-align-c { text-align: center !important; }
+  .rpt-align-r { text-align: right !important; }
+  .rpt-align-l { text-align: left !important; }
+  .rpt-mono { font-family: Consolas, 'Courier New', monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .rpt-name { font-weight: 700; text-transform: uppercase; word-break: break-word; white-space: normal; }
+  .rpt-grp-sep { border-left: 2px solid rgba(255,255,255,0.35) !important; }
+  .rpt-staff-table tbody .rpt-grp-sep-data { border-left: 2px solid #cbd5e1 !important; }
+  .rpt-staff-table tbody tr:nth-child(even) { background: #f8fafc; }
+  .rpt-staff-table tbody tr:nth-child(odd) { background: #fff; }
+  .rpt-th-dark { background: #1e293b; color: #fff; }
+  .rpt-th-blue { background: #1d4ed8; color: #fff; }
+  .rpt-th-amber { background: #d97706; color: #fff; }
+  .rpt-th-indigo { background: #4338ca; color: #fff; }
+  .rpt-th-emerald { background: #059669; color: #fff; }
+  .rpt-td-blue { background: #eff6ff; color: #1e40af; }
+  .rpt-td-amber { background: #fffbeb; color: #92400e; }
+  .rpt-td-indigo { background: #eef2ff; color: #312e81; font-weight: 700; }
+  .rpt-td-emerald { background: #ecfdf5; color: #065f46; font-weight: 800; }
+  .rpt-foot { background: #f1f5f9; font-weight: 700; border-top: 2px solid #94a3b8; }
+  .rpt-act-table tbody tr:nth-child(even) { background: #f8fafc; }
+  .rpt-act-table tbody tr:nth-child(odd) { background: #fff; }
+`;
+
 function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
 }
@@ -213,11 +250,10 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
       .report-root { width: 100%; max-width: 194mm; margin: 0 auto; }
       section, div, table { overflow: visible !important; max-height: none !important; height: auto !important; }
       section { page-break-inside: auto !important; break-inside: auto !important; margin-bottom: 6mm; }
-      table { width: 100%; border-collapse: collapse; table-layout: auto; page-break-inside: auto !important; }
+      table { page-break-inside: auto !important; }
       thead { display: table-header-group; }
       tfoot { display: table-footer-group; }
       tr { page-break-inside: avoid; break-inside: avoid; }
-      th, td { padding: 2px 4px; vertical-align: top; word-wrap: break-word; }
       svg { display: none !important; }
       .rpt-banner { background: #1E4E78; color: #fff; padding: 8px 10px; border-radius: 6px 6px 0 0; }
       .rpt-banner-sub { background: #ecfdf5; border: 1px solid #a7f3d0; padding: 6px; text-align: center; font-weight: 700; font-size: 9pt; color: #065f46; }
@@ -231,22 +267,14 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
       .rpt-zer-meta { font-size: 7.5pt; color: #059669; margin-top: 4px; }
       .rpt-sec-title { font-size: 8.5pt; font-weight: 800; color: #1E4E78; text-transform: uppercase; margin: 0 0 4px; }
       .rpt-sec-sub { font-size: 7pt; color: #64748b; margin: 0 0 6px; }
-      .rpt-table-wrap { border: 1px solid #cbd5e1; border-radius: 6px; margin-top: 4px; }
-      .rpt-th-dark { background: #1e293b; color: #fff; font-size: 7pt; font-weight: 700; text-transform: uppercase; }
-      .rpt-th-blue { background: #1d4ed8; color: #fff; }
-      .rpt-th-amber { background: #d97706; color: #fff; }
-      .rpt-th-indigo { background: #4338ca; color: #fff; }
-      .rpt-th-emerald { background: #059669; color: #fff; }
-      .rpt-td-blue { background: #eff6ff; color: #1e40af; text-align: right; font-family: Consolas, monospace; }
-      .rpt-td-amber { background: #fffbeb; color: #92400e; text-align: right; font-family: Consolas, monospace; }
-      .rpt-td-indigo { background: #eef2ff; color: #312e81; text-align: right; font-weight: 700; font-family: Consolas, monospace; }
-      .rpt-td-emerald { background: #ecfdf5; color: #065f46; text-align: right; font-weight: 800; font-family: Consolas, monospace; }
-      .rpt-foot { background: #f1f5f9; font-weight: 700; border-top: 2px solid #94a3b8; }
+      .rpt-table-wrap { border: 1px solid #cbd5e1; border-radius: 6px; margin-top: 4px; overflow: hidden; }
+      .rpt-td-blue, .rpt-td-amber, .rpt-td-indigo, .rpt-td-emerald { text-align: right; font-family: Consolas, monospace; }
       .rpt-summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
       .rpt-summary-card { border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; text-align: center; }
       .rpt-summary-emerald { border: 2px solid #059669; background: #ecfdf5; }
       .rpt-sign-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
       .rpt-sign-box { border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; text-align: center; min-height: 52px; }
+      ${REPORT_TABLE_CSS}
       @media print {
         html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       }
@@ -445,6 +473,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
 
           <div className="bg-white border rounded-3xl p-6 shadow-sm">
             <div id="kibar-report-print-area" className="report-root bg-white space-y-4 text-xs text-slate-800">
+              <style>{REPORT_TABLE_CSS}</style>
 
               {/* —— Başlık —— */}
               <div className="border border-slate-200 rounded-lg">
@@ -486,56 +515,69 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                 <p className="rpt-sec-title m-0">1 · Personel Kazanç ve Hakediş Detayı</p>
                 <p className="rpt-sec-sub">{activeStaffRows.length} personel · {totalPersonDays} gün · {totalMesaiSaat} sa mesai</p>
                 <div className="rpt-table-wrap">
-                  <table className="w-full text-left border-collapse text-[7px]">
+                  <table className="rpt-staff-table">
+                    <colgroup>
+                      <col style={{ width: '4%' }} />
+                      <col style={{ width: '18%' }} />
+                      <col style={{ width: '9%' }} />
+                      <col style={{ width: '9%' }} />
+                      <col style={{ width: '5%' }} />
+                      <col style={{ width: '5%' }} />
+                      <col style={{ width: '9%' }} />
+                      <col style={{ width: '9%' }} />
+                      <col style={{ width: '10%' }} />
+                      <col style={{ width: '5%' }} />
+                      <col style={{ width: '12%' }} />
+                    </colgroup>
                     <thead>
                       <tr className="rpt-th-dark">
-                        <th className="p-1 text-center" rowSpan={2}>#</th>
-                        <th className="p-1" rowSpan={2}>Ad Soyad</th>
-                        <th className="p-1" rowSpan={2}>Görev</th>
-                        <th className="p-1 text-right" rowSpan={2}>Maaş</th>
-                        <th className="p-1 text-center" rowSpan={2}>Gün</th>
-                        <th className="p-1 text-center" rowSpan={2}>Mesai</th>
-                        <th className="p-1 text-center rpt-th-blue" colSpan={3}>Maaş Kazancı</th>
-                        <th className="p-1 text-center rpt-th-emerald" colSpan={2}>ZER YAPI Hakediş</th>
+                        <th className="rpt-align-c" rowSpan={2}>#</th>
+                        <th className="rpt-align-l" rowSpan={2}>Ad Soyad</th>
+                        <th className="rpt-align-l" rowSpan={2}>Görev</th>
+                        <th className="rpt-align-r" rowSpan={2}>Maaş</th>
+                        <th className="rpt-align-c" rowSpan={2}>Gün</th>
+                        <th className="rpt-align-c" rowSpan={2}>Mesai</th>
+                        <th className="rpt-align-c rpt-th-blue rpt-grp-sep" colSpan={3}>Maaş Kazancı</th>
+                        <th className="rpt-align-c rpt-th-emerald rpt-grp-sep" colSpan={2}>ZER YAPI Hakediş</th>
                       </tr>
-                      <tr className="text-[6px] font-bold uppercase">
-                        <th className="p-1 rpt-th-blue text-right">Gün</th>
-                        <th className="p-1 rpt-th-amber text-right">Mesai</th>
-                        <th className="p-1 rpt-th-indigo text-right">Toplam</th>
-                        <th className="p-1 rpt-th-emerald text-center">₺/Gün</th>
-                        <th className="p-1 rpt-th-emerald text-right">Tutar</th>
+                      <tr>
+                        <th className="rpt-th-blue rpt-align-r rpt-grp-sep">Gün</th>
+                        <th className="rpt-th-amber rpt-align-r">Mesai</th>
+                        <th className="rpt-th-indigo rpt-align-r">Toplam</th>
+                        <th className="rpt-th-emerald rpt-align-c rpt-grp-sep">₺/Gün</th>
+                        <th className="rpt-th-emerald rpt-align-r">Tutar</th>
                       </tr>
                     </thead>
                     <tbody>
                       {activeStaffRows.map((row, idx) => (
-                        <tr key={row.personel.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                          <td className="p-1 text-center font-mono text-slate-500 border-b border-slate-100">{idx + 1}</td>
-                          <td className="p-1 font-bold uppercase border-b border-slate-100">{row.personel.ad} {row.personel.soyad}</td>
-                          <td className="p-1 uppercase border-b border-slate-100">{normalizeGorev(row.personel.gorev)}</td>
-                          <td className="p-1 text-right font-mono border-b border-slate-100">{formatMoney(row.personel.maas || 30000, 0)}</td>
-                          <td className="p-1 text-center font-mono font-bold border-b border-slate-100">{row.geldiGun}</td>
-                          <td className="p-1 text-center font-mono border-b border-slate-100">{row.mesaiSaat > 0 ? row.mesaiSaat : '—'}</td>
-                          <td className="p-1 rpt-td-blue border-b border-slate-100">{formatMoney(row.gunKazanci)}</td>
-                          <td className="p-1 rpt-td-amber border-b border-slate-100">{row.mesaiKazanci > 0 ? formatMoney(row.mesaiKazanci) : '—'}</td>
-                          <td className="p-1 rpt-td-indigo border-b border-slate-100">{formatMoney(row.toplamKazanc)}</td>
-                          <td className="p-1 text-center font-mono text-emerald-700 border-b border-slate-100">{ZER_YAPI_GUNLUK}</td>
-                          <td className="p-1 rpt-td-emerald border-b border-slate-100">{formatMoney(row.zerYapiHakedis, 0)}</td>
+                        <tr key={row.personel.id}>
+                          <td className="rpt-align-c rpt-mono text-slate-500">{idx + 1}</td>
+                          <td className="rpt-name">{row.personel.ad} {row.personel.soyad}</td>
+                          <td className="rpt-align-l uppercase">{normalizeGorev(row.personel.gorev)}</td>
+                          <td className="rpt-align-r rpt-mono">{formatMoney(row.personel.maas || 30000, 0)}</td>
+                          <td className="rpt-align-c rpt-mono">{row.geldiGun}</td>
+                          <td className="rpt-align-c rpt-mono">{row.mesaiSaat > 0 ? row.mesaiSaat : '—'}</td>
+                          <td className="rpt-td-blue rpt-grp-sep-data">{formatMoney(row.gunKazanci)}</td>
+                          <td className="rpt-td-amber">{row.mesaiKazanci > 0 ? formatMoney(row.mesaiKazanci) : '—'}</td>
+                          <td className="rpt-td-indigo">{formatMoney(row.toplamKazanc)}</td>
+                          <td className="rpt-align-c rpt-mono text-emerald-700 rpt-grp-sep-data">{ZER_YAPI_GUNLUK}</td>
+                          <td className="rpt-td-emerald">{formatMoney(row.zerYapiHakedis, 0)}</td>
                         </tr>
                       ))}
                       {activeStaffRows.length === 0 && (
-                        <tr><td colSpan={11} className="text-center py-6 text-slate-400 italic">Kayıt yok</td></tr>
+                        <tr><td colSpan={11} className="rpt-align-c py-6 text-slate-400 italic">Kayıt yok</td></tr>
                       )}
                     </tbody>
                     <tfoot>
                       <tr className="rpt-foot">
-                        <td colSpan={4} className="p-1 text-right uppercase text-[7px]">Toplam</td>
-                        <td className="p-1 text-center font-mono">{totalPersonDays}</td>
-                        <td className="p-1 text-center font-mono">{totalMesaiSaat}</td>
-                        <td className="p-1 rpt-td-blue">{formatMoney(totalGunKazanci)}</td>
-                        <td className="p-1 rpt-td-amber">{formatMoney(totalMesaiKazanci)}</td>
-                        <td className="p-1 rpt-td-indigo">{formatMoney(totalMaasKazanci)}</td>
-                        <td className="p-1 text-center text-emerald-600">×{ZER_YAPI_GUNLUK}</td>
-                        <td className="p-1 rpt-td-emerald">{formatMoney(totalZerYapiHakedis, 0)}</td>
+                        <td colSpan={4} className="rpt-align-r uppercase">Toplam</td>
+                        <td className="rpt-align-c rpt-mono">{totalPersonDays}</td>
+                        <td className="rpt-align-c rpt-mono">{totalMesaiSaat}</td>
+                        <td className="rpt-td-blue rpt-grp-sep-data">{formatMoney(totalGunKazanci)}</td>
+                        <td className="rpt-td-amber">{formatMoney(totalMesaiKazanci)}</td>
+                        <td className="rpt-td-indigo">{formatMoney(totalMaasKazanci)}</td>
+                        <td className="rpt-align-c text-emerald-600 rpt-grp-sep-data">×{ZER_YAPI_GUNLUK}</td>
+                        <td className="rpt-td-emerald">{formatMoney(totalZerYapiHakedis, 0)}</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -550,26 +592,34 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                   <p className="text-[9px] text-slate-400 italic">Bu dönemde saha faaliyeti kaydı yok.</p>
                 ) : (
                   <div className="rpt-table-wrap">
-                    <table className="w-full border-collapse text-[7px]">
+                    <table className="rpt-act-table">
+                      <colgroup>
+                        <col style={{ width: '5%' }} />
+                        <col style={{ width: '12%' }} />
+                        <col style={{ width: '8%' }} />
+                        <col style={{ width: '6%' }} />
+                        <col style={{ width: '62%' }} />
+                        <col style={{ width: '7%' }} />
+                      </colgroup>
                       <thead>
                         <tr className="rpt-th-dark">
-                          <th className="p-1 w-7 text-center">No</th>
-                          <th className="p-1 w-[82px] text-left">Tarih</th>
-                          <th className="p-1 w-[48px] text-left">Parsel</th>
-                          <th className="p-1 w-[32px] text-left">Blok</th>
-                          <th className="p-1 text-left">Yapılan İş / Faaliyet</th>
-                          <th className="p-1 w-[56px] text-right">Personel</th>
+                          <th className="rpt-align-c">No</th>
+                          <th className="rpt-align-l">Tarih</th>
+                          <th className="rpt-align-l">Parsel</th>
+                          <th className="rpt-align-l">Blok</th>
+                          <th className="rpt-align-l">Yapılan İş / Faaliyet</th>
+                          <th className="rpt-align-r">Pers.</th>
                         </tr>
                       </thead>
                       <tbody>
                         {sahaFaaliyetSatirlari.map(sf => (
-                          <tr key={sf.id} className={sf.siraNo % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
-                            <td className="p-1 text-center font-mono font-bold text-slate-500 border-b border-slate-100">{sf.siraNo}</td>
-                            <td className="p-1 font-mono whitespace-nowrap border-b border-slate-100">{sf.tarihLabel}</td>
-                            <td className="p-1 font-semibold border-b border-slate-100">{sf.parselKisa}</td>
-                            <td className="p-1 font-semibold border-b border-slate-100">{sf.blokKisa}</td>
-                            <td className="p-1 leading-snug border-b border-slate-100">{faaliyetIsTanimi(sf)}</td>
-                            <td className="p-1 text-right whitespace-nowrap border-b border-slate-100">{formatPersonelSayisi(sf)}</td>
+                          <tr key={sf.id}>
+                            <td className="rpt-align-c rpt-mono text-slate-500">{sf.siraNo}</td>
+                            <td className="rpt-mono">{sf.tarihLabel}</td>
+                            <td>{sf.parselKisa}</td>
+                            <td>{sf.blokKisa}</td>
+                            <td className="leading-snug">{faaliyetIsTanimi(sf)}</td>
+                            <td className="rpt-align-r rpt-mono">{formatPersonelSayisi(sf)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -586,22 +636,28 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                   <p className="text-[9px] text-slate-400 italic">Bu dönemde kamp faaliyeti kaydı yok.</p>
                 ) : (
                   <div className="rpt-table-wrap">
-                    <table className="w-full border-collapse text-[7px]">
+                    <table className="rpt-act-table">
+                      <colgroup>
+                        <col style={{ width: '5%' }} />
+                        <col style={{ width: '14%' }} />
+                        <col style={{ width: '14%' }} />
+                        <col style={{ width: '67%' }} />
+                      </colgroup>
                       <thead>
                         <tr className="rpt-th-dark">
-                          <th className="p-1 w-7 text-center">No</th>
-                          <th className="p-1 w-[82px] text-left">Tarih</th>
-                          <th className="p-1 w-[72px] text-left">Tip</th>
-                          <th className="p-1 text-left">Açıklama</th>
+                          <th className="rpt-align-c">No</th>
+                          <th className="rpt-align-l">Tarih</th>
+                          <th className="rpt-align-l">Tip</th>
+                          <th className="rpt-align-l">Açıklama</th>
                         </tr>
                       </thead>
                       <tbody>
                         {kampFaaliyetSatirlari.map(kf => (
-                          <tr key={kf.id} className={kf.siraNo % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
-                            <td className="p-1 text-center font-mono border-b border-slate-100">{kf.siraNo}</td>
-                            <td className="p-1 font-mono border-b border-slate-100">{kf.tarihLabel}</td>
-                            <td className="p-1 font-semibold border-b border-slate-100">{kf.faaliyetTipi}</td>
-                            <td className="p-1 border-b border-slate-100">{kf.aciklama}</td>
+                          <tr key={kf.id}>
+                            <td className="rpt-align-c rpt-mono">{kf.siraNo}</td>
+                            <td className="rpt-mono">{kf.tarihLabel}</td>
+                            <td>{kf.faaliyetTipi}</td>
+                            <td>{kf.aciklama}</td>
                           </tr>
                         ))}
                       </tbody>
