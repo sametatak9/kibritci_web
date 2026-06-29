@@ -7,3 +7,5 @@ coverage/
 .env*
 !.env.example
 .env
+api/[...path].js
+api/[...path].js.map
