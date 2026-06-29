@@ -9,6 +9,7 @@ import {
   signInAnonymously
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
+import { saveKullanici, kullaniciDocId, findKullaniciByEmail } from '../lib/kullaniciUtils';
 import { Building2, Lock, Mail, Loader2, ArrowRight, CheckCircle2, AlertTriangle, ShieldCheck, User, Fingerprint, PenTool, Check, Trash, Smartphone } from 'lucide-react';
 
 function withReadTimeout<T>(promise: Promise<T>, ms = 8000): Promise<T> {
@@ -175,9 +176,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           createdAt: new Date().toISOString()
         };
 
-        const saveToKullanicilarCollection = async (uid: string) => {
-          await setDoc(doc(db, 'kullanicilar', uid), {
-            id: uid,
+        const saveToKullanicilarCollection = async () => {
+          await saveKullanici({
+            id: emailLower,
             email: emailLower,
             yetki: 'MİSAFİR',
             durum: 'ONAY BEKLİYOR',
@@ -187,8 +188,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             tcNo: tcNo.trim(),
             imzaText: imzaText.trim() || `${ad.trim()} ${soyad.trim()}`,
             imzaStyle: imzaStyle,
-            imzaCanvas: imzaCanvas || null,
-            matchedPersonelId: matchedPersonelId
+            imzaCanvas: imzaCanvas || undefined,
+            matchedPersonelId: matchedPersonelId || undefined,
           });
         };
 
@@ -210,7 +211,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           const userCredential = await createUserWithEmailAndPassword(auth, emailLower, passTrim);
           const finalUid = userCredential.user.uid;
           await setDoc(doc(db, 'portalKullanicilar', emailLower), userPayload);
-          await saveToKullanicilarCollection(finalUid);
+          try {
+            await saveToKullanicilarCollection();
+          } catch (saveErr) {
+            console.error('kullanicilar kaydı başarısız:', saveErr);
+            setErrorMsg('Hesap oluşturuldu ancak üyelik listesine yazılamadı. Yöneticiye bildirin.');
+            setLoading(false);
+            return;
+          }
           finishSignup(finalUid, userCredential.user);
           return;
         } catch (fbErr: any) {
@@ -241,7 +249,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             console.warn('Anonim oturum açılamadı:', anonErr);
           }
           await setDoc(doc(db, 'portalKullanicilar', emailLower), userPayload);
-          await saveToKullanicilarCollection(anonUid);
+          try {
+            await saveToKullanicilarCollection();
+          } catch (saveErr) {
+            console.error('kullanicilar kaydı başarısız:', saveErr);
+            setErrorMsg('Üyelik kaydı tamamlanamadı. Lütfen tekrar deneyin veya yöneticiye bildirin.');
+            setLoading(false);
+            return;
+          }
           finishSignup(anonUid, { email: emailLower, uid: anonUid, isMock: true });
           return;
         } catch (fallbackErr) {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { persistKullaniciRole, dedupeKullanicilarByEmail } from '../lib/kullaniciUtils';
+import { persistKullaniciRole, dedupeKullanicilarByEmail, saveKullanici, deleteKullaniciByEmail, findKullaniciByEmail } from '../lib/kullaniciUtils';
 import { 
   Users, KeySquare, ShieldAlert, Trash2, CheckCircle, 
   XOctagon, UserCheck, AlertCircle, RefreshCw, Key,
@@ -97,35 +97,35 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
     }
   }, [activeTab]);
 
-  const handleToggleStatus = (id: string) => {
-    const target = kullanicilar.find(u => u.id === id);
+  const handleToggleStatus = async (id: string) => {
+    const target = findKullaniciByEmail(kullanicilar, id) || kullanicilar.find(u => u.id === id);
     if (target?.email === currentUser?.email) {
       alert("Hata: Kendi hesabınızın durumunu kısıtlayamazsınız!");
       return;
     }
+    if (!target) return;
 
-    setKullanicilar(prev => prev.map(u => {
-      if (u.id === id) {
-        let nextDurum: 'AKTİF' | 'KISITLI' | 'ONAY BEKLİYOR' = 'AKTİF';
-        if (u.durum === 'AKTİF') nextDurum = 'KISITLI';
-        else if (u.durum === 'KISITLI') nextDurum = 'ONAY BEKLİYOR';
-        else nextDurum = 'AKTİF';
-        
-        alert(`Kullanıcı (${u.email}) hesabı "${nextDurum}" durumuna getirildi.`);
-        if (addNotification) {
-          addNotification(`${u.email} kullanıcısının hesabı "${nextDurum}" durumuna getirildi.`);
-        }
-        return {
-          ...u,
-          durum: nextDurum
-        };
+    let nextDurum: 'AKTİF' | 'KISITLI' | 'ONAY BEKLİYOR' = 'AKTİF';
+    if (target.durum === 'AKTİF') nextDurum = 'KISITLI';
+    else if (target.durum === 'KISITLI') nextDurum = 'ONAY BEKLİYOR';
+    else nextDurum = 'AKTİF';
+
+    try {
+      const updated = await saveKullanici({ ...target, durum: nextDurum });
+      setKullanicilar(prev => dedupeKullanicilarByEmail(
+        prev.map(u => u.email?.toLowerCase() === target.email.toLowerCase() ? { ...u, ...updated } : u)
+      ));
+      alert(`Kullanıcı (${target.email}) hesabı "${nextDurum}" durumuna getirildi.`);
+      if (addNotification) {
+        addNotification(`${target.email} kullanıcısının hesabı "${nextDurum}" durumuna getirildi.`);
       }
-      return u;
-    }));
+    } catch {
+      alert('Durum güncellenemedi.');
+    }
   };
 
   const handleChangeRole = async (id: string, newYetki: any) => {
-    const target = kullanicilar.find((u) => u.id === id);
+    const target = findKullaniciByEmail(kullanicilar, id) || kullanicilar.find((u) => u.id === id);
     if (!target) return;
 
     try {
@@ -149,17 +149,22 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
     }
   };
 
-  const handleDeleteUser = (id: string, email: string) => {
+  const handleDeleteUser = async (id: string, email: string) => {
     if (email === currentUser?.email) {
       alert("Hata: Kendi hesabınızı silemezsiniz!");
       return;
     }
 
-    if (confirm(`"${email}" kullanıcısını sistemden ve üyelik listesinden tamamen silmek istediğinize emin misiniz?`)) {
-      setKullanicilar(prev => prev.filter(u => u.id !== id));
-      alert("Kullanıcı kaydı başarıyla silindi.");
-      if (addNotification) {
-        addNotification(`${email} kullanıcısı admin tarafından sistemden silindi.`);
+    if (confirm(`"${email}" kullanıcısını sistemden tamamen silmek istediğinize emin misiniz?`)) {
+      try {
+        await deleteKullaniciByEmail(email);
+        setKullanicilar(prev => prev.filter(u => u.email?.toLowerCase() !== email.toLowerCase()));
+        alert("Kullanıcı kaydı başarıyla silindi.");
+        if (addNotification) {
+          addNotification(`${email} kullanıcısı admin tarafından sistemden silindi.`);
+        }
+      } catch {
+        alert('Kullanıcı silinemedi.');
       }
     }
   };

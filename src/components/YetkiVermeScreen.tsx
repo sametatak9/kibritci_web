@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { Kullanici } from './AdminPanelScreen';
 import { PORTAL_PAGES, sanitizeKisitliSayfalar } from '../lib/yetkiUtils';
+import { saveKullanici } from '../lib/kullaniciUtils';
 
 interface YetkiVermeScreenProps {
   kullanicilar: Kullanici[];
@@ -83,12 +84,12 @@ export const YetkiVermeScreen: React.FC<YetkiVermeScreenProps> = ({
     );
 
     try {
+      const updatedUser = { ...selectedUser, kisitliSayfalar: restricted };
+      await saveKullanici(updatedUser);
+
       setKullanicilar(prev => prev.map(u => {
-        if (u.id === selectedUserId) {
-          return {
-            ...u,
-            kisitliSayfalar: restricted
-          };
+        if (u.email?.toLowerCase() === selectedUser.email.toLowerCase()) {
+          return { ...u, kisitliSayfalar: restricted };
         }
         return u;
       }));

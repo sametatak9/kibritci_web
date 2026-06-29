@@ -5,6 +5,7 @@ import {
   Send, AlertTriangle, CheckCircle, XCircle, FileText, BadgeInfo, Clock, Calendar, Check, Ban, ArrowLeft
 } from 'lucide-react';
 import { db } from '../lib/firebase';
+import { saveKullanici, findKullaniciByEmail } from '../lib/kullaniciUtils';
 import { collection, onSnapshot, doc, updateDoc, query, orderBy, limit, addDoc, setDoc, deleteDoc } from 'firebase/firestore';
 
 // Sub-screens for Manager preview
@@ -315,24 +316,37 @@ export const MobileManagerScreen: React.FC<MobileManagerScreenProps> = ({
   const feedItems = getCombinedFeed();
 
   // Approval Handlers
-  const handleApproveUser = (userId: string) => {
-    setKullanicilar((prev: Kullanici[]) => prev.map(u => {
-      if (u.id === userId) {
-        return { ...u, durum: 'AKTİF', yetki: u.yetki === 'MİSAFİR' ? 'YÖNETİCİ' : u.yetki };
-      }
-      return u;
-    }));
-    alert("Kullanıcı hesabı onaylandı ve 'AKTİF' statüsüne getirildi.");
+  const handleApproveUser = async (userId: string) => {
+    const target = findKullaniciByEmail(kullanicilar, userId) || kullanicilar.find(u => u.id === userId);
+    if (!target) return;
+    const updated = {
+      ...target,
+      durum: 'AKTİF' as const,
+      yetki: target.yetki === 'MİSAFİR' ? 'YÖNETİCİ' : target.yetki,
+    };
+    try {
+      const saved = await saveKullanici(updated);
+      setKullanicilar((prev: Kullanici[]) =>
+        prev.map(u => (u.email?.toLowerCase() === target.email.toLowerCase() ? { ...u, ...saved } : u))
+      );
+      alert("Kullanıcı hesabı onaylandı ve 'AKTİF' statüsüne getirildi.");
+    } catch {
+      alert('Onay kaydedilemedi. Lütfen tekrar deneyin.');
+    }
   };
 
-  const handleRestrictUser = (userId: string) => {
-    setKullanicilar((prev: Kullanici[]) => prev.map(u => {
-      if (u.id === userId) {
-        return { ...u, durum: 'KISITLI' };
-      }
-      return u;
-    }));
-    alert("Kullanıcı hesabı kısıtlandı.");
+  const handleRestrictUser = async (userId: string) => {
+    const target = findKullaniciByEmail(kullanicilar, userId) || kullanicilar.find(u => u.id === userId);
+    if (!target) return;
+    try {
+      const saved = await saveKullanici({ ...target, durum: 'KISITLI' });
+      setKullanicilar((prev: Kullanici[]) =>
+        prev.map(u => (u.email?.toLowerCase() === target.email.toLowerCase() ? { ...u, ...saved } : u))
+      );
+      alert("Kullanıcı hesabı kısıtlandı.");
+    } catch {
+      alert('Kısıtlama kaydedilemedi.');
+    }
   };
 
   const handleApprovePurchase = (purchaseId: string) => {

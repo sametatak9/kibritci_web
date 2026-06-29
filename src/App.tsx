@@ -71,6 +71,7 @@ import {
   hasDuplicateKullaniciEmails,
   parseKullanicilarSnapshot,
   removeDuplicateKullaniciDocs,
+  saveKullanici,
 } from './lib/kullaniciUtils';
 import { collection, onSnapshot, doc, getDoc, query, orderBy, limit } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -97,7 +98,6 @@ export default function App() {
   });
 
   const [bildirimler, setBildirimler] = useState<any[]>([]);
-  const kullaniciDedupeRanRef = useRef(false);
 
   useEffect(() => {
     if (currentUser) {
@@ -564,19 +564,12 @@ export default function App() {
 
     const unsubKullanicilar = onSnapshot(collection(db, 'kullanicilar'), (snapshot) => {
       const raw = parseKullanicilarSnapshot(snapshot.docs) as Kullanici[];
-      const applyList = (list: Kullanici[]) => setKullanicilar(dedupeKullanicilarByEmail(list) as Kullanici[]);
-
-      if (!kullaniciDedupeRanRef.current && hasDuplicateKullaniciEmails(raw)) {
-        kullaniciDedupeRanRef.current = true;
-        removeDuplicateKullaniciDocs(raw)
-          .then(applyList)
-          .catch((err) => {
-            console.warn('Çift kullanıcı kayıtları birleştirilemedi:', err);
-            applyList(raw);
-          });
-        return;
+      setKullanicilar(dedupeKullanicilarByEmail(raw) as Kullanici[]);
+      if (hasDuplicateKullaniciEmails(raw)) {
+        removeDuplicateKullaniciDocs(raw).catch((err) => {
+          console.warn('Kullanıcı çift kayıtları temizlenemedi:', err);
+        });
       }
-      applyList(raw);
     });
 
     const unsubSahaFaaliyetleri = onSnapshot(collection(db, 'sahaFaaliyetleri'), (snapshot) => {
@@ -710,7 +703,7 @@ export default function App() {
       const isDefaultAdmin = emailLower === 'santiye@kibritci.com';
       
       const newKullanici: Kullanici = {
-        id: currentUser.uid || `u_${Date.now()}`,
+        id: emailLower,
         email: currentUser.email,
         yetki: isSamet || isDefaultAdmin ? 'YÖNETİCİ' : 'MİSAFİR',
         durum: 'AKTİF',
@@ -718,9 +711,10 @@ export default function App() {
       };
       
       if (dbStatus === 'synced') {
-        setKullanicilarWithSync(prev => {
+        saveKullanici(newKullanici).catch(console.error);
+        setKullanicilar(prev => {
           if (prev.some(u => u.email.toLowerCase() === emailLower)) return prev;
-          return [...prev, newKullanici];
+          return dedupeKullanicilarByEmail([...prev, newKullanici]);
         });
       } else {
         setKullanicilar(prev => {
@@ -908,11 +902,9 @@ export default function App() {
   };
 
   const setKullanicilarWithSync = (updater: Kullanici[] | ((u: Kullanici[]) => Kullanici[])) => {
-    setKullanicilar(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('kullanicilar', prev, next), 0);
-      return next;
-    });
+    // kullanicilar: toplu syncArrayToFirestore kullanılmaz — eski state rolü geri yazar.
+    // Tekil kayıtlar saveKullanici / persistKullaniciRole ile Firestore'a yazılır.
+    setKullanicilar((prev) => (typeof updater === 'function' ? updater(prev) : updater));
   };
 
   const setAracKmLoglariWithSync = (updater: any[] | ((a: any[]) => any[])) => {
