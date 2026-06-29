@@ -6,6 +6,7 @@ import {
 import { db, saveDocument } from '../lib/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { Personel, AylikYoklamaMap } from '../types/erp';
+import { KibritciLogo } from './KibritciLogo';
 import { buildPersonelListForMonth, iterateMonthYoklama } from '../lib/yoklamaUtils';
 import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 import { normalizeGorev } from '../lib/gorevUtils';
@@ -35,41 +36,118 @@ interface StaffHakedisRow {
 
 const ZER_YAPI_GUNLUK = 200;
 
-/** Ekran önizleme + yazdırma için ortak tablo stilleri */
-const REPORT_TABLE_CSS = `
+/** Ekran önizleme + yazdırma — naif gri/beyaz rapor stili */
+const REPORT_CSS = `
+  .rpt-header { border: 1px solid #d1d5db; border-radius: 4px; overflow: hidden; }
+  .rpt-header-main {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 12px; border-bottom: 1px solid #e5e7eb; background: #fff;
+  }
+  .rpt-header-brand { display: flex; align-items: center; gap: 12px; }
+  .rpt-header-brand h2 {
+    margin: 0; font-size: 10pt; font-weight: 800; color: #1f2937;
+    text-transform: uppercase; letter-spacing: 0.02em;
+  }
+  .rpt-header-brand p {
+    margin: 2px 0 0; font-size: 7pt; color: #6b7280;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .rpt-header-meta { text-align: right; }
+  .rpt-ref {
+    display: inline-block; border: 1px solid #d1d5db; background: #f9fafb;
+    font-size: 7pt; font-weight: 700; padding: 2px 8px; color: #374151;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .rpt-header-meta p { margin: 4px 0 0; font-size: 7pt; color: #9ca3af; }
+  .rpt-header-title {
+    text-align: center; padding: 7px 10px; background: #f9fafb;
+    border-top: 1px solid #f3f4f6; font-size: 8.5pt; font-weight: 700;
+    color: #374151; text-transform: uppercase; letter-spacing: 0.03em;
+  }
+  .rpt-zer-box {
+    border: 1px solid #d1d5db; background: #fafafa; border-radius: 4px;
+    padding: 12px 14px; margin: 10px 0; page-break-inside: avoid;
+  }
+  .rpt-zer-box h4 {
+    margin: 0 0 6px; font-size: 8pt; color: #4b5563;
+    text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;
+  }
+  .rpt-zer-formula { font-size: 7.5pt; color: #6b7280; margin: 0 0 6px; }
+  .rpt-zer-total {
+    font-size: 17pt; font-weight: 800; color: #047857;
+    font-family: Consolas, 'Courier New', monospace;
+  }
+  .rpt-zer-meta { font-size: 7pt; color: #9ca3af; margin-top: 4px; }
+  .rpt-sec-title {
+    font-size: 9pt; font-weight: 700; color: #374151;
+    text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 3px;
+  }
+  .rpt-sec-sub { font-size: 7.5pt; color: #9ca3af; margin: 0 0 6px; }
+  .rpt-table-wrap { border: 1px solid #d1d5db; border-radius: 4px; overflow: hidden; margin-top: 4px; }
   .rpt-staff-table, .rpt-act-table {
-    width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 7.5pt;
+    width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 8.5pt;
   }
   .rpt-staff-table th, .rpt-staff-table td,
   .rpt-act-table th, .rpt-act-table td {
-    padding: 3px 5px; vertical-align: middle;
-    border-bottom: 1px solid #e2e8f0; line-height: 1.25;
+    padding: 4px 6px; vertical-align: middle;
+    border-bottom: 1px solid #e5e7eb; line-height: 1.3; color: #374151;
   }
   .rpt-staff-table thead th, .rpt-act-table thead th {
-    font-size: 6.5pt; font-weight: 700; text-transform: uppercase;
+    font-size: 7.5pt; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.03em; white-space: nowrap;
+    background: #f3f4f6; color: #4b5563;
+    border-bottom: 1px solid #d1d5db;
   }
   .rpt-align-c { text-align: center !important; }
   .rpt-align-r { text-align: right !important; }
   .rpt-align-l { text-align: left !important; }
   .rpt-mono { font-family: Consolas, 'Courier New', monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .rpt-name { font-weight: 700; text-transform: uppercase; word-break: break-word; white-space: normal; }
-  .rpt-grp-sep { border-left: 2px solid rgba(255,255,255,0.35) !important; }
-  .rpt-staff-table tbody .rpt-grp-sep-data { border-left: 2px solid #cbd5e1 !important; }
-  .rpt-staff-table tbody tr:nth-child(even) { background: #f8fafc; }
-  .rpt-staff-table tbody tr:nth-child(odd) { background: #fff; }
-  .rpt-th-dark { background: #1e293b; color: #fff; }
-  .rpt-th-blue { background: #1d4ed8; color: #fff; }
-  .rpt-th-amber { background: #d97706; color: #fff; }
-  .rpt-th-indigo { background: #4338ca; color: #fff; }
-  .rpt-th-emerald { background: #059669; color: #fff; }
-  .rpt-td-blue { background: #eff6ff; color: #1e40af; }
-  .rpt-td-amber { background: #fffbeb; color: #92400e; }
-  .rpt-td-indigo { background: #eef2ff; color: #312e81; font-weight: 700; }
-  .rpt-td-emerald { background: #ecfdf5; color: #065f46; font-weight: 800; }
-  .rpt-foot { background: #f1f5f9; font-weight: 700; border-top: 2px solid #94a3b8; }
-  .rpt-act-table tbody tr:nth-child(even) { background: #f8fafc; }
+  .rpt-name { font-weight: 600; text-transform: uppercase; word-break: break-word; white-space: normal; color: #1f2937; }
+  .rpt-grp-sep { border-left: 1px solid #d1d5db !important; }
+  .rpt-th-hakedis { color: #047857 !important; }
+  .rpt-td-num { text-align: right; color: #4b5563; }
+  .rpt-td-hakedis {
+    text-align: right; color: #047857; font-weight: 700;
+    background: #f9fafb;
+  }
+  .rpt-staff-table tbody tr:nth-child(even),
+  .rpt-act-table tbody tr:nth-child(even) { background: #fafafa; }
+  .rpt-staff-table tbody tr:nth-child(odd),
   .rpt-act-table tbody tr:nth-child(odd) { background: #fff; }
+  .rpt-foot { background: #f3f4f6; font-weight: 700; border-top: 2px solid #d1d5db; color: #374151; }
+  .rpt-foot .rpt-td-hakedis { background: #f3f4f6; font-size: 9pt; }
+  .rpt-summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .rpt-summary-card {
+    border: 1px solid #d1d5db; border-radius: 4px; padding: 10px;
+    text-align: center; background: #fafafa;
+  }
+  .rpt-summary-card span:first-child {
+    font-size: 7pt; font-weight: 700; color: #6b7280;
+    text-transform: uppercase; display: block;
+  }
+  .rpt-summary-val { font-size: 11pt; font-weight: 700; color: #374151; font-family: Consolas, monospace; display: block; margin-top: 4px; }
+  .rpt-summary-sub { font-size: 6.5pt; color: #9ca3af; display: block; margin-top: 3px; }
+  .rpt-summary-hakedis { border-color: #059669; background: #fafafa; }
+  .rpt-summary-hakedis span:first-child { color: #047857; }
+  .rpt-summary-hakedis .rpt-summary-val { color: #047857; font-size: 13pt; font-weight: 800; }
+  .rpt-sign-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  .rpt-sign-box {
+    border: 1px solid #d1d5db; border-radius: 4px; padding: 14px 12px 12px;
+    text-align: center; min-height: 96px; background: #fff;
+  }
+  .rpt-sign-label {
+    font-weight: 700; color: #374151; font-size: 8.5pt;
+    text-transform: uppercase; letter-spacing: 0.04em; display: block;
+  }
+  .rpt-sign-space {
+    height: 52px; margin: 10px 16px 6px;
+    border-bottom: 1px solid #cbd5e1;
+  }
+  .rpt-sign-hint { font-size: 7.5pt; color: #9ca3af; font-weight: 600; }
+  .rpt-eimza {
+    border: 1px solid #d1d5db; border-radius: 4px; padding: 12px;
+    background: #f9fafb; font-size: 8pt; color: #374151;
+  }
 `;
 
 function daysInMonth(year: number, month: number): number {
@@ -244,8 +322,8 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
       @page { size: A4 portrait; margin: 10mm 8mm; }
       * { box-sizing: border-box; }
       html, body {
-        margin: 0; padding: 0; background: #fff; color: #0f172a;
-        font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; line-height: 1.35;
+        margin: 0; padding: 0; background: #fff; color: #374151;
+        font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; line-height: 1.4;
       }
       .report-root { width: 100%; max-width: 194mm; margin: 0 auto; }
       section, div, table { overflow: visible !important; max-height: none !important; height: auto !important; }
@@ -254,27 +332,9 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
       thead { display: table-header-group; }
       tfoot { display: table-footer-group; }
       tr { page-break-inside: avoid; break-inside: avoid; }
-      svg { display: none !important; }
-      .rpt-banner { background: #1E4E78; color: #fff; padding: 8px 10px; border-radius: 6px 6px 0 0; }
-      .rpt-banner-sub { background: #ecfdf5; border: 1px solid #a7f3d0; padding: 6px; text-align: center; font-weight: 700; font-size: 9pt; color: #065f46; }
-      .rpt-zer-box {
-        border: 2px solid #059669; background: #ecfdf5; border-radius: 8px;
-        padding: 10px 12px; margin: 8px 0 10px; page-break-inside: avoid;
-      }
-      .rpt-zer-box h4 { margin: 0 0 6px; font-size: 9pt; color: #065f46; text-transform: uppercase; letter-spacing: 0.04em; }
-      .rpt-zer-formula { font-size: 8pt; color: #047857; margin: 0 0 4px; }
-      .rpt-zer-total { font-size: 16pt; font-weight: 800; color: #047857; font-family: Consolas, monospace; }
-      .rpt-zer-meta { font-size: 7.5pt; color: #059669; margin-top: 4px; }
-      .rpt-sec-title { font-size: 8.5pt; font-weight: 800; color: #1E4E78; text-transform: uppercase; margin: 0 0 4px; }
-      .rpt-sec-sub { font-size: 7pt; color: #64748b; margin: 0 0 6px; }
-      .rpt-table-wrap { border: 1px solid #cbd5e1; border-radius: 6px; margin-top: 4px; overflow: hidden; }
-      .rpt-td-blue, .rpt-td-amber, .rpt-td-indigo, .rpt-td-emerald { text-align: right; font-family: Consolas, monospace; }
-      .rpt-summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
-      .rpt-summary-card { border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; text-align: center; }
-      .rpt-summary-emerald { border: 2px solid #059669; background: #ecfdf5; }
-      .rpt-sign-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
-      .rpt-sign-box { border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; text-align: center; min-height: 52px; }
-      ${REPORT_TABLE_CSS}
+      svg:not(.rpt-logo-mark) { display: none !important; }
+      .rpt-logo-mark { display: block !important; }
+      ${REPORT_CSS}
       @media print {
         html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       }
@@ -473,26 +533,25 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
 
           <div className="bg-white border rounded-3xl p-6 shadow-sm">
             <div id="kibar-report-print-area" className="report-root bg-white space-y-4 text-xs text-slate-800">
-              <style>{REPORT_TABLE_CSS}</style>
+              <style>{REPORT_CSS}</style>
 
               {/* —— Başlık —— */}
-              <div className="border border-slate-200 rounded-lg">
-                <div className="rpt-banner bg-gradient-to-r from-[#1E4E78] to-[#2563a8] px-4 py-3 flex justify-between items-center text-white">
-                  <div>
-                    <h2 className="text-sm font-black uppercase tracking-wide m-0">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h2>
-                    <p className="text-[8px] opacity-90 uppercase tracking-widest m-0 mt-0.5">ZER YAPI · Aylık Hakediş & Faaliyet Mutabakatı</p>
+              <div className="rpt-header">
+                <div className="rpt-header-main">
+                  <div className="rpt-header-brand">
+                    <KibritciLogo size="lg" showText={false} className="h-11 rpt-logo" />
+                    <div>
+                      <h2>KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h2>
+                      <p>ZER YAPI · Aylık Hakediş & Faaliyet Mutabakatı</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="inline-block bg-emerald-400/20 border border-emerald-300/40 text-[8px] font-bold px-2 py-0.5 rounded uppercase">
-                      ZER-YAPI-{donemKey}
-                    </span>
-                    <p className="text-[8px] opacity-80 mt-1 m-0">{donemLabel} · {new Date().toLocaleDateString('tr-TR')}</p>
+                  <div className="rpt-header-meta">
+                    <span className="rpt-ref">ZER-YAPI-{donemKey}</span>
+                    <p>{donemLabel} · {new Date().toLocaleDateString('tr-TR')}</p>
                   </div>
                 </div>
-                <div className="rpt-banner-sub bg-emerald-50 border-t border-emerald-100 px-4 py-2 text-center">
-                  <h3 className="font-bold text-emerald-900 uppercase text-[10px] tracking-wide m-0">
-                    Şantiye Sahası Aylık Hakediş ve Faaliyet Raporu — {donemLabel}
-                  </h3>
+                <div className="rpt-header-title">
+                  Şantiye Sahası Aylık Hakediş ve Faaliyet Raporu — {donemLabel}
                 </div>
               </div>
 
@@ -530,38 +589,38 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                       <col style={{ width: '12%' }} />
                     </colgroup>
                     <thead>
-                      <tr className="rpt-th-dark">
+                      <tr>
                         <th className="rpt-align-c" rowSpan={2}>#</th>
                         <th className="rpt-align-l" rowSpan={2}>Ad Soyad</th>
                         <th className="rpt-align-l" rowSpan={2}>Görev</th>
                         <th className="rpt-align-r" rowSpan={2}>Maaş</th>
                         <th className="rpt-align-c" rowSpan={2}>Gün</th>
                         <th className="rpt-align-c" rowSpan={2}>Mesai</th>
-                        <th className="rpt-align-c rpt-th-blue rpt-grp-sep" colSpan={3}>Maaş Kazancı</th>
-                        <th className="rpt-align-c rpt-th-emerald rpt-grp-sep" colSpan={2}>ZER YAPI Hakediş</th>
+                        <th className="rpt-align-c rpt-grp-sep" colSpan={3}>Maaş Kazancı</th>
+                        <th className="rpt-align-c rpt-grp-sep rpt-th-hakedis" colSpan={2}>ZER YAPI Hakediş</th>
                       </tr>
                       <tr>
-                        <th className="rpt-th-blue rpt-align-r rpt-grp-sep">Gün</th>
-                        <th className="rpt-th-amber rpt-align-r">Mesai</th>
-                        <th className="rpt-th-indigo rpt-align-r">Toplam</th>
-                        <th className="rpt-th-emerald rpt-align-c rpt-grp-sep">₺/Gün</th>
-                        <th className="rpt-th-emerald rpt-align-r">Tutar</th>
+                        <th className="rpt-align-r rpt-grp-sep">Gün</th>
+                        <th className="rpt-align-r">Mesai</th>
+                        <th className="rpt-align-r">Toplam</th>
+                        <th className="rpt-align-c rpt-grp-sep">₺/Gün</th>
+                        <th className="rpt-align-r rpt-th-hakedis">Tutar</th>
                       </tr>
                     </thead>
                     <tbody>
                       {activeStaffRows.map((row, idx) => (
                         <tr key={row.personel.id}>
-                          <td className="rpt-align-c rpt-mono text-slate-500">{idx + 1}</td>
+                          <td className="rpt-align-c rpt-mono">{idx + 1}</td>
                           <td className="rpt-name">{row.personel.ad} {row.personel.soyad}</td>
                           <td className="rpt-align-l uppercase">{normalizeGorev(row.personel.gorev)}</td>
-                          <td className="rpt-align-r rpt-mono">{formatMoney(row.personel.maas || 30000, 0)}</td>
+                          <td className="rpt-td-num rpt-mono">{formatMoney(row.personel.maas || 30000, 0)}</td>
                           <td className="rpt-align-c rpt-mono">{row.geldiGun}</td>
                           <td className="rpt-align-c rpt-mono">{row.mesaiSaat > 0 ? row.mesaiSaat : '—'}</td>
-                          <td className="rpt-td-blue rpt-grp-sep-data">{formatMoney(row.gunKazanci)}</td>
-                          <td className="rpt-td-amber">{row.mesaiKazanci > 0 ? formatMoney(row.mesaiKazanci) : '—'}</td>
-                          <td className="rpt-td-indigo">{formatMoney(row.toplamKazanc)}</td>
-                          <td className="rpt-align-c rpt-mono text-emerald-700 rpt-grp-sep-data">{ZER_YAPI_GUNLUK}</td>
-                          <td className="rpt-td-emerald">{formatMoney(row.zerYapiHakedis, 0)}</td>
+                          <td className="rpt-td-num rpt-mono rpt-grp-sep">{formatMoney(row.gunKazanci)}</td>
+                          <td className="rpt-td-num rpt-mono">{row.mesaiKazanci > 0 ? formatMoney(row.mesaiKazanci) : '—'}</td>
+                          <td className="rpt-td-num rpt-mono">{formatMoney(row.toplamKazanc)}</td>
+                          <td className="rpt-align-c rpt-mono rpt-grp-sep">{ZER_YAPI_GUNLUK}</td>
+                          <td className="rpt-td-hakedis rpt-mono">{formatMoney(row.zerYapiHakedis, 0)}</td>
                         </tr>
                       ))}
                       {activeStaffRows.length === 0 && (
@@ -573,11 +632,11 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                         <td colSpan={4} className="rpt-align-r uppercase">Toplam</td>
                         <td className="rpt-align-c rpt-mono">{totalPersonDays}</td>
                         <td className="rpt-align-c rpt-mono">{totalMesaiSaat}</td>
-                        <td className="rpt-td-blue rpt-grp-sep-data">{formatMoney(totalGunKazanci)}</td>
-                        <td className="rpt-td-amber">{formatMoney(totalMesaiKazanci)}</td>
-                        <td className="rpt-td-indigo">{formatMoney(totalMaasKazanci)}</td>
-                        <td className="rpt-align-c text-emerald-600 rpt-grp-sep-data">×{ZER_YAPI_GUNLUK}</td>
-                        <td className="rpt-td-emerald">{formatMoney(totalZerYapiHakedis, 0)}</td>
+                        <td className="rpt-td-num rpt-mono rpt-grp-sep">{formatMoney(totalGunKazanci)}</td>
+                        <td className="rpt-td-num rpt-mono">{formatMoney(totalMesaiKazanci)}</td>
+                        <td className="rpt-td-num rpt-mono">{formatMoney(totalMaasKazanci)}</td>
+                        <td className="rpt-align-c rpt-mono rpt-grp-sep">×{ZER_YAPI_GUNLUK}</td>
+                        <td className="rpt-td-hakedis rpt-mono">{formatMoney(totalZerYapiHakedis, 0)}</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -602,7 +661,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                         <col style={{ width: '7%' }} />
                       </colgroup>
                       <thead>
-                        <tr className="rpt-th-dark">
+                        <tr>
                           <th className="rpt-align-c">No</th>
                           <th className="rpt-align-l">Tarih</th>
                           <th className="rpt-align-l">Parsel</th>
@@ -644,7 +703,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                         <col style={{ width: '67%' }} />
                       </colgroup>
                       <thead>
-                        <tr className="rpt-th-dark">
+                        <tr>
                           <th className="rpt-align-c">No</th>
                           <th className="rpt-align-l">Tarih</th>
                           <th className="rpt-align-l">Tip</th>
@@ -669,36 +728,35 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
               {/* —— Özet —— */}
               <div className="rpt-summary-grid">
                 <div className="rpt-summary-card">
-                  <span className="text-[7px] font-bold text-indigo-700 uppercase block">Toplam Maaş Kazancı</span>
-                  <span className="text-base font-black text-indigo-900 font-mono">{formatMoney(totalMaasKazanci)}</span>
-                  <span className="text-[6px] text-indigo-500 block mt-0.5">Gün + mesai (bilgi amaçlı)</span>
+                  <span>Toplam Maaş Kazancı</span>
+                  <span className="rpt-summary-val">{formatMoney(totalMaasKazanci)}</span>
+                  <span className="rpt-summary-sub">Gün + mesai (bilgi amaçlı)</span>
                 </div>
-                <div className="rpt-summary-card rpt-summary-emerald">
-                  <span className="text-[7px] font-black text-emerald-800 uppercase block">ZER YAPI Hakediş Toplamı</span>
-                  <span className="text-base font-black text-emerald-800 font-mono">{formatMoney(totalZerYapiHakedis, 0)}</span>
-                  <span className="text-[6px] text-emerald-600 block mt-0.5 font-semibold">{totalPersonDays} gün × ₺{ZER_YAPI_GUNLUK}</span>
+                <div className="rpt-summary-card rpt-summary-hakedis">
+                  <span>ZER YAPI Hakediş Toplamı</span>
+                  <span className="rpt-summary-val">{formatMoney(totalZerYapiHakedis, 0)}</span>
+                  <span className="rpt-summary-sub">{totalPersonDays} gün × ₺{ZER_YAPI_GUNLUK}</span>
                 </div>
               </div>
 
               {/* —— İmza —— */}
               <div className="pt-2 border-t border-slate-200">
                 {reportType === 'E-IMZALI' ? (
-                  <div className="border border-emerald-500/30 rounded-xl p-3 bg-emerald-500/5 flex items-center space-x-3">
-                    <ShieldCheck size={26} className="text-emerald-600 shrink-0" />
-                    <div>
-                      <span className="text-[10px] font-black text-emerald-700 uppercase block">E-İMZA İLE ONAYLANMIŞTIR</span>
-                      <p className="text-[9px] text-slate-500">Doğrulayan: {currentUser?.email || 'sametatak9@gmail.com'}</p>
-                    </div>
+                  <div className="rpt-eimza">
+                    <span className="font-bold uppercase block mb-1">E-İmza ile Onaylanmıştır</span>
+                    <span className="text-slate-500">Doğrulayan: {currentUser?.email || 'sametatak9@gmail.com'}</span>
                   </div>
                 ) : (
                   <div className="rpt-sign-grid">
                     <div className="rpt-sign-box">
-                      <span className="font-extrabold text-[#1e4e78] block text-[8px]">Hakedişi Düzenleyen</span>
-                      <div className="h-8" /><span className="text-[8px] font-bold text-slate-400">İmza</span>
+                      <span className="rpt-sign-label">Hazırlayan</span>
+                      <div className="rpt-sign-space" />
+                      <span className="rpt-sign-hint">İmza</span>
                     </div>
                     <div className="rpt-sign-box">
-                      <span className="font-extrabold text-[#1e4e78] block text-[8px]">Proje Koordinatörü</span>
-                      <div className="h-8" /><span className="text-[8px] font-bold text-slate-400">İmza / Kaşe</span>
+                      <span className="rpt-sign-label">Proje Müdürü</span>
+                      <div className="rpt-sign-space" />
+                      <span className="rpt-sign-hint">İmza / Kaşe</span>
                     </div>
                   </div>
                 )}

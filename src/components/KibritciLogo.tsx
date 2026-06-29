@@ -25,7 +25,7 @@ export const KibritciLogo: React.FC<KibritciLogoProps> = ({
       {/* Elegant Architectural K-shaped SVG Logo */}
       <svg 
         viewBox="0 0 140 120" 
-        className="h-full w-auto" 
+        className="h-full w-auto rpt-logo-mark" 
         fill="none" 
         xmlns="http://www.w3.org/2000/svg"
       >
