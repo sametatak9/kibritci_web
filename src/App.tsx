@@ -279,7 +279,7 @@ export default function App() {
         setLoadingMsg('Aylık personel puantaj cetvelleri yükleniyor...');
         let attData = await seedYoklamaIfEmpty(INITIAL_YOKLAMA);
 
-        const { bootstrapLegacyYoklama, markLegacyYoklamaBootstrapped } = await import('./lib/legacyYoklamaBootstrap');
+        const { bootstrapLegacyYoklama, markLegacyYoklamaBootstrapped, mayis2026NeedsBootstrap } = await import('./lib/legacyYoklamaBootstrap');
         const legacyMerge = bootstrapLegacyYoklama(personnelData, attData);
         if (legacyMerge) {
           personnelData = legacyMerge.personeller;
@@ -290,7 +290,10 @@ export default function App() {
               await saveDocument('personeller', p);
             }
           }
-          markLegacyYoklamaBootstrapped();
+          if (!mayis2026NeedsBootstrap(attData)) {
+            markLegacyYoklamaBootstrapped();
+          }
+          setLoadingMsg(`Excel yoklamaları Firestore'a kaydedildi (${legacyMerge.importedDays} gün)...`);
           console.log(`Legacy yoklama birleştirildi: ${legacyMerge.importedDays} gün`);
         }
 
