@@ -6,7 +6,6 @@ import {
 import { db, saveDocument } from '../lib/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { Personel, AylikYoklamaMap } from '../types/erp';
-import { KibritciLogo } from './KibritciLogo';
 import { buildPersonelListForMonth, iterateMonthYoklama } from '../lib/yoklamaUtils';
 import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 import { normalizeGorev } from '../lib/gorevUtils';
@@ -204,24 +203,59 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
     const printContent = document.getElementById('kibar-report-print-area')?.innerHTML;
     if (!printContent) return;
 
-    const htmlSnippet = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>ZER_YAPI_Hakedis_${donemKey}</title>
-      <script src="https://cdn.tailwindcss.com"></script>
-      <style>
-        *{box-sizing:border-box}
-        body{font-family:'Segoe UI',Inter,system-ui,sans-serif;font-size:10px;color:#0f172a;background:#fff;margin:0}
-        @media print{
-          .no-print{display:none!important}
-          html,body{padding:0;margin:0;background:white;height:auto!important;overflow:visible!important}
-          .report-root,.print-area,.faaliyet-table-wrap,.kamp-table-wrap{
-            max-height:none!important;height:auto!important;overflow:visible!important;
-          }
-          .report-row,.faaliyet-row{page-break-inside:avoid;break-inside:avoid}
-          thead{display:table-header-group}
-          tfoot{display:table-footer-group}
-        }
-      </style>
-      </head><body class="p-5"><div class="max-w-[210mm] mx-auto report-root">${printContent}</div>
-      <script>window.onload=function(){setTimeout(function(){window.print()},400)}</script></body></html>`;
+    const printCss = `
+      @page { size: A4 portrait; margin: 10mm 8mm; }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0; background: #fff; color: #0f172a;
+        font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; line-height: 1.35;
+      }
+      .report-root { width: 100%; max-width: 194mm; margin: 0 auto; }
+      section, div, table { overflow: visible !important; max-height: none !important; height: auto !important; }
+      section { page-break-inside: auto !important; break-inside: auto !important; margin-bottom: 6mm; }
+      table { width: 100%; border-collapse: collapse; table-layout: auto; page-break-inside: auto !important; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+      tr { page-break-inside: avoid; break-inside: avoid; }
+      th, td { padding: 2px 4px; vertical-align: top; word-wrap: break-word; }
+      svg { display: none !important; }
+      .rpt-banner { background: #1E4E78; color: #fff; padding: 8px 10px; border-radius: 6px 6px 0 0; }
+      .rpt-banner-sub { background: #ecfdf5; border: 1px solid #a7f3d0; padding: 6px; text-align: center; font-weight: 700; font-size: 9pt; color: #065f46; }
+      .rpt-zer-box {
+        border: 2px solid #059669; background: #ecfdf5; border-radius: 8px;
+        padding: 10px 12px; margin: 8px 0 10px; page-break-inside: avoid;
+      }
+      .rpt-zer-box h4 { margin: 0 0 6px; font-size: 9pt; color: #065f46; text-transform: uppercase; letter-spacing: 0.04em; }
+      .rpt-zer-formula { font-size: 8pt; color: #047857; margin: 0 0 4px; }
+      .rpt-zer-total { font-size: 16pt; font-weight: 800; color: #047857; font-family: Consolas, monospace; }
+      .rpt-zer-meta { font-size: 7.5pt; color: #059669; margin-top: 4px; }
+      .rpt-sec-title { font-size: 8.5pt; font-weight: 800; color: #1E4E78; text-transform: uppercase; margin: 0 0 4px; }
+      .rpt-sec-sub { font-size: 7pt; color: #64748b; margin: 0 0 6px; }
+      .rpt-table-wrap { border: 1px solid #cbd5e1; border-radius: 6px; margin-top: 4px; }
+      .rpt-th-dark { background: #1e293b; color: #fff; font-size: 7pt; font-weight: 700; text-transform: uppercase; }
+      .rpt-th-blue { background: #1d4ed8; color: #fff; }
+      .rpt-th-amber { background: #d97706; color: #fff; }
+      .rpt-th-indigo { background: #4338ca; color: #fff; }
+      .rpt-th-emerald { background: #059669; color: #fff; }
+      .rpt-td-blue { background: #eff6ff; color: #1e40af; text-align: right; font-family: Consolas, monospace; }
+      .rpt-td-amber { background: #fffbeb; color: #92400e; text-align: right; font-family: Consolas, monospace; }
+      .rpt-td-indigo { background: #eef2ff; color: #312e81; text-align: right; font-weight: 700; font-family: Consolas, monospace; }
+      .rpt-td-emerald { background: #ecfdf5; color: #065f46; text-align: right; font-weight: 800; font-family: Consolas, monospace; }
+      .rpt-foot { background: #f1f5f9; font-weight: 700; border-top: 2px solid #94a3b8; }
+      .rpt-summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+      .rpt-summary-card { border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; text-align: center; }
+      .rpt-summary-emerald { border: 2px solid #059669; background: #ecfdf5; }
+      .rpt-sign-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+      .rpt-sign-box { border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; text-align: center; min-height: 52px; }
+      @media print {
+        html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      }
+    `;
+
+    const htmlSnippet = `<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"><title>ZER_YAPI_Hakedis_${donemKey}</title>
+      <style>${printCss}</style>
+      </head><body><div class="report-root">${printContent}</div>
+      <script>window.onload=function(){setTimeout(function(){window.print()},300)}</script></body></html>`;
 
     const win = window.open('', '_blank');
     if (win) {
@@ -410,76 +444,82 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
           </div>
 
           <div className="bg-white border rounded-3xl p-6 shadow-sm">
-            <div id="kibar-report-print-area" className="report-root bg-white space-y-5 text-xs text-slate-800">
+            <div id="kibar-report-print-area" className="report-root bg-white space-y-4 text-xs text-slate-800">
 
               {/* —— Başlık —— */}
-              <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm">
-                <div className="bg-gradient-to-r from-[#1E4E78] to-[#2563a8] px-4 py-3 flex justify-between items-center text-white">
-                  <div className="flex items-center gap-3">
-                    <KibritciLogo size="md" />
-                    <div>
-                      <h2 className="text-sm font-black uppercase tracking-wide">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h2>
-                      <p className="text-[8px] opacity-90 uppercase tracking-widest">ZER YAPI · Aylık Hakediş & Faaliyet Mutabakatı</p>
-                    </div>
+              <div className="border border-slate-200 rounded-lg">
+                <div className="rpt-banner bg-gradient-to-r from-[#1E4E78] to-[#2563a8] px-4 py-3 flex justify-between items-center text-white">
+                  <div>
+                    <h2 className="text-sm font-black uppercase tracking-wide m-0">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h2>
+                    <p className="text-[8px] opacity-90 uppercase tracking-widest m-0 mt-0.5">ZER YAPI · Aylık Hakediş & Faaliyet Mutabakatı</p>
                   </div>
                   <div className="text-right">
                     <span className="inline-block bg-emerald-400/20 border border-emerald-300/40 text-[8px] font-bold px-2 py-0.5 rounded uppercase">
                       ZER-YAPI-{donemKey}
                     </span>
-                    <p className="text-[8px] opacity-80 mt-1">{donemLabel} · {new Date().toLocaleDateString('tr-TR')}</p>
+                    <p className="text-[8px] opacity-80 mt-1 m-0">{donemLabel} · {new Date().toLocaleDateString('tr-TR')}</p>
                   </div>
                 </div>
-                <div className="bg-emerald-50 border-t border-emerald-100 px-4 py-2 text-center">
-                  <h3 className="font-bold text-emerald-900 uppercase text-[10px] tracking-wide">
+                <div className="rpt-banner-sub bg-emerald-50 border-t border-emerald-100 px-4 py-2 text-center">
+                  <h3 className="font-bold text-emerald-900 uppercase text-[10px] tracking-wide m-0">
                     Şantiye Sahası Aylık Hakediş ve Faaliyet Raporu — {donemLabel}
                   </h3>
                 </div>
               </div>
 
+              {/* —— ZER YAPI Hakediş Özeti (rapor başı) —— */}
+              <div className="rpt-zer-box">
+                <h4>ZER YAPI Hakediş Formülü — Dönem Kazancı</h4>
+                <p className="rpt-zer-formula">
+                  Formül: Toplam çalışma günü × ₺{ZER_YAPI_GUNLUK} günlük birim bedel
+                  &nbsp;|&nbsp; {totalPersonDays} gün × ₺{ZER_YAPI_GUNLUK} = {formatMoney(totalZerYapiHakedis, 0)}
+                </p>
+                <div className="rpt-zer-total">{formatMoney(totalZerYapiHakedis, 0)}</div>
+                <p className="rpt-zer-meta">
+                  {activeStaffRows.length} personel · {totalPersonDays} iş-günü · {donemLabel}
+                  &nbsp;—&nbsp; Bu tutar maaş kazancından bağımsızdır.
+                </p>
+              </div>
+
               {/* —— 1. PERSONEL —— */}
-              <section className="print-area">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="w-6 h-6 rounded-lg bg-[#1E4E78] text-white text-[9px] font-black flex items-center justify-center">1</span>
-                  <div>
-                    <h4 className="font-black text-[10px] text-[#1E4E78] uppercase tracking-wider">Personel Kazanç ve Hakediş</h4>
-                    <p className="text-[7px] text-slate-500">{activeStaffRows.length} personel · {totalPersonDays} gün · {totalMesaiSaat} sa mesai</p>
-                  </div>
-                </div>
-                <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm">
-                  <table className="w-full text-left border-collapse text-[7px] report-row">
+              <section>
+                <p className="rpt-sec-title m-0">1 · Personel Kazanç ve Hakediş Detayı</p>
+                <p className="rpt-sec-sub">{activeStaffRows.length} personel · {totalPersonDays} gün · {totalMesaiSaat} sa mesai</p>
+                <div className="rpt-table-wrap">
+                  <table className="w-full text-left border-collapse text-[7px]">
                     <thead>
-                      <tr className="bg-slate-800 text-white font-bold uppercase">
-                        <th className="p-1.5 text-center" rowSpan={2}>#</th>
-                        <th className="p-1.5" rowSpan={2}>Ad Soyad</th>
-                        <th className="p-1.5" rowSpan={2}>Görev</th>
-                        <th className="p-1.5 text-right" rowSpan={2}>Maaş</th>
-                        <th className="p-1.5 text-center" rowSpan={2}>Gün</th>
-                        <th className="p-1.5 text-center" rowSpan={2}>Mesai</th>
-                        <th className="p-1.5 text-center bg-blue-700" colSpan={3}>Maaş Kazancı</th>
-                        <th className="p-1.5 text-center bg-emerald-700" colSpan={2}>ZER YAPI Hakediş</th>
+                      <tr className="rpt-th-dark">
+                        <th className="p-1 text-center" rowSpan={2}>#</th>
+                        <th className="p-1" rowSpan={2}>Ad Soyad</th>
+                        <th className="p-1" rowSpan={2}>Görev</th>
+                        <th className="p-1 text-right" rowSpan={2}>Maaş</th>
+                        <th className="p-1 text-center" rowSpan={2}>Gün</th>
+                        <th className="p-1 text-center" rowSpan={2}>Mesai</th>
+                        <th className="p-1 text-center rpt-th-blue" colSpan={3}>Maaş Kazancı</th>
+                        <th className="p-1 text-center rpt-th-emerald" colSpan={2}>ZER YAPI Hakediş</th>
                       </tr>
-                      <tr className="font-bold uppercase text-[6px]">
-                        <th className="p-1 bg-blue-600 text-right">Gün</th>
-                        <th className="p-1 bg-amber-600 text-right">Mesai</th>
-                        <th className="p-1 bg-indigo-600 text-right">Toplam</th>
-                        <th className="p-1 bg-emerald-600 text-center">₺/Gün</th>
-                        <th className="p-1 bg-emerald-700 text-right">Tutar</th>
+                      <tr className="text-[6px] font-bold uppercase">
+                        <th className="p-1 rpt-th-blue text-right">Gün</th>
+                        <th className="p-1 rpt-th-amber text-right">Mesai</th>
+                        <th className="p-1 rpt-th-indigo text-right">Toplam</th>
+                        <th className="p-1 rpt-th-emerald text-center">₺/Gün</th>
+                        <th className="p-1 rpt-th-emerald text-right">Tutar</th>
                       </tr>
                     </thead>
                     <tbody>
                       {activeStaffRows.map((row, idx) => (
-                        <tr key={row.personel.id} className={`report-row ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
-                          <td className="p-1.5 text-center font-mono text-slate-500 border-b border-slate-100">{idx + 1}</td>
-                          <td className="p-1.5 font-bold uppercase border-b border-slate-100">{row.personel.ad} {row.personel.soyad}</td>
-                          <td className="p-1.5 uppercase border-b border-slate-100">{normalizeGorev(row.personel.gorev)}</td>
-                          <td className="p-1.5 text-right font-mono border-b border-slate-100">{formatMoney(row.personel.maas || 30000, 0)}</td>
-                          <td className="p-1.5 text-center font-mono font-bold border-b border-slate-100">{row.geldiGun}</td>
-                          <td className="p-1.5 text-center font-mono border-b border-slate-100">{row.mesaiSaat > 0 ? row.mesaiSaat : '—'}</td>
-                          <td className="p-1.5 text-right font-mono text-blue-800 bg-blue-50/50 border-b border-blue-100">{formatMoney(row.gunKazanci)}</td>
-                          <td className="p-1.5 text-right font-mono text-amber-800 bg-amber-50/50 border-b border-amber-100">{row.mesaiKazanci > 0 ? formatMoney(row.mesaiKazanci) : '—'}</td>
-                          <td className="p-1.5 text-right font-mono font-bold text-indigo-900 bg-indigo-50/50 border-b border-indigo-100">{formatMoney(row.toplamKazanc)}</td>
-                          <td className="p-1.5 text-center font-mono text-emerald-700 bg-emerald-50 border-b border-emerald-100">{ZER_YAPI_GUNLUK}</td>
-                          <td className="p-1.5 text-right font-mono font-black text-emerald-800 bg-emerald-50 border-b border-emerald-100">{formatMoney(row.zerYapiHakedis, 0)}</td>
+                        <tr key={row.personel.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                          <td className="p-1 text-center font-mono text-slate-500 border-b border-slate-100">{idx + 1}</td>
+                          <td className="p-1 font-bold uppercase border-b border-slate-100">{row.personel.ad} {row.personel.soyad}</td>
+                          <td className="p-1 uppercase border-b border-slate-100">{normalizeGorev(row.personel.gorev)}</td>
+                          <td className="p-1 text-right font-mono border-b border-slate-100">{formatMoney(row.personel.maas || 30000, 0)}</td>
+                          <td className="p-1 text-center font-mono font-bold border-b border-slate-100">{row.geldiGun}</td>
+                          <td className="p-1 text-center font-mono border-b border-slate-100">{row.mesaiSaat > 0 ? row.mesaiSaat : '—'}</td>
+                          <td className="p-1 rpt-td-blue border-b border-slate-100">{formatMoney(row.gunKazanci)}</td>
+                          <td className="p-1 rpt-td-amber border-b border-slate-100">{row.mesaiKazanci > 0 ? formatMoney(row.mesaiKazanci) : '—'}</td>
+                          <td className="p-1 rpt-td-indigo border-b border-slate-100">{formatMoney(row.toplamKazanc)}</td>
+                          <td className="p-1 text-center font-mono text-emerald-700 border-b border-slate-100">{ZER_YAPI_GUNLUK}</td>
+                          <td className="p-1 rpt-td-emerald border-b border-slate-100">{formatMoney(row.zerYapiHakedis, 0)}</td>
                         </tr>
                       ))}
                       {activeStaffRows.length === 0 && (
@@ -487,54 +527,49 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                       )}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-slate-100 font-bold border-t-2 border-slate-300">
-                        <td colSpan={4} className="p-1.5 text-right uppercase text-[7px]">Toplam</td>
-                        <td className="p-1.5 text-center font-mono">{totalPersonDays}</td>
-                        <td className="p-1.5 text-center font-mono">{totalMesaiSaat}</td>
-                        <td className="p-1.5 text-right font-mono text-blue-900">{formatMoney(totalGunKazanci)}</td>
-                        <td className="p-1.5 text-right font-mono text-amber-900">{formatMoney(totalMesaiKazanci)}</td>
-                        <td className="p-1.5 text-right font-mono text-indigo-900">{formatMoney(totalMaasKazanci)}</td>
-                        <td className="p-1.5 text-center text-emerald-600">×{ZER_YAPI_GUNLUK}</td>
-                        <td className="p-1.5 text-right font-mono font-black text-emerald-900">{formatMoney(totalZerYapiHakedis, 0)}</td>
+                      <tr className="rpt-foot">
+                        <td colSpan={4} className="p-1 text-right uppercase text-[7px]">Toplam</td>
+                        <td className="p-1 text-center font-mono">{totalPersonDays}</td>
+                        <td className="p-1 text-center font-mono">{totalMesaiSaat}</td>
+                        <td className="p-1 rpt-td-blue">{formatMoney(totalGunKazanci)}</td>
+                        <td className="p-1 rpt-td-amber">{formatMoney(totalMesaiKazanci)}</td>
+                        <td className="p-1 rpt-td-indigo">{formatMoney(totalMaasKazanci)}</td>
+                        <td className="p-1 text-center text-emerald-600">×{ZER_YAPI_GUNLUK}</td>
+                        <td className="p-1 rpt-td-emerald">{formatMoney(totalZerYapiHakedis, 0)}</td>
                       </tr>
                     </tfoot>
                   </table>
                 </div>
               </section>
 
-              {/* —— 2. SAHA FAALİYETLERİ (kayıt kayıt, tarih sırası, kaydırmasız) —— */}
-              <section className="print-area faaliyet-table-wrap">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="w-6 h-6 rounded-lg bg-[#1E4E78] text-white text-[9px] font-black flex items-center justify-center">2</span>
-                  <div>
-                    <h4 className="font-black text-[10px] text-[#1E4E78] uppercase tracking-wider">Saha Faaliyet Raporları</h4>
-                    <p className="text-[7px] text-slate-500">{sahaFaaliyetSatirlari.length} kayıt · eskiden yeniye tarih sırası</p>
-                  </div>
-                </div>
+              {/* —— 2. SAHA FAALİYETLERİ —— */}
+              <section>
+                <p className="rpt-sec-title m-0">2 · Saha Faaliyet Raporları</p>
+                <p className="rpt-sec-sub">{sahaFaaliyetSatirlari.length} kayıt · eskiden yeniye tarih sırası</p>
                 {sahaFaaliyetSatirlari.length === 0 ? (
-                  <p className="text-[9px] text-slate-400 italic pl-8">Bu dönemde saha faaliyeti kaydı yok.</p>
+                  <p className="text-[9px] text-slate-400 italic">Bu dönemde saha faaliyeti kaydı yok.</p>
                 ) : (
-                  <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm">
-                    <table className="w-full border-collapse text-[7px] faaliyet-defteri">
+                  <div className="rpt-table-wrap">
+                    <table className="w-full border-collapse text-[7px]">
                       <thead>
-                        <tr className="bg-[#1E4E78] text-white font-bold uppercase">
-                          <th className="p-1.5 w-7 text-center border-r border-white/10">No</th>
-                          <th className="p-1.5 w-[82px] text-left border-r border-white/10">Tarih</th>
-                          <th className="p-1.5 w-[48px] text-left border-r border-white/10">Parsel</th>
-                          <th className="p-1.5 w-[32px] text-left border-r border-white/10">Blok</th>
-                          <th className="p-1.5 text-left border-r border-white/10">Yapılan İş / Faaliyet</th>
-                          <th className="p-1.5 w-[56px] text-right">Personel</th>
+                        <tr className="rpt-th-dark">
+                          <th className="p-1 w-7 text-center">No</th>
+                          <th className="p-1 w-[82px] text-left">Tarih</th>
+                          <th className="p-1 w-[48px] text-left">Parsel</th>
+                          <th className="p-1 w-[32px] text-left">Blok</th>
+                          <th className="p-1 text-left">Yapılan İş / Faaliyet</th>
+                          <th className="p-1 w-[56px] text-right">Personel</th>
                         </tr>
                       </thead>
                       <tbody>
                         {sahaFaaliyetSatirlari.map(sf => (
-                          <tr key={sf.id} className={`faaliyet-row report-row ${sf.siraNo % 2 === 0 ? 'bg-slate-50' : 'bg-white'}`}>
+                          <tr key={sf.id} className={sf.siraNo % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
                             <td className="p-1 text-center font-mono font-bold text-slate-500 border-b border-slate-100">{sf.siraNo}</td>
-                            <td className="p-1 font-mono whitespace-nowrap text-slate-800 border-b border-slate-100">{sf.tarihLabel}</td>
-                            <td className="p-1 font-semibold text-slate-700 border-b border-slate-100">{sf.parselKisa}</td>
-                            <td className="p-1 font-semibold text-slate-700 border-b border-slate-100">{sf.blokKisa}</td>
-                            <td className="p-1 text-slate-900 leading-snug border-b border-slate-100">{faaliyetIsTanimi(sf)}</td>
-                            <td className="p-1 text-right text-slate-600 whitespace-nowrap border-b border-slate-100">{formatPersonelSayisi(sf)}</td>
+                            <td className="p-1 font-mono whitespace-nowrap border-b border-slate-100">{sf.tarihLabel}</td>
+                            <td className="p-1 font-semibold border-b border-slate-100">{sf.parselKisa}</td>
+                            <td className="p-1 font-semibold border-b border-slate-100">{sf.blokKisa}</td>
+                            <td className="p-1 leading-snug border-b border-slate-100">{faaliyetIsTanimi(sf)}</td>
+                            <td className="p-1 text-right whitespace-nowrap border-b border-slate-100">{formatPersonelSayisi(sf)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -544,34 +579,29 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
               </section>
 
               {/* —— 3. KAMP FAALİYETLERİ —— */}
-              <section className="print-area kamp-table-wrap">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="w-6 h-6 rounded-lg bg-slate-600 text-white text-[9px] font-black flex items-center justify-center">3</span>
-                  <div>
-                    <h4 className="font-black text-[10px] text-slate-700 uppercase tracking-wider">Kamp / Lojman Faaliyetleri</h4>
-                    <p className="text-[7px] text-slate-500">{kampFaaliyetSatirlari.length} kayıt</p>
-                  </div>
-                </div>
+              <section>
+                <p className="rpt-sec-title m-0">3 · Kamp / Lojman Faaliyetleri</p>
+                <p className="rpt-sec-sub">{kampFaaliyetSatirlari.length} kayıt</p>
                 {kampFaaliyetSatirlari.length === 0 ? (
-                  <p className="text-[9px] text-slate-400 italic pl-8">Bu dönemde kamp faaliyeti kaydı yok.</p>
+                  <p className="text-[9px] text-slate-400 italic">Bu dönemde kamp faaliyeti kaydı yok.</p>
                 ) : (
-                  <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                  <div className="rpt-table-wrap">
                     <table className="w-full border-collapse text-[7px]">
                       <thead>
-                        <tr className="bg-slate-600 text-white font-bold uppercase">
-                          <th className="p-1.5 w-7 text-center">No</th>
-                          <th className="p-1.5 w-[82px] text-left">Tarih</th>
-                          <th className="p-1.5 w-[72px] text-left">Tip</th>
-                          <th className="p-1.5 text-left">Açıklama</th>
+                        <tr className="rpt-th-dark">
+                          <th className="p-1 w-7 text-center">No</th>
+                          <th className="p-1 w-[82px] text-left">Tarih</th>
+                          <th className="p-1 w-[72px] text-left">Tip</th>
+                          <th className="p-1 text-left">Açıklama</th>
                         </tr>
                       </thead>
                       <tbody>
                         {kampFaaliyetSatirlari.map(kf => (
-                          <tr key={kf.id} className={`report-row ${kf.siraNo % 2 === 0 ? 'bg-slate-50' : 'bg-white'}`}>
+                          <tr key={kf.id} className={kf.siraNo % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
                             <td className="p-1 text-center font-mono border-b border-slate-100">{kf.siraNo}</td>
                             <td className="p-1 font-mono border-b border-slate-100">{kf.tarihLabel}</td>
                             <td className="p-1 font-semibold border-b border-slate-100">{kf.faaliyetTipi}</td>
-                            <td className="p-1 text-slate-700 border-b border-slate-100">{kf.aciklama}</td>
+                            <td className="p-1 border-b border-slate-100">{kf.aciklama}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -581,21 +611,21 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
               </section>
 
               {/* —— Özet —— */}
-              <div className="grid grid-cols-2 gap-3 print-area">
-                <div className="rounded-xl bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200 p-3 text-center shadow-sm">
-                  <span className="text-[7px] font-bold text-indigo-700 uppercase tracking-wide block">Toplam Maaş Kazancı</span>
+              <div className="rpt-summary-grid">
+                <div className="rpt-summary-card">
+                  <span className="text-[7px] font-bold text-indigo-700 uppercase block">Toplam Maaş Kazancı</span>
                   <span className="text-base font-black text-indigo-900 font-mono">{formatMoney(totalMaasKazanci)}</span>
                   <span className="text-[6px] text-indigo-500 block mt-0.5">Gün + mesai (bilgi amaçlı)</span>
                 </div>
-                <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-green-100 border-2 border-emerald-400 p-3 text-center shadow-sm">
-                  <span className="text-[7px] font-black text-emerald-800 uppercase tracking-wide block">ZER YAPI Hakediş Toplamı</span>
+                <div className="rpt-summary-card rpt-summary-emerald">
+                  <span className="text-[7px] font-black text-emerald-800 uppercase block">ZER YAPI Hakediş Toplamı</span>
                   <span className="text-base font-black text-emerald-800 font-mono">{formatMoney(totalZerYapiHakedis, 0)}</span>
                   <span className="text-[6px] text-emerald-600 block mt-0.5 font-semibold">{totalPersonDays} gün × ₺{ZER_YAPI_GUNLUK}</span>
                 </div>
               </div>
 
               {/* —— İmza —— */}
-              <div className="pt-3 border-t border-slate-200 print-area">
+              <div className="pt-2 border-t border-slate-200">
                 {reportType === 'E-IMZALI' ? (
                   <div className="border border-emerald-500/30 rounded-xl p-3 bg-emerald-500/5 flex items-center space-x-3">
                     <ShieldCheck size={26} className="text-emerald-600 shrink-0" />
@@ -605,13 +635,13 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-4 text-center">
-                    <div className="border p-2.5 rounded-xl bg-slate-50/50">
-                      <span className="font-extrabold text-[#1e4e78] block">Hakedişi Düzenleyen</span>
+                  <div className="rpt-sign-grid">
+                    <div className="rpt-sign-box">
+                      <span className="font-extrabold text-[#1e4e78] block text-[8px]">Hakedişi Düzenleyen</span>
                       <div className="h-8" /><span className="text-[8px] font-bold text-slate-400">İmza</span>
                     </div>
-                    <div className="border p-2.5 rounded-xl bg-slate-50/50">
-                      <span className="font-extrabold text-[#1e4e78] block">Proje Koordinatörü</span>
+                    <div className="rpt-sign-box">
+                      <span className="font-extrabold text-[#1e4e78] block text-[8px]">Proje Koordinatörü</span>
                       <div className="h-8" /><span className="text-[8px] font-bold text-slate-400">İmza / Kaşe</span>
                     </div>
                   </div>
