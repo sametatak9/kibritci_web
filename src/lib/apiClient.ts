@@ -1,6 +1,6 @@
 /**
  * API yanıtlarını güvenli JSON olarak okur.
- * Vite/HTML fallback ("The page could not be found") durumunda anlaşılır hata verir.
+ * Vite/HTML fallback veya Vercel yapılandırma hatalarında anlaşılır hata verir.
  */
 export async function fetchApiJson<T = unknown>(
   url: string,
@@ -11,7 +11,7 @@ export async function fetchApiJson<T = unknown>(
     res = await fetch(url, options);
   } catch {
     throw new Error(
-      'Sunucuya bağlanılamadı. Lütfen terminalde "npm run dev" komutu ile uygulamayı başlatın (http://localhost:3000).'
+      'Sunucuya bağlanılamadı. Yerelde "npm run dev" (port 3000) veya Vercel\'de GEMINI_API_KEY ortam değişkenini kontrol edin.'
     );
   }
 
@@ -19,10 +19,10 @@ export async function fetchApiJson<T = unknown>(
   const text = await res.text();
 
   if (!contentType.includes('application/json')) {
-    const snippet = text.slice(0, 80).replace(/\s+/g, ' ').trim();
+    const snippet = text.slice(0, 120).replace(/\s+/g, ' ').trim();
     if (snippet.startsWith('<!') || snippet.toLowerCase().includes('html') || snippet.startsWith('The page')) {
       throw new Error(
-        `API yanıt vermedi (HTML sayfa döndü). Uygulamayı "npm run dev" ile port 3000\'de çalıştırın. (${snippet}...)`
+        `AI API yanıt vermedi (HTML döndü). Vercel'de /api rotalarının aktif olduğundan ve GEMINI_API_KEY tanımlı olduğundan emin olun. (${snippet.slice(0, 60)}...)`
       );
     }
     throw new Error(`Beklenmeyen sunucu yanıtı: ${snippet || res.statusText}`);

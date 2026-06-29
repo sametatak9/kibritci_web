@@ -27,26 +27,26 @@ export interface LegacyExcelMonthData {
   personeller: LegacyExcelPersonRecord[];
 }
 
-/** Şubat 2026 — ekran görüntüsünden aktarıldı */
+/** Şubat 2026 — iş yeni başladı; çoğu personel ay sonunda 1–6 gün çalışmış (Excel satır 1–15) */
 export const SUBAT_2026_YOKLAMA: LegacyExcelMonthData = {
   year: 2026,
   month: 2,
   personeller: [
-    { excelId: 1, ad: 'ONUR', soyad: 'DURSUN', gorev: 'DÜZ İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-10', calismaGunleri: [28] },
-    { excelId: 2, ad: 'MAHMUT', soyad: 'İVGEN', gorev: 'DÜZ İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-14', calismaGunleri: [28] },
-    { excelId: 3, ad: 'YİĞİTCAN', soyad: 'DEMİRCAN', gorev: 'DÜZ İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-17', calismaGunleri: [28] },
-    { excelId: 4, ad: 'ŞÜKRÜ', soyad: 'ÇELPİŞ', gorev: 'DÜZ İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-18', calismaGunleri: [28] },
-    { excelId: 5, ad: 'BERAT', soyad: 'DEMİRCAN', gorev: 'DÜZ İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-17', calismaGunleri: [28] },
-    { excelId: 6, ad: 'ANIL', soyad: 'TUZCUOĞLU', gorev: 'DÜZ İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-31', calismaGunleri: [24, 25, 26, 27, 28] },
-    { excelId: 7, ad: 'NEZİH', soyad: 'SERT', gorev: 'DÜZ İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-31', calismaGunleri: [24, 25, 26, 27, 28] },
-    { excelId: 8, ad: 'ENES', soyad: 'PURLİK', gorev: 'DÜZ İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-31', calismaGunleri: [23, 24, 25, 26, 27, 28] },
-    { excelId: 9, ad: 'GÖRKEM', soyad: 'CİVGA', gorev: 'DÜZ İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-13', calismaGunleri: [27, 28] },
-    { excelId: 10, ad: 'EFE', soyad: 'DEMİRPOLAT', gorev: 'DÜZ İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-13', calismaGunleri: [27, 28] },
-    { excelId: 11, ad: 'OSMAN', soyad: 'BATAK', gorev: 'DÜZ İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-18', calismaGunleri: [27, 28] },
-    { excelId: 12, ad: 'MUSTAFA', soyad: 'ÇELPİŞ', gorev: 'DÜZ İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-18', calismaGunleri: [27, 28] },
-    { excelId: 13, ad: 'SEMİH', soyad: 'YAKA', gorev: 'DÜZ İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-12', calismaGunleri: [27, 28] },
-    { excelId: 14, ad: 'KORAY KADİR', soyad: 'İRKÖRÜCÜ', gorev: 'DÜZ İŞÇİ', maas: 30000, istenCikisTarihi: '2026-02-28', calismaGunleri: [27, 28] },
-    { excelId: 15, ad: 'RAMAZAN', soyad: 'KUŞBABA', gorev: 'DÜZ İŞÇİ', maas: 30000, istenCikisTarihi: '2026-02-28', calismaGunleri: [28] },
+    { excelId: 1, ad: 'ONUR', soyad: 'DURSUN', gorev: 'İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-10', calismaGunleri: [28] },
+    { excelId: 2, ad: 'MAHMUT', soyad: 'İVGEN', gorev: 'İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-14', calismaGunleri: [28] },
+    { excelId: 3, ad: 'YİĞİTCAN', soyad: 'DEMİRCAN', gorev: 'İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-17', calismaGunleri: [28] },
+    { excelId: 4, ad: 'ŞÜKRÜ', soyad: 'ÇELPİŞ', gorev: 'İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-18', calismaGunleri: [28] },
+    { excelId: 5, ad: 'BERAT', soyad: 'DEMİRCAN', gorev: 'İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-17', calismaGunleri: [28] },
+    { excelId: 6, ad: 'ANIL', soyad: 'TUZCUOĞLU', gorev: 'İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-31', calismaGunleri: [24, 25, 26, 27, 28] },
+    { excelId: 7, ad: 'NEZİH', soyad: 'SERT', gorev: 'İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-31', calismaGunleri: [24, 25, 26, 27, 28] },
+    { excelId: 8, ad: 'ENES', soyad: 'PURLİK', gorev: 'İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-31', calismaGunleri: [23, 24, 25, 26, 27, 28] },
+    { excelId: 9, ad: 'GÖRKEM', soyad: 'CİVGA', gorev: 'İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-13', calismaGunleri: [27, 28] },
+    { excelId: 10, ad: 'EFE', soyad: 'DEMİRPOLAT', gorev: 'İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-13', calismaGunleri: [27, 28] },
+    { excelId: 11, ad: 'OSMAN', soyad: 'BATAK', gorev: 'İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-18', calismaGunleri: [27, 28] },
+    { excelId: 12, ad: 'MUSTAFA', soyad: 'ÇELPİŞ', gorev: 'İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-18', calismaGunleri: [27, 28] },
+    { excelId: 13, ad: 'SEMİH', soyad: 'YAKA', gorev: 'İŞÇİ', maas: 30000, istenCikisTarihi: '2026-03-12', calismaGunleri: [27, 28] },
+    { excelId: 14, ad: 'KORAY KADİR', soyad: 'İRKÖRÜCÜ', gorev: 'İŞÇİ', maas: 30000, istenCikisTarihi: '2026-02-28', calismaGunleri: [27, 28] },
+    { excelId: 15, ad: 'RAMAZAN', soyad: 'KUŞBABA', gorev: 'İŞÇİ', maas: 30000, istenCikisTarihi: '2026-02-28', calismaGunleri: [28] },
   ],
 };
 
