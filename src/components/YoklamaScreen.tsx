@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Calendar, Trash2, ShieldAlert, CheckCircle, FileText, ChevronRight, RefreshCw, Database } from 'lucide-react';
 import { Personel, AylikYoklamaMap, YoklamaDurum } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
-import { findPersonelByName, getYoklamaDay, setYoklamaDay } from '../lib/yoklamaUtils';
+import { findPersonelByName, getYoklamaDay, isDayActiveForPersonel, isPersonelVisibleInMonth, setYoklamaDay } from '../lib/yoklamaUtils';
 import { importAllLegacyExcelMonths, importLegacyExcelMonth, aiMonthlyDataToLegacyMonth } from '../lib/legacyYoklamaImport';
 import { LEGACY_EXCEL_MONTHS } from '../data/legacyExcelYoklama';
 import { fetchApiJson } from '../lib/apiClient';
@@ -271,44 +271,11 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     return { isHoliday: isSunday, name: isSunday ? 'Pazar' : '', isOfficial: false };
   };
 
-  const isEmployeeVisibleInMonth = (p: Personel) => {
-    const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
-    if (p.iseGirisTarihi) {
-      const [hireY, hireM] = p.iseGirisTarihi.split('-').map(Number);
-      if (hireY > selectedYear || (hireY === selectedYear && hireM > selectedMonth)) {
-        return false; // Not hired yet in this period
-      }
-    }
-    if (p.istenCikisTarihi) {
-      const [exitY, exitM] = p.istenCikisTarihi.split('-').map(Number);
-      if (exitY < selectedYear || (exitY === selectedYear && exitM < selectedMonth)) {
-        return false; // Already left before this period
-      }
-    } else if (!isAktif) {
-      return false; // Fully passive and no exit date
-    }
-    return true;
-  };
+  const isEmployeeVisibleInMonth = (p: Personel) =>
+    isPersonelVisibleInMonth(p, selectedYear, selectedMonth, yoklamalar[p.id]);
 
-  const isDayActiveForEmployee = (p: Personel, day: number) => {
-    if (p.iseGirisTarihi) {
-      const [hireY, hireM, hireD] = p.iseGirisTarihi.split('-').map(Number);
-      const currentDateVal = selectedYear * 10000 + selectedMonth * 100 + day;
-      const hireDateVal = hireY * 10000 + hireM * 100 + hireD;
-      if (currentDateVal < hireDateVal) {
-        return false; // Not hired yet
-      }
-    }
-    if (p.istenCikisTarihi) {
-      const [exitY, exitM, exitD] = p.istenCikisTarihi.split('-').map(Number);
-      const currentDateVal = selectedYear * 10000 + selectedMonth * 100 + day;
-      const exitDateVal = exitY * 10000 + exitM * 100 + exitD;
-      if (currentDateVal > exitDateVal) {
-        return false; // Already left / Dismissed
-      }
-    }
-    return true;
-  };
+  const isDayActiveForEmployee = (p: Personel, day: number) =>
+    isDayActiveForPersonel(p, selectedYear, selectedMonth, day, yoklamalar[p.id]);
 
   const handleCellClick = (personelId: string, day: number) => {
     const p = personeller.find(emp => emp.id === personelId);

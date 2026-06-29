@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { CreditCard, Copy, Check, DollarSign, Download, Building, Search, Clock } from 'lucide-react';
 import { Personel, AylikYoklamaMap } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
-import { getYoklamaDay, iterateMonthYoklama } from '../lib/yoklamaUtils';
+import { getYoklamaDay, isDayActiveForPersonel, isPersonelVisibleInMonth, iterateMonthYoklama } from '../lib/yoklamaUtils';
 
 interface MaasScreenProps {
   personeller: Personel[];
@@ -42,44 +42,11 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
     }, 1200);
   };
 
-  const isEmployeeVisibleInMonth = (p: Personel) => {
-    const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
-    if (p.iseGirisTarihi) {
-      const [hireY, hireM] = p.iseGirisTarihi.split('-').map(Number);
-      if (hireY > selectedYear || (hireY === selectedYear && hireM > selectedMonth)) {
-        return false;
-      }
-    }
-    if (p.istenCikisTarihi) {
-      const [exitY, exitM] = p.istenCikisTarihi.split('-').map(Number);
-      if (exitY < selectedYear || (exitY === selectedYear && exitM < selectedMonth)) {
-        return false;
-      }
-    } else if (!isAktif) {
-      return false;
-    }
-    return true;
-  };
+  const isEmployeeVisibleInMonth = (p: Personel) =>
+    isPersonelVisibleInMonth(p, selectedYear, selectedMonth, yoklamalar[p.id]);
 
-  const isDayActiveForEmployee = (emp: Personel, day: number) => {
-    if (emp.iseGirisTarihi) {
-      const [hireY, hireM, hireD] = emp.iseGirisTarihi.split('-').map(Number);
-      const currentDateVal = selectedYear * 10000 + selectedMonth * 100 + day;
-      const hireDateVal = hireY * 10000 + hireM * 100 + hireD;
-      if (currentDateVal < hireDateVal) {
-        return false;
-      }
-    }
-    if (emp.istenCikisTarihi) {
-      const [exitY, exitM, exitD] = emp.istenCikisTarihi.split('-').map(Number);
-      const currentDateVal = selectedYear * 10000 + selectedMonth * 100 + day;
-      const exitDateVal = exitY * 10000 + exitM * 100 + exitD;
-      if (currentDateVal > exitDateVal) {
-        return false;
-      }
-    }
-    return true;
-  };
+  const isDayActiveForEmployee = (emp: Personel, day: number) =>
+    isDayActiveForPersonel(emp, selectedYear, selectedMonth, day, yoklamalar[emp.id]);
 
   // Calculations loop
   let grandBaseHakedis = 0;
