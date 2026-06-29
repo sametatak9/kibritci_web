@@ -11,6 +11,19 @@ export function formatReportDate(iso: string): string {
   return `${String(d).padStart(2, '0')}.${String(m).padStart(2, '0')}.${y}${dayName ? ` (${dayName})` : ''}`;
 }
 
+/** Tablo hücresi için kısa tarih + gün (sütun taşmasını önler) */
+export function formatReportDateParts(iso: string): { date: string; day: string } {
+  if (!iso) return { date: '—', day: '' };
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d) return { date: iso, day: '' };
+  const dt = new Date(y, m - 1, d);
+  const dayName = TURKISH_DAYS[dt.getDay()] ?? '';
+  return {
+    date: `${String(d).padStart(2, '0')}.${String(m).padStart(2, '0')}.${y}`,
+    day: dayName,
+  };
+}
+
 export function formatPersonelSayisi(sf: SahaFaaliyeti): string {
   const parts: string[] = [];
   if (sf.ustaSayisi) parts.push(`${sf.ustaSayisi} usta`);
@@ -34,6 +47,8 @@ export function faaliyetBlok(sf: SahaFaaliyeti): string {
 export interface FaaliyetRaporSatiri extends SahaFaaliyeti {
   siraNo: number;
   tarihLabel: string;
+  tarihDate: string;
+  tarihDay: string;
   parselKisa: string;
   blokKisa: string;
 }
@@ -46,13 +61,18 @@ export function prepareSahaFaaliyetRaporu(items: SahaFaaliyeti[]): FaaliyetRapor
     return faaliyetIsTanimi(a).localeCompare(faaliyetIsTanimi(b), 'tr');
   });
 
-  return sorted.map((sf, idx) => ({
-    ...sf,
-    siraNo: idx + 1,
-    tarihLabel: formatReportDate(sf.tarih || ''),
-    parselKisa: faaliyetParsel(sf),
-    blokKisa: faaliyetBlok(sf),
-  }));
+  return sorted.map((sf, idx) => {
+    const { date, day } = formatReportDateParts(sf.tarih || '');
+    return {
+      ...sf,
+      siraNo: idx + 1,
+      tarihLabel: formatReportDate(sf.tarih || ''),
+      tarihDate: date,
+      tarihDay: day,
+      parselKisa: faaliyetParsel(sf),
+      blokKisa: faaliyetBlok(sf),
+    };
+  });
 }
 
 export interface KampFaaliyetSatiri {

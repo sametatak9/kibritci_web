@@ -114,6 +114,22 @@ const REPORT_CSS = `
   .rpt-act-table tbody tr:nth-child(even) { background: #fafafa; }
   .rpt-staff-table tbody tr:nth-child(odd),
   .rpt-act-table tbody tr:nth-child(odd) { background: #fff; }
+  .rpt-act-table th, .rpt-act-table td { overflow: hidden; }
+  .rpt-act-no { width: 4%; }
+  .rpt-act-date { width: 11%; white-space: normal; line-height: 1.2; }
+  .rpt-act-date-main { display: block; font-family: Consolas, 'Courier New', monospace; font-size: 7.5pt; }
+  .rpt-act-date-day { display: block; font-size: 6.5pt; color: #9ca3af; margin-top: 1px; }
+  .rpt-act-parsel { width: 10%; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; }
+  .rpt-act-blok { width: 8%; white-space: nowrap; text-overflow: ellipsis; }
+  .rpt-act-desc {
+    white-space: normal !important; overflow: visible !important;
+    word-break: break-word; overflow-wrap: break-word; line-height: 1.35;
+  }
+  .rpt-act-table td.rpt-act-desc { overflow: visible !important; }
+  .rpt-act-pers { width: 9%; white-space: normal; font-size: 7pt; line-height: 1.2; }
+  .rpt-kamp-date { width: 13%; white-space: normal; }
+  .rpt-kamp-tip { width: 16%; white-space: normal; word-break: break-word; }
+  .rpt-kamp-desc { white-space: normal; word-break: break-word; overflow-wrap: break-word; }
   .rpt-foot { background: #f3f4f6; font-weight: 700; border-top: 2px solid #d1d5db; color: #374151; }
   .rpt-foot .rpt-td-hakedis { background: #f3f4f6; font-size: 9pt; }
   .rpt-summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
@@ -653,32 +669,35 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                   <div className="rpt-table-wrap">
                     <table className="rpt-act-table">
                       <colgroup>
-                        <col style={{ width: '5%' }} />
-                        <col style={{ width: '12%' }} />
+                        <col style={{ width: '4%' }} />
+                        <col style={{ width: '11%' }} />
+                        <col style={{ width: '10%' }} />
                         <col style={{ width: '8%' }} />
-                        <col style={{ width: '6%' }} />
-                        <col style={{ width: '62%' }} />
-                        <col style={{ width: '7%' }} />
+                        <col style={{ width: '58%' }} />
+                        <col style={{ width: '9%' }} />
                       </colgroup>
                       <thead>
                         <tr>
-                          <th className="rpt-align-c">No</th>
-                          <th className="rpt-align-l">Tarih</th>
-                          <th className="rpt-align-l">Parsel</th>
-                          <th className="rpt-align-l">Blok</th>
-                          <th className="rpt-align-l">Yapılan İş / Faaliyet</th>
-                          <th className="rpt-align-r">Pers.</th>
+                          <th className="rpt-align-c rpt-act-no">No</th>
+                          <th className="rpt-align-l rpt-act-date">Tarih</th>
+                          <th className="rpt-align-l rpt-act-parsel">Parsel</th>
+                          <th className="rpt-align-l rpt-act-blok">Blok</th>
+                          <th className="rpt-align-l rpt-act-desc">Yapılan İş / Faaliyet</th>
+                          <th className="rpt-align-r rpt-act-pers">Pers.</th>
                         </tr>
                       </thead>
                       <tbody>
                         {sahaFaaliyetSatirlari.map(sf => (
                           <tr key={sf.id}>
-                            <td className="rpt-align-c rpt-mono text-slate-500">{sf.siraNo}</td>
-                            <td className="rpt-mono">{sf.tarihLabel}</td>
-                            <td>{sf.parselKisa}</td>
-                            <td>{sf.blokKisa}</td>
-                            <td className="leading-snug">{faaliyetIsTanimi(sf)}</td>
-                            <td className="rpt-align-r rpt-mono">{formatPersonelSayisi(sf)}</td>
+                            <td className="rpt-align-c rpt-mono rpt-act-no">{sf.siraNo}</td>
+                            <td className="rpt-act-date rpt-align-l">
+                              <span className="rpt-act-date-main">{sf.tarihDate}</span>
+                              {sf.tarihDay && <span className="rpt-act-date-day">{sf.tarihDay}</span>}
+                            </td>
+                            <td className="rpt-act-parsel rpt-align-l" title={sf.parselKisa}>{sf.parselKisa}</td>
+                            <td className="rpt-act-blok rpt-align-l" title={sf.blokKisa}>{sf.blokKisa}</td>
+                            <td className="rpt-act-desc rpt-align-l">{faaliyetIsTanimi(sf)}</td>
+                            <td className="rpt-act-pers rpt-align-r">{formatPersonelSayisi(sf)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -697,26 +716,26 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                   <div className="rpt-table-wrap">
                     <table className="rpt-act-table">
                       <colgroup>
-                        <col style={{ width: '5%' }} />
-                        <col style={{ width: '14%' }} />
-                        <col style={{ width: '14%' }} />
+                        <col style={{ width: '4%' }} />
+                        <col style={{ width: '13%' }} />
+                        <col style={{ width: '16%' }} />
                         <col style={{ width: '67%' }} />
                       </colgroup>
                       <thead>
                         <tr>
-                          <th className="rpt-align-c">No</th>
-                          <th className="rpt-align-l">Tarih</th>
-                          <th className="rpt-align-l">Tip</th>
-                          <th className="rpt-align-l">Açıklama</th>
+                          <th className="rpt-align-c rpt-act-no">No</th>
+                          <th className="rpt-align-l rpt-kamp-date">Tarih</th>
+                          <th className="rpt-align-l rpt-kamp-tip">Tip</th>
+                          <th className="rpt-align-l rpt-kamp-desc">Açıklama</th>
                         </tr>
                       </thead>
                       <tbody>
                         {kampFaaliyetSatirlari.map(kf => (
                           <tr key={kf.id}>
-                            <td className="rpt-align-c rpt-mono">{kf.siraNo}</td>
-                            <td className="rpt-mono">{kf.tarihLabel}</td>
-                            <td>{kf.faaliyetTipi}</td>
-                            <td>{kf.aciklama}</td>
+                            <td className="rpt-align-c rpt-mono rpt-act-no">{kf.siraNo}</td>
+                            <td className="rpt-kamp-date rpt-mono rpt-align-l">{kf.tarihLabel}</td>
+                            <td className="rpt-kamp-tip rpt-align-l">{kf.faaliyetTipi}</td>
+                            <td className="rpt-kamp-desc rpt-align-l">{kf.aciklama}</td>
                           </tr>
                         ))}
                       </tbody>
