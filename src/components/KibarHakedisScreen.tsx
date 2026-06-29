@@ -7,6 +7,7 @@ import { db, saveDocument } from '../lib/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { Personel, AylikYoklamaMap, SahaFaaliyeti } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
+import { getYoklamaDay } from '../lib/yoklamaUtils';
 
 interface KibarHakedisScreenProps {
   personeller: Personel[];
@@ -65,8 +66,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
   const getPresentStaff = () => {
     const list: Personel[] = [];
     personeller.forEach(p => {
-      const personYoklama = yoklamalar[p.id] || {};
-      const dayData = personYoklama[day];
+      const dayData = getYoklamaDay(yoklamalar[p.id], year, month, day);
       // Check if they were present (Geldi) in the selected period
       if (dayData?.durum === 'Geldi') {
         list.push(p);

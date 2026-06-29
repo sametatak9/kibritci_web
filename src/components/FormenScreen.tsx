@@ -9,6 +9,7 @@ import {
 import { Personel, AylikYoklamaMap, YoklamaDurum, SahaFaaliyeti as SahaFaaliyetiType } from '../types/erp';
 import { db } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
+import { getYoklamaDay, setYoklamaDay } from '../lib/yoklamaUtils';
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 interface FormenScreenProps {
@@ -352,8 +353,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     const localMesai: Record<string, number> = {};
 
     activeStaff.forEach(p => {
-      const pMap = yoklamalar[p.id] || {};
-      const dayData = pMap[day];
+      const dayData = getYoklamaDay(yoklamalar[p.id], year, month, day);
       if (dayData) {
         if (dayData.durum === 'Geldi') {
           present.push(p.id);
@@ -504,21 +504,17 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     // Save to the main yoklamalar map
     setYoklamalar(prev => {
       const next = { ...prev };
-      const gonderenYazar = currentUser?.displayName || (currentUser?.ad ? `${currentUser.ad} ${currentUser.soyad || ''}` : '') || 'FORMEN';
       
       activeStaff.forEach(p => {
-        const pMap = next[p.id] ? { ...next[p.id] } : {};
-        const dayData = pMap[day] || { durum: 'Girilmedi', mesaiSaati: 0 };
+        const dayData = getYoklamaDay(next[p.id], year, month, day) || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 };
 
         if (presentIds.includes(p.id)) {
-          pMap[day] = { ...dayData, durum: 'Geldi', mesaiSaati: mesaiSaatleri[p.id] || 0, gonderen: gonderenYazar };
+          next[p.id] = setYoklamaDay(next[p.id], year, month, day, { ...dayData, durum: 'Geldi', mesaiSaati: mesaiSaatleri[p.id] || 0 });
         } else if (absentIds.includes(p.id)) {
-          pMap[day] = { ...dayData, durum: 'Yok', mesaiSaati: 0, gonderen: gonderenYazar };
+          next[p.id] = setYoklamaDay(next[p.id], year, month, day, { ...dayData, durum: 'Yok', mesaiSaati: 0 });
         } else {
-          pMap[day] = { ...dayData, durum: 'Girilmedi', mesaiSaati: 0 };
+          next[p.id] = setYoklamaDay(next[p.id], year, month, day, { ...dayData, durum: 'Girilmedi', mesaiSaati: 0 });
         }
-
-        next[p.id] = pMap;
       });
 
       return next;
@@ -2274,8 +2270,10 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                                   </div>
                                 </td>
                                 {getDaysOfWeek().map((d, i) => {
-                                  const pMap = yoklamalar[p.id] || {};
-                                  const dayData = pMap[d.getDate()];
+                                  const dYear = d.getFullYear();
+                                  const dMonth = d.getMonth() + 1;
+                                  const dDay = d.getDate();
+                                  const dayData = getYoklamaDay(yoklamalar[p.id], dYear, dMonth, dDay);
                                   const status = dayData?.durum || 'Girilmedi';
                                   const mesai = dayData?.mesaiSaati || 0;
 
@@ -2412,15 +2410,21 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                               const mesai = selectedCell.currentMesai;
 
                               setYoklamalar(prev => {
-                                const next = { ...prev };
-                                const pMap = next[pId] ? { ...next[pId] } : {};
-                                pMap[dVal.getDate()] = {
-                                  durum: status,
-                                  mesaiSaati: mesai,
-                                  gonderen: currentUser?.email || 'FORMEN'
+                                const dVal = selectedCell.date;
+                                const pId = selectedCell.personelId;
+                                const status = selectedCell.currentDurum;
+                                const mesai = selectedCell.currentMesai;
+                                const dYear = dVal.getFullYear();
+                                const dMonth = dVal.getMonth() + 1;
+                                const dDay = dVal.getDate();
+
+                                return {
+                                  ...prev,
+                                  [pId]: setYoklamaDay(prev[pId], dYear, dMonth, dDay, {
+                                    durum: status,
+                                    mesaiSaati: mesai,
+                                  }),
                                 };
-                                next[pId] = pMap;
-                                return next;
                               });
 
                               await logActionToPersonelHistory(

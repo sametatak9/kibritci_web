@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CreditCard, Copy, Check, DollarSign, Download, Building, Search, Clock } from 'lucide-react';
 import { Personel, AylikYoklamaMap } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
+import { getYoklamaDay, iterateMonthYoklama } from '../lib/yoklamaUtils';
 
 interface MaasScreenProps {
   personeller: Personel[];
@@ -98,7 +99,6 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
     })
     .map(p => {
     const personYoklama = yoklamalar[p.id] || {};
-    
     let hakedisDays = 0;
     let totalOvertimeHours = 0;
     let geldiGun = 0;
@@ -108,24 +108,24 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
     let yokGun = 0;
     let raporluGun = 0;
 
-    if (Object.keys(personYoklama).length > 0) {
-      Object.keys(personYoklama).forEach(dayStr => {
-        const day = parseInt(dayStr);
-        const dayData = personYoklama[day];
-        if (dayData && isDayActiveForEmployee(p, day)) {
-          if (dayData.durum === 'Geldi' || dayData.durum === 'İzinli' || dayData.durum === 'Pazar' || dayData.durum === 'Tatil') {
-            hakedisDays++;
-          }
-          if (dayData.durum === 'Geldi') geldiGun++;
-          if (dayData.durum === 'İzinli') izinliGun++;
-          if (dayData.durum === 'Pazar') pazarGun++;
-          if (dayData.durum === 'Tatil') tatilGun++;
-          if (dayData.durum === 'Yok') yokGun++;
-          if (dayData.durum === 'Raporlu') raporluGun++;
-          totalOvertimeHours += dayData.mesaiSaati;
+    let hasMonthData = false;
+    iterateMonthYoklama(personYoklama, selectedYear, selectedMonth, (day, dayData) => {
+      hasMonthData = true;
+      if (dayData && isDayActiveForEmployee(p, day)) {
+        if (dayData.durum === 'Geldi' || dayData.durum === 'İzinli' || dayData.durum === 'Pazar' || dayData.durum === 'Tatil') {
+          hakedisDays++;
         }
-      });
-    } else {
+        if (dayData.durum === 'Geldi') geldiGun++;
+        if (dayData.durum === 'İzinli') izinliGun++;
+        if (dayData.durum === 'Pazar') pazarGun++;
+        if (dayData.durum === 'Tatil') tatilGun++;
+        if (dayData.durum === 'Yok') yokGun++;
+        if (dayData.durum === 'Raporlu') raporluGun++;
+        totalOvertimeHours += dayData.mesaiSaati;
+      }
+    });
+
+    if (!hasMonthData) {
       for (let day = 1; day <= daysInMonth; day++) {
         if (isDayActiveForEmployee(p, day)) {
           hakedisDays++;
@@ -531,7 +531,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
                                 <span className="font-bold text-[8px] uppercase tracking-wider text-slate-400">GÜN DETAYI:</span>
                                 <div className="flex flex-wrap gap-1">
                                   {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
-                                    const dayData = personYoklama[day] || { durum: 'Girilmedi', mesaiSaati: 0 };
+                                    const dayData = getYoklamaDay(personYoklama, selectedYear, selectedMonth, day) || { durum: 'Girilmedi', mesaiSaati: 0 };
                                     let letter = "•";
                                     let color = "text-slate-450 bg-slate-100";
                                     if (dayData.durum === 'Geldi') { letter = "G"; color = "text-emerald-700 bg-emerald-100/50 font-bold"; }

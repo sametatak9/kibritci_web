@@ -5,6 +5,8 @@ import {
 } from 'lucide-react';
 import { saveDocument } from '../lib/firebase';
 import { CariKart, StokKart, Personel, AylikYoklamaMap, SahaFaaliyeti } from '../types/erp';
+import { findPersonelByName, setYoklamaDay } from '../lib/yoklamaUtils';
+import { fetchApiJson } from '../lib/apiClient';
 
 interface EvrakAktarimiScreenProps {
   cariKartlar: CariKart[];
@@ -223,69 +225,47 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
       const fileBase64 = await fileToBase64(selectedFile);
       setLoadingStep('Yapay zeka dökümanı inceliyor (Gemini 2.5 Flash)...');
       
-      const response = await fetch('/api/parse-legacy-document', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileBase64,
-          mimeType: selectedFile.type || 'application/pdf',
-          docType
-        })
-      });
-
-      if (!response.ok) {
-        let errMsg = 'Döküman yapay zeka tarafından ayrıştırılamadı.';
-        try {
-          const text = await response.clone().text();
-          try {
-            const errData = JSON.parse(text);
-            let innerMsg = errData.error || errMsg;
-            try {
-              const innerObj = JSON.parse(innerMsg);
-              if (innerObj && innerObj.error && innerObj.error.message) {
-                innerMsg = innerObj.error.message;
-              }
-            } catch (innerErr) {
-              // Not a JSON string inside, keep innerMsg as is
-            }
-            errMsg = innerMsg;
-          } catch {
-            errMsg = text || errMsg;
-          }
-        } catch (e) {
-          // ignore
+      const result = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
+        '/api/parse-legacy-document',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileBase64,
+            mimeType: selectedFile.type || 'application/pdf',
+            docType
+          })
         }
-        throw new Error(errMsg);
+      );
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Döküman yapay zeka tarafından ayrıştırılamadı.');
       }
 
-      const result = await response.json();
-      if (result.success && result.data) {
-        if (docType === 'auto') {
-          const type = result.data.detectedType;
-          if (type) {
-            setDocType(type);
-            setParsedData(result.data);
-            const typeLabels: Record<string, string> = {
-              fatura: 'Fatura (Invoice)',
-              irsaliye: 'Sevk İrsaliyesi (Waybill)',
-              makbuz: 'Makbuz / Dekont',
-              hakedis: 'Taşeron Hakediş Kapağı',
-              yoklama: 'Puantaj & Yoklama Çizelgesi',
-              saha_faaliyet: 'Saha Günlük Faaliyet Raporu'
-            };
-            setDetectedTypeMsg(`🤖 Yapay zeka bu evrakın bir "${typeLabels[type] || type.toUpperCase()}" olduğunu akıllıca tespit etti ve doğrulama formunu adapte etti!`);
-            showStatus('success', 'Yapay zeka evrak türünü algıladı ve başarıyla ayrıştırdı!');
-          } else {
-            setParsedData(result.data);
-            setDocType('fatura'); // Fallback
-            showStatus('success', 'Belge çözümlendi.');
-          }
+      const data = result.data;
+      if (docType === 'auto') {
+        const type = data.detectedType;
+        if (type) {
+          setDocType(type);
+          setParsedData(data);
+          const typeLabels: Record<string, string> = {
+            fatura: 'Fatura (Invoice)',
+            irsaliye: 'Sevk İrsaliyesi (Waybill)',
+            makbuz: 'Makbuz / Dekont',
+            hakedis: 'Taşeron Hakediş Kapağı',
+            yoklama: 'Puantaj & Yoklama Çizelgesi',
+            saha_faaliyet: 'Saha Günlük Faaliyet Raporu'
+          };
+          setDetectedTypeMsg(`🤖 Yapay zeka bu evrakın bir "${typeLabels[type] || type.toUpperCase()}" olduğunu akıllıca tespit etti ve doğrulama formunu adapte etti!`);
+          showStatus('success', 'Yapay zeka evrak türünü algıladı ve başarıyla ayrıştırdı!');
         } else {
-          setParsedData(result.data);
-          showStatus('success', 'Döküman başarıyla ayrıştırıldı! Lütfen alanları gözden geçirin.');
+          setParsedData(data);
+          setDocType('fatura');
+          showStatus('success', 'Belge çözümlendi.');
         }
       } else {
-        throw new Error('Geçersiz veri formatı döndü.');
+        setParsedData(data);
+        showStatus('success', 'Döküman başarıyla ayrıştırıldı! Lütfen alanları gözden geçirin.');
       }
     } catch (err: any) {
       console.error(err);
@@ -493,38 +473,54 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
       } else if (docType === 'yoklama') {
         const newYoklamalar = { ...yoklamalar };
         let matchedCount = 0;
+        const unmatched: string[] = [];
+
+        let importYear = new Date().getFullYear();
+        let importMonth = new Date().getMonth() + 1;
+        if (parsedData.tarih) {
+          const parts = parsedData.tarih.split('-');
+          if (parts.length >= 2) {
+            importYear = Number(parts[0]) || importYear;
+            importMonth = Number(parts[1]) || importMonth;
+          } else {
+            const monthNames = ['ocak', 'şubat', 'subat', 'mart', 'nisan', 'mayıs', 'mayis', 'haziran', 'temmuz', 'ağustos', 'agustos', 'eylül', 'eylul', 'ekim', 'kasım', 'kasim', 'aralık', 'aralik'];
+            const lower = parsedData.tarih.toLowerCase();
+            monthNames.forEach((name, idx) => {
+              if (lower.includes(name)) importMonth = (idx % 12) + 1;
+            });
+            const yearMatch = parsedData.tarih.match(/20\d{2}/);
+            if (yearMatch) importYear = Number(yearMatch[0]);
+          }
+        }
 
         (parsedData.yoklamaKayitlari || []).forEach((item: any) => {
-          const matchedPerson = personeller.find(p => 
-            `${p.ad} ${p.soyad}`.toLowerCase().trim() === item.adSoyad.toLowerCase().trim() ||
-            item.adSoyad.toLowerCase().trim().includes(`${p.ad} ${p.soyad}`.toLowerCase().trim()) ||
-            `${p.ad} ${p.soyad}`.toLowerCase().trim().includes(item.adSoyad.toLowerCase().trim())
-          );
-
-          if (matchedPerson) {
-            let dayNo = Number(item.gunNo);
-            if (!dayNo && parsedData.tarih) {
-              const parts = parsedData.tarih.split('-');
-              if (parts.length === 3) {
-                dayNo = Number(parts[2]);
-              }
-            }
-            if (!dayNo) dayNo = new Date().getDate(); // Fallback to current day
-
-            if (!newYoklamalar[matchedPerson.id]) {
-              newYoklamalar[matchedPerson.id] = {};
-            }
-            newYoklamalar[matchedPerson.id][dayNo] = {
-              durum: (item.durum || 'Geldi') as any,
-              mesaiSaati: Number(item.mesaiSaati) || 0
-            };
-            matchedCount++;
+          const matchedPerson = findPersonelByName(personeller, item.adSoyad || '');
+          if (!matchedPerson) {
+            unmatched.push(item.adSoyad || 'Bilinmeyen');
+            return;
           }
+
+          let dayNo = Number(item.gunNo);
+          if (!dayNo && parsedData.tarih) {
+            const parts = parsedData.tarih.split('-');
+            if (parts.length === 3) dayNo = Number(parts[2]);
+          }
+          if (!dayNo) dayNo = new Date().getDate();
+
+          const validDurum = ['Geldi', 'Yok', 'İzinli', 'Raporlu', 'Pazar', 'Tatil'].includes(item.durum)
+            ? item.durum
+            : 'Geldi';
+
+          newYoklamalar[matchedPerson.id] = setYoklamaDay(newYoklamalar[matchedPerson.id], importYear, importMonth, dayNo, {
+            durum: validDurum as any,
+            mesaiSaati: Number(item.mesaiSaati) || 0
+          });
+          matchedCount++;
         });
 
-        // Save entire map to Firestore using specific sync function passed down
         setYoklamalar(newYoklamalar);
-        showStatus('success', `🎉 Toplam ${matchedCount} personelin yoklama/puantaj verisi canlı sisteme akıtıldı ve kaydedildi!`);
+        const unmatchedMsg = unmatched.length > 0 ? ` Eşleşmeyen: ${unmatched.join(', ')}` : '';
+        showStatus('success', `🎉 Toplam ${matchedCount} personelin yoklama/puantaj verisi (${importMonth}/${importYear}) sisteme aktarıldı!${unmatchedMsg}`);
 
       } else if (docType === 'saha_faaliyet') {
         const mappedList = (parsedData.aktifPersonelListesi || []).map((name: string) => {

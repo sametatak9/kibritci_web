@@ -4,7 +4,8 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 
-dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
 const app = express();
 const PORT = 3000;
@@ -67,7 +68,7 @@ Please extract:
 2. "yoklamaKayitlari": An array of all workers listed on the sheet with fields:
    - "adSoyad": Full name.
    - "gorev": Job title/role (e.g. İŞÇİ, FORMEN, USTA, GÜVENLİK, DEPOCU, etc.).
-   - "durum": The attendance status mapped to one of: "Geldi", "Yok", "İzinli", "Raporlu".
+   - "durum": The attendance status mapped to one of: "Geldi", "Yok", "İzinli", "Raporlu", "Pazar", "Tatil".
    - "mesaiSaati": Varsa fazla mesai saati (number, default to 0).
 
 Provide the output strictly conforming to the response schema.
@@ -84,7 +85,7 @@ Provide the output strictly conforming to the response schema.
             properties: {
               adSoyad: { type: Type.STRING },
               gorev: { type: Type.STRING },
-              durum: { type: Type.STRING, description: "'Geldi', 'Yok', 'İzinli', 'Raporlu'" },
+              durum: { type: Type.STRING, description: "'Geldi', 'Yok', 'İzinli', 'Raporlu', 'Pazar', 'Tatil'" },
               mesaiSaati: { type: Type.NUMBER }
             },
             required: ["adSoyad", "durum"]
@@ -99,22 +100,29 @@ Provide the output strictly conforming to the response schema.
     let lastError;
 
     for (const model of models) {
-      try {
-        console.log(`Parsing daily yoklama with model: ${model}...`);
-        response = await ai.models.generateContent({
-          model: model,
-          contents: [promptText, imagePart],
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: responseSchema,
-            temperature: 0.1,
-          },
-        });
-        if (response?.text) break;
-      } catch (err) {
-        lastError = err;
-        console.warn(`Model ${model} failed for daily yoklama:`, err);
+      let retries = 3;
+      let delayMs = 1200;
+      for (let i = 0; i < retries; i++) {
+        try {
+          console.log(`Parsing daily yoklama with model: ${model} (Attempt ${i + 1}/${retries})...`);
+          response = await ai.models.generateContent({
+            model: model,
+            contents: [promptText, imagePart],
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: responseSchema,
+              temperature: 0.1,
+            },
+          });
+          if (response?.text) break;
+        } catch (err) {
+          lastError = err;
+          console.warn(`Model ${model} failed for daily yoklama (attempt ${i + 1}):`, err);
+          if (i < retries - 1) await new Promise(r => setTimeout(r, delayMs));
+          delayMs *= 2;
+        }
       }
+      if (response?.text) break;
     }
 
     if (!response || !response.text) {
@@ -126,6 +134,99 @@ Provide the output strictly conforming to the response schema.
   } catch (error: any) {
     console.error("Error in parse-daily-yoklama:", error);
     res.status(500).json({ error: error.message || "Failed to parse daily yoklama sheet" });
+  }
+});
+
+// API endpoint to parse Monthly Excel-style Puantaj (3-row blocks per employee with X marks)
+app.post("/api/parse-monthly-excel-yoklama", async (req, res) => {
+  try {
+    const { fileBase64, mimeType } = req.body;
+    if (!fileBase64 || !mimeType) {
+      return res.status(400).json({ error: "Missing fileBase64 or mimeType" });
+    }
+
+    const ai = getGeminiClient();
+    const imagePart = {
+      inlineData: { mimeType, data: fileBase64 },
+    };
+
+    const promptText = `
+You are an expert HR timesheet auditor for Turkish construction sites.
+Analyze this MONTHLY Excel puantaj sheet. Each employee occupies a block of rows:
+- Row 1: ID number, full name (AD SOYAD), status, exit date, days worked count, job title, salary
+- Row 2: "TARİH" label followed by day numbers like 1.2, 2.2, ... 28.2 (day.month format)
+- Row 3: "ÇALIŞMA" label followed by "X" marks under days the employee worked
+- Row 4 (optional): "MESAİ" row with overtime hours
+
+Extract:
+1. "yil": 4-digit year (infer from dates, default 2026)
+2. "ay": month number 1-12 (infer from date row like ".2" = February = 2)
+3. "personelKayitlari": array of each employee block:
+   - "excelId": the numeric ID in column 1 (unique per person on this sheet)
+   - "adSoyad": full name exactly as written
+   - "gorev": job title (default "DÜZ İŞÇİ")
+   - "calismaGunleri": array of day numbers (1-31) where X appears in ÇALIŞMA row
+   - "mesaiGunleri": optional object mapping day number to overtime hours
+   - "istenCikisTarihi": exit date as YYYY-MM-DD if visible (e.g. ÇIKIŞ 10.03 → 2026-03-10)
+
+Be precise with Turkish names (İ, Ş, Ğ, Ü, Ö, Ç). Each excelId is a distinct person even if names are similar.
+`;
+
+    const responseSchema = {
+      type: Type.OBJECT,
+      properties: {
+        yil: { type: Type.NUMBER },
+        ay: { type: Type.NUMBER },
+        personelKayitlari: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              excelId: { type: Type.NUMBER },
+              adSoyad: { type: Type.STRING },
+              gorev: { type: Type.STRING },
+              calismaGunleri: { type: Type.ARRAY, items: { type: Type.NUMBER } },
+              mesaiGunleri: { type: Type.OBJECT, additionalProperties: { type: Type.NUMBER } },
+              istenCikisTarihi: { type: Type.STRING },
+            },
+            required: ["excelId", "adSoyad", "calismaGunleri"],
+          },
+        },
+      },
+      required: ["yil", "ay", "personelKayitlari"],
+    };
+
+    const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+    let response;
+    let lastError;
+
+    for (const model of models) {
+      try {
+        console.log(`Parsing monthly excel yoklama with model: ${model}...`);
+        response = await ai.models.generateContent({
+          model,
+          contents: [promptText, imagePart],
+          config: {
+            responseMimeType: "application/json",
+            responseSchema,
+            temperature: 0.1,
+          },
+        });
+        if (response?.text) break;
+      } catch (err) {
+        lastError = err;
+        console.warn(`Model ${model} failed for monthly excel yoklama:`, err);
+      }
+    }
+
+    if (!response?.text) {
+      throw lastError || new Error("All models failed to parse monthly excel yoklama");
+    }
+
+    res.json({ success: true, data: JSON.parse(response.text) });
+  } catch (error: any) {
+    console.error("Error in parse-monthly-excel-yoklama:", error);
+    res.status(500).json({ error: error.message || "Failed to parse monthly excel yoklama" });
   }
 });
 
@@ -819,12 +920,25 @@ app.post("/api/chat", async (req, res) => {
 
 // Vite & Static file handler
 async function startServer() {
+  // Bilinmeyen API istekleri HTML yerine JSON dönsün
+  app.use("/api", (req, res) => {
+    res.status(404).json({
+      error: `API endpoint bulunamadı: ${req.method} ${req.originalUrl}. Sunucuyu "npm run dev" ile başlatın.`,
+    });
+  });
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
-    app.use(vite.middlewares);
+    // /api isteklerini Vite'a düşürme — HTML sayfa yerine Express API kullanılsın
+    app.use((req, res, next) => {
+      if (req.path.startsWith("/api")) {
+        return next();
+      }
+      return vite.middlewares(req, res, next);
+    });
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));

@@ -1348,10 +1348,11 @@ export default function App() {
               )}
 
               {activeTab === "yoklama" && (
-                <YoklamaScreen 
-                  personeller={personeller} 
-                  yoklamalar={yoklamalar} 
-                  setYoklamalar={setYoklamalarWithSync} 
+                <YoklamaScreen
+                  personeller={personeller}
+                  setPersoneller={setPersonellerWithSync}
+                  yoklamalar={yoklamalar}
+                  setYoklamalar={setYoklamalarWithSync}
                   addNotification={addNotification}
                 />
               )}

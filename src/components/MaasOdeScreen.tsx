@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Banknote, Search, CircleCheck as CheckCircle, Circle as XCircle, ListFilter as Filter, Download, Printer, Calendar, User, CreditCard, TriangleAlert as AlertTriangle, Save, ChevronDown, ChevronUp } from 'lucide-react';
 import { Personel, AylikYoklamaMap, MaaşOdeme, MaasKesinti } from '../types/erp';
+import { iterateMonthYoklama } from '../lib/yoklamaUtils';
 
 interface MaasOdeScreenProps {
   personeller: Personel[];
@@ -33,7 +34,7 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
     const pYoklama = yoklamalar[personel.id] || {};
     let hakedisGun = 0;
     let mesaiSaat = 0;
-    Object.values(pYoklama).forEach((day: any) => {
+    iterateMonthYoklama(pYoklama, selectedYil, selectedAy, (_day, day) => {
       if (day?.durum === 'Geldi' || day?.durum === 'İzinli' || day?.durum === 'Pazar' || day?.durum === 'Tatil') {
         hakedisGun++;
       }

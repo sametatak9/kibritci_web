@@ -4,6 +4,7 @@ import {
   Truck, Tent, Clock, ClipboardList, Sparkles, ChevronRight, Activity 
 } from 'lucide-react';
 import { Personel, AylikYoklamaMap, AracBakim, KampKaydi, KampOdasi, HazirTutanak, KasaHareketi } from '../types/erp';
+import { getYoklamaDay } from '../lib/yoklamaUtils';
 
 interface PersonelKartlariScreenProps {
   personeller: Personel[];
@@ -32,7 +33,7 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
     // Basic calculation:
     // Worked days in current month (June 2026) * Daily wage (Salary / 30) - any Cash Advance (Avans) from kasa.
     const pYoklama = yoklamalar[p.id] || {};
-    const workedDays = Object.values(pYoklama).filter((d: any) => d?.durum === 'Geldi').length;
+    const workedDays = Object.values(pYoklama).filter(d => (d as { durum?: string })?.durum === 'Geldi').length;
     const dailyWage = p.maas / 30;
     const grossEarned = workedDays * dailyWage;
 
@@ -246,8 +247,7 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
                 {/* Simulated days for June 2026 (Starts on Monday June 1) */}
                 {Array.from({ length: 30 }).map((_, idx) => {
                   const dayNo = idx + 1;
-                  const pYoklama = yoklamalar[selectedPersonnel.id] || {};
-                  const dayData = (pYoklama[dayNo] || { durum: 'Girilmedi' }) as any;
+                  const dayData = getYoklamaDay(yoklamalar[selectedPersonnel.id], 2026, 6, dayNo) || { durum: 'Girilmedi' as const };
                   return (
                     <div 
                       key={idx} 

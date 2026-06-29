@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Users, UserPlus, Trash2, CreditCard as Edit3, Camera, Search, ShieldCheck, Mail, Phone, MapPin, DollarSign, UserX, FileText, CloudUpload as UploadCloud, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, Loader as Loader2, Building2, History, Download } from 'lucide-react';
 import { Personel } from '../types/erp';
+import { fetchApiJson } from '../lib/apiClient';
 
 interface PersonelScreenProps {
   personeller: Personel[];
@@ -67,19 +68,18 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     reader.onload = async () => {
       try {
         const base64Data = (reader.result as string).split(',')[1];
-        const response = await fetch('/api/parse-sgk', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            fileBase64: base64Data,
-            mimeType: file.type
-          })
-        });
-
-        const resData = await response.json();
-        if (!response.ok || !resData.success) {
+        const resData = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
+          '/api/parse-sgk',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileBase64: base64Data,
+              mimeType: file.type
+            })
+          }
+        );
+        if (!resData.success) {
           throw new Error(resData.error || "Belge yapay zeka tarafından çözümlenirken bir sorun oluştu.");
         }
 
