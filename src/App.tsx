@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { CircleAlert as AlertCircle, RefreshCw } from 'lucide-react';
@@ -65,6 +65,7 @@ import {
   isTabRestrictedForUser,
   sanitizeKisitliSayfalar,
 } from './lib/yetkiUtils';
+import { ensureYapıFromOdalari } from './lib/kampYapisi';
 import { collection, onSnapshot, doc, getDoc, query, orderBy, limit } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { LoginScreen } from './components/LoginScreen';
@@ -90,6 +91,7 @@ export default function App() {
   });
 
   const [bildirimler, setBildirimler] = useState<any[]>([]);
+  const kampYapiSyncedRef = useRef(false);
 
   useEffect(() => {
     if (currentUser) {
@@ -680,6 +682,15 @@ export default function App() {
       unsubMaasOde();
     };
   }, [dbStatus, currentUser]);
+
+  // Eski kamp odalarından yerleşke/kat yapısını Firestore'a senkronize et (Kamp Yönetimi ↔ Kampçı Mobil)
+  useEffect(() => {
+    if (dbStatus !== 'synced' || kampOdalari.length === 0 || kampYapiSyncedRef.current) return;
+    kampYapiSyncedRef.current = true;
+    ensureYapıFromOdalari(kampOdalari, currentUser?.email).catch((err) =>
+      console.error('Kamp yapısı senkron hatası:', err)
+    );
+  }, [dbStatus, kampOdalari, currentUser?.email]);
 
   // Auto online signup sync and administrator check
   useEffect(() => {

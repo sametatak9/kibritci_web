@@ -6,7 +6,7 @@ import {
 import { KampOdasi, KampKaydi, Personel, StokKart, KampYerleske, KampKat } from '../types/erp';
 import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
-import { createKampYerleske, createKampKat, katsForYerleske } from '../lib/kampYapisi';
+import { createKampYerleske, createKampKat, katsForYerleske, createKampOdasi, deleteKampOdasi } from '../lib/kampYapisi';
 import { collection, onSnapshot, doc, updateDoc, query, orderBy } from 'firebase/firestore';
 
 interface KampciScreenProps {
@@ -49,7 +49,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   };
 
   // ─────────────────────────────────────────────────────────────
-  // 🏕️ 1. YERLEŞKE / KAT / ODA — Kampçı kendi tanımlar (Idari programdan bağımsız)
+  // 🏕️ 1. YERLEŞKE / KAT / ODA — Kamp Yönetimi ile ortak Firestore yapısı
   // ─────────────────────────────────────────────────────────────
   const [yerleskeler, setYerleskeler] = useState<KampYerleske[]>([]);
   const [katlar, setKatlar] = useState<KampKat[]>([]);
@@ -235,25 +235,24 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
 
     setLoadingRoom(true);
     try {
-      const roomId = `room_${Date.now()}`;
-      const newRoom: KampOdasi = {
-        id: roomId,
+      const savedOdaNo = odaNo;
+      const newRoom = await createKampOdasi({
         yerleskeAdi: selectedYerleske.ad,
         kogusNo: selectedKat.ad,
-        yerleskeId: selectedYerleske.id,
-        katId: selectedKat.id,
-        odaNo,
+        odaNo: savedOdaNo,
         kapasite: Number(kapasite),
         firmaTipi,
-        durum: 'BOŞ'
-      };
+        yerleskeId: selectedYerleske.id,
+        katId: selectedKat.id,
+        olusturan: currentUser?.email,
+      });
 
-      await saveDocument('kampOdalari', newRoom);
+      setKampOdalari((prev) => [...prev, newRoom]);
       if (addNotification) {
-        addNotification(`${selectedYerleske.ad} / ${selectedKat.ad} - Oda ${odaNo} açıldı.`);
+        addNotification(`${selectedYerleske.ad} / ${selectedKat.ad} - Oda ${savedOdaNo} açıldı.`);
       }
       setOdaNo('');
-      showStatus('success', `Oda ${odaNo} başarıyla açıldı.`);
+      showStatus('success', `Oda ${savedOdaNo} başarıyla açıldı.`);
     } catch (err) {
       console.error(err);
       showStatus('error', 'Oda oluşturulurken hata oluştu!');
@@ -265,8 +264,9 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   const handleDeleteRoom = async (id: string, name: string) => {
     if (!window.confirm(`${name} numaralı odayı silmek istediğinize emin misiniz?`)) return;
     try {
-      // Use local state update or deleteDoc directly
-      setKampOdalari(prev => prev.filter(r => r.id !== id));
+      await deleteKampOdasi(id);
+      setKampOdalari((prev) => prev.filter((r) => r.id !== id));
+      setKampKayitlari((prev) => prev.filter((k) => k.odaId !== id && k.roomId !== id));
       if (addNotification) {
         addNotification(`${name} nolu oda silindi.`);
       }

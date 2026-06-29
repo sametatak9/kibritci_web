@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Truck, Tent, Building2, FileText, Users, Mail, Package,
   Plus, Trash2, ShieldAlert, Award, FileUp, CheckCircle, Check, HelpCircle, ClipboardList,
@@ -7,11 +7,23 @@ import {
 import { KibritciLogo } from './KibritciLogo';
 import { 
   AracBakim, Demisbas, Tahsis, KampOdasi, KampKaydi, KampSarf, KampFaaliyet,
-  SahaFaaliyeti, HazirTutanak, CariKart, StokKart, EpostaGonderim, Personel
+  SahaFaaliyeti, HazirTutanak, CariKart, StokKart, EpostaGonderim, Personel,
+  KampYerleske, KampKat
 } from '../types/erp';
 import { db } from '../lib/firebase';
+import {
+  createKampYerleske,
+  createKampKat,
+  createKampOdasi,
+  deleteKampOdasi,
+  deleteYerleskeCascade,
+  deleteKatCascade,
+  deriveCampusNames,
+  deriveCampusFloors,
+  findOrCreateYerleske,
+} from '../lib/kampYapisi';
 import { compressImage } from '../lib/imageCompress';
-import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, getDocs, doc, setDoc } from 'firebase/firestore';
 
 interface IdariScreenProps {
   currentSubTab: string; // arac, kamp, saha, tutanak, cari_stok, eposta
@@ -213,130 +225,110 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [residentInputName, setResidentInputName] = useState("");
   const [residentInputFirma, setResidentInputFirma] = useState("");
 
-  // Room Creation Hierarchical States
-  const [campuses, setCampuses] = useState<string[]>([
-    "A Yerleşkesi",
-    "B Yerleşkesi",
-    "C Yerleşkesi",
-    "D Yerleşkesi"
-  ]);
+  // Kamp yapısı — Kampçı Mobil ile ortak Firestore koleksiyonları
+  const [yerleskeler, setYerleskeler] = useState<KampYerleske[]>([]);
+  const [katlar, setKatlar] = useState<KampKat[]>([]);
 
-  const [campusFloors, setCampusFloors] = useState<Record<string, string[]>>({
-    "A Yerleşkesi": ["1. Kat", "2. Kat", "3. Kat"],
-    "B Yerleşkesi": ["1. Kat", "2. Kat", "3. Kat"],
-    "C Yerleşkesi": ["1. Kat", "2. Kat", "3. Kat"],
-    "D Yerleşkesi": ["1. Kat", "2. Kat", "3. Kat"]
-  });
+  useEffect(() => {
+    const unsubY = onSnapshot(collection(db, 'kampYerleskeleri'), (snap) => {
+      const list: KampYerleske[] = [];
+      snap.forEach((d) => list.push({ id: d.id, ...d.data() } as KampYerleske));
+      list.sort((a, b) => a.ad.localeCompare(b.ad, 'tr'));
+      setYerleskeler(list);
+    });
+    const unsubK = onSnapshot(collection(db, 'kampKatlari'), (snap) => {
+      const list: KampKat[] = [];
+      snap.forEach((d) => list.push({ id: d.id, ...d.data() } as KampKat));
+      setKatlar(list);
+    });
+    return () => {
+      unsubY();
+      unsubK();
+    };
+  }, []);
 
-  const [selectedYerleske, setSelectedYerleske] = useState("A Yerleşkesi");
-  const [selectedKat, setSelectedKat] = useState("1. Kat");
+  const campuses = useMemo(
+    () => deriveCampusNames(yerleskeler, kampOdalari),
+    [yerleskeler, kampOdalari]
+  );
+
+  const campusFloors = useMemo(
+    () => deriveCampusFloors(campuses, katlar, kampOdalari),
+    [campuses, katlar, kampOdalari]
+  );
+
+  const [selectedYerleske, setSelectedYerleske] = useState("");
+  const [selectedKat, setSelectedKat] = useState("");
   
   const [campCreationStep, setCampCreationStep] = useState<'campus' | 'floor' | 'room'>('room');
   const [newCampusInput, setNewCampusInput] = useState("");
   const [newFloorInput, setNewFloorInput] = useState("");
 
-  // Sync campuses & floors with currently loaded rooms in database
-  React.useEffect(() => {
-    if (kampOdalari && kampOdalari.length > 0) {
-      const uniqueCamps = Array.from(new Set(kampOdalari.map(r => r.yerleskeAdi as string))).filter(Boolean) as string[];
-      
-      setCampuses(prev => {
-        const merged = Array.from(new Set([...prev, ...uniqueCamps]));
-        return merged;
-      });
-
-      setCampusFloors(prev => {
-        const updated = { ...prev } as Record<string, string[]>;
-        uniqueCamps.forEach(camp => {
-          if (!updated[camp]) {
-            updated[camp] = [];
-          }
-          const roomsInCamp = kampOdalari.filter(r => r.yerleskeAdi === camp);
-          const floorsInCamp = Array.from(new Set(roomsInCamp.map(r => r.kogusNo as string))).filter(Boolean) as string[];
-          
-          updated[camp] = Array.from(new Set([...updated[camp], ...floorsInCamp]));
-        });
-        return updated;
-      });
+  useEffect(() => {
+    if (campuses.length > 0 && !selectedYerleske) {
+      setSelectedYerleske(campuses[0]);
     }
-  }, [kampOdalari]);
+  }, [campuses, selectedYerleske]);
 
-  // Handle selectedYerleske change to auto-update selectedKat option
-  React.useEffect(() => {
+  useEffect(() => {
     const floorsOfSelected = campusFloors[selectedYerleske] || [];
-    if (floorsOfSelected.length > 0) {
+    if (floorsOfSelected.length > 0 && !floorsOfSelected.includes(selectedKat)) {
       setSelectedKat(floorsOfSelected[0]);
-    } else {
+    } else if (floorsOfSelected.length === 0) {
       setSelectedKat("");
     }
-  }, [selectedYerleske, campusFloors]);
+  }, [selectedYerleske, campusFloors, selectedKat]);
 
   const [showNewRoomForm, setShowNewRoomForm] = useState(false);
   const [newRoomNo, setNewRoomNo] = useState("");
   const [newRoomKapasite, setNewRoomKapasite] = useState(4);
   const [newRoomFirma, setNewRoomFirma] = useState<'ANA_FIRMA' | 'TASERON'>("ANA_FIRMA");
 
-  const handleDeleteRoom = (id: string) => {
-    if (window.confirm("Bu odayı ve odaya ait olan tüm konaklama kayıtlarını sistemden silmek istediğinize emin misiniz?")) {
-      setKampOdalari(prev => prev.filter(r => r.id !== id));
-      setKampKayitlari(prev => prev.filter(kk => kk.odaId !== id && kk.roomId !== id));
+  const handleDeleteRoom = async (id: string) => {
+    if (!window.confirm("Bu odayı ve odaya ait olan tüm konaklama kayıtlarını sistemden silmek istediğinize emin misiniz?")) return;
+    try {
+      await deleteKampOdasi(id);
+      setKampOdalari((prev) => prev.filter((r) => r.id !== id));
+      setKampKayitlari((prev) => prev.filter((kk) => kk.odaId !== id && kk.roomId !== id));
       alert("Oda kaydı ve sakin yerleşimleri başarıyla kaldırıldı.");
+    } catch {
+      alert("Oda silinirken hata oluştu.");
     }
   };
 
-  const handleDeleteCampus = (campName: string) => {
-    if (window.confirm(`"${campName}" yerleşkesini ve bu yerleşkeye bağlı tüm odaları ve sakin kayıtlarını silmek istediğinize emin misiniz?`)) {
-      setCampuses(prev => prev.filter(c => c !== campName));
-      setCampusFloors(prev => {
-        const updated = { ...prev };
-        delete updated[campName];
-        return updated;
-      });
-      // Filter out rooms and records
-      const roomsToDelete = kampOdalari.filter(r => r.yerleskeAdi === campName).map(r => r.id);
-      setKampOdalari(prev => prev.filter(r => r.yerleskeAdi !== campName));
-      setKampKayitlari(prev => prev.filter(kk => !roomsToDelete.includes(kk.odaId) && !roomsToDelete.includes(kk.roomId)));
-      
-      // Select another campus if the current active one was deleted
+  const handleDeleteCampus = async (campName: string) => {
+    if (!window.confirm(`"${campName}" yerleşkesini ve bu yerleşkeye bağlı tüm odaları ve sakin kayıtlarını silmek istediğinize emin misiniz?`)) return;
+    try {
+      const roomsToDelete = await deleteYerleskeCascade(campName, yerleskeler, katlar, kampOdalari);
+      setKampOdalari((prev) => prev.filter((r) => r.yerleskeAdi !== campName));
+      setKampKayitlari((prev) => prev.filter((kk) => !roomsToDelete.includes(kk.odaId) && !roomsToDelete.includes(kk.roomId)));
       if (selectedYerleske === campName) {
-        const remaining = campuses.filter(c => c !== campName);
-        if (remaining.length > 0) {
-          setSelectedYerleske(remaining[0]);
-        } else {
-          setSelectedYerleske("");
-        }
+        const remaining = campuses.filter((c) => c !== campName);
+        setSelectedYerleske(remaining[0] ?? "");
       }
       alert(`"${campName}" yerleşkesi başarıyla silindi.`);
+    } catch {
+      alert("Yerleşke silinirken hata oluştu.");
     }
   };
 
-  const handleDeleteFloor = (campName: string, floorName: string) => {
-    if (window.confirm(`"${campName}" altındaki "${floorName}" katını/bloğunu ve bağlı tüm odaları silmek istediğinize emin misiniz?`)) {
-      setCampusFloors(prev => {
-        const updated = { ...prev };
-        if (updated[campName]) {
-          updated[campName] = updated[campName].filter(f => f !== floorName);
-        }
-        return updated;
-      });
-      // Filter out rooms and records
-      const roomsToDelete = kampOdalari.filter(r => r.yerleskeAdi === campName && r.kogusNo === floorName).map(r => r.id);
-      setKampOdalari(prev => prev.filter(r => !(r.yerleskeAdi === campName && r.kogusNo === floorName)));
-      setKampKayitlari(prev => prev.filter(kk => !roomsToDelete.includes(kk.odaId) && !roomsToDelete.includes(kk.roomId)));
-
+  const handleDeleteFloor = async (campName: string, floorName: string) => {
+    if (!window.confirm(`"${campName}" altındaki "${floorName}" katını/bloğunu ve bağlı tüm odaları silmek istediğinize emin misiniz?`)) return;
+    try {
+      const roomsToDelete = await deleteKatCascade(campName, floorName, katlar, kampOdalari);
+      setKampOdalari((prev) => prev.filter((r) => !(r.yerleskeAdi === campName && r.kogusNo === floorName)));
+      setKampKayitlari((prev) => prev.filter((kk) => !roomsToDelete.includes(kk.odaId) && !roomsToDelete.includes(kk.roomId)));
       if (selectedKat === floorName) {
-        const remaining = (campusFloors[campName] || []).filter(f => f !== floorName);
-        if (remaining.length > 0) {
-          setSelectedKat(remaining[0]);
-        } else {
-          setSelectedKat("");
-        }
+        const remaining = (campusFloors[campName] || []).filter((f) => f !== floorName);
+        setSelectedKat(remaining[0] ?? "");
       }
       alert(`"${floorName}" katı/bloğu başarıyla silindi.`);
+    } catch {
+      alert("Kat silinirken hata oluştu.");
     }
   };
 
-  const handleCreateCampus = () => {
+  const handleCreateCampus = async () => {
     const trimmed = newCampusInput.trim();
     if (!trimmed) {
       alert("Lütfen geçerli bir Yerleşke adı girin!");
@@ -346,18 +338,18 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       alert("Bu yerleşke zaten tanımlı!");
       return;
     }
-    setCampuses(prev => [...prev, trimmed]);
-    setCampusFloors(prev => ({
-      ...prev,
-      [trimmed]: []
-    }));
-    setSelectedYerleske(trimmed);
-    setNewCampusInput("");
-    setCampCreationStep('floor');
-    alert(`"${trimmed}" yerleşkesi başarıyla eklendi! Şimdi bu yerleşke için kat oluşturabilirsiniz.`);
+    try {
+      await createKampYerleske(trimmed);
+      setSelectedYerleske(trimmed);
+      setNewCampusInput("");
+      setCampCreationStep('floor');
+      alert(`"${trimmed}" yerleşkesi başarıyla eklendi! Şimdi bu yerleşke için kat oluşturabilirsiniz.`);
+    } catch {
+      alert("Yerleşke oluşturulamadı.");
+    }
   };
 
-  const handleCreateFloor = () => {
+  const handleCreateFloor = async () => {
     const trimmed = newFloorInput.trim();
     if (!selectedYerleske) {
       alert("Lütfen önce bir yerleşke seçin veya ekleyin!");
@@ -372,17 +364,19 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       alert("Bu kat/blok bu yerleşkede zaten tanımlı!");
       return;
     }
-    setCampusFloors(prev => ({
-      ...prev,
-      [selectedYerleske]: [...currentFloors, trimmed]
-    }));
-    setSelectedKat(trimmed);
-    setNewFloorInput("");
-    setCampCreationStep('room');
-    alert(`"${trimmed}" katı, "${selectedYerleske}" yerleşkesine başarıyla eklendi! Şimdi oda açabilirsiniz.`);
+    try {
+      const yerleske = await findOrCreateYerleske(selectedYerleske);
+      await createKampKat(yerleske, trimmed, currentFloors.length + 1);
+      setSelectedKat(trimmed);
+      setNewFloorInput("");
+      setCampCreationStep('room');
+      alert(`"${trimmed}" katı, "${selectedYerleske}" yerleşkesine başarıyla eklendi! Şimdi oda açabilirsiniz.`);
+    } catch {
+      alert("Kat oluşturulamadı.");
+    }
   };
 
-  const handleCreateRoom = () => {
+  const handleCreateRoom = async () => {
     if (!selectedYerleske) {
       alert("Lütfen önce bir Yerleşke oluşturun veya seçin.");
       return;
@@ -395,20 +389,22 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       alert("Lütfen oda numarası giriniz.");
       return;
     }
-    const brandNewRoom: KampOdasi = {
-      id: `room_${Date.now()}`,
-      yerleskeAdi: selectedYerleske,
-      kogusNo: selectedKat,
-      odaNo: newRoomNo,
-      kapasite: Number(newRoomKapasite),
-      firmaTipi: newRoomFirma,
-      durum: 'BOŞ'
-    };
-
-    setKampOdalari(prev => [...prev, brandNewRoom]);
-    setNewRoomNo("");
-    setShowNewRoomForm(false);
-    alert(`${selectedYerleske} - ${selectedKat} bünyesinde Oda No ${newRoomNo} başarıyla açılmıştır.`);
+    try {
+      const roomNo = newRoomNo;
+      const brandNewRoom = await createKampOdasi({
+        yerleskeAdi: selectedYerleske,
+        kogusNo: selectedKat,
+        odaNo: roomNo,
+        kapasite: Number(newRoomKapasite),
+        firmaTipi: newRoomFirma,
+      });
+      setKampOdalari((prev) => [...prev, brandNewRoom]);
+      setNewRoomNo("");
+      setShowNewRoomForm(false);
+      alert(`${selectedYerleske} - ${selectedKat} bünyesinde Oda No ${roomNo} başarıyla açılmıştır.`);
+    } catch {
+      alert("Oda oluşturulurken hata oluştu.");
+    }
   };
 
   const handleResetToStandardCampBlocks = () => {
