@@ -7,6 +7,7 @@ import {
   setYoklamaDay,
   yoklamaDateKey,
 } from './yoklamaUtils';
+import { LEGACY_EXCEL_MONTHS } from '../data/legacyExcelYoklama';
 
 export interface LegacyImportResult {
   yoklamalar: AylikYoklamaMap;
@@ -46,6 +47,30 @@ function applyEarlierHireDate(personeller: Personel[], personel: Personel, infer
   return updated;
 }
 
+function legacyStableId(excelId: number): string {
+  return `PRS-LEGACY-L${excelId}`;
+}
+
+/** Yoklama haritasındaki legacy ID için isim bilgisi üret */
+export function resolveStubPersonelFromLegacyId(personelId: string): Personel | undefined {
+  const m = personelId.match(/^PRS-LEGACY-L(\d+)$/);
+  if (!m) return undefined;
+  const excelId = Number(m[1]);
+  for (const month of LEGACY_EXCEL_MONTHS) {
+    const rec = month.personeller.find(p => p.excelId === excelId);
+    if (rec) {
+      return createMinimalPersonel(rec.ad, rec.soyad, {
+        gorev: rec.gorev,
+        maas: rec.maas,
+        iseGirisTarihi: rec.iseGirisTarihi,
+        istenCikisTarihi: rec.istenCikisTarihi,
+        legacyExcelId: rec.excelId,
+      });
+    }
+  }
+  return undefined;
+}
+
 function resolvePersonelForLegacyRecord(
   record: LegacyExcelPersonRecord,
   personeller: Personel[],
@@ -54,6 +79,12 @@ function resolvePersonelForLegacyRecord(
   month: number
 ): { personel: Personel; created: boolean } {
   const inferredHire = inferLegacyIseGirisTarihi(record, year, month);
+  const stableId = legacyStableId(record.excelId);
+  const byStable = personeller.find(p => p.id === stableId);
+  if (byStable) {
+    excelIdToPersonelId.set(record.excelId, byStable.id);
+    return { personel: applyEarlierHireDate(personeller, byStable, inferredHire), created: false };
+  }
 
   const cachedId = excelIdToPersonelId.get(record.excelId);
   if (cachedId) {

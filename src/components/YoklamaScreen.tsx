@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Calendar, Trash2, ShieldAlert, CheckCircle, FileText, ChevronRight, RefreshCw, Database } from 'lucide-react';
 import { Personel, AylikYoklamaMap, YoklamaDurum } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
-import { findPersonelByName, getYoklamaDay, isDayActiveForPersonel, isPersonelVisibleInMonth, setYoklamaDay } from '../lib/yoklamaUtils';
-import { importAllLegacyExcelMonths, importLegacyExcelMonth, aiMonthlyDataToLegacyMonth } from '../lib/legacyYoklamaImport';
+import { buildPersonelListForMonth, findPersonelByName, getYoklamaDay, isDayActiveForPersonel, isPersonelVisibleInMonth, setYoklamaDay } from '../lib/yoklamaUtils';
+import { importAllLegacyExcelMonths, importLegacyExcelMonth, aiMonthlyDataToLegacyMonth, resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 import { LEGACY_EXCEL_MONTHS } from '../data/legacyExcelYoklama';
 import { fetchApiJson } from '../lib/apiClient';
 
@@ -26,7 +26,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   setYoklamalar,
   addNotification
 }) => {
-  const [selectedMonth, setSelectedMonth] = useState(6); // June as default
+  const [selectedMonth, setSelectedMonth] = useState(5); // Mayıs 2026
   const [selectedYear, setSelectedYear] = useState(2026);
   const [searchTerm, setSearchTerm] = useState("");
   
@@ -271,6 +271,11 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     return { isHoliday: isSunday, name: isSunday ? 'Pazar' : '', isOfficial: false };
   };
 
+  const monthPersoneller = useMemo(
+    () => buildPersonelListForMonth(personeller, yoklamalar, selectedYear, selectedMonth, resolveStubPersonelFromLegacyId),
+    [personeller, yoklamalar, selectedYear, selectedMonth]
+  );
+
   const isEmployeeVisibleInMonth = (p: Personel) =>
     isPersonelVisibleInMonth(p, selectedYear, selectedMonth, yoklamalar[p.id]);
 
@@ -322,8 +327,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   const handleBulkSetStatus = (status: YoklamaDurum) => {
     const newYoklamalar = { ...yoklamalar };
     
-    personeller.forEach(p => {
-      if (!isEmployeeVisibleInMonth(p)) return;
+    monthPersoneller.forEach(p => {
       let personMap = { ...(newYoklamalar[p.id] || {}) };
       daysArray.forEach(d => {
         if (!isDayActiveForEmployee(p, d)) return;
@@ -346,8 +350,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
   const [printModal, setPrintModal] = useState<'NONE' | 'BOS' | 'DOLU' | 'GUNLUK_BOS'>('NONE');
 
-  const filteredPersonel = personeller
-    .filter(isEmployeeVisibleInMonth)
+  const filteredPersonel = monthPersoneller
     .filter(p => {
       const term = searchTerm.toLowerCase();
       const fullName = `${p.ad} ${p.soyad}`.toLowerCase();
@@ -357,8 +360,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   const handleBulkOvertime = (hours: number) => {
     const newYoklamalar = { ...yoklamalar };
     
-    personeller.forEach(p => {
-      if (!isEmployeeVisibleInMonth(p)) return;
+    monthPersoneller.forEach(p => {
       let personMap = { ...(newYoklamalar[p.id] || {}) };
       daysArray.forEach(d => {
         if (!isDayActiveForEmployee(p, d)) return;
@@ -771,7 +773,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                 className="text-[11px] font-bold bg-white border border-slate-200 rounded p-1"
               >
                 <option value="ALL">📋 Tüm Şantiye Kadrosu</option>
-                {personeller.filter(isEmployeeVisibleInMonth).map(p => (
+                {monthPersoneller.map(p => (
                   <option key={p.id} value={p.id}>👤 {p.ad} {p.soyad} ({p.gorev})</option>
                 ))}
               </select>

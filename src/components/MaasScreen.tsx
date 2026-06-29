@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { CreditCard, Copy, Check, DollarSign, Download, Building, Search, Clock } from 'lucide-react';
 import { Personel, AylikYoklamaMap } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
-import { getYoklamaDay, isDayActiveForPersonel, isPersonelVisibleInMonth, iterateMonthYoklama } from '../lib/yoklamaUtils';
+import { buildPersonelListForMonth, getYoklamaDay, isDayActiveForPersonel, iterateMonthYoklama } from '../lib/yoklamaUtils';
+import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 
 interface MaasScreenProps {
   personeller: Personel[];
@@ -18,6 +19,11 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
   const [searchQuery, setSearchQuery] = useState('');
 
   const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
+
+  const monthPersoneller = useMemo(
+    () => buildPersonelListForMonth(personeller, yoklamalar, selectedYear, selectedMonth, resolveStubPersonelFromLegacyId),
+    [personeller, yoklamalar, selectedYear, selectedMonth]
+  );
 
   const handleCutChange = (personelId: string, value: string) => {
     const amount = parseFloat(value) || 0;
@@ -42,9 +48,6 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
     }, 1200);
   };
 
-  const isEmployeeVisibleInMonth = (p: Personel) =>
-    isPersonelVisibleInMonth(p, selectedYear, selectedMonth, yoklamalar[p.id]);
-
   const isDayActiveForEmployee = (emp: Personel, day: number) =>
     isDayActiveForPersonel(emp, selectedYear, selectedMonth, day, yoklamalar[emp.id]);
 
@@ -54,8 +57,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
   let grandKesinti = 0;
   let grandNetPayment = 0;
 
-  const calculatedSalaries = personeller
-    .filter(isEmployeeVisibleInMonth)
+  const calculatedSalaries = monthPersoneller
     .filter(p => {
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase();
