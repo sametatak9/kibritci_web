@@ -108,9 +108,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
     let yokGun = 0;
     let raporluGun = 0;
 
-    let hasMonthData = false;
     iterateMonthYoklama(personYoklama, selectedYear, selectedMonth, (day, dayData) => {
-      hasMonthData = true;
       if (dayData && isDayActiveForEmployee(p, day)) {
         if (dayData.durum === 'Geldi' || dayData.durum === 'İzinli' || dayData.durum === 'Pazar' || dayData.durum === 'Tatil') {
           hakedisDays++;
@@ -124,16 +122,6 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
         totalOvertimeHours += dayData.mesaiSaati;
       }
     });
-
-    if (!hasMonthData) {
-      for (let day = 1; day <= daysInMonth; day++) {
-        if (isDayActiveForEmployee(p, day)) {
-          hakedisDays++;
-          geldiGun++;
-        }
-      }
-      totalOvertimeHours = 0;
-    }
 
     const baseWage = p.maas;
     const katsayi = hakedisDays / daysInMonth;
