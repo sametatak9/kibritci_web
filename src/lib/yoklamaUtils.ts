@@ -50,6 +50,69 @@ export function setYoklamaDay(
   return { ...(personMap || {}), [dateKey]: data };
 }
 
+const MEANINGFUL_YOKLAMA_DURUM: YoklamaDurum[] = ['Geldi', 'Yok', 'İzinli', 'Raporlu'];
+
+export function personHasYoklamaInMonth(
+  personMap: Record<string, YoklamaGunKaydi> | undefined,
+  year: number,
+  month: number
+): boolean {
+  let found = false;
+  iterateMonthYoklama(personMap, year, month, (_day, data) => {
+    if (data?.durum && MEANINGFUL_YOKLAMA_DURUM.includes(data.durum)) found = true;
+  });
+  return found;
+}
+
+export function isPersonelVisibleInMonth(
+  p: Personel,
+  year: number,
+  month: number,
+  personMap?: Record<string, YoklamaGunKaydi>
+): boolean {
+  const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
+  let visibleByDates = true;
+
+  if (p.iseGirisTarihi) {
+    const [hireY, hireM] = p.iseGirisTarihi.split('-').map(Number);
+    if (hireY > year || (hireY === year && hireM > month)) visibleByDates = false;
+  }
+  if (visibleByDates && p.istenCikisTarihi) {
+    const [exitY, exitM] = p.istenCikisTarihi.split('-').map(Number);
+    if (exitY < year || (exitY === year && exitM < month)) visibleByDates = false;
+  } else if (visibleByDates && !isAktif && !p.istenCikisTarihi) {
+    visibleByDates = false;
+  }
+
+  if (visibleByDates) return true;
+  return personMap ? personHasYoklamaInMonth(personMap, year, month) : false;
+}
+
+export function isDayActiveForPersonel(
+  p: Personel,
+  year: number,
+  month: number,
+  day: number,
+  personMap?: Record<string, YoklamaGunKaydi>
+): boolean {
+  const dayData = personMap ? getYoklamaDay(personMap, year, month, day) : undefined;
+  if (dayData?.durum && MEANINGFUL_YOKLAMA_DURUM.includes(dayData.durum)) return true;
+
+  if (p.iseGirisTarihi) {
+    const [hireY, hireM, hireD] = p.iseGirisTarihi.split('-').map(Number);
+    const currentDateVal = year * 10000 + month * 100 + day;
+    const hireDateVal = hireY * 10000 + hireM * 100 + hireD;
+    if (currentDateVal < hireDateVal) return false;
+  }
+  if (p.istenCikisTarihi) {
+    const [exitY, exitM, exitD] = p.istenCikisTarihi.split('-').map(Number);
+    const currentDateVal = year * 10000 + month * 100 + day;
+    const exitDateVal = exitY * 10000 + exitM * 100 + exitD;
+    if (currentDateVal > exitDateVal) return false;
+  }
+  return true;
+}
+
 export function iterateMonthYoklama(
   personMap: Record<string, YoklamaGunKaydi> | undefined,
   year: number,

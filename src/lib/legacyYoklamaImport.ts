@@ -25,29 +25,56 @@ function splitAdSoyad(ad: string, soyad: string): { ad: string; soyad: string } 
   return { ad: parts.slice(0, -1).join(' '), soyad: parts[parts.length - 1] };
 }
 
+function inferLegacyIseGirisTarihi(
+  record: LegacyExcelPersonRecord,
+  year: number,
+  month: number
+): string {
+  if (record.iseGirisTarihi) return record.iseGirisTarihi;
+  if (record.calismaGunleri.length > 0) {
+    const firstDay = Math.min(...record.calismaGunleri);
+    return yoklamaDateKey(year, month, firstDay);
+  }
+  return yoklamaDateKey(year, month, 1);
+}
+
+function applyEarlierHireDate(personeller: Personel[], personel: Personel, inferredHire: string): Personel {
+  if (personel.iseGirisTarihi && personel.iseGirisTarihi <= inferredHire) return personel;
+  const updated = { ...personel, iseGirisTarihi: inferredHire };
+  const idx = personeller.findIndex(p => p.id === personel.id);
+  if (idx >= 0) personeller[idx] = updated;
+  return updated;
+}
+
 function resolvePersonelForLegacyRecord(
   record: LegacyExcelPersonRecord,
   personeller: Personel[],
-  excelIdToPersonelId: Map<number, string>
+  excelIdToPersonelId: Map<number, string>,
+  year: number,
+  month: number
 ): { personel: Personel; created: boolean } {
+  const inferredHire = inferLegacyIseGirisTarihi(record, year, month);
+
   const cachedId = excelIdToPersonelId.get(record.excelId);
   if (cachedId) {
     const cached = personeller.find(p => p.id === cachedId);
-    if (cached) return { personel: cached, created: false };
+    if (cached) {
+      return { personel: applyEarlierHireDate(personeller, cached, inferredHire), created: false };
+    }
   }
 
   const fullName = `${record.ad} ${record.soyad}`.trim();
   const matched = findPersonelByName(personeller, fullName);
   if (matched) {
     excelIdToPersonelId.set(record.excelId, matched.id);
-    return { personel: matched, created: false };
+    return { personel: applyEarlierHireDate(personeller, matched, inferredHire), created: false };
   }
 
   const { ad, soyad } = splitAdSoyad(record.ad, record.soyad);
   const created = createMinimalPersonel(ad, soyad, {
     gorev: record.gorev,
     maas: record.maas,
-    iseGirisTarihi: record.iseGirisTarihi || `${record.istenCikisTarihi?.slice(0, 7) || '2026-02'}-01`,
+    iseGirisTarihi: inferredHire,
     istenCikisTarihi: record.istenCikisTarihi,
     legacyExcelId: record.excelId,
   });
@@ -77,7 +104,13 @@ export function importLegacyExcelMonth(
   const daysInMonth = new Date(year, month, 0).getDate();
 
   monthData.personeller.forEach(record => {
-    const { personel, created } = resolvePersonelForLegacyRecord(record, personeller, excelIdToPersonelId);
+    const { personel, created } = resolvePersonelForLegacyRecord(
+      record,
+      personeller,
+      excelIdToPersonelId,
+      year,
+      month
+    );
 
     if (created) {
       personeller.push(personel);
