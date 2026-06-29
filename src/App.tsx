@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { CircleAlert as AlertCircle, RefreshCw } from 'lucide-react';
@@ -65,6 +65,13 @@ import {
   isTabRestrictedForUser,
   sanitizeKisitliSayfalar,
 } from './lib/yetkiUtils';
+import {
+  dedupeKullanicilarByEmail,
+  findKullaniciByEmail,
+  hasDuplicateKullaniciEmails,
+  parseKullanicilarSnapshot,
+  removeDuplicateKullaniciDocs,
+} from './lib/kullaniciUtils';
 import { collection, onSnapshot, doc, getDoc, query, orderBy, limit } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { LoginScreen } from './components/LoginScreen';
@@ -90,6 +97,7 @@ export default function App() {
   });
 
   const [bildirimler, setBildirimler] = useState<any[]>([]);
+  const kullaniciDedupeRanRef = useRef(false);
 
   useEffect(() => {
     if (currentUser) {
@@ -555,11 +563,20 @@ export default function App() {
     });
 
     const unsubKullanicilar = onSnapshot(collection(db, 'kullanicilar'), (snapshot) => {
-      const list: Kullanici[] = [];
-      snapshot.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() } as any);
-      });
-      setKullanicilar(list);
+      const raw = parseKullanicilarSnapshot(snapshot.docs) as Kullanici[];
+      const applyList = (list: Kullanici[]) => setKullanicilar(dedupeKullanicilarByEmail(list) as Kullanici[]);
+
+      if (!kullaniciDedupeRanRef.current && hasDuplicateKullaniciEmails(raw)) {
+        kullaniciDedupeRanRef.current = true;
+        removeDuplicateKullaniciDocs(raw)
+          .then(applyList)
+          .catch((err) => {
+            console.warn('Çift kullanıcı kayıtları birleştirilemedi:', err);
+            applyList(raw);
+          });
+        return;
+      }
+      applyList(raw);
     });
 
     const unsubSahaFaaliyetleri = onSnapshot(collection(db, 'sahaFaaliyetleri'), (snapshot) => {
@@ -687,7 +704,7 @@ export default function App() {
     const emailLower = currentUser.email.toLowerCase();
     
     // Check if user is in DB list of accounts
-    const exists = kullanicilar.some(u => u.email.toLowerCase() === emailLower);
+    const exists = !!findKullaniciByEmail(kullanicilar, emailLower);
     if (!exists && (dbStatus === 'synced' || dbStatus === 'offline')) {
       const isSamet = emailLower === 'sametatak9@gmail.com';
       const isDefaultAdmin = emailLower === 'santiye@kibritci.com';
@@ -717,7 +734,7 @@ export default function App() {
   // Auto-redirect FORMEN to their mobile screen
   useEffect(() => {
     if (!currentUser || !kullanicilar.length) return;
-    const matched = kullanicilar.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
+    const matched = findKullaniciByEmail(kullanicilar, currentUser?.email);
     if (matched) {
       const homeTab = getRoleHomeTab(matched.yetki);
       if (homeTab && activeTab !== homeTab) {
@@ -1134,7 +1151,7 @@ export default function App() {
     );
   }
 
-  const matchedU = kullanicilar.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
+  const matchedU = findKullaniciByEmail(kullanicilar, currentUser?.email);
   const userYetki = normalizeYetki(matchedU?.yetki);
   const isYonetici = userYetki === 'YÖNETİCİ' || 
                      currentUser?.email?.toLowerCase() === 'sametatak9@gmail.com' || 
@@ -1337,7 +1354,7 @@ export default function App() {
         <main className="flex-1 overflow-y-auto relative bg-slate-50">
           
           {(() => {
-            const matchedUser = kullanicilar.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
+            const matchedUser = findKullaniciByEmail(kullanicilar, currentUser?.email);
             const matchedYetki = normalizeYetki(matchedUser?.yetki);
             const hasActiveMobileRole = isMobileRole(matchedYetki) && matchedUser?.durum === 'AKTİF';
             const isBlocked =

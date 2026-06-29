@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { sanitizeKisitliSayfalar, isMobileRole } from '../lib/yetkiUtils';
+import { persistKullaniciRole, dedupeKullanicilarByEmail } from '../lib/kullaniciUtils';
 import { 
   Users, KeySquare, ShieldAlert, Trash2, CheckCircle, 
   XOctagon, UserCheck, AlertCircle, RefreshCw, Key,
@@ -67,6 +67,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
   personeller = [],
   addNotification
 }) => {
+  const visibleKullanicilar = dedupeKullanicilarByEmail(kullanicilar);
   const [activeTab, setActiveTab] = useState<'users' | 'errors'>('users');
   const [hataRaporlari, setHataRaporlari] = useState<HataRaporu[]>([]);
   const [loadingErrors, setLoadingErrors] = useState(false);
@@ -123,23 +124,29 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
     }));
   };
 
-  const handleChangeRole = (id: string, newYetki: any) => {
-    setKullanicilar(prev => prev.map(u => {
-      if (u.id === id) {
-        alert(`Kullanıcı (${u.email}) yetki seviyesi "${newYetki}" olarak değiştirildi.`);
-        if (addNotification) {
-          addNotification(`${u.email} kullanıcısının rolü "${newYetki}" olarak güncellendi.`);
-        }
-        const mobileRole = isMobileRole(newYetki);
-        return {
-          ...u,
-          yetki: newYetki,
-          durum: mobileRole ? 'AKTİF' : u.durum,
-          kisitliSayfalar: sanitizeKisitliSayfalar(newYetki, u.kisitliSayfalar),
-        };
+  const handleChangeRole = async (id: string, newYetki: any) => {
+    const target = kullanicilar.find((u) => u.id === id);
+    if (!target) return;
+
+    try {
+      const updated = await persistKullaniciRole(kullanicilar, id, newYetki);
+      setKullanicilar((prev) =>
+        dedupeKullanicilarByEmail(
+          prev.map((u) =>
+            u.email?.trim().toLowerCase() === target.email.trim().toLowerCase()
+              ? { ...u, ...updated }
+              : u
+          )
+        )
+      );
+      alert(`Kullanıcı (${target.email}) yetki seviyesi "${newYetki}" olarak kaydedildi.`);
+      if (addNotification) {
+        addNotification(`${target.email} kullanıcısının rolü "${newYetki}" olarak güncellendi.`);
       }
-      return u;
-    }));
+    } catch (err) {
+      console.error(err);
+      alert('Rol kaydedilemedi. Lütfen tekrar deneyin.');
+    }
   };
 
   const handleDeleteUser = (id: string, email: string) => {
@@ -240,7 +247,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
               }`}
             >
               <Users size={14} />
-              <span>ÜYE YETKİLENDİRME VE ROLLER ({kullanicilar.length})</span>
+              <span>ÜYE YETKİLENDİRME VE ROLLER ({visibleKullanicilar.length})</span>
             </button>
             <button
               onClick={() => setActiveTab('errors')}
@@ -273,7 +280,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
           {/* TAB 1: USERS */}
           {activeTab === 'users' && (
             <div className="space-y-3">
-              {kullanicilar.length === 0 ? (
+              {visibleKullanicilar.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400 py-16 space-y-2">
                   <AlertCircle size={32} />
                   <p className="text-xs font-semibold">Kayıtlı kullanıcı hesabı bulunamadı.</p>
@@ -291,7 +298,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y text-slate-600">
-                      {kullanicilar.map(user => {
+                      {visibleKullanicilar.map(user => {
                         const isSelf = user.email === currentUser?.email;
                         return (
                           <tr key={user.id} className={`hover:bg-slate-50/55 transition ${isSelf ? 'bg-amber-50/30 font-semibold' : ''}`}>
