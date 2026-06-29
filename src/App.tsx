@@ -333,7 +333,25 @@ export default function App() {
         setKampKayitlari(stayLogData);
 
         setLoadingMsg('Saha günlük faaliyet dökümleri arşivleniyor...');
-        const reportData = await seedCollectionIfEmpty('sahaFaaliyetleri', INITIAL_SAHA);
+        let reportData = await seedCollectionIfEmpty('sahaFaaliyetleri', INITIAL_SAHA);
+
+        const {
+          bootstrapLegacySahaFaaliyet,
+          markLegacySahaFaaliyetBootstrapped,
+          mayis2026SahaNeedsBootstrap,
+        } = await import('./lib/legacySahaFaaliyetBootstrap');
+        const sahaMerge = bootstrapLegacySahaFaaliyet(reportData);
+        if (sahaMerge) {
+          for (const sf of sahaMerge.filter(s => s.id.startsWith('SF-MAY26-'))) {
+            await saveDocument('sahaFaaliyetleri', sf);
+          }
+          reportData = sahaMerge;
+          if (!mayis2026SahaNeedsBootstrap(reportData)) {
+            markLegacySahaFaaliyetBootstrapped();
+          }
+          console.log(`Mayıs 2026 saha faaliyetleri yüklendi: ${sahaMerge.filter(s => s.id.startsWith('SF-MAY26-')).length} kayıt`);
+        }
+
         setSahaFaaliyetleri(reportData);
 
         setLoadingMsg('Hukuki ve resmi şantiye hazır tutanaklar yükleniyor...');

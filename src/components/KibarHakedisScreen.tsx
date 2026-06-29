@@ -370,10 +370,10 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                     {monthlySahaFaaliyetleri.map((sf, idx) => (
                       <div key={idx} className="p-2.5">
                         <div className="flex justify-between font-bold text-slate-900">
-                          <span>{sf.baslik || 'Saha Faaliyeti'}</span>
+                          <span>{sf.isNiteligi || sf.baslik || 'Saha Faaliyeti'}</span>
                           <span className="text-slate-400 font-mono">{sf.tarih}</span>
                         </div>
-                        <p className="text-slate-600">{sf.detay || sf.aciklama}</p>
+                        <p className="text-slate-600">{sf.parsel && sf.blok ? `${sf.parsel} · ${sf.blok} — ` : ''}{sf.aciklama || sf.detay}</p>
                       </div>
                     ))}
                   </div>
