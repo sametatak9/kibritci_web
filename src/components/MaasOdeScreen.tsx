@@ -41,10 +41,6 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
       if (day?.mesaiSaati) mesaiSaat += Number(day.mesaiSaati);
     });
 
-    if (hakedisGun === 0) {
-      hakedisGun = daysInMonth;
-    }
-
     const katsayi = hakedisGun / daysInMonth;
     const brutMaas = (personel.maas || 0) * katsayi;
     const saatlikUcret = (personel.maas || 0) / daysInMonth / 7.5;
