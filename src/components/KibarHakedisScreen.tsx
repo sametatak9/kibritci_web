@@ -9,6 +9,13 @@ import { Personel, AylikYoklamaMap } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
 import { buildPersonelListForMonth, iterateMonthYoklama } from '../lib/yoklamaUtils';
 import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
+import { normalizeGorev } from '../lib/gorevUtils';
+import {
+  prepareSahaFaaliyetRaporu,
+  prepareKampFaaliyetRaporu,
+  faaliyetIsTanimi,
+  formatPersonelSayisi,
+} from '../lib/kibarReportUtils';
 
 interface KibarHakedisScreenProps {
   personeller: Personel[];
@@ -20,27 +27,37 @@ interface KibarHakedisScreenProps {
 interface StaffHakedisRow {
   personel: Personel;
   geldiGun: number;
-  tutar: number;
   mesaiSaat: number;
-  mesaiHakedis: number;
-  maasReferans: number;
+  gunKazanci: number;
+  mesaiKazanci: number;
+  toplamKazanc: number;
+  zerYapiHakedis: number;
 }
 
-const RATE_PER_DAY = 200;
+const ZER_YAPI_GUNLUK = 200;
 
-function calcMesaiHakedis(personel: Personel, mesaiSaat: number, year: number, month: number): number {
-  if (mesaiSaat <= 0) return 0;
-  const daysInMonth = new Date(year, month, 0).getDate();
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
+function calcGunKazanci(personel: Personel, geldiGun: number, year: number, month: number): number {
+  if (geldiGun <= 0) return 0;
   const baseWage = personel.maas || 30000;
-  const hourlyWage = baseWage / daysInMonth / 7.5;
+  return geldiGun * (baseWage / daysInMonth(year, month));
+}
+
+function calcMesaiKazanci(personel: Personel, mesaiSaat: number, year: number, month: number): number {
+  if (mesaiSaat <= 0) return 0;
+  const baseWage = personel.maas || 30000;
+  const hourlyWage = baseWage / daysInMonth(year, month) / 7.5;
   return mesaiSaat * hourlyWage * 1.5;
 }
 
-function calcMaasReferans(personel: Personel, geldiGun: number, mesaiHakedis: number, year: number, month: number): number {
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const baseWage = personel.maas || 30000;
-  const dailyWage = baseWage / daysInMonth;
-  return geldiGun * dailyWage + mesaiHakedis;
+function formatMoney(amount: number, fraction = 2): string {
+  return `₺${amount.toLocaleString('tr-TR', {
+    minimumFractionDigits: fraction,
+    maximumFractionDigits: fraction,
+  })}`;
 }
 
 const TURKISH_MONTHS = [
@@ -99,14 +116,16 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
         mesaiSaat += data?.mesaiSaati || 0;
       });
       if (geldiGun > 0) {
-        const mesaiHakedis = calcMesaiHakedis(p, mesaiSaat, selectedYear, selectedMonth);
+        const gunKazanci = calcGunKazanci(p, geldiGun, selectedYear, selectedMonth);
+        const mesaiKazanci = calcMesaiKazanci(p, mesaiSaat, selectedYear, selectedMonth);
         rows.push({
           personel: p,
           geldiGun,
-          tutar: geldiGun * RATE_PER_DAY,
           mesaiSaat,
-          mesaiHakedis,
-          maasReferans: calcMaasReferans(p, geldiGun, mesaiHakedis, selectedYear, selectedMonth),
+          gunKazanci,
+          mesaiKazanci,
+          toplamKazanc: gunKazanci + mesaiKazanci,
+          zerYapiHakedis: geldiGun * ZER_YAPI_GUNLUK,
         });
       }
     });
@@ -127,8 +146,22 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
     [kampFaaliyetleri, selectedYear, selectedMonth]
   );
 
+  const sahaFaaliyetSatirlari = useMemo(
+    () => prepareSahaFaaliyetRaporu(monthlySahaFaaliyetleri),
+    [monthlySahaFaaliyetleri]
+  );
+
+  const kampFaaliyetSatirlari = useMemo(
+    () => prepareKampFaaliyetRaporu(monthlyKampFaaliyetleri),
+    [monthlyKampFaaliyetleri]
+  );
+
   const totalPersonDays = activeStaffRows.reduce((s, r) => s + r.geldiGun, 0);
-  const totalHakedis = activeStaffRows.reduce((s, r) => s + r.tutar, 0);
+  const totalMesaiSaat = activeStaffRows.reduce((s, r) => s + r.mesaiSaat, 0);
+  const totalGunKazanci = activeStaffRows.reduce((s, r) => s + r.gunKazanci, 0);
+  const totalMesaiKazanci = activeStaffRows.reduce((s, r) => s + r.mesaiKazanci, 0);
+  const totalMaasKazanci = activeStaffRows.reduce((s, r) => s + r.toplamKazanc, 0);
+  const totalZerYapiHakedis = activeStaffRows.reduce((s, r) => s + r.zerYapiHakedis, 0);
 
   const handleExcludeStaff = (staffId: string) => {
     setExcludedStaffIds(prev => [...prev, staffId]);
@@ -141,7 +174,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
   const handleSaveReport = async () => {
     setLoading(true);
     try {
-      const reportId = `KIBAR-HKD-${donemKey}-${Date.now()}`;
+      const reportId = `ZER-YAPI-HKD-${donemKey}-${Date.now()}`;
       await saveDocument('kibarHakedisRaporlari', {
         id: reportId,
         donem: donemKey,
@@ -150,14 +183,16 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
         ay: selectedMonth,
         personelSayisi: activeStaffRows.length,
         toplamCalismaGunu: totalPersonDays,
-        birimFiyat: RATE_PER_DAY,
-        toplamTutar: totalHakedis,
+        birimFiyat: ZER_YAPI_GUNLUK,
+        toplamTutar: totalZerYapiHakedis,
+        toplamMaasKazanci: totalMaasKazanci,
         olusturan: currentUser?.email || 'sametatak9@gmail.com',
         olusturmaTarihi: new Date().toISOString(),
         faaliyetlerCount: monthlySahaFaaliyetleri.length + monthlyKampFaaliyetleri.length,
         durum: 'KAYDEDİLDİ',
+        raporTipi: 'ZER_YAPI_HAKEDIS',
       });
-      showStatus('success', `${donemLabel} Kibar Hakediş Raporu kaydedildi!`);
+      showStatus('success', `${donemLabel} ZER YAPI Hakediş Raporu kaydedildi!`);
     } catch (err: any) {
       showStatus('error', `Rapor kaydedilirken hata: ${err.message}`);
     } finally {
@@ -169,11 +204,24 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
     const printContent = document.getElementById('kibar-report-print-area')?.innerHTML;
     if (!printContent) return;
 
-    const htmlSnippet = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Kibar_Hakedis_${donemKey}</title>
+    const htmlSnippet = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>ZER_YAPI_Hakedis_${donemKey}</title>
       <script src="https://cdn.tailwindcss.com"></script>
-      <style>body{font-family:Inter,sans-serif}@media print{.no-print{display:none}body{padding:0;margin:0;background:white}}</style>
-      </head><body class="p-8 bg-white text-slate-900"><div class="max-w-4xl mx-auto border p-8 rounded-2xl">${printContent}</div>
-      <script>window.onload=function(){window.print()}</script></body></html>`;
+      <style>
+        *{box-sizing:border-box}
+        body{font-family:'Segoe UI',Inter,system-ui,sans-serif;font-size:10px;color:#0f172a;background:#fff;margin:0}
+        @media print{
+          .no-print{display:none!important}
+          html,body{padding:0;margin:0;background:white;height:auto!important;overflow:visible!important}
+          .report-root,.print-area,.faaliyet-table-wrap,.kamp-table-wrap{
+            max-height:none!important;height:auto!important;overflow:visible!important;
+          }
+          .report-row,.faaliyet-row{page-break-inside:avoid;break-inside:avoid}
+          thead{display:table-header-group}
+          tfoot{display:table-footer-group}
+        }
+      </style>
+      </head><body class="p-5"><div class="max-w-[210mm] mx-auto report-root">${printContent}</div>
+      <script>window.onload=function(){setTimeout(function(){window.print()},400)}</script></body></html>`;
 
     const win = window.open('', '_blank');
     if (win) {
@@ -187,21 +235,21 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
 
       <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-md border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center text-slate-950 font-black">
+          <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-slate-950 font-black">
             <CreditCard size={22} />
           </div>
           <div>
-            <span className="text-[10px] bg-amber-500/20 text-amber-400 font-bold px-2 py-0.5 rounded-full border border-amber-500/20 uppercase tracking-wider block w-fit">
-              KİBAR ÖZEL ERİŞİM
+            <span className="text-[10px] bg-emerald-500/20 text-emerald-400 font-bold px-2 py-0.5 rounded-full border border-emerald-500/20 uppercase tracking-wider block w-fit">
+              ZER YAPI ÖZEL ERİŞİM
             </span>
-            <h1 className="text-lg font-black tracking-tight mt-1 text-white">KİBAR HAKEDİŞ DÜZENLEME PANELİ</h1>
+            <h1 className="text-lg font-black tracking-tight mt-1 text-white">ZER YAPI HAKEDİŞ DÜZENLEME PANELİ</h1>
             <p className="text-[11px] text-slate-400">Aylık yoklama ve saha faaliyetlerine göre dönemsel hakediş raporu</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center space-x-2 bg-slate-950 border border-slate-800 rounded-xl p-2 px-3">
-            <Calendar size={14} className="text-amber-500" />
+            <Calendar size={14} className="text-emerald-500" />
             <select
               value={selectedMonth}
               onChange={(e) => { setSelectedMonth(Number(e.target.value)); setExcludedStaffIds([]); }}
@@ -258,7 +306,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                   {donemLabel} döneminde yoklama kaydı bulunamadı. Yoklama ekranından Excel aktarımını yapın.
                 </div>
               ) : (
-                allStaffRows.map(({ personel: p, geldiGun, tutar, mesaiSaat, mesaiHakedis, maasReferans }) => {
+                allStaffRows.map(({ personel: p, geldiGun, mesaiSaat, gunKazanci, mesaiKazanci, toplamKazanc, zerYapiHakedis }) => {
                   const isExcluded = excludedStaffIds.includes(p.id);
                   return (
                     <div
@@ -272,14 +320,17 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                           {p.ad} {p.soyad}
                         </span>
                         <span className="text-[9px] text-slate-500 block uppercase font-semibold">
-                          {p.gorev || 'İŞÇİ'} • {geldiGun} gün • ₺{tutar.toLocaleString('tr-TR')}
+                          {normalizeGorev(p.gorev)} • {geldiGun} gün
                           {mesaiSaat > 0 && ` • ${mesaiSaat} sa mesai`}
                         </span>
-                        {mesaiHakedis > 0 && (
-                          <span className="text-[8px] text-amber-600 block">
-                            Ref. maaş: ₺{maasReferans.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}
-                          </span>
-                        )}
+                        <span className="text-[8px] text-blue-700 block">
+                          Gün kaz.: {formatMoney(gunKazanci)}
+                          {mesaiKazanci > 0 && ` + Mesai: ${formatMoney(mesaiKazanci)}`}
+                          {' = '}{formatMoney(toplamKazanc)}
+                        </span>
+                        <span className="text-[8px] text-emerald-700 font-bold block">
+                          ZER YAPI: {formatMoney(zerYapiHakedis, 0)} ({geldiGun}×{ZER_YAPI_GUNLUK})
+                        </span>
                       </div>
                       {isExcluded ? (
                         <button onClick={() => handleIncludeStaff(p.id)} className="bg-blue-50 border border-blue-100 text-blue-600 font-bold text-[9px] py-1 px-2.5 rounded-lg cursor-pointer">
@@ -298,7 +349,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
           </div>
 
           <div className="bg-white border rounded-2xl p-5 shadow-sm space-y-4">
-            <h3 className="text-xs font-black text-slate-850 uppercase tracking-wider">Hakediş Özeti</h3>
+            <h3 className="text-xs font-black text-slate-850 uppercase tracking-wider">Dönem Özeti</h3>
             <div className="grid grid-cols-2 gap-3 text-center">
               <div className="bg-slate-50 border p-3 rounded-xl">
                 <span className="text-[8px] text-slate-500 font-bold block uppercase">Personel</span>
@@ -309,10 +360,33 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                 <span className="text-base font-extrabold text-slate-700 block mt-0.5">{totalPersonDays} Gün</span>
               </div>
             </div>
-            <div className="bg-amber-500/5 border border-amber-500/10 p-4 rounded-xl text-center">
-              <span className="text-[9px] text-amber-700 font-bold block uppercase">{donemLabel} Toplam Hakediş</span>
-              <span className="text-lg font-black text-amber-600 font-mono mt-1 block">₺{totalHakedis.toLocaleString('tr-TR')}</span>
-              <span className="text-[8px] text-slate-400 block mt-1">{totalPersonDays} gün × ₺{RATE_PER_DAY}</span>
+
+            <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl space-y-2">
+              <span className="text-[9px] text-blue-800 font-bold block uppercase">Maaş Kaynaklı Kazançlar (Bilgi)</span>
+              <div className="flex justify-between text-[10px]">
+                <span className="text-blue-700">Gün kazancı</span>
+                <span className="font-mono font-bold text-blue-900">{formatMoney(totalGunKazanci)}</span>
+              </div>
+              <div className="flex justify-between text-[10px]">
+                <span className="text-amber-700">Mesai kazancı</span>
+                <span className="font-mono font-bold text-amber-800">{formatMoney(totalMesaiKazanci)}</span>
+              </div>
+              <div className="flex justify-between text-[10px] border-t border-blue-200 pt-2">
+                <span className="text-indigo-800 font-bold">Toplam kazanç</span>
+                <span className="font-mono font-black text-indigo-900">{formatMoney(totalMaasKazanci)}</span>
+              </div>
+            </div>
+
+            <div className="bg-emerald-500/10 border-2 border-emerald-500/30 p-4 rounded-xl text-center">
+              <span className="text-[9px] text-emerald-800 font-black block uppercase tracking-wide">
+                ZER YAPI Hakediş — {donemLabel}
+              </span>
+              <span className="text-lg font-black text-emerald-700 font-mono mt-1 block">
+                {formatMoney(totalZerYapiHakedis, 0)}
+              </span>
+              <span className="text-[8px] text-emerald-600 block mt-1 font-semibold">
+                Formül: {totalPersonDays} gün × ₺{ZER_YAPI_GUNLUK} (maaş kazancından ayrı)
+              </span>
             </div>
           </div>
         </div>
@@ -325,7 +399,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                 <button onClick={() => setReportType('NORMAL')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition ${reportType === 'NORMAL' ? 'bg-slate-800 text-white' : 'text-slate-500'}`}>
                   Normal Rapor
                 </button>
-                <button onClick={() => setReportType('E-IMZALI')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition flex items-center space-x-1 ${reportType === 'E-IMZALI' ? 'bg-amber-500 text-slate-950' : 'text-slate-500'}`}>
+                <button onClick={() => setReportType('E-IMZALI')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition flex items-center space-x-1 ${reportType === 'E-IMZALI' ? 'bg-emerald-500 text-slate-950' : 'text-slate-500'}`}>
                   <ShieldCheck size={11} /><span>E-İmzalı</span>
                 </button>
               </div>
@@ -335,125 +409,198 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
             </button>
           </div>
 
-          <div className="bg-white border rounded-3xl p-6 shadow-sm overflow-hidden">
-            <div id="kibar-report-print-area" className="bg-white p-4 space-y-6 text-xs text-slate-800">
+          <div className="bg-white border rounded-3xl p-6 shadow-sm">
+            <div id="kibar-report-print-area" className="report-root bg-white space-y-5 text-xs text-slate-800">
 
-              <div className="border-b-2 border-slate-900 pb-4 flex justify-between items-center">
-                <div className="flex items-center space-x-4">
-                  <KibritciLogo size="lg" />
+              {/* —— Başlık —— */}
+              <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                <div className="bg-gradient-to-r from-[#1E4E78] to-[#2563a8] px-4 py-3 flex justify-between items-center text-white">
+                  <div className="flex items-center gap-3">
+                    <KibritciLogo size="md" />
+                    <div>
+                      <h2 className="text-sm font-black uppercase tracking-wide">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h2>
+                      <p className="text-[8px] opacity-90 uppercase tracking-widest">ZER YAPI · Aylık Hakediş & Faaliyet Mutabakatı</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="inline-block bg-emerald-400/20 border border-emerald-300/40 text-[8px] font-bold px-2 py-0.5 rounded uppercase">
+                      ZER-YAPI-{donemKey}
+                    </span>
+                    <p className="text-[8px] opacity-80 mt-1">{donemLabel} · {new Date().toLocaleDateString('tr-TR')}</p>
+                  </div>
+                </div>
+                <div className="bg-emerald-50 border-t border-emerald-100 px-4 py-2 text-center">
+                  <h3 className="font-bold text-emerald-900 uppercase text-[10px] tracking-wide">
+                    Şantiye Sahası Aylık Hakediş ve Faaliyet Raporu — {donemLabel}
+                  </h3>
+                </div>
+              </div>
+
+              {/* —— 1. PERSONEL —— */}
+              <section className="print-area">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-6 h-6 rounded-lg bg-[#1E4E78] text-white text-[9px] font-black flex items-center justify-center">1</span>
                   <div>
-                    <h2 className="text-base font-black text-[#1E4E78] uppercase">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h2>
-                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">YÖNETİM VE DENETİM KURULU ÖZEL RAPORU</p>
-                    <p className="text-[9px] text-slate-600 mt-0.5">Dönem: <strong>{donemLabel}</strong></p>
+                    <h4 className="font-black text-[10px] text-[#1E4E78] uppercase tracking-wider">Personel Kazanç ve Hakediş</h4>
+                    <p className="text-[7px] text-slate-500">{activeStaffRows.length} personel · {totalPersonDays} gün · {totalMesaiSaat} sa mesai</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className="border border-slate-900 text-[9px] font-bold px-3 py-1 bg-slate-50 uppercase tracking-widest block mb-1">
-                    BELGE NO: KBR-KIBAR-{donemKey}
-                  </span>
-                  <span className="text-[8px] text-slate-500 font-mono">Döküm: {new Date().toLocaleDateString('tr-TR')}</span>
-                </div>
-              </div>
-
-              <div className="text-center bg-slate-50 border-y py-2.5">
-                <h3 className="font-bold text-slate-900 tracking-wider uppercase text-xs">
-                  ŞANTİYE SAHASI KİBAR AYLIK HAKEDİŞ VE FAALİYET MUTABAKATI — {donemLabel.toUpperCase()}
-                </h3>
-              </div>
-
-              <div className="space-y-2">
-                <span className="font-bold text-[9px] text-[#1E4E78] uppercase tracking-wider block">SAHA FAALİYET RAPORLARI ({monthlySahaFaaliyetleri.length} kayıt)</span>
-                {monthlySahaFaaliyetleri.length === 0 ? (
-                  <p className="text-[10px] text-slate-500 italic">Bu dönemde saha faaliyeti kaydı yok.</p>
-                ) : (
-                  <div className="border rounded-xl divide-y overflow-hidden text-[10px] max-h-48 overflow-y-auto">
-                    {monthlySahaFaaliyetleri.map((sf, idx) => (
-                      <div key={idx} className="p-2.5">
-                        <div className="flex justify-between font-bold text-slate-900">
-                          <span>{sf.isNiteligi || sf.baslik || 'Saha Faaliyeti'}</span>
-                          <span className="text-slate-400 font-mono">{sf.tarih}</span>
-                        </div>
-                        <p className="text-slate-600">{sf.parsel && sf.blok ? `${sf.parsel} · ${sf.blok} — ` : ''}{sf.aciklama || sf.detay}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <span className="font-bold text-[9px] text-[#1E4E78] uppercase tracking-wider block">KAMP / LOJMAN FAALİYETLERİ ({monthlyKampFaaliyetleri.length} kayıt)</span>
-                {monthlyKampFaaliyetleri.length === 0 ? (
-                  <p className="text-[10px] text-slate-500 italic">Bu dönemde kamp faaliyeti kaydı yok.</p>
-                ) : (
-                  <div className="border rounded-xl divide-y overflow-hidden text-[10px] max-h-36 overflow-y-auto">
-                    {monthlyKampFaaliyetleri.map((kf, idx) => (
-                      <div key={idx} className="p-2.5">
-                        <div className="flex justify-between font-bold">
-                          <span>{kf.faaliyetTipi}</span>
-                          <span className="text-slate-400 font-mono">{kf.tarih}</span>
-                        </div>
-                        <p className="text-slate-600">{kf.aciklama}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <span className="font-bold text-[9px] text-[#1E4E78] uppercase tracking-wider block">FİİLİ HAKEDİŞE TABİ PERSONEL DETAYI</span>
-                <p className="text-[8px] text-slate-500 italic">Mesai hakedişi ve ref. maaş sütunları yalnızca görsel karşılaştırma içindir; Kibar toplamına dahil değildir.</p>
-                <div className="border rounded-xl overflow-hidden text-[9px]">
-                  <table className="w-full text-left border-collapse">
+                <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                  <table className="w-full text-left border-collapse text-[7px] report-row">
                     <thead>
-                      <tr className="bg-slate-100 border-b text-slate-600 font-bold uppercase text-[8px]">
-                        <th className="p-2 w-10 text-center">SIRA</th>
-                        <th className="p-2">AD SOYAD</th>
-                        <th className="p-2">GÖREV / ÜNVAN</th>
-                        <th className="p-2 text-center">ÇALIŞMA GÜNÜ</th>
-                        <th className="p-2 text-center">MESAİ SAAT</th>
-                        <th className="p-2 text-right">GÜNLÜK BEDEL</th>
-                        <th className="p-2 text-right">KİBAR TUTAR</th>
-                        <th className="p-2 text-right text-amber-700">MESAİ HK.</th>
-                        <th className="p-2 text-right text-slate-500">REF. MAAŞ</th>
+                      <tr className="bg-slate-800 text-white font-bold uppercase">
+                        <th className="p-1.5 text-center" rowSpan={2}>#</th>
+                        <th className="p-1.5" rowSpan={2}>Ad Soyad</th>
+                        <th className="p-1.5" rowSpan={2}>Görev</th>
+                        <th className="p-1.5 text-right" rowSpan={2}>Maaş</th>
+                        <th className="p-1.5 text-center" rowSpan={2}>Gün</th>
+                        <th className="p-1.5 text-center" rowSpan={2}>Mesai</th>
+                        <th className="p-1.5 text-center bg-blue-700" colSpan={3}>Maaş Kazancı</th>
+                        <th className="p-1.5 text-center bg-emerald-700" colSpan={2}>ZER YAPI Hakediş</th>
+                      </tr>
+                      <tr className="font-bold uppercase text-[6px]">
+                        <th className="p-1 bg-blue-600 text-right">Gün</th>
+                        <th className="p-1 bg-amber-600 text-right">Mesai</th>
+                        <th className="p-1 bg-indigo-600 text-right">Toplam</th>
+                        <th className="p-1 bg-emerald-600 text-center">₺/Gün</th>
+                        <th className="p-1 bg-emerald-700 text-right">Tutar</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y font-medium text-slate-700">
-                      {activeStaffRows.map(({ personel: p, geldiGun, tutar, mesaiSaat, mesaiHakedis, maasReferans }, idx) => (
-                        <tr key={p.id}>
-                          <td className="p-2 text-center font-mono">{idx + 1}</td>
-                          <td className="p-2 font-bold text-slate-900">{p.ad} {p.soyad}</td>
-                          <td className="p-2">{p.gorev || 'İŞÇİ'}</td>
-                          <td className="p-2 text-center font-mono">{geldiGun}</td>
-                          <td className="p-2 text-center font-mono">{mesaiSaat > 0 ? mesaiSaat : '—'}</td>
-                          <td className="p-2 text-right font-mono">₺{RATE_PER_DAY.toLocaleString('tr-TR')},00</td>
-                          <td className="p-2 text-right font-mono font-bold">₺{tutar.toLocaleString('tr-TR')},00</td>
-                          <td className="p-2 text-right font-mono text-amber-700">{mesaiHakedis > 0 ? `₺${mesaiHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}</td>
-                          <td className="p-2 text-right font-mono text-slate-500">{maasReferans > 0 ? `₺${maasReferans.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}</td>
+                    <tbody>
+                      {activeStaffRows.map((row, idx) => (
+                        <tr key={row.personel.id} className={`report-row ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
+                          <td className="p-1.5 text-center font-mono text-slate-500 border-b border-slate-100">{idx + 1}</td>
+                          <td className="p-1.5 font-bold uppercase border-b border-slate-100">{row.personel.ad} {row.personel.soyad}</td>
+                          <td className="p-1.5 uppercase border-b border-slate-100">{normalizeGorev(row.personel.gorev)}</td>
+                          <td className="p-1.5 text-right font-mono border-b border-slate-100">{formatMoney(row.personel.maas || 30000, 0)}</td>
+                          <td className="p-1.5 text-center font-mono font-bold border-b border-slate-100">{row.geldiGun}</td>
+                          <td className="p-1.5 text-center font-mono border-b border-slate-100">{row.mesaiSaat > 0 ? row.mesaiSaat : '—'}</td>
+                          <td className="p-1.5 text-right font-mono text-blue-800 bg-blue-50/50 border-b border-blue-100">{formatMoney(row.gunKazanci)}</td>
+                          <td className="p-1.5 text-right font-mono text-amber-800 bg-amber-50/50 border-b border-amber-100">{row.mesaiKazanci > 0 ? formatMoney(row.mesaiKazanci) : '—'}</td>
+                          <td className="p-1.5 text-right font-mono font-bold text-indigo-900 bg-indigo-50/50 border-b border-indigo-100">{formatMoney(row.toplamKazanc)}</td>
+                          <td className="p-1.5 text-center font-mono text-emerald-700 bg-emerald-50 border-b border-emerald-100">{ZER_YAPI_GUNLUK}</td>
+                          <td className="p-1.5 text-right font-mono font-black text-emerald-800 bg-emerald-50 border-b border-emerald-100">{formatMoney(row.zerYapiHakedis, 0)}</td>
                         </tr>
                       ))}
                       {activeStaffRows.length === 0 && (
-                        <tr><td colSpan={9} className="text-center py-6 text-slate-400 italic">Kayıt yok</td></tr>
+                        <tr><td colSpan={11} className="text-center py-6 text-slate-400 italic">Kayıt yok</td></tr>
                       )}
-                      <tr className="bg-slate-50 font-bold text-slate-900 border-t">
-                        <td colSpan={3} className="p-2 text-right uppercase">Dönem Toplamı:</td>
-                        <td className="p-2 text-center font-mono">{totalPersonDays}</td>
-                        <td className="p-2 text-center font-mono">{activeStaffRows.reduce((s, r) => s + r.mesaiSaat, 0)}</td>
-                        <td className="p-2 text-right font-mono text-slate-400">—</td>
-                        <td className="p-2 text-right font-mono text-amber-700 font-black">₺{totalHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
-                        <td className="p-2 text-right font-mono text-amber-600">{activeStaffRows.reduce((s, r) => s + r.mesaiHakedis, 0) > 0 ? `₺${activeStaffRows.reduce((s, r) => s + r.mesaiHakedis, 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}</td>
-                        <td className="p-2 text-right font-mono text-slate-500">{activeStaffRows.reduce((s, r) => s + r.maasReferans, 0) > 0 ? `₺${activeStaffRows.reduce((s, r) => s + r.maasReferans, 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}</td>
-                      </tr>
                     </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-100 font-bold border-t-2 border-slate-300">
+                        <td colSpan={4} className="p-1.5 text-right uppercase text-[7px]">Toplam</td>
+                        <td className="p-1.5 text-center font-mono">{totalPersonDays}</td>
+                        <td className="p-1.5 text-center font-mono">{totalMesaiSaat}</td>
+                        <td className="p-1.5 text-right font-mono text-blue-900">{formatMoney(totalGunKazanci)}</td>
+                        <td className="p-1.5 text-right font-mono text-amber-900">{formatMoney(totalMesaiKazanci)}</td>
+                        <td className="p-1.5 text-right font-mono text-indigo-900">{formatMoney(totalMaasKazanci)}</td>
+                        <td className="p-1.5 text-center text-emerald-600">×{ZER_YAPI_GUNLUK}</td>
+                        <td className="p-1.5 text-right font-mono font-black text-emerald-900">{formatMoney(totalZerYapiHakedis, 0)}</td>
+                      </tr>
+                    </tfoot>
                   </table>
+                </div>
+              </section>
+
+              {/* —— 2. SAHA FAALİYETLERİ (kayıt kayıt, tarih sırası, kaydırmasız) —— */}
+              <section className="print-area faaliyet-table-wrap">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-6 h-6 rounded-lg bg-[#1E4E78] text-white text-[9px] font-black flex items-center justify-center">2</span>
+                  <div>
+                    <h4 className="font-black text-[10px] text-[#1E4E78] uppercase tracking-wider">Saha Faaliyet Raporları</h4>
+                    <p className="text-[7px] text-slate-500">{sahaFaaliyetSatirlari.length} kayıt · eskiden yeniye tarih sırası</p>
+                  </div>
+                </div>
+                {sahaFaaliyetSatirlari.length === 0 ? (
+                  <p className="text-[9px] text-slate-400 italic pl-8">Bu dönemde saha faaliyeti kaydı yok.</p>
+                ) : (
+                  <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                    <table className="w-full border-collapse text-[7px] faaliyet-defteri">
+                      <thead>
+                        <tr className="bg-[#1E4E78] text-white font-bold uppercase">
+                          <th className="p-1.5 w-7 text-center border-r border-white/10">No</th>
+                          <th className="p-1.5 w-[82px] text-left border-r border-white/10">Tarih</th>
+                          <th className="p-1.5 w-[48px] text-left border-r border-white/10">Parsel</th>
+                          <th className="p-1.5 w-[32px] text-left border-r border-white/10">Blok</th>
+                          <th className="p-1.5 text-left border-r border-white/10">Yapılan İş / Faaliyet</th>
+                          <th className="p-1.5 w-[56px] text-right">Personel</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sahaFaaliyetSatirlari.map(sf => (
+                          <tr key={sf.id} className={`faaliyet-row report-row ${sf.siraNo % 2 === 0 ? 'bg-slate-50' : 'bg-white'}`}>
+                            <td className="p-1 text-center font-mono font-bold text-slate-500 border-b border-slate-100">{sf.siraNo}</td>
+                            <td className="p-1 font-mono whitespace-nowrap text-slate-800 border-b border-slate-100">{sf.tarihLabel}</td>
+                            <td className="p-1 font-semibold text-slate-700 border-b border-slate-100">{sf.parselKisa}</td>
+                            <td className="p-1 font-semibold text-slate-700 border-b border-slate-100">{sf.blokKisa}</td>
+                            <td className="p-1 text-slate-900 leading-snug border-b border-slate-100">{faaliyetIsTanimi(sf)}</td>
+                            <td className="p-1 text-right text-slate-600 whitespace-nowrap border-b border-slate-100">{formatPersonelSayisi(sf)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+
+              {/* —— 3. KAMP FAALİYETLERİ —— */}
+              <section className="print-area kamp-table-wrap">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-6 h-6 rounded-lg bg-slate-600 text-white text-[9px] font-black flex items-center justify-center">3</span>
+                  <div>
+                    <h4 className="font-black text-[10px] text-slate-700 uppercase tracking-wider">Kamp / Lojman Faaliyetleri</h4>
+                    <p className="text-[7px] text-slate-500">{kampFaaliyetSatirlari.length} kayıt</p>
+                  </div>
+                </div>
+                {kampFaaliyetSatirlari.length === 0 ? (
+                  <p className="text-[9px] text-slate-400 italic pl-8">Bu dönemde kamp faaliyeti kaydı yok.</p>
+                ) : (
+                  <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                    <table className="w-full border-collapse text-[7px]">
+                      <thead>
+                        <tr className="bg-slate-600 text-white font-bold uppercase">
+                          <th className="p-1.5 w-7 text-center">No</th>
+                          <th className="p-1.5 w-[82px] text-left">Tarih</th>
+                          <th className="p-1.5 w-[72px] text-left">Tip</th>
+                          <th className="p-1.5 text-left">Açıklama</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {kampFaaliyetSatirlari.map(kf => (
+                          <tr key={kf.id} className={`report-row ${kf.siraNo % 2 === 0 ? 'bg-slate-50' : 'bg-white'}`}>
+                            <td className="p-1 text-center font-mono border-b border-slate-100">{kf.siraNo}</td>
+                            <td className="p-1 font-mono border-b border-slate-100">{kf.tarihLabel}</td>
+                            <td className="p-1 font-semibold border-b border-slate-100">{kf.faaliyetTipi}</td>
+                            <td className="p-1 text-slate-700 border-b border-slate-100">{kf.aciklama}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+
+              {/* —— Özet —— */}
+              <div className="grid grid-cols-2 gap-3 print-area">
+                <div className="rounded-xl bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200 p-3 text-center shadow-sm">
+                  <span className="text-[7px] font-bold text-indigo-700 uppercase tracking-wide block">Toplam Maaş Kazancı</span>
+                  <span className="text-base font-black text-indigo-900 font-mono">{formatMoney(totalMaasKazanci)}</span>
+                  <span className="text-[6px] text-indigo-500 block mt-0.5">Gün + mesai (bilgi amaçlı)</span>
+                </div>
+                <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-green-100 border-2 border-emerald-400 p-3 text-center shadow-sm">
+                  <span className="text-[7px] font-black text-emerald-800 uppercase tracking-wide block">ZER YAPI Hakediş Toplamı</span>
+                  <span className="text-base font-black text-emerald-800 font-mono">{formatMoney(totalZerYapiHakedis, 0)}</span>
+                  <span className="text-[6px] text-emerald-600 block mt-0.5 font-semibold">{totalPersonDays} gün × ₺{ZER_YAPI_GUNLUK}</span>
                 </div>
               </div>
 
-              <div className="pt-6 border-t">
+              {/* —— İmza —— */}
+              <div className="pt-3 border-t border-slate-200 print-area">
                 {reportType === 'E-IMZALI' ? (
-                  <div className="border border-amber-500/30 rounded-xl p-3 bg-amber-500/5 flex items-center space-x-3">
-                    <ShieldCheck size={26} className="text-amber-600 shrink-0" />
+                  <div className="border border-emerald-500/30 rounded-xl p-3 bg-emerald-500/5 flex items-center space-x-3">
+                    <ShieldCheck size={26} className="text-emerald-600 shrink-0" />
                     <div>
-                      <span className="text-[10px] font-black text-amber-700 uppercase block">E-İMZA İLE ONAYLANMIŞTIR</span>
+                      <span className="text-[10px] font-black text-emerald-700 uppercase block">E-İMZA İLE ONAYLANMIŞTIR</span>
                       <p className="text-[9px] text-slate-500">Doğrulayan: {currentUser?.email || 'sametatak9@gmail.com'}</p>
                     </div>
                   </div>

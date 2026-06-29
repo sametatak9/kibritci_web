@@ -56,7 +56,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { key: "taseron_kesinti", label: "Taşeron Kesintileri", icon: Wallet },
         { key: "cari_stok", label: "Cari ve Stok Kartları", icon: Package },
         { key: "evrak_aktarimi", label: "AI Belge Aktarımı", icon: BookOpen },
-        { key: "kibar_hakedis", label: "Kibar Hakediş", icon: CreditCard },
+        { key: "kibar_hakedis", label: "ZER YAPI Hakediş", icon: CreditCard },
         { key: "planli_organizasyon", label: "Planlı Organizasyon", icon: CalendarCheck2 },
       ]
     },
