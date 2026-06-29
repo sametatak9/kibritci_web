@@ -138,28 +138,20 @@ export async function ensureYapıFromOdalari(
   }
 }
 
-export function deriveCampusNames(
-  yerleskeler: KampYerleske[],
-  kampOdalari: KampOdasi[]
-): string[] {
-  const names = new Set<string>();
-  yerleskeler.forEach((y) => names.add(y.ad));
-  kampOdalari.forEach((r) => {
-    if (r.yerleskeAdi) names.add(r.yerleskeAdi);
-  });
-  return Array.from(names).sort((a, b) => a.localeCompare(b, 'tr'));
+export function deriveCampusNames(yerleskeler: KampYerleske[]): string[] {
+  return yerleskeler.map((y) => y.ad).sort((a, b) => a.localeCompare(b, 'tr'));
 }
 
 export function deriveCampusFloors(
   campusNames: string[],
-  katlar: KampKat[],
-  kampOdalari: KampOdasi[]
+  katlar: KampKat[]
 ): Record<string, string[]> {
   const result: Record<string, string[]> = {};
   campusNames.forEach((camp) => {
-    const fromKat = katlar.filter((k) => k.yerleskeAdi === camp).map((k) => k.ad);
-    const fromRooms = kampOdalari.filter((r) => r.yerleskeAdi === camp).map((r) => r.kogusNo);
-    result[camp] = Array.from(new Set([...fromKat, ...fromRooms])).filter(Boolean);
+    result[camp] = katlar
+      .filter((k) => k.yerleskeAdi === camp)
+      .sort((a, b) => a.sira - b.sira || a.ad.localeCompare(b.ad, 'tr'))
+      .map((k) => k.ad);
   });
   return result;
 }
@@ -170,7 +162,7 @@ export async function deleteYerleskeCascade(
   katlar: KampKat[],
   kampOdalari: KampOdasi[]
 ): Promise<string[]> {
-  const yerleske = yerleskeler.find((y) => y.ad === campName);
+  let yerleske = yerleskeler.find((y) => y.ad === campName) ?? (await findYerleskeByAd(campName));
   const roomIds = kampOdalari.filter((r) => r.yerleskeAdi === campName).map((r) => r.id);
   await Promise.all(roomIds.map((id) => deleteKampOdasi(id)));
 
@@ -201,19 +193,44 @@ const LEGACY_SEED_YERLESKELER = new Set([
   'A BLOK', 'B BLOK', 'C BLOK', 'D BLOK',
 ]);
 
+export function isLegacyKampRoom(room: KampOdasi): boolean {
+  return LEGACY_SEED_YERLESKELER.has(room.yerleskeAdi) || room.id.startsWith('ko_room_');
+}
+
+export function isLegacyKampYerleske(ad: string): boolean {
+  return LEGACY_SEED_YERLESKELER.has(ad);
+}
+
 /** Demo/seed ile gelen örnek odalar */
 export function hasLegacySeedRooms(rooms: KampOdasi[]): boolean {
-  return rooms.some(
-    (r) => LEGACY_SEED_YERLESKELER.has(r.yerleskeAdi) || r.id.startsWith('ko_room_')
-  );
+  return rooms.some(isLegacyKampRoom);
 }
 
 export async function clearLegacySeedRooms(rooms: KampOdasi[]): Promise<string[]> {
-  const toDelete = rooms.filter(
-    (r) => LEGACY_SEED_YERLESKELER.has(r.yerleskeAdi) || r.id.startsWith('ko_room_')
-  );
+  const toDelete = rooms.filter(isLegacyKampRoom);
   await Promise.all(toDelete.map((r) => deleteKampOdasi(r.id)));
   return toDelete.map((r) => r.id);
+}
+
+/** Eski demo yerleşke, kat ve odalarını Firestore'dan temizler */
+export async function purgeLegacyKampData(): Promise<{ roomIds: string[]; yerleskeIds: string[]; katIds: string[] }> {
+  const rooms = await fetchCollection<KampOdasi & { id: string }>('kampOdalari');
+  const legacyRooms = rooms.filter((r) => isLegacyKampRoom(r));
+  await Promise.all(legacyRooms.map((r) => deleteKampOdasi(r.id)));
+
+  const yerleskeler = await fetchCollection<KampYerleske & { id: string }>('kampYerleskeleri');
+  const legacyYerleskeler = yerleskeler.filter((y) => isLegacyKampYerleske(y.ad));
+  await Promise.all(legacyYerleskeler.map((y) => deleteKampYerleske(y.id)));
+
+  const katlar = await fetchCollection<KampKat & { id: string }>('kampKatlari');
+  const legacyKatlar = katlar.filter((k) => isLegacyKampYerleske(k.yerleskeAdi));
+  await Promise.all(legacyKatlar.map((k) => deleteKampKat(k.id)));
+
+  return {
+    roomIds: legacyRooms.map((r) => r.id),
+    yerleskeIds: legacyYerleskeler.map((y) => y.id),
+    katIds: legacyKatlar.map((k) => k.id),
+  };
 }
 
 /** Realtime dinleyiciler için yardımcı */

@@ -21,6 +21,7 @@ import {
   deriveCampusNames,
   deriveCampusFloors,
   findOrCreateYerleske,
+  purgeLegacyKampData,
 } from '../lib/kampYapisi';
 import { compressImage } from '../lib/imageCompress';
 import { collection, onSnapshot, getDocs, doc, setDoc } from 'firebase/firestore';
@@ -248,14 +249,41 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   }, []);
 
   const campuses = useMemo(
-    () => deriveCampusNames(yerleskeler, kampOdalari),
-    [yerleskeler, kampOdalari]
+    () => deriveCampusNames(yerleskeler),
+    [yerleskeler]
   );
 
   const campusFloors = useMemo(
-    () => deriveCampusFloors(campuses, katlar, kampOdalari),
-    [campuses, katlar, kampOdalari]
+    () => deriveCampusFloors(campuses, katlar),
+    [campuses, katlar]
   );
+
+  useEffect(() => {
+    if (currentSubTab !== 'kamp') return;
+    const purgeKey = 'kibritci_kamp_legacy_purged_v2';
+    if (sessionStorage.getItem(purgeKey) === '1') return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await purgeLegacyKampData();
+        if (cancelled) return;
+        if (result.roomIds.length > 0 || result.yerleskeIds.length > 0 || result.katIds.length > 0) {
+          setKampOdalari((prev) => prev.filter((r) => !result.roomIds.includes(r.id)));
+          setKampKayitlari((prev) =>
+            prev.filter((kk) => !result.roomIds.includes(kk.odaId) && !result.roomIds.includes(kk.roomId))
+          );
+        }
+        sessionStorage.setItem(purgeKey, '1');
+      } catch (err) {
+        console.warn('Eski kamp verisi temizlenemedi:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentSubTab, setKampOdalari, setKampKayitlari]);
 
   const [selectedYerleske, setSelectedYerleske] = useState("");
   const [selectedKat, setSelectedKat] = useState("");
@@ -407,34 +435,20 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     }
   };
 
-  const handleResetToStandardCampBlocks = () => {
-    if (!window.confirm("Dikkat! Tüm kamp odaları silinecek ve yerine A, B, C, D BLOK (3 kat, her katta 10 oda - Toplam 120 Oda) olarak sıfırdan oluşturulacaktır. Emin misiniz?")) {
-      return;
+  const handleClearLegacyKampData = async () => {
+    if (!window.confirm('Eski demo/örnek kamp yerleşkeleri ve odaları kalıcı olarak silinecek. Devam edilsin mi?')) return;
+    try {
+      const result = await purgeLegacyKampData();
+      setKampOdalari((prev) => prev.filter((r) => !result.roomIds.includes(r.id)));
+      setKampKayitlari((prev) =>
+        prev.filter((kk) => !result.roomIds.includes(kk.odaId) && !result.roomIds.includes(kk.roomId))
+      );
+      setSelectedYerleske('');
+      setSelectedKat('');
+      alert('Eski örnek kamp verileri temizlendi. Yerleşkeleri sıfırdan oluşturabilirsiniz.');
+    } catch {
+      alert('Temizlik sırasında hata oluştu.');
     }
-    const rooms: KampOdasi[] = [];
-    const blocks = ["A BLOK", "B BLOK", "C BLOK", "D BLOK"];
-    const floors = ["1. Kat", "2. Kat", "3. Kat"];
-    
-    let idCounter = 1;
-    blocks.forEach(block => {
-      floors.forEach((floor, fIdx) => {
-        const floorNum = fIdx + 1; // 1, 2, 3
-        for (let roomNum = 1; roomNum <= 10; roomNum++) {
-          const roomStr = `${block.split(' ')[0]}-${floorNum}${roomNum < 10 ? '0' : ''}${roomNum}`; // A-101, B-204 etc.
-          rooms.push({
-            id: `ko_room_${idCounter++}_${Date.now()}`,
-            yerleskeAdi: block,
-            kogusNo: floor,
-            odaNo: roomStr,
-            kapasite: 6, // 6 beds capacity
-            firmaTipi: "ANA_FIRMA",
-            durum: "BOŞ"
-          });
-        }
-      });
-    });
-    setKampOdalari(rooms);
-    alert("120 Odalı Standart Kibritçi Blok Yapısı başarıyla kuruldu.");
   };
 
   const handleAssignResident = () => {
@@ -2051,10 +2065,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   </button>
 
                   <button
-                    onClick={handleResetToStandardCampBlocks}
-                    className="w-full bg-slate-800 hover:bg-slate-900 text-white font-semibold py-1.5 px-3 rounded-lg cursor-pointer transition text-[10px] uppercase tracking-wider flex items-center justify-center space-x-1"
+                    onClick={handleClearLegacyKampData}
+                    className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-1.5 px-3 rounded-lg cursor-pointer transition text-[10px] uppercase tracking-wider flex items-center justify-center space-x-1 border border-slate-200"
                   >
-                    <span>🏢 Blok Yapısını Kur (120 Oda)</span>
+                    <span>🧹 Eski Örnek Kamp Verisini Temizle</span>
                   </button>
                 </div>
               </div>

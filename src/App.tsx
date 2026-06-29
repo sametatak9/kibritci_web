@@ -822,19 +822,13 @@ export default function App() {
   };
 
   const setKampOdalariWithSync = (updater: KampOdasi[] | ((k: KampOdasi[]) => KampOdasi[])) => {
-    setKampOdalari(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('kampOdalari', prev, next), 0);
-      return next;
-    });
+    // kampOdalari: toplu syncArrayToFirestore kullanılmaz — silinen odalar geri yazılır.
+    // Tekil kayıtlar createKampOdasi / deleteKampOdasi ile Firestore'a yazılır.
+    setKampOdalari((prev) => (typeof updater === 'function' ? updater(prev) : updater));
   };
 
   const setKampKayitlariWithSync = (updater: KampKaydi[] | ((k: KampKaydi[]) => KampKaydi[])) => {
-    setKampKayitlari(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('kampKayitlari', prev, next), 0);
-      return next;
-    });
+    setKampKayitlari((prev) => (typeof updater === 'function' ? updater(prev) : updater));
   };
 
   const setSahaFaaliyetleriWithSync = (updater: SahaFaaliyetiType[] | ((s: SahaFaaliyetiType[]) => SahaFaaliyetiType[])) => {

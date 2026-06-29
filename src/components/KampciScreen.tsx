@@ -6,7 +6,7 @@ import {
 import { KampOdasi, KampKaydi, Personel, StokKart, KampYerleske, KampKat } from '../types/erp';
 import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
-import { createKampYerleske, createKampKat, katsForYerleske, createKampOdasi, deleteKampOdasi, hasLegacySeedRooms, clearLegacySeedRooms } from '../lib/kampYapisi';
+import { createKampYerleske, createKampKat, katsForYerleske, createKampOdasi, deleteKampOdasi, hasLegacySeedRooms, purgeLegacyKampData } from '../lib/kampYapisi';
 import { collection, onSnapshot, doc, updateDoc, query, orderBy } from 'firebase/firestore';
 
 interface KampciScreenProps {
@@ -264,13 +264,15 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   };
 
   const handleClearLegacyRooms = async () => {
-    if (!window.confirm('Demo ile gelen örnek odalar silinecek. Kendi yapınızı sıfırdan kurabilirsiniz. Devam edilsin mi?')) return;
+    if (!window.confirm('Demo ile gelen örnek yerleşke, kat ve odalar silinecek. Kendi yapınızı sıfırdan kurabilirsiniz. Devam edilsin mi?')) return;
     setClearingLegacy(true);
     try {
-      const deletedIds = await clearLegacySeedRooms(kampOdalari);
-      setKampOdalari((prev) => prev.filter((r) => !deletedIds.includes(r.id)));
-      setKampKayitlari((prev) => prev.filter((k) => !deletedIds.includes(k.odaId) && !deletedIds.includes(k.roomId)));
-      showStatus('success', `${deletedIds.length} örnek oda temizlendi. Yerleşkenizi kurabilirsiniz.`);
+      const result = await purgeLegacyKampData();
+      setKampOdalari((prev) => prev.filter((r) => !result.roomIds.includes(r.id)));
+      setKampKayitlari((prev) =>
+        prev.filter((k) => !result.roomIds.includes(k.odaId) && !result.roomIds.includes(k.roomId))
+      );
+      showStatus('success', `${result.roomIds.length} örnek oda temizlendi. Yerleşkenizi kurabilirsiniz.`);
     } catch {
       showStatus('error', 'Örnek odalar temizlenemedi.');
     } finally {
