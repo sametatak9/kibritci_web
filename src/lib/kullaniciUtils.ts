@@ -70,24 +70,26 @@ export function hasDuplicateKullaniciEmails(users: KullaniciLike[]): boolean {
   return users.some((u) => u.email && u.id !== kullaniciDocId(u.email));
 }
 
-/** Tek kullanıcıyı e-posta anahtarlı belgeye yazar, çift kayıtları siler */
+/** Tek kullanıcıyı e-posta anahtarlı belgeye yazar, çift kayıtları arka planda siler */
 export async function saveKullanici(user: KullaniciLike): Promise<KullaniciLike> {
   const emailKey = kullaniciDocId(user.email);
   const canonical: KullaniciLike = { ...user, id: emailKey, email: emailKey };
 
   await saveDocument('kullanicilar', canonical as KullaniciLike & { id: string });
 
-  try {
-    const all = await fetchCollection<KullaniciLike>('kullanicilar');
-    const dupes = all.filter(
-      (u) => u.email?.trim().toLowerCase() === emailKey && u.id !== emailKey
-    );
-    await Promise.all(dupes.map((u) => removeDocument('kullanicilar', u.id).catch(() => undefined)));
-  } catch (err) {
+  void cleanupDuplicateKullaniciDocs(emailKey).catch((err) => {
     console.warn('Çift kullanıcı temizliği atlandı:', err);
-  }
+  });
 
   return canonical;
+}
+
+async function cleanupDuplicateKullaniciDocs(emailKey: string): Promise<void> {
+  const all = await fetchCollection<KullaniciLike>('kullanicilar');
+  const dupes = all.filter(
+    (u) => u.email?.trim().toLowerCase() === emailKey && u.id !== emailKey
+  );
+  await Promise.all(dupes.map((u) => removeDocument('kullanicilar', u.id).catch(() => undefined)));
 }
 
 export async function persistKullaniciRole<T extends KullaniciLike>(

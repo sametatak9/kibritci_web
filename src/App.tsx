@@ -255,7 +255,7 @@ export default function App() {
     }
   }, []);
 
-  // 0. Monitor Authentication State Changes
+  // Monitor Authentication State Changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       const savedSession = localStorage.getItem('kibritci_portal_session');
@@ -263,9 +263,10 @@ export default function App() {
         try {
           const parsed = JSON.parse(savedSession);
           setCurrentUser({
-            ...user,
+            ...(user || {}),
             email: parsed.email || user?.email,
-            uid: user?.uid || parsed.uid || `u_${Date.now()}`
+            uid: user?.uid || parsed.uid || `u_${Date.now()}`,
+            isMock: !user || parsed.isMock,
           });
         } catch {
           setCurrentUser(user);

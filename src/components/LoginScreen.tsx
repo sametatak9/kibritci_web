@@ -21,6 +21,47 @@ function withReadTimeout<T>(promise: Promise<T>, ms = 8000): Promise<T> {
   ]);
 }
 
+function withAuthTimeout<T>(promise: Promise<T>, ms = 6000): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('AUTH_TIMEOUT')), ms)
+    ),
+  ]);
+}
+
+function finishPortalLogin(
+  emailLower: string,
+  uid: string,
+  onLoginSuccess: (user: any) => void
+) {
+  localStorage.setItem('kibritci_portal_session', JSON.stringify({ email: emailLower, uid }));
+  onLoginSuccess({ email: emailLower, uid, isMock: true });
+}
+
+function seedFounderRecords(emailLower: string, passTrim: string) {
+  const userDocRef = doc(db, 'portalKullanicilar', emailLower);
+  setDoc(
+    userDocRef,
+    {
+      email: emailLower,
+      password: passTrim,
+      role: 'YÖNETİCİ',
+      yetki: 'YÖNETİCİ',
+      createdAt: new Date().toISOString(),
+    },
+    { merge: true }
+  ).catch((err) => console.warn('portalKullanicilar seed atlandı:', err));
+
+  saveKullanici({
+    id: emailLower,
+    email: emailLower,
+    yetki: 'YÖNETİCİ',
+    durum: 'AKTİF',
+    kayitTarihi: new Date().toISOString().split('T')[0],
+  }).catch((err) => console.warn('kullanicilar seed atlandı:', err));
+}
+
 interface LoginScreenProps {
   onLoginSuccess: (user: any) => void;
 }
@@ -266,82 +307,82 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
       } else {
         // --- SIGN IN LOGIC ---
-        // 1. Predefined coordinates check for instant absolute administrator access
         const isSamet = emailLower === 'sametatak9@gmail.com' && passTrim === '117270Sa';
         const isSantiye = emailLower === 'santiye@kibritci.com' && passTrim === 'kibritci2026';
 
+        // 1. Kurucu / şantiye yönetici — Firestore beklemeden anında giriş
         if (isSamet || isSantiye) {
-          const userDocRef = doc(db, 'portalKullanicilar', emailLower);
-          
-          // Seed the account to the database dynamically so they are visible under list of accounts
-          try {
-            await setDoc(userDocRef, {
-              email: emailLower,
-              password: passTrim,
-              role: 'YÖNETİCİ',
-              createdAt: new Date().toISOString()
-            }, { merge: true });
-          } catch (dbErr) {
-            console.warn("Firestore write error during auto-seeding admin, bypassing...", dbErr);
-          }
+          seedFounderRecords(emailLower, passTrim);
 
           let anonUid = isSamet ? 'samet_atak_uid' : 'santiye_kibritci_uid';
           try {
-            const res = await signInAnonymously(auth);
+            const res = await withAuthTimeout(signInAnonymously(auth), 4000);
             anonUid = res.user.uid;
           } catch (anonErr) {
-            console.warn("Could not start anonymous user session, bypassing...", anonErr);
+            console.warn('Anonim oturum atlandı, yerel oturum kullanılıyor:', anonErr);
           }
 
-          localStorage.setItem('kibritci_portal_session', JSON.stringify({ email: emailLower, uid: anonUid }));
-          onLoginSuccess({ email: emailLower, uid: anonUid, isMock: true });
+          finishPortalLogin(emailLower, anonUid, onLoginSuccess);
           return;
         }
 
-        // 2. Check if user credentials exist in fallback Firestore database
+        // 2. portalKullanicilar yedek girişi
         try {
           const userDocRef = doc(db, 'portalKullanicilar', emailLower);
-          const userDocSnap = await getDoc(userDocRef);
+          const userDocSnap = await withReadTimeout(getDoc(userDocRef), 6000);
 
           if (userDocSnap.exists()) {
             const data = userDocSnap.data();
             if (data.password === passTrim) {
               let anonUid = `u_${Date.now()}`;
               try {
-                const res = await signInAnonymously(auth);
+                const res = await withAuthTimeout(signInAnonymously(auth), 4000);
                 anonUid = res.user.uid;
               } catch (anonErr) {
-                console.warn("Anonymous session initialization failed, bypassing...", anonErr);
+                console.warn('Anonim oturum atlandı:', anonErr);
               }
 
-              localStorage.setItem('kibritci_portal_session', JSON.stringify({ email: emailLower, uid: anonUid }));
-              onLoginSuccess({ email: emailLower, uid: anonUid, isMock: true });
-              return;
-            } else {
-              setErrorMsg('Hatalı şifre girdiniz.');
-              setLoading(false);
+              finishPortalLogin(emailLower, anonUid, onLoginSuccess);
               return;
             }
+
+            setErrorMsg('Hatalı şifre girdiniz.');
+            return;
           }
-        } catch (dbErr) {
-          console.warn("Firestore user fallback lookup failed:", dbErr);
+        } catch (dbErr: any) {
+          if (dbErr?.message === 'FIRESTORE_TIMEOUT') {
+            setErrorMsg('Veritabanı yanıt vermedi. Bağlantınızı kontrol edip tekrar deneyin.');
+            return;
+          }
+          console.warn('Firestore user fallback lookup failed:', dbErr);
         }
 
-        // 3. Fallback: standard Firebase Auth sign-in
+        // 3. Standart Firebase Auth
         try {
-          const userCredential = await signInWithEmailAndPassword(auth, email, password);
-          localStorage.setItem('kibritci_portal_session', JSON.stringify({ email: emailLower, uid: userCredential.user.uid }));
+          const userCredential = await withAuthTimeout(
+            signInWithEmailAndPassword(auth, emailLower, passTrim),
+            8000
+          );
+          localStorage.setItem(
+            'kibritci_portal_session',
+            JSON.stringify({ email: emailLower, uid: userCredential.user.uid })
+          );
           onLoginSuccess(userCredential.user);
         } catch (fbErr: any) {
-          console.error("Firebase regular auth failed:", fbErr);
+          console.error('Firebase regular auth failed:', fbErr);
           let turkishError = 'Giriş yapılamadı. Bilgilerinizi kontrol edip tekrar deneyin.';
-          
-          if (fbErr.code === 'auth/wrong-password' || fbErr.code === 'auth/invalid-credential') {
+
+          if (fbErr?.message === 'AUTH_TIMEOUT') {
+            turkishError = 'Giriş isteği zaman aşımına uğradı. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+          } else if (fbErr.code === 'auth/wrong-password' || fbErr.code === 'auth/invalid-credential') {
             turkishError = 'Hatalı şifre girdiniz.';
           } else if (fbErr.code === 'auth/user-not-found') {
             turkishError = 'Bu e-posta adresine kayıtlı kullanıcı bulunamadı.';
           } else if (fbErr.code === 'auth/invalid-email') {
             turkishError = 'Geçersiz e-posta formatı girdiniz.';
+          } else if (fbErr.code === 'auth/operation-not-allowed') {
+            turkishError = 'Firebase E-posta/Şifre girişi kapalı. Yöneticiye bildirin.';
+            setShowOfflineBypass(true);
           }
           setErrorMsg(turkishError);
         }
