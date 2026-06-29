@@ -9,7 +9,7 @@ import {
   signInAnonymously
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
-import { saveKullanici, kullaniciDocId, findKullaniciByEmail } from '../lib/kullaniciUtils';
+import { saveKullanici, saveKullaniciForSignup } from '../lib/kullaniciUtils';
 import { Building2, Lock, Mail, Loader2, ArrowRight, CheckCircle2, AlertTriangle, ShieldCheck, User, Fingerprint, PenTool, Check, Trash, Smartphone } from 'lucide-react';
 
 function withReadTimeout<T>(promise: Promise<T>, ms = 8000): Promise<T> {
@@ -60,6 +60,50 @@ function seedFounderRecords(emailLower: string, passTrim: string) {
     durum: 'AKTİF',
     kayitTarihi: new Date().toISOString().split('T')[0],
   }).catch((err) => console.warn('kullanicilar seed atlandı:', err));
+}
+
+async function getRegistrationState(
+  emailLower: string
+): Promise<'none' | 'complete' | 'partial'> {
+  const [portalSnap, userSnap] = await Promise.all([
+    withReadTimeout(getDoc(doc(db, 'portalKullanicilar', emailLower)), 8000),
+    withReadTimeout(getDoc(doc(db, 'kullanicilar', emailLower)), 8000),
+  ]);
+  if (portalSnap.exists() && userSnap.exists()) return 'complete';
+  if (portalSnap.exists() || userSnap.exists()) return 'partial';
+  return 'none';
+}
+
+async function resolveSignupAuthUid(emailLower: string, passTrim: string): Promise<string> {
+  let uid = `u_${Date.now()}`;
+  try {
+    const cred = await withAuthTimeout(
+      createUserWithEmailAndPassword(auth, emailLower, passTrim),
+      10000
+    );
+    return cred.user.uid;
+  } catch (authErr: any) {
+    if (authErr?.code === 'auth/email-already-in-use') {
+      try {
+        const cred = await withAuthTimeout(
+          signInWithEmailAndPassword(auth, emailLower, passTrim),
+          8000
+        );
+        return cred.user.uid;
+      } catch {
+        console.warn('Mevcut Auth hesabına giriş yapılamadı, yedek oturum deneniyor');
+      }
+    } else {
+      console.warn('Firebase Auth kayıt atlandı:', authErr?.code || authErr?.message);
+    }
+  }
+
+  try {
+    const anon = await withAuthTimeout(signInAnonymously(auth), 4000);
+    return anon.user.uid;
+  } catch {
+    return uid;
+  }
 }
 
 interface LoginScreenProps {
@@ -186,11 +230,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           console.warn('Personel TC eşleştirmesi atlandı:', matchErr);
         }
 
+        let registrationState: 'none' | 'complete' | 'partial' = 'none';
         try {
-          const userDocRef = doc(db, 'portalKullanicilar', emailLower);
-          const userDocSnap = await withReadTimeout(getDoc(userDocRef));
-          if (userDocSnap.exists()) {
-            setErrorMsg('Bu e-posta adresi zaten kullanımda.');
+          registrationState = await getRegistrationState(emailLower);
+          if (registrationState === 'complete') {
+            setErrorMsg('Bu e-posta adresi zaten kayıtlı. Giriş yapmayı deneyin.');
             setLoading(false);
             return;
           }
@@ -200,13 +244,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             setLoading(false);
             return;
           }
-          console.warn('Portal kullanıcı kontrolü atlandı:', checkErr);
+          console.warn('Kayıt kontrolü atlandı, devam ediliyor:', checkErr);
         }
 
         const userPayload = {
           email: emailLower,
           password: passTrim,
           role: 'MİSAFİR',
+          yetki: 'MİSAFİR',
           ad: ad.trim(),
           soyad: soyad.trim(),
           tcNo: tcNo.trim(),
@@ -217,21 +262,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           createdAt: new Date().toISOString()
         };
 
-        const saveToKullanicilarCollection = async () => {
-          await saveKullanici({
-            id: emailLower,
-            email: emailLower,
-            yetki: 'MİSAFİR',
-            durum: 'ONAY BEKLİYOR',
-            kayitTarihi: new Date().toISOString().split('T')[0],
-            ad: ad.trim(),
-            soyad: soyad.trim(),
-            tcNo: tcNo.trim(),
-            imzaText: imzaText.trim() || `${ad.trim()} ${soyad.trim()}`,
-            imzaStyle: imzaStyle,
-            imzaCanvas: imzaCanvas || undefined,
-            matchedPersonelId: matchedPersonelId || undefined,
-          });
+        const kullaniciPayload = {
+          id: emailLower,
+          email: emailLower,
+          yetki: 'MİSAFİR',
+          durum: 'ONAY BEKLİYOR' as const,
+          kayitTarihi: new Date().toISOString().split('T')[0],
+          ad: ad.trim(),
+          soyad: soyad.trim(),
+          tcNo: tcNo.trim(),
+          imzaText: imzaText.trim() || `${ad.trim()} ${soyad.trim()}`,
+          imzaStyle: imzaStyle,
+          imzaCanvas: imzaCanvas || undefined,
+          matchedPersonelId: matchedPersonelId || undefined,
         };
 
         const finishSignup = (uid: string, userObj: { email?: string | null; uid: string; isMock?: boolean }) => {
@@ -241,68 +284,33 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             body: JSON.stringify({ email: emailLower })
           }).catch(err => console.warn(err));
           localStorage.setItem('kibritci_portal_session', JSON.stringify({ email: emailLower, uid }));
-          setInfoMsg(matchedPersonelId
-            ? 'Hesap oluşturuldu! TC eşleşti. Yönetici onayından sonra erişim açılacaktır.'
-            : 'Hesap oluşturuldu! Yönetici onayından sonra sisteme erişebilirsiniz.'
+          setInfoMsg(
+            registrationState === 'partial'
+              ? 'Kayıt tamamlandı! Eksik bilgiler güncellendi. Yönetici onayından sonra erişim açılacaktır.'
+              : matchedPersonelId
+                ? 'Hesap oluşturuldu! TC eşleşti. Yönetici onayından sonra erişim açılacaktır.'
+                : 'Hesap oluşturuldu! Yönetici onayından sonra sisteme erişebilirsiniz.'
           );
           setTimeout(() => onLoginSuccess(userObj), 1200);
         };
 
         try {
-          const userCredential = await createUserWithEmailAndPassword(auth, emailLower, passTrim);
-          const finalUid = userCredential.user.uid;
-          await setDoc(doc(db, 'portalKullanicilar', emailLower), userPayload);
-          try {
-            await saveToKullanicilarCollection();
-          } catch (saveErr) {
-            console.error('kullanicilar kaydı başarısız:', saveErr);
-            setErrorMsg('Hesap oluşturuldu ancak üyelik listesine yazılamadı. Yöneticiye bildirin.');
-            setLoading(false);
-            return;
-          }
-          finishSignup(finalUid, userCredential.user);
-          return;
-        } catch (fbErr: any) {
-          if (fbErr.code === 'auth/email-already-in-use') {
-            setErrorMsg('Bu e-posta adresi zaten kullanımda.');
-            setLoading(false);
-            return;
-          }
-          if (fbErr.code === 'auth/weak-password') {
-            setErrorMsg('Şifre en az 6 karakter olmalıdır.');
-            setLoading(false);
-            return;
-          }
-          if (fbErr.code === 'auth/invalid-email') {
-            setErrorMsg('Geçersiz e-posta formatı.');
-            setLoading(false);
-            return;
-          }
-          console.warn('Firebase Auth kayıt başarısız, yedek akış deneniyor:', fbErr);
-        }
+          await withReadTimeout(
+            setDoc(doc(db, 'portalKullanicilar', emailLower), userPayload, { merge: true }),
+            12000
+          );
+          await saveKullaniciForSignup(kullaniciPayload);
 
-        try {
-          let anonUid = `u_${Date.now()}`;
-          try {
-            const res = await signInAnonymously(auth);
-            anonUid = res.user.uid;
-          } catch (anonErr) {
-            console.warn('Anonim oturum açılamadı:', anonErr);
-          }
-          await setDoc(doc(db, 'portalKullanicilar', emailLower), userPayload);
-          try {
-            await saveToKullanicilarCollection();
-          } catch (saveErr) {
-            console.error('kullanicilar kaydı başarısız:', saveErr);
-            setErrorMsg('Üyelik kaydı tamamlanamadı. Lütfen tekrar deneyin veya yöneticiye bildirin.');
-            setLoading(false);
-            return;
-          }
-          finishSignup(anonUid, { email: emailLower, uid: anonUid, isMock: true });
+          const finalUid = await resolveSignupAuthUid(emailLower, passTrim);
+          finishSignup(finalUid, { email: emailLower, uid: finalUid, isMock: true });
           return;
-        } catch (fallbackErr) {
-          console.error('Kayıt yedek akış hatası:', fallbackErr);
-          setErrorMsg('Üyelik oluşturulamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.');
+        } catch (signupErr: any) {
+          console.error('Üyelik kaydı hatası:', signupErr);
+          if (signupErr?.message === 'FIRESTORE_TIMEOUT') {
+            setErrorMsg('Kayıt zaman aşımına uğradı. İnternet bağlantınızı kontrol edip tekrar deneyin.');
+          } else {
+            setErrorMsg('Üyelik oluşturulamadı. Lütfen tekrar deneyin veya yöneticiye bildirin.');
+          }
         }
 
       } else {

@@ -78,7 +78,7 @@ function cleanUndefined(obj: any): any {
  */
 export async function saveDocument<T extends { id: string }>(collectionName: string, item: T): Promise<void> {
   const docRef = doc(db, collectionName, item.id);
-  await setDoc(docRef, cleanUndefined(item), { merge: true });
+  await withTimeout(setDoc(docRef, cleanUndefined(item), { merge: true }), 15000);
 }
 
 /**

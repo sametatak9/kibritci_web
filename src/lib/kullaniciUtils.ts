@@ -115,6 +115,15 @@ export async function saveKullanici(user: KullaniciLike): Promise<KullaniciLike>
   return canonical;
 }
 
+/** Yeni üyelik — tüm koleksiyonu taramadan doğrudan yazar (hızlı kayıt) */
+export async function saveKullaniciForSignup(user: KullaniciLike): Promise<KullaniciLike> {
+  const emailKey = kullaniciDocId(user.email);
+  const canonical: KullaniciLike = { ...user, id: emailKey, email: emailKey };
+  await saveDocument('kullanicilar', canonical as KullaniciLike & { id: string });
+  void deleteDuplicateDocs(emailKey, emailKey).catch(() => undefined);
+  return canonical;
+}
+
 export async function persistKullaniciRole<T extends KullaniciLike>(
   kullanicilar: T[],
   targetId: string,
