@@ -196,6 +196,26 @@ export async function deleteKatCascade(
   return roomIds;
 }
 
+const LEGACY_SEED_YERLESKELER = new Set([
+  'A Yerleşkesi', 'B Yerleşkesi', 'C Yerleşkesi', 'D Yerleşkesi',
+  'A BLOK', 'B BLOK', 'C BLOK', 'D BLOK',
+]);
+
+/** Demo/seed ile gelen örnek odalar */
+export function hasLegacySeedRooms(rooms: KampOdasi[]): boolean {
+  return rooms.some(
+    (r) => LEGACY_SEED_YERLESKELER.has(r.yerleskeAdi) || r.id.startsWith('ko_room_')
+  );
+}
+
+export async function clearLegacySeedRooms(rooms: KampOdasi[]): Promise<string[]> {
+  const toDelete = rooms.filter(
+    (r) => LEGACY_SEED_YERLESKELER.has(r.yerleskeAdi) || r.id.startsWith('ko_room_')
+  );
+  await Promise.all(toDelete.map((r) => deleteKampOdasi(r.id)));
+  return toDelete.map((r) => r.id);
+}
+
 /** Realtime dinleyiciler için yardımcı */
 export { collection, onSnapshot } from 'firebase/firestore';
 export { db };

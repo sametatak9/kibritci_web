@@ -11,6 +11,15 @@ import {
 import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { Building2, Lock, Mail, Loader2, ArrowRight, CheckCircle2, AlertTriangle, ShieldCheck, User, Fingerprint, PenTool, Check, Trash, Smartphone } from 'lucide-react';
 
+function withReadTimeout<T>(promise: Promise<T>, ms = 8000): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('FIRESTORE_TIMEOUT')), ms)
+    ),
+  ]);
+}
+
 interface LoginScreenProps {
   onLoginSuccess: (user: any) => void;
 }
@@ -120,38 +129,42 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           return;
         }
 
-        // Let's check first if this email already exists in our Firestore database 'portalKullanicilar'
-        const userDocRef = doc(db, 'portalKullanicilar', emailLower);
-        const userDocSnap = await getDoc(userDocRef);
-        
-        if (userDocSnap.exists()) {
-          setErrorMsg('Bu e-posta adresi zaten kullanımda.');
+        if (passTrim.length < 6) {
+          setErrorMsg('Şifre en az 6 karakter olmalıdır.');
           setLoading(false);
           return;
         }
 
-        // --- TC NO MATCHING WITH PERSONEL LIST ---
         let matchedPersonelId: string | null = null;
         try {
-          const colRef = collection(db, 'personeller');
-          const snap = await getDocs(colRef);
-          const matchedDoc = snap.docs.find(doc => {
-            const data = doc.data();
-            return String(data.tcNo).trim() === tcNo.trim();
-          });
-          if (matchedDoc) {
-            matchedPersonelId = matchedDoc.id;
-            console.log("Matched personnel record found:", matchedPersonelId);
-          }
+          const snap = await withReadTimeout(getDocs(collection(db, 'personeller')), 6000);
+          const matchedDoc = snap.docs.find(d => String(d.data().tcNo).trim() === tcNo.trim());
+          if (matchedDoc) matchedPersonelId = matchedDoc.id;
         } catch (matchErr) {
-          console.warn("Could not check personeller collection for TC No matching:", matchErr);
+          console.warn('Personel TC eşleştirmesi atlandı:', matchErr);
         }
 
-        // Profile payload
+        try {
+          const userDocRef = doc(db, 'portalKullanicilar', emailLower);
+          const userDocSnap = await withReadTimeout(getDoc(userDocRef));
+          if (userDocSnap.exists()) {
+            setErrorMsg('Bu e-posta adresi zaten kullanımda.');
+            setLoading(false);
+            return;
+          }
+        } catch (checkErr: any) {
+          if (checkErr?.message === 'FIRESTORE_TIMEOUT') {
+            setErrorMsg('Veritabanı yanıt vermedi. Bağlantınızı kontrol edip tekrar deneyin.');
+            setLoading(false);
+            return;
+          }
+          console.warn('Portal kullanıcı kontrolü atlandı:', checkErr);
+        }
+
         const userPayload = {
           email: emailLower,
           password: passTrim,
-          role: 'MİSAFİR', // default to MİSAFİR until approved by Admin
+          role: 'MİSAFİR',
           ad: ad.trim(),
           soyad: soyad.trim(),
           tcNo: tcNo.trim(),
@@ -162,95 +175,78 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           createdAt: new Date().toISOString()
         };
 
-        // Save account credentials in secure NoSQL fallback FIRST
-        await setDoc(userDocRef, userPayload);
-
-        // Helper to save to 'kullanicilar' collection
         const saveToKullanicilarCollection = async (uid: string) => {
-          try {
-            const mainUserDocRef = doc(db, 'kullanicilar', uid);
-            await setDoc(mainUserDocRef, {
-              id: uid,
-              email: emailLower,
-              yetki: 'MİSAFİR', // starts as guest
-              durum: 'ONAY BEKLİYOR', // requires admin approval
-              kayitTarihi: new Date().toISOString().split('T')[0],
-              ad: ad.trim(),
-              soyad: soyad.trim(),
-              tcNo: tcNo.trim(),
-              imzaText: imzaText.trim() || `${ad.trim()} ${soyad.trim()}`,
-              imzaStyle: imzaStyle,
-              imzaCanvas: imzaCanvas || null,
-              matchedPersonelId: matchedPersonelId
-            });
-          } catch (dbErr) {
-            console.error("Error saving to central kullanicilar collection:", dbErr);
-          }
+          await setDoc(doc(db, 'kullanicilar', uid), {
+            id: uid,
+            email: emailLower,
+            yetki: 'MİSAFİR',
+            durum: 'ONAY BEKLİYOR',
+            kayitTarihi: new Date().toISOString().split('T')[0],
+            ad: ad.trim(),
+            soyad: soyad.trim(),
+            tcNo: tcNo.trim(),
+            imzaText: imzaText.trim() || `${ad.trim()} ${soyad.trim()}`,
+            imzaStyle: imzaStyle,
+            imzaCanvas: imzaCanvas || null,
+            matchedPersonelId: matchedPersonelId
+          });
         };
 
-        // Try standard Firebase Auth second, to use native user environment if available
-        let finalUid = `u_${Date.now()}`;
-        let useFallback = true;
-        try {
-          const userCredential = await createUserWithEmailAndPassword(auth, emailLower, passTrim);
-          finalUid = userCredential.user.uid;
-          useFallback = false;
-          
-          await saveToKullanicilarCollection(finalUid);
-          
-          // Trigger simulated email verification code
+        const finishSignup = (uid: string, userObj: { email?: string | null; uid: string; isMock?: boolean }) => {
           fetch('/api/send-verification-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: emailLower })
           }).catch(err => console.warn(err));
-          
-          localStorage.setItem('kibritci_portal_session', JSON.stringify({ email: emailLower, uid: finalUid }));
-          setInfoMsg(matchedPersonelId 
-            ? 'Hesap başarıyla oluşturuldu! Doğrulama e-postası simüle edildi ✉️ TC No personel listesiyle eşleşti ✅ Sisteme giriş yapılıyor...'
-            : 'Hesap başarıyla oluşturuldu! Doğrulama e-postası simüle edildi ✉️ Sisteme giriş yapılıyor...'
+          localStorage.setItem('kibritci_portal_session', JSON.stringify({ email: emailLower, uid }));
+          setInfoMsg(matchedPersonelId
+            ? 'Hesap oluşturuldu! TC eşleşti. Yönetici onayından sonra erişim açılacaktır.'
+            : 'Hesap oluşturuldu! Yönetici onayından sonra sisteme erişebilirsiniz.'
           );
-          setTimeout(() => {
-            onLoginSuccess(userCredential.user);
-          }, 1500);
+          setTimeout(() => onLoginSuccess(userObj), 1200);
+        };
+
+        try {
+          const userCredential = await createUserWithEmailAndPassword(auth, emailLower, passTrim);
+          const finalUid = userCredential.user.uid;
+          await setDoc(doc(db, 'portalKullanicilar', emailLower), userPayload);
+          await saveToKullanicilarCollection(finalUid);
+          finishSignup(finalUid, userCredential.user);
           return;
         } catch (fbErr: any) {
-          console.log("Firebase Auth SignUp failed or email/password is disabled, continuing with Firestore registration info...", fbErr);
           if (fbErr.code === 'auth/email-already-in-use') {
             setErrorMsg('Bu e-posta adresi zaten kullanımda.');
             setLoading(false);
             return;
           }
+          if (fbErr.code === 'auth/weak-password') {
+            setErrorMsg('Şifre en az 6 karakter olmalıdır.');
+            setLoading(false);
+            return;
+          }
+          if (fbErr.code === 'auth/invalid-email') {
+            setErrorMsg('Geçersiz e-posta formatı.');
+            setLoading(false);
+            return;
+          }
+          console.warn('Firebase Auth kayıt başarısız, yedek akış deneniyor:', fbErr);
         }
 
-        // Fallback flow if standard Auth is disabled or fails
-        if (useFallback) {
-          // Initialize standard anonymous auth session as secondary to authenticate the database sync connection
-          let anonUid = finalUid;
+        try {
+          let anonUid = `u_${Date.now()}`;
           try {
             const res = await signInAnonymously(auth);
             anonUid = res.user.uid;
           } catch (anonErr) {
-            console.warn("Could not start anonymous backup session, bypassing...", anonErr);
+            console.warn('Anonim oturum açılamadı:', anonErr);
           }
-
+          await setDoc(doc(db, 'portalKullanicilar', emailLower), userPayload);
           await saveToKullanicilarCollection(anonUid);
-
-          // Trigger simulated email verification code
-          fetch('/api/send-verification-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: emailLower })
-          }).catch(err => console.warn(err));
-
-          localStorage.setItem('kibritci_portal_session', JSON.stringify({ email: emailLower, uid: anonUid }));
-          setInfoMsg(matchedPersonelId 
-            ? 'Hesap başarıyla oluşturuldu! Doğrulama e-postası simüle edildi ✉️ TC No personel listesiyle eşleşti ✅ Sisteme giriş yapılıyor...'
-            : 'Hesap başarıyla oluşturuldu! Doğrulama e-postası simüle edildi ✉️ Sisteme giriş yapılıyor...'
-          );
-          setTimeout(() => {
-            onLoginSuccess({ email: emailLower, uid: anonUid, isMock: true });
-          }, 1500);
+          finishSignup(anonUid, { email: emailLower, uid: anonUid, isMock: true });
+          return;
+        } catch (fallbackErr) {
+          console.error('Kayıt yedek akış hatası:', fallbackErr);
+          setErrorMsg('Üyelik oluşturulamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.');
         }
 
       } else {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { CircleAlert as AlertCircle, RefreshCw } from 'lucide-react';
@@ -42,7 +42,7 @@ import {
 import { 
   INITIAL_PERSONEL, INITIAL_YOKLAMA, INITIAL_CARI, INITIAL_STOK, 
   INITIAL_SATIN_ALMA, INITIAL_IRSALIYE, INITIAL_FATURA, INITIAL_KASA, 
-  INITIAL_ARAC, INITIAL_KAMP, INITIAL_KAMP_KAYDI, 
+  INITIAL_ARAC, 
   INITIAL_SAHA, INITIAL_TUTANAK, INITIAL_EPOSTA,
   INITIAL_OPERATOR_FAALIYET, INITIAL_TASERON_KESINTI, INITIAL_MAAS_ODEME,
   INITIAL_PERSONEL_ISLEM, INITIAL_CARI_ISLEM, INITIAL_STOK_ISLEM
@@ -65,7 +65,6 @@ import {
   isTabRestrictedForUser,
   sanitizeKisitliSayfalar,
 } from './lib/yetkiUtils';
-import { ensureYapıFromOdalari } from './lib/kampYapisi';
 import { collection, onSnapshot, doc, getDoc, query, orderBy, limit } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { LoginScreen } from './components/LoginScreen';
@@ -91,7 +90,6 @@ export default function App() {
   });
 
   const [bildirimler, setBildirimler] = useState<any[]>([]);
-  const kampYapiSyncedRef = useRef(false);
 
   useEffect(() => {
     if (currentUser) {
@@ -344,11 +342,11 @@ export default function App() {
         setDemirbaslar(toolData);
 
         setLoadingMsg('Yatakhane ve kamp oda yerleşimleri düzenleniyor...');
-        const roomData = await seedCollectionIfEmpty('kampOdalari', INITIAL_KAMP);
+        const roomData = await seedCollectionIfEmpty('kampOdalari', []);
         setKampOdalari(roomData);
 
         setLoadingMsg('Yatakhane personel giriş-çıkış kayıtları eşitleniyor...');
-        const stayLogData = await seedCollectionIfEmpty('kampKayitlari', INITIAL_KAMP_KAYDI);
+        const stayLogData = await seedCollectionIfEmpty('kampKayitlari', []);
         setKampKayitlari(stayLogData);
 
         setLoadingMsg('Saha günlük faaliyet dökümleri arşivleniyor...');
@@ -451,8 +449,8 @@ export default function App() {
         setKasaHareketleri(INITIAL_KASA);
         setAraclar(INITIAL_ARAC);
         setDemirbaslar([]);
-        setKampOdalari(INITIAL_KAMP);
-        setKampKayitlari(INITIAL_KAMP_KAYDI);
+        setKampOdalari([]);
+        setKampKayitlari([]);
         setSahaFaaliyetleri(INITIAL_SAHA);
         setHazirTutanaklar(INITIAL_TUTANAK);
         setCariKartlar(INITIAL_CARI);
@@ -503,8 +501,8 @@ export default function App() {
     setKasaHareketleri(INITIAL_KASA);
     setAraclar(INITIAL_ARAC);
     setDemirbaslar([]);
-    setKampOdalari(INITIAL_KAMP);
-    setKampKayitlari(INITIAL_KAMP_KAYDI);
+    setKampOdalari([]);
+    setKampKayitlari([]);
     setSahaFaaliyetleri(INITIAL_SAHA);
     setHazirTutanaklar(INITIAL_TUTANAK);
     setCariKartlar(INITIAL_CARI);
@@ -682,15 +680,6 @@ export default function App() {
       unsubMaasOde();
     };
   }, [dbStatus, currentUser]);
-
-  // Eski kamp odalarından yerleşke/kat yapısını Firestore'a senkronize et (Kamp Yönetimi ↔ Kampçı Mobil)
-  useEffect(() => {
-    if (dbStatus !== 'synced' || kampOdalari.length === 0 || kampYapiSyncedRef.current) return;
-    kampYapiSyncedRef.current = true;
-    ensureYapıFromOdalari(kampOdalari, currentUser?.email).catch((err) =>
-      console.error('Kamp yapısı senkron hatası:', err)
-    );
-  }, [dbStatus, kampOdalari, currentUser?.email]);
 
   // Auto online signup sync and administrator check
   useEffect(() => {
@@ -1151,7 +1140,7 @@ export default function App() {
                      currentUser?.email?.toLowerCase() === 'sametatak9@gmail.com' || 
                      currentUser?.email?.toLowerCase() === 'santiye@kibritci.com';
 
-  const hideSidebarAndTopbar = isMobileRole(userYetki);
+  const hideSidebarAndTopbar = isMobileRole(userYetki) && isMobileMode;
 
   const isAllowedFormen = userYetki === 'FORMEN' || isYonetici;
   const isAllowedGuvenlik = userYetki === 'GÜVENLİK' || isYonetici;
@@ -1349,9 +1338,16 @@ export default function App() {
           
           {(() => {
             const matchedUser = kullanicilar.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
-            if (matchedUser?.durum === 'KISITLI' || matchedUser?.durum === 'ONAY BEKLİYOR' || matchedUser?.yetki === 'MİSAFİR') {
+            const matchedYetki = normalizeYetki(matchedUser?.yetki);
+            const hasActiveMobileRole = isMobileRole(matchedYetki) && matchedUser?.durum === 'AKTİF';
+            const isBlocked =
+              !hasActiveMobileRole &&
+              (matchedUser?.durum === 'KISITLI' ||
+                matchedUser?.durum === 'ONAY BEKLİYOR' ||
+                matchedYetki === 'MİSAFİR');
+            if (isBlocked) {
               const pending = matchedUser?.durum === 'ONAY BEKLİYOR';
-              const isGuest = matchedUser?.yetki === 'MİSAFİR';
+              const isGuest = matchedYetki === 'MİSAFİR';
               return (
                 <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center p-8 z-50 select-none text-white animate-fade-in">
                   <div className="text-center space-y-5 max-w-md bg-slate-900 border border-amber-500/30 p-8 rounded-3xl shadow-2xl">

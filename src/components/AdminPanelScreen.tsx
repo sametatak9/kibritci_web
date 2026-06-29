@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { sanitizeKisitliSayfalar } from '../lib/yetkiUtils';
+import { sanitizeKisitliSayfalar, isMobileRole } from '../lib/yetkiUtils';
 import { 
   Users, KeySquare, ShieldAlert, Trash2, CheckCircle, 
   XOctagon, UserCheck, AlertCircle, RefreshCw, Key,
@@ -130,9 +130,11 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
         if (addNotification) {
           addNotification(`${u.email} kullanıcısının rolü "${newYetki}" olarak güncellendi.`);
         }
+        const mobileRole = isMobileRole(newYetki);
         return {
           ...u,
           yetki: newYetki,
+          durum: mobileRole ? 'AKTİF' : u.durum,
           kisitliSayfalar: sanitizeKisitliSayfalar(newYetki, u.kisitliSayfalar),
         };
       }
