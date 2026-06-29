@@ -3,7 +3,7 @@ import { persistKullaniciRole, dedupeKullanicilarByEmail, saveKullanici, deleteK
 import { 
   Users, KeySquare, ShieldAlert, Trash2, CheckCircle, 
   XOctagon, UserCheck, AlertCircle, RefreshCw, Key,
-  Eye, Check, Clipboard, CheckSquare
+  Eye, Check, Clipboard, CheckSquare, Save, Loader2
 } from 'lucide-react';
 import { fetchCollection, removeDocument, saveDocument } from '../lib/firebase';
 
@@ -28,6 +28,7 @@ export interface Kullanici {
     | 'KAMPÇI'
     | 'GÜVENLİK'
     | 'LOJİSTİK'
+    | 'DEPOCU'
     | 'MİSAFİR';
   durum: 'AKTİF' | 'KISITLI' | 'ONAY BEKLİYOR';
   kayitTarihi: string;
@@ -73,6 +74,8 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
   const [loadingErrors, setLoadingErrors] = useState(false);
   const [selectedError, setSelectedError] = useState<HataRaporu | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [pendingRoles, setPendingRoles] = useState<Record<string, string>>({});
+  const [savingRoleEmail, setSavingRoleEmail] = useState<string | null>(null);
 
   // Load error reports
   const loadErrorReports = async () => {
@@ -124,28 +127,45 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
     }
   };
 
-  const handleChangeRole = async (id: string, newYetki: any) => {
-    const target = findKullaniciByEmail(kullanicilar, id) || kullanicilar.find((u) => u.id === id);
-    if (!target) return;
+  const handleSaveRole = async (email: string) => {
+    const newYetki = pendingRoles[email];
+    const target = findKullaniciByEmail(kullanicilar, email);
+    if (!target || !newYetki) return;
+    if (newYetki === target.yetki) {
+      setPendingRoles((prev) => {
+        const next = { ...prev };
+        delete next[email];
+        return next;
+      });
+      return;
+    }
 
+    setSavingRoleEmail(email);
     try {
-      const updated = await persistKullaniciRole(kullanicilar, id, newYetki);
+      const updated = await persistKullaniciRole(kullanicilar, target.id, newYetki);
       setKullanicilar((prev) =>
         dedupeKullanicilarByEmail(
           prev.map((u) =>
-            u.email?.trim().toLowerCase() === target.email.trim().toLowerCase()
+            u.email?.trim().toLowerCase() === email.trim().toLowerCase()
               ? { ...u, ...updated }
               : u
           )
         )
       );
-      alert(`Kullanıcı (${target.email}) yetki seviyesi "${newYetki}" olarak kaydedildi.`);
+      setPendingRoles((prev) => {
+        const next = { ...prev };
+        delete next[email];
+        return next;
+      });
+      alert(`✅ ${email} — yetki "${newYetki}" kalıcı olarak kaydedildi.`);
       if (addNotification) {
-        addNotification(`${target.email} kullanıcısının rolü "${newYetki}" olarak güncellendi.`);
+        addNotification(`${email} kullanıcısının rolü "${newYetki}" olarak kaydedildi.`);
       }
     } catch (err) {
       console.error(err);
       alert('Rol kaydedilemedi. Lütfen tekrar deneyin.');
+    } finally {
+      setSavingRoleEmail(null);
     }
   };
 
@@ -358,30 +378,57 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                             </td>
                             <td className="p-3 font-mono text-slate-400">{user.kayitTarihi || new Date().toISOString().split('T')[0]}</td>
                             <td className="p-3">
-                              <select 
-                                className={`p-1.5 text-[11px] font-bold rounded-lg border bg-slate-50 outline-none cursor-pointer text-slate-855 focus:border-blue-500`}
-                                value={user.yetki}
-                                onChange={(e) => handleChangeRole(user.id, e.target.value as any)}
-                              >
-                                <option value="YÖNETİCİ">👑 Sistem Yöneticisi / Müdür</option>
-                                <option value="MUHASEBE">💰 Muhasebe (Finans)</option>
-                                <option value="İDARİ_İŞLER">🏡 İdari İşler (İK)</option>
-                                <option value="SATIN_ALMA">🛒 Satın Alma Şefi</option>
-                                <option value="ŞANTİYE_ŞEFİ">🚧 Şantiye Şefi</option>
-                                <option value="PROJE_MÜDÜRÜ">📋 Proje Müdürü</option>
-                                <option value="ELEKTRİK_ŞEFİ">⚡ Elektrik Şefi</option>
-                                <option value="TESİSAT_ŞEFİ">🔧 Tesisat Şefi</option>
-                                <option value="MEKANİK_ŞEFİ">⚙️ Mekanik Şefi</option>
-                                <option value="İNCE_İŞLER_ŞEFİ">🪜 İnce İşler Şefi</option>
-                                <option value="KABA_İŞLER_ŞEFİ">🧱 Kaba İşler Şefi</option>
-                                <option value="DİZAYN_ŞEFİ">📐 Dizayn Şefi</option>
-                                <option value="PARSEL_ŞEFİ">🗺️ Parsel Şefi</option>
-                                <option value="FORMEN">👷 FORMEN (Saha Mobil)</option>
-                                <option value="KAMPÇI">⛺ KAMPÇI (Kamp Amiri)</option>
-                                <option value="GÜVENLİK">👮 GÜVENLİK (Kapı Kontrol)</option>
-                                <option value="LOJİSTİK">🚚 LOJİSTİK (Malzeme ve Sevkiyat)</option>
-                                <option value="MİSAFİR">⏳ MİSAFİR (Erişimsiz)</option>
-                              </select>
+                              <div className="flex flex-col gap-1.5">
+                                <select 
+                                  className={`p-1.5 text-[11px] font-bold rounded-lg border bg-slate-50 outline-none cursor-pointer text-slate-855 focus:border-blue-500 ${
+                                    pendingRoles[user.email] && pendingRoles[user.email] !== user.yetki
+                                      ? 'border-amber-400 ring-1 ring-amber-300'
+                                      : ''
+                                  }`}
+                                  value={pendingRoles[user.email] ?? user.yetki}
+                                  onChange={(e) =>
+                                    setPendingRoles((prev) => ({
+                                      ...prev,
+                                      [user.email]: e.target.value,
+                                    }))
+                                  }
+                                >
+                                  <option value="YÖNETİCİ">👑 Sistem Yöneticisi / Müdür</option>
+                                  <option value="MUHASEBE">💰 Muhasebe (Finans)</option>
+                                  <option value="İDARİ_İŞLER">🏡 İdari İşler (İK)</option>
+                                  <option value="SATIN_ALMA">🛒 Satın Alma Şefi</option>
+                                  <option value="ŞANTİYE_ŞEFİ">🚧 Şantiye Şefi</option>
+                                  <option value="PROJE_MÜDÜRÜ">📋 Proje Müdürü</option>
+                                  <option value="ELEKTRİK_ŞEFİ">⚡ Elektrik Şefi</option>
+                                  <option value="TESİSAT_ŞEFİ">🔧 Tesisat Şefi</option>
+                                  <option value="MEKANİK_ŞEFİ">⚙️ Mekanik Şefi</option>
+                                  <option value="İNCE_İŞLER_ŞEFİ">🪜 İnce İşler Şefi</option>
+                                  <option value="KABA_İŞLER_ŞEFİ">🧱 Kaba İşler Şefi</option>
+                                  <option value="DİZAYN_ŞEFİ">📐 Dizayn Şefi</option>
+                                  <option value="PARSEL_ŞEFİ">🗺️ Parsel Şefi</option>
+                                  <option value="FORMEN">👷 FORMEN (Saha Mobil)</option>
+                                  <option value="KAMPÇI">⛺ KAMPÇI (Kamp Amiri)</option>
+                                  <option value="GÜVENLİK">👮 GÜVENLİK (Kapı Kontrol)</option>
+                                  <option value="LOJİSTİK">🚚 LOJİSTİK (Şoför Mobil)</option>
+                                  <option value="DEPOCU">📦 DEPOCU (Depo Mobil)</option>
+                                  <option value="MİSAFİR">⏳ MİSAFİR (Erişimsiz)</option>
+                                </select>
+                                {(pendingRoles[user.email] ?? user.yetki) !== user.yetki && (
+                                  <button
+                                    type="button"
+                                    disabled={savingRoleEmail === user.email}
+                                    onClick={() => handleSaveRole(user.email)}
+                                    className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-[10px] font-black rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white transition active:scale-95 disabled:opacity-60 cursor-pointer"
+                                  >
+                                    {savingRoleEmail === user.email ? (
+                                      <Loader2 size={12} className="animate-spin" />
+                                    ) : (
+                                      <Save size={12} />
+                                    )}
+                                    <span>YETKİYİ KAYDET</span>
+                                  </button>
+                                )}
+                              </div>
                             </td>
                             <td className="p-3 text-center">
                               <button

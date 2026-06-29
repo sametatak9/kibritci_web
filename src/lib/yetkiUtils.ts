@@ -67,14 +67,16 @@ export function isMobileRole(yetki?: string | null): boolean {
   return getRoleHomeTab(yetki) !== null;
 }
 
-/** Rol ana paneli kısıtlamalardan muaf; diğer sekmeler kisitliSayfalar'a tabidir */
+/** Rol ana paneli kısıtlamalardan muaf; mobil roller sadece kendi paneline erişir */
 export function isTabRestrictedForUser(
   tab: string,
   yetki?: string | null,
   kisitliSayfalar?: string[] | null
 ): boolean {
   const homeTab = getRoleHomeTab(yetki);
-  if (homeTab && tab === homeTab) return false;
+  if (homeTab) {
+    return tab !== homeTab;
+  }
   if (!kisitliSayfalar?.length) return false;
   return kisitliSayfalar.includes(tab);
 }
@@ -87,4 +89,31 @@ export function sanitizeKisitliSayfalar(
   const homeTab = getRoleHomeTab(yetki);
   if (!homeTab || !kisitliSayfalar?.length) return kisitliSayfalar ?? [];
   return kisitliSayfalar.filter((k) => k !== homeTab);
+}
+
+/** Mobil saha rolleri yalnızca kendi panel sekmesini görür */
+export function buildKisitliSayfalarForRole(yetki?: string | null): string[] | undefined {
+  const normalized = normalizeYetki(yetki);
+  const homeTab = getRoleHomeTab(normalized);
+  if (homeTab) {
+    return PORTAL_PAGES.map((p) => p.key).filter((k) => k !== homeTab);
+  }
+  if (normalized === "MİSAFİR") {
+    return PORTAL_PAGES.map((p) => p.key);
+  }
+  return undefined;
+}
+
+/** Rol değişince yetki + sayfa kısıtlarını tek seferde uygular */
+export function applyRoleDefaults<T extends { yetki?: string; kisitliSayfalar?: string[] }>(
+  user: T,
+  newYetki: string
+): T & { yetki: string; kisitliSayfalar?: string[] } {
+  const yetki = normalizeYetki(newYetki);
+  const autoRestricted = buildKisitliSayfalarForRole(yetki);
+  return {
+    ...user,
+    yetki,
+    kisitliSayfalar: autoRestricted ?? sanitizeKisitliSayfalar(yetki, user.kisitliSayfalar),
+  };
 }
