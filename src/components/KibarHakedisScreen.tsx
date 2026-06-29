@@ -7,7 +7,8 @@ import { db, saveDocument } from '../lib/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { Personel, AylikYoklamaMap } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
-import { iterateMonthYoklama } from '../lib/yoklamaUtils';
+import { buildPersonelListForMonth, iterateMonthYoklama } from '../lib/yoklamaUtils';
+import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 
 interface KibarHakedisScreenProps {
   personeller: Personel[];
@@ -20,14 +21,32 @@ interface StaffHakedisRow {
   personel: Personel;
   geldiGun: number;
   tutar: number;
+  mesaiSaat: number;
+  mesaiHakedis: number;
+  maasReferans: number;
+}
+
+const RATE_PER_DAY = 200;
+
+function calcMesaiHakedis(personel: Personel, mesaiSaat: number, year: number, month: number): number {
+  if (mesaiSaat <= 0) return 0;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const baseWage = personel.maas || 30000;
+  const hourlyWage = baseWage / daysInMonth / 7.5;
+  return mesaiSaat * hourlyWage * 1.5;
+}
+
+function calcMaasReferans(personel: Personel, geldiGun: number, mesaiHakedis: number, year: number, month: number): number {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const baseWage = personel.maas || 30000;
+  const dailyWage = baseWage / daysInMonth;
+  return geldiGun * dailyWage + mesaiHakedis;
 }
 
 const TURKISH_MONTHS = [
   'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
   'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
 ];
-
-const RATE_PER_DAY = 200;
 
 function filterByMonth(items: { tarih?: string }[], year: number, month: number) {
   const prefix = `${year}-${String(month).padStart(2, '0')}`;
@@ -41,7 +60,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
   currentUser
 }) => {
   const [selectedYear, setSelectedYear] = useState(2026);
-  const [selectedMonth, setSelectedMonth] = useState(2);
+  const [selectedMonth, setSelectedMonth] = useState(5);
   const [kampFaaliyetleri, setKampFaaliyetleri] = useState<any[]>([]);
   const [excludedStaffIds, setExcludedStaffIds] = useState<string[]>([]);
   const [reportType, setReportType] = useState<'NORMAL' | 'E-IMZALI'>('NORMAL');
@@ -65,21 +84,36 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
     return () => unsubKamp();
   }, []);
 
+  const monthPersoneller = useMemo(
+    () => buildPersonelListForMonth(personeller, yoklamalar, selectedYear, selectedMonth, resolveStubPersonelFromLegacyId),
+    [personeller, yoklamalar, selectedYear, selectedMonth]
+  );
+
   const allStaffRows = useMemo((): StaffHakedisRow[] => {
     const rows: StaffHakedisRow[] = [];
-    personeller.forEach(p => {
+    monthPersoneller.forEach(p => {
       let geldiGun = 0;
+      let mesaiSaat = 0;
       iterateMonthYoklama(yoklamalar[p.id], selectedYear, selectedMonth, (_day, data) => {
         if (data?.durum === 'Geldi') geldiGun++;
+        mesaiSaat += data?.mesaiSaati || 0;
       });
       if (geldiGun > 0) {
-        rows.push({ personel: p, geldiGun, tutar: geldiGun * RATE_PER_DAY });
+        const mesaiHakedis = calcMesaiHakedis(p, mesaiSaat, selectedYear, selectedMonth);
+        rows.push({
+          personel: p,
+          geldiGun,
+          tutar: geldiGun * RATE_PER_DAY,
+          mesaiSaat,
+          mesaiHakedis,
+          maasReferans: calcMaasReferans(p, geldiGun, mesaiHakedis, selectedYear, selectedMonth),
+        });
       }
     });
     return rows.sort((a, b) =>
       `${a.personel.ad} ${a.personel.soyad}`.localeCompare(`${b.personel.ad} ${b.personel.soyad}`, 'tr')
     );
-  }, [personeller, yoklamalar, selectedYear, selectedMonth]);
+  }, [monthPersoneller, yoklamalar, selectedYear, selectedMonth]);
 
   const activeStaffRows = allStaffRows.filter(r => !excludedStaffIds.includes(r.personel.id));
 
@@ -224,7 +258,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                   {donemLabel} döneminde yoklama kaydı bulunamadı. Yoklama ekranından Excel aktarımını yapın.
                 </div>
               ) : (
-                allStaffRows.map(({ personel: p, geldiGun, tutar }) => {
+                allStaffRows.map(({ personel: p, geldiGun, tutar, mesaiSaat, mesaiHakedis, maasReferans }) => {
                   const isExcluded = excludedStaffIds.includes(p.id);
                   return (
                     <div
@@ -239,7 +273,13 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                         </span>
                         <span className="text-[9px] text-slate-500 block uppercase font-semibold">
                           {p.gorev || 'İŞÇİ'} • {geldiGun} gün • ₺{tutar.toLocaleString('tr-TR')}
+                          {mesaiSaat > 0 && ` • ${mesaiSaat} sa mesai`}
                         </span>
+                        {mesaiHakedis > 0 && (
+                          <span className="text-[8px] text-amber-600 block">
+                            Ref. maaş: ₺{maasReferans.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}
+                          </span>
+                        )}
                       </div>
                       {isExcluded ? (
                         <button onClick={() => handleIncludeStaff(p.id)} className="bg-blue-50 border border-blue-100 text-blue-600 font-bold text-[9px] py-1 px-2.5 rounded-lg cursor-pointer">
@@ -361,6 +401,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
 
               <div className="space-y-2">
                 <span className="font-bold text-[9px] text-[#1E4E78] uppercase tracking-wider block">FİİLİ HAKEDİŞE TABİ PERSONEL DETAYI</span>
+                <p className="text-[8px] text-slate-500 italic">Mesai hakedişi ve ref. maaş sütunları yalnızca görsel karşılaştırma içindir; Kibar toplamına dahil değildir.</p>
                 <div className="border rounded-xl overflow-hidden text-[9px]">
                   <table className="w-full text-left border-collapse">
                     <thead>
@@ -369,29 +410,38 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                         <th className="p-2">AD SOYAD</th>
                         <th className="p-2">GÖREV / ÜNVAN</th>
                         <th className="p-2 text-center">ÇALIŞMA GÜNÜ</th>
+                        <th className="p-2 text-center">MESAİ SAAT</th>
                         <th className="p-2 text-right">GÜNLÜK BEDEL</th>
-                        <th className="p-2 text-right">TUTAR</th>
+                        <th className="p-2 text-right">KİBAR TUTAR</th>
+                        <th className="p-2 text-right text-amber-700">MESAİ HK.</th>
+                        <th className="p-2 text-right text-slate-500">REF. MAAŞ</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y font-medium text-slate-700">
-                      {activeStaffRows.map(({ personel: p, geldiGun, tutar }, idx) => (
+                      {activeStaffRows.map(({ personel: p, geldiGun, tutar, mesaiSaat, mesaiHakedis, maasReferans }, idx) => (
                         <tr key={p.id}>
                           <td className="p-2 text-center font-mono">{idx + 1}</td>
                           <td className="p-2 font-bold text-slate-900">{p.ad} {p.soyad}</td>
                           <td className="p-2">{p.gorev || 'İŞÇİ'}</td>
                           <td className="p-2 text-center font-mono">{geldiGun}</td>
+                          <td className="p-2 text-center font-mono">{mesaiSaat > 0 ? mesaiSaat : '—'}</td>
                           <td className="p-2 text-right font-mono">₺{RATE_PER_DAY.toLocaleString('tr-TR')},00</td>
                           <td className="p-2 text-right font-mono font-bold">₺{tutar.toLocaleString('tr-TR')},00</td>
+                          <td className="p-2 text-right font-mono text-amber-700">{mesaiHakedis > 0 ? `₺${mesaiHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}</td>
+                          <td className="p-2 text-right font-mono text-slate-500">{maasReferans > 0 ? `₺${maasReferans.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}</td>
                         </tr>
                       ))}
                       {activeStaffRows.length === 0 && (
-                        <tr><td colSpan={6} className="text-center py-6 text-slate-400 italic">Kayıt yok</td></tr>
+                        <tr><td colSpan={9} className="text-center py-6 text-slate-400 italic">Kayıt yok</td></tr>
                       )}
                       <tr className="bg-slate-50 font-bold text-slate-900 border-t">
                         <td colSpan={3} className="p-2 text-right uppercase">Dönem Toplamı:</td>
                         <td className="p-2 text-center font-mono">{totalPersonDays}</td>
+                        <td className="p-2 text-center font-mono">{activeStaffRows.reduce((s, r) => s + r.mesaiSaat, 0)}</td>
                         <td className="p-2 text-right font-mono text-slate-400">—</td>
                         <td className="p-2 text-right font-mono text-amber-700 font-black">₺{totalHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
+                        <td className="p-2 text-right font-mono text-amber-600">{activeStaffRows.reduce((s, r) => s + r.mesaiHakedis, 0) > 0 ? `₺${activeStaffRows.reduce((s, r) => s + r.mesaiHakedis, 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}</td>
+                        <td className="p-2 text-right font-mono text-slate-500">{activeStaffRows.reduce((s, r) => s + r.maasReferans, 0) > 0 ? `₺${activeStaffRows.reduce((s, r) => s + r.maasReferans, 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}</td>
                       </tr>
                     </tbody>
                   </table>

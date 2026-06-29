@@ -273,11 +273,28 @@ export default function App() {
         setLoadingMsg('Güvenli veritabanı oturumu kontrol ediliyor...');
         
         setLoadingMsg('Şantiye personel kadrosu eşitleniyor...');
-        const personnelData = await seedCollectionIfEmpty('personeller', INITIAL_PERSONEL);
-        setPersoneller(personnelData);
+        let personnelData = await seedCollectionIfEmpty('personeller', INITIAL_PERSONEL);
+        const personnelIdsBefore = new Set(personnelData.map(p => p.id));
 
         setLoadingMsg('Aylık personel puantaj cetvelleri yükleniyor...');
-        const attData = await seedYoklamaIfEmpty(INITIAL_YOKLAMA);
+        let attData = await seedYoklamaIfEmpty(INITIAL_YOKLAMA);
+
+        const { bootstrapLegacyYoklama, markLegacyYoklamaBootstrapped } = await import('./lib/legacyYoklamaBootstrap');
+        const legacyMerge = bootstrapLegacyYoklama(personnelData, attData);
+        if (legacyMerge) {
+          personnelData = legacyMerge.personeller;
+          attData = legacyMerge.yoklamalar;
+          await saveYoklamaDocument(attData);
+          for (const p of personnelData) {
+            if (!personnelIdsBefore.has(p.id)) {
+              await saveDocument('personeller', p);
+            }
+          }
+          markLegacyYoklamaBootstrapped();
+          console.log(`Legacy yoklama birleştirildi: ${legacyMerge.importedDays} gün`);
+        }
+
+        setPersoneller(personnelData);
         setYoklamalar(attData);
 
         setLoadingMsg('Satın alma ve hakediş talepleri eşitleniyor...');

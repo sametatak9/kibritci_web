@@ -50,8 +50,6 @@ export function setYoklamaDay(
   return { ...(personMap || {}), [dateKey]: data };
 }
 
-const MEANINGFUL_YOKLAMA_DURUM: YoklamaDurum[] = ['Geldi', 'Yok', 'İzinli', 'Raporlu'];
-
 export function personHasYoklamaInMonth(
   personMap: Record<string, YoklamaGunKaydi> | undefined,
   year: number,
@@ -59,35 +57,47 @@ export function personHasYoklamaInMonth(
 ): boolean {
   let found = false;
   iterateMonthYoklama(personMap, year, month, (_day, data) => {
-    if (data?.durum && MEANINGFUL_YOKLAMA_DURUM.includes(data.durum)) found = true;
+    if (data?.durum && data.durum !== 'Girilmedi') found = true;
   });
   return found;
 }
 
+export function personHasGeldiInMonth(
+  personMap: Record<string, YoklamaGunKaydi> | undefined,
+  year: number,
+  month: number
+): boolean {
+  let found = false;
+  iterateMonthYoklama(personMap, year, month, (_day, data) => {
+    if (data?.durum === 'Geldi') found = true;
+  });
+  return found;
+}
+
+/** Yoklama kaydı varsa işe giriş/çıkış filtresini uygulama */
 export function isPersonelVisibleInMonth(
   p: Personel,
   year: number,
   month: number,
   personMap?: Record<string, YoklamaGunKaydi>
 ): boolean {
-  const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
-  let visibleByDates = true;
+  if (personMap && personHasYoklamaInMonth(personMap, year, month)) return true;
 
+  const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
   if (p.iseGirisTarihi) {
     const [hireY, hireM] = p.iseGirisTarihi.split('-').map(Number);
-    if (hireY > year || (hireY === year && hireM > month)) visibleByDates = false;
+    if (hireY > year || (hireY === year && hireM > month)) return false;
   }
-  if (visibleByDates && p.istenCikisTarihi) {
+  if (p.istenCikisTarihi) {
     const [exitY, exitM] = p.istenCikisTarihi.split('-').map(Number);
-    if (exitY < year || (exitY === year && exitM < month)) visibleByDates = false;
-  } else if (visibleByDates && !isAktif && !p.istenCikisTarihi) {
-    visibleByDates = false;
+    if (exitY < year || (exitY === year && exitM < month)) return false;
+  } else if (!isAktif && !p.istenCikisTarihi) {
+    return false;
   }
-
-  if (visibleByDates) return true;
-  return personMap ? personHasYoklamaInMonth(personMap, year, month) : false;
+  return true;
 }
 
+/** Kayıtlı yoklama varsa hücreyi her zaman göster (harfiyen) */
 export function isDayActiveForPersonel(
   p: Personel,
   year: number,
@@ -96,7 +106,7 @@ export function isDayActiveForPersonel(
   personMap?: Record<string, YoklamaGunKaydi>
 ): boolean {
   const dayData = personMap ? getYoklamaDay(personMap, year, month, day) : undefined;
-  if (dayData?.durum && MEANINGFUL_YOKLAMA_DURUM.includes(dayData.durum)) return true;
+  if (dayData?.durum && dayData.durum !== 'Girilmedi') return true;
 
   if (p.iseGirisTarihi) {
     const [hireY, hireM, hireD] = p.iseGirisTarihi.split('-').map(Number);
@@ -195,9 +205,8 @@ export function createMinimalPersonel(ad: string, soyad: string, opts?: {
   legacyExcelId?: number;
 }): Personel {
   const stamp = Date.now().toString().slice(-4);
-  const legacySuffix = opts?.legacyExcelId != null ? `-L${opts.legacyExcelId}` : '';
   return {
-    id: `PRS-LEGACY${legacySuffix}-${stamp}`,
+    id: opts?.legacyExcelId != null ? `PRS-LEGACY-L${opts.legacyExcelId}` : `PRS-LEGACY-${stamp}`,
     tcNo: '',
     ad: ad.trim().toUpperCase(),
     soyad: soyad.trim().toUpperCase(),
@@ -221,4 +230,29 @@ export function createMinimalPersonel(ad: string, soyad: string, opts?: {
     ibanNo: '',
     durum: !opts?.istenCikisTarihi,
   };
+}
+
+export function buildPersonelListForMonth(
+  personeller: Personel[],
+  yoklamalar: AylikYoklamaMap,
+  year: number,
+  month: number,
+  resolveStub?: (personelId: string) => Personel | undefined
+): Personel[] {
+  const byId = new Map(personeller.map(p => [p.id, p]));
+  const ids = new Set<string>();
+
+  personeller.forEach(p => {
+    if (isPersonelVisibleInMonth(p, year, month, yoklamalar[p.id])) ids.add(p.id);
+  });
+  Object.entries(yoklamalar).forEach(([id, map]) => {
+    if (personHasYoklamaInMonth(map, year, month)) ids.add(id);
+  });
+
+  return Array.from(ids)
+    .map(id => byId.get(id) ?? resolveStub?.(id))
+    .filter((p): p is Personel => !!p)
+    .sort((a, b) =>
+      `${a.ad} ${a.soyad}`.localeCompare(`${b.ad} ${b.soyad}`, 'tr')
+    );
 }
