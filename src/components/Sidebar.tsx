@@ -1,5 +1,6 @@
 import React from 'react';
 import { Building2, Users, CalendarCheck2, CreditCard, ShoppingCart, Truck, KeySquare, FileText, Tent, Mail, ChartBar as BarChart3, BookOpen, Contact as Contact2, Package, LogOut, Wallet, Hop as Home, ShieldCheck, PenTool, MessageSquare, Smartphone, HardHat, Banknote } from 'lucide-react';
+import { getRoleHomeTab, normalizeYetki } from '../lib/yetkiUtils';
 
 interface SidebarProps {
   activeTab: string;
@@ -28,6 +29,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleMobileMode,
   kisitliSayfalar = []
 }) => {
+  const normalizedYetki = normalizeYetki(userYetki);
+  const roleHomeTab = getRoleHomeTab(normalizedYetki);
+
   const menuItems = [
     {
       group: "BAŞLANGIÇ",
@@ -101,6 +105,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return {
       ...group,
       items: group.items.filter(item => {
+        // Mobil saha rolleri yalnızca kendi panelini görür (kisitliSayfalar'dan muaf)
+        if (roleHomeTab) {
+          return item.key === roleHomeTab;
+        }
+
         if (kisitliSayfalar && kisitliSayfalar.includes(item.key)) {
           return false;
         }
@@ -113,26 +122,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         if (item.key === 'yetki_verme') {
           const emailLower = currentUser?.email?.toLowerCase();
           return emailLower === 'sametatak9@gmail.com' || emailLower === 'santiye@kibritci.com';
-        }
-
-        if (userYetki === 'FORMEN') {
-          return item.key === 'formen_ekrani';
-        }
-
-        if (userYetki === 'GÜVENLİK') {
-          return item.key === 'guvenlik_ekrani';
-        }
-
-        if (userYetki === 'KAMPÇI') {
-          return item.key === 'kampci_ekrani';
-        }
-
-        if (userYetki === 'LOJİSTİK') {
-          return item.key === 'lojistik_ekrani';
-        }
-
-        if (userYetki === 'DEPOCU') {
-          return item.key === 'depocu_ekrani';
         }
 
         if (item.key === 'formen_ekrani') {

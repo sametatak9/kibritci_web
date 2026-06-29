@@ -1,0 +1,90 @@
+/** Portal sayfa anahtarları — Sidebar ile YetkiVerme aynı listeyi kullanır */
+export const PORTAL_PAGES = [
+  { key: "ana_sayfa", label: "Ana Sayfa Dashboard", group: "BAŞLANGIÇ" },
+  { key: "personel", label: "Personel Yönetimi", group: "PERSONEL" },
+  { key: "personel_kartlari", label: "Personel Detay Kartları", group: "PERSONEL" },
+  { key: "yoklama", label: "Yoklama ve Puantaj", group: "PERSONEL" },
+  { key: "maas", label: "Maaş Hesaplama", group: "PERSONEL" },
+  { key: "maas_odeme", label: "Maaş Ödeme", group: "PERSONEL" },
+  { key: "personel_izin", label: "Personel İzin Formu", group: "PERSONEL" },
+  { key: "kasa", label: "Haftalık Kasa", group: "FİNANS & ENVANTER" },
+  { key: "satin_alma", label: "Satın Alma Talep", group: "FİNANS & ENVANTER" },
+  { key: "irsaliye_giris", label: "İrsaliye ve Fiş Girişi", group: "FİNANS & ENVANTER" },
+  { key: "fatura_giris", label: "Fatura Girişi", group: "FİNANS & ENVANTER" },
+  { key: "taseron_kesinti", label: "Taşeron Kesintileri", group: "FİNANS & ENVANTER" },
+  { key: "cari_stok", label: "Cari ve Stok Kartları", group: "FİNANS & ENVANTER" },
+  { key: "evrak_aktarimi", label: "AI Belge Aktarımı", group: "FİNANS & ENVANTER" },
+  { key: "kibar_hakedis", label: "ZER YAPI Hakediş", group: "FİNANS & ENVANTER" },
+  { key: "planli_organizasyon", label: "Planlı Organizasyon", group: "FİNANS & ENVANTER" },
+  { key: "operator", label: "Operatör Faaliyetleri", group: "İŞ MAKİNESİ & OPERATÖR" },
+  { key: "arac", label: "Araç ve Demirbaş", group: "İDARİ İŞLER & SAHA" },
+  { key: "kamp", label: "Kamp Yönetimi", group: "İDARİ İŞLER & SAHA" },
+  { key: "saha", label: "Daily Saha Faaliyetleri", group: "İDARİ İŞLER & SAHA" },
+  { key: "tutanak", label: "Hazır Tutanaklar", group: "İDARİ İŞLER & SAHA" },
+  { key: "formen_ekrani", label: "Formen Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
+  { key: "guvenlik_ekrani", label: "Güvenlik & Kapı Kontrol", group: "İDARİ İŞLER & SAHA" },
+  { key: "kampci_ekrani", label: "Kampçı Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
+  { key: "lojistik_ekrani", label: "Şöför Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
+  { key: "depocu_ekrani", label: "Depocu Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
+  { key: "sohbet", label: "Sohbet & Haberleşme", group: "RAPOR VE İLETİŞİM" },
+  { key: "eposta", label: "E-Posta Merkezi", group: "RAPOR VE İLETİŞİM" },
+  { key: "onay_islemleri", label: "Onay Havuzu & İmzalar", group: "RAPOR VE İLETİŞİM" },
+  { key: "admin", label: "Üyelik & Admin Paneli", group: "ADMİNİSTRATOR" },
+  { key: "yetki_verme", label: "Sayfa Yetkilendirme", group: "ADMİNİSTRATOR" },
+] as const;
+
+export type PortalPageKey = (typeof PORTAL_PAGES)[number]["key"];
+
+/** Mobil saha rolleri → ana panel sekmesi */
+export const MOBILE_ROLE_HOME_TAB: Record<string, PortalPageKey> = {
+  FORMEN: "formen_ekrani",
+  GÜVENLİK: "guvenlik_ekrani",
+  KAMPÇI: "kampci_ekrani",
+  LOJİSTİK: "lojistik_ekrani",
+  DEPOCU: "depocu_ekrani",
+};
+
+const YETKI_ALIASES: Record<string, string> = {
+  KAMPCI: "KAMPÇI",
+  KAMPCİ: "KAMPÇI",
+  GUVENLIK: "GÜVENLİK",
+  LOJISTIK: "LOJİSTİK",
+  DEPO: "DEPOCU",
+};
+
+export function normalizeYetki(yetki?: string | null): string {
+  if (!yetki) return "";
+  let v = String(yetki).trim().toLocaleUpperCase("tr-TR");
+  return YETKI_ALIASES[v] ?? v;
+}
+
+export function getRoleHomeTab(yetki?: string | null): PortalPageKey | null {
+  const normalized = normalizeYetki(yetki);
+  return MOBILE_ROLE_HOME_TAB[normalized] ?? null;
+}
+
+export function isMobileRole(yetki?: string | null): boolean {
+  return getRoleHomeTab(yetki) !== null;
+}
+
+/** Rol ana paneli kısıtlamalardan muaf; diğer sekmeler kisitliSayfalar'a tabidir */
+export function isTabRestrictedForUser(
+  tab: string,
+  yetki?: string | null,
+  kisitliSayfalar?: string[] | null
+): boolean {
+  const homeTab = getRoleHomeTab(yetki);
+  if (homeTab && tab === homeTab) return false;
+  if (!kisitliSayfalar?.length) return false;
+  return kisitliSayfalar.includes(tab);
+}
+
+/** Kayıt sırasında mobil rolün ana paneli asla kısıtlı listeye eklenmez */
+export function sanitizeKisitliSayfalar(
+  yetki: string | undefined,
+  kisitliSayfalar: string[] | undefined
+): string[] {
+  const homeTab = getRoleHomeTab(yetki);
+  if (!homeTab || !kisitliSayfalar?.length) return kisitliSayfalar ?? [];
+  return kisitliSayfalar.filter((k) => k !== homeTab);
+}

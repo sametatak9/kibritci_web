@@ -180,6 +180,24 @@ export interface Tahsis {
   aciklama: string;
 }
 
+/** Kampçı mobil — yerleşke tanımı (Idari programdan bağımsız) */
+export interface KampYerleske {
+  id: string;
+  ad: string;
+  olusturmaTarihi: string;
+  olusturan?: string;
+}
+
+/** Kampçı mobil — kat/blok tanımı */
+export interface KampKat {
+  id: string;
+  yerleskeId: string;
+  yerleskeAdi: string;
+  ad: string;
+  sira: number;
+  olusturmaTarihi: string;
+}
+
 export interface KampOdasi {
   id: string;
   yerleskeAdi: string;
@@ -188,6 +206,8 @@ export interface KampOdasi {
   kapasite: number;
   firmaTipi: 'ANA_FIRMA' | 'TASERON';
   durum: 'BOŞ' | 'DOLU' | 'KISMEN DOLU';
+  yerleskeId?: string;
+  katId?: string;
 }
 
 export interface KampKaydi {

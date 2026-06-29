@@ -3,9 +3,10 @@ import {
   Tent, Plus, Trash2, Camera, Check, RefreshCw, Eye, 
   Search, UserPlus, ClipboardList, Package, Layers, MapPin, Sparkles, CheckCircle, Clock, X, ArrowRight, ShieldCheck, DoorOpen, LogOut
 } from 'lucide-react';
-import { KampOdasi, KampKaydi, Personel, StokKart } from '../types/erp';
+import { KampOdasi, KampKaydi, Personel, StokKart, KampYerleske, KampKat } from '../types/erp';
 import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
+import { createKampYerleske, createKampKat, katsForYerleske } from '../lib/kampYapisi';
 import { collection, onSnapshot, doc, updateDoc, query, orderBy } from 'firebase/firestore';
 
 interface KampciScreenProps {
@@ -48,18 +49,24 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   };
 
   // ─────────────────────────────────────────────────────────────
-  // 🏕️ 1. ODA & YERLEŞKE OLUŞTURMA STATE
+  // 🏕️ 1. YERLEŞKE / KAT / ODA — Kampçı kendi tanımlar (Idari programdan bağımsız)
   // ─────────────────────────────────────────────────────────────
-  const [yerleskeAdi, setYerleskeAdi] = useState('Merkez Konteyner Kampı');
-  const [customYerleskeAdi, setCustomYerleskeAdi] = useState("");
-  const [showCustomYerleske, setShowCustomYerleske] = useState(false);
-  const [kogusNo, setKogusNo] = useState('A Blok (Zemin Kat)'); // Acts as Floor / Block
-  const [customKogusNo, setCustomKogusNo] = useState("");
-  const [showCustomKogus, setShowCustomKogus] = useState(false);
+  const [yerleskeler, setYerleskeler] = useState<KampYerleske[]>([]);
+  const [katlar, setKatlar] = useState<KampKat[]>([]);
+  const [setupStep, setSetupStep] = useState<1 | 2 | 3>(1);
+  const [selectedYerleskeId, setSelectedYerleskeId] = useState('');
+  const [selectedKatId, setSelectedKatId] = useState('');
+  const [newYerleskeAd, setNewYerleskeAd] = useState('');
+  const [newKatAd, setNewKatAd] = useState('');
   const [odaNo, setOdaNo] = useState('');
   const [kapasite, setKapasite] = useState<number>(4);
   const [firmaTipi, setFirmaTipi] = useState<'ANA_FIRMA' | 'TASERON'>('ANA_FIRMA');
   const [loadingRoom, setLoadingRoom] = useState(false);
+  const [loadingYapı, setLoadingYapı] = useState(false);
+
+  const selectedYerleske = yerleskeler.find(y => y.id === selectedYerleskeId);
+  const selectedKat = katlar.find(k => k.id === selectedKatId);
+  const yerleskeKatlari = selectedYerleskeId ? katsForYerleske(katlar, selectedYerleskeId) : [];
 
   // ─────────────────────────────────────────────────────────────
   // 👥 2. YERLEŞİM (CHECK-IN / OUT) STATE
@@ -111,7 +118,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   // ─────────────────────────────────────────────────────────────
   const [gunlukFaaliyetler, setGunlukFaaliyetler] = useState<any[]>([]);
   const [faaliyetTipi, setFaaliyetTipi] = useState<'TEMİZLİK' | 'YEMEK' | 'GÜVENLİK' | 'BAKIM' | 'DİĞER'>('TEMİZLİK');
-  const [faaliyetYerleske, setFaaliyetYerleske] = useState('Merkez Konteyner Kampı');
+  const [faaliyetYerleske, setFaaliyetYerleske] = useState('');
   const [faaliyetAciklama, setFaaliyetAciklama] = useState('');
   const [faaliyetFoto, setFaaliyetFoto] = useState<string | null>(null);
   const [loadingFaaliyet, setLoadingFaaliyet] = useState(false);
@@ -142,32 +149,99 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       setGunlukFaaliyetler(list);
     });
 
+    // 3. Kamp yerleşke & kat yapısı (kampçı tanımlı)
+    const yerleskeColl = collection(db, 'kampYerleskeleri');
+    const katColl = collection(db, 'kampKatlari');
+    const unsubYerleske = onSnapshot(yerleskeColl, (snap) => {
+      const list: KampYerleske[] = [];
+      snap.forEach(d => list.push({ id: d.id, ...d.data() } as KampYerleske));
+      list.sort((a, b) => a.ad.localeCompare(b.ad, 'tr'));
+      setYerleskeler(list);
+    });
+    const unsubKat = onSnapshot(katColl, (snap) => {
+      const list: KampKat[] = [];
+      snap.forEach(d => list.push({ id: d.id, ...d.data() } as KampKat));
+      setKatlar(list);
+    });
+
     return () => {
       unsubCounts();
       unsubActs();
+      unsubYerleske();
+      unsubKat();
     };
   }, []);
+
+  useEffect(() => {
+    if (yerleskeler.length > 0 && !selectedYerleskeId) {
+      setSelectedYerleskeId(yerleskeler[0].id);
+    }
+    if (yerleskeler.length > 0 && !faaliyetYerleske) {
+      setFaaliyetYerleske(yerleskeler[0].ad);
+    }
+  }, [yerleskeler, selectedYerleskeId, faaliyetYerleske]);
+
+  useEffect(() => {
+    const kats = selectedYerleskeId ? katsForYerleske(katlar, selectedYerleskeId) : [];
+    if (kats.length > 0 && !kats.some(k => k.id === selectedKatId)) {
+      setSelectedKatId(kats[0].id);
+    }
+    if (kats.length === 0) setSelectedKatId('');
+  }, [selectedYerleskeId, katlar, selectedKatId]);
+
+  const handleCreateYerleske = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newYerleskeAd.trim()) return;
+    setLoadingYapı(true);
+    try {
+      const y = await createKampYerleske(newYerleskeAd, currentUser?.email);
+      setSelectedYerleskeId(y.id);
+      setNewYerleskeAd('');
+      setSetupStep(2);
+      showStatus('success', `Yerleşke "${y.ad}" oluşturuldu. Şimdi kat ekleyin.`);
+    } catch (err) {
+      showStatus('error', 'Yerleşke oluşturulamadı.');
+    } finally {
+      setLoadingYapı(false);
+    }
+  };
+
+  const handleCreateKat = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedYerleske || !newKatAd.trim()) return;
+    setLoadingYapı(true);
+    try {
+      const k = await createKampKat(selectedYerleske, newKatAd, yerleskeKatlari.length + 1);
+      setSelectedKatId(k.id);
+      setNewKatAd('');
+      setSetupStep(3);
+      showStatus('success', `Kat "${k.ad}" eklendi. Oda tanımlayabilirsiniz.`);
+    } catch (err) {
+      showStatus('error', 'Kat oluşturulamadı.');
+    } finally {
+      setLoadingYapı(false);
+    }
+  };
 
   // ─────────────────────────────────────────────────────────────
   // 🏕️ ACTIONS: ROOM MANAGEMENT
   // ─────────────────────────────────────────────────────────────
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!odaNo) {
-      showStatus('error', 'Lütfen Oda Numarasını belirtin!');
+    if (!odaNo || !selectedYerleske || !selectedKat) {
+      showStatus('error', 'Önce yerleşke ve kat seçin, oda numarası girin.');
       return;
     }
 
     setLoadingRoom(true);
     try {
-      const finalYerleskeAdi = showCustomYerleske ? (customYerleskeAdi.trim() || yerleskeAdi) : yerleskeAdi;
-      const finalKogusNo = showCustomKogus ? (customKogusNo.trim() || kogusNo) : kogusNo;
-
       const roomId = `room_${Date.now()}`;
       const newRoom: KampOdasi = {
         id: roomId,
-        yerleskeAdi: finalYerleskeAdi,
-        kogusNo: finalKogusNo,
+        yerleskeAdi: selectedYerleske.ad,
+        kogusNo: selectedKat.ad,
+        yerleskeId: selectedYerleske.id,
+        katId: selectedKat.id,
         odaNo,
         kapasite: Number(kapasite),
         firmaTipi,
@@ -176,13 +250,9 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
 
       await saveDocument('kampOdalari', newRoom);
       if (addNotification) {
-        addNotification(`${finalYerleskeAdi} / ${finalKogusNo} - Oda ${odaNo} başarıyla açıldı.`);
+        addNotification(`${selectedYerleske.ad} / ${selectedKat.ad} - Oda ${odaNo} açıldı.`);
       }
       setOdaNo('');
-      setCustomYerleskeAdi("");
-      setCustomKogusNo("");
-      setShowCustomYerleske(false);
-      setShowCustomKogus(false);
       showStatus('success', `Oda ${odaNo} başarıyla açıldı.`);
     } catch (err) {
       console.error(err);
@@ -922,127 +992,131 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           {/* Create Room Form */}
           <div className="lg:col-span-1 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
             <div>
-              <span className="font-extrabold text-[10px] text-blue-400 uppercase tracking-wider">Yeni Kamp Lojman Odası Ekle</span>
-              <h3 className="font-bold text-sm text-white mt-0.5">🏢 Oda / Koğuş Tanımla</h3>
+              <span className="font-extrabold text-[10px] text-blue-600 uppercase tracking-wider">Kamp Yapısı Kurulumu</span>
+              <h3 className="font-bold text-sm text-slate-800 mt-0.5">Yerleşke → Kat → Oda</h3>
+              <p className="text-[10px] text-slate-500 mt-1">Idari programdan bağımsız; kampçı kendi yerleşkesini tanımlar.</p>
             </div>
 
-            <form onSubmit={handleCreateRoom} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Yerleşke Adı *</label>
-                <select
-                  required
-                  value={yerleskeAdi}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setYerleskeAdi(val);
-                    if (val === 'CUSTOM') {
-                      setShowCustomYerleske(true);
-                    } else {
-                      setShowCustomYerleske(false);
-                    }
-                  }}
-                  className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-white rounded-xl p-3 outline-none"
+            <div className="flex gap-1 text-[9px] font-bold">
+              {[1, 2, 3].map(step => (
+                <button
+                  key={step}
+                  type="button"
+                  onClick={() => setSetupStep(step as 1 | 2 | 3)}
+                  className={`flex-1 py-1.5 rounded-lg border ${setupStep === step ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200'}`}
                 >
-                  <option value="Merkez Konteyner Kampı">Merkez Konteyner Kampı</option>
-                  <option value="Kuzey Lojman Sahası">Kuzey Lojman Sahası</option>
-                  <option value="Güney Teknik Kampı">Güney Teknik Kampı</option>
-                  <option value="CUSTOM">➕ Yeni Yerleşke Ekle...</option>
-                </select>
-                {showCustomYerleske && (
+                  {step}. {step === 1 ? 'Yerleşke' : step === 2 ? 'Kat' : 'Oda'}
+                </button>
+              ))}
+            </div>
+
+            {setupStep === 1 && (
+              <form onSubmit={handleCreateYerleske} className="space-y-3">
+                {yerleskeler.length > 0 && (
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-slate-500 uppercase">Mevcut Yerleşkeler</label>
+                    <select
+                      value={selectedYerleskeId}
+                      onChange={(e) => { setSelectedYerleskeId(e.target.value); setSetupStep(2); }}
+                      className="w-full bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-800 rounded-xl p-3"
+                    >
+                      {yerleskeler.map(y => (
+                        <option key={y.id} value={y.id}>{y.ad}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-500 uppercase">Yeni Yerleşke Adı *</label>
                   <input
                     type="text"
-                    required
-                    placeholder="Yeni Yerleşke Adını Yazınız"
-                    value={customYerleskeAdi}
-                    onChange={(e) => setCustomYerleskeAdi(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 text-xs text-white p-3 rounded-xl outline-none mt-1.5 animate-in slide-in-from-top-1 duration-150"
+                    value={newYerleskeAd}
+                    onChange={(e) => setNewYerleskeAd(e.target.value)}
+                    placeholder="Örn: Şantiye Merkez Kampı"
+                    className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 p-3 rounded-xl"
                   />
+                </div>
+                <button type="submit" disabled={loadingYapı} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-3 rounded-xl cursor-pointer">
+                  {loadingYapı ? 'Kaydediliyor...' : '1. Yerleşkeyi Oluştur'}
+                </button>
+              </form>
+            )}
+
+            {setupStep === 2 && (
+              <form onSubmit={handleCreateKat} className="space-y-3">
+                {!selectedYerleske ? (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 p-3 rounded-xl">Önce 1. adımda yerleşke oluşturun.</p>
+                ) : (
+                  <>
+                    <p className="text-xs font-bold text-slate-700">Yerleşke: {selectedYerleske.ad}</p>
+                    {yerleskeKatlari.length > 0 && (
+                      <select
+                        value={selectedKatId}
+                        onChange={(e) => { setSelectedKatId(e.target.value); setSetupStep(3); }}
+                        className="w-full bg-slate-50 border border-slate-200 text-xs p-3 rounded-xl text-slate-800"
+                      >
+                        {yerleskeKatlari.map(k => (
+                          <option key={k.id} value={k.id}>{k.ad}</option>
+                        ))}
+                      </select>
+                    )}
+                    <input
+                      type="text"
+                      value={newKatAd}
+                      onChange={(e) => setNewKatAd(e.target.value)}
+                      placeholder="Kat / blok adı (Örn: A Blok Zemin)"
+                      className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 p-3 rounded-xl"
+                    />
+                    <button type="submit" disabled={loadingYapı} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-3 rounded-xl cursor-pointer">
+                      {loadingYapı ? 'Kaydediliyor...' : '2. Kat Ekle'}
+                    </button>
+                  </>
                 )}
-              </div>
+              </form>
+            )}
 
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Kat / Blok Tanımı *</label>
-                <select
-                  required
-                  value={kogusNo}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setKogusNo(val);
-                    if (val === 'CUSTOM') {
-                      setShowCustomKogus(true);
-                    } else {
-                      setShowCustomKogus(false);
-                    }
-                  }}
-                  className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-white rounded-xl p-3 outline-none"
-                >
-                  <option value="A Blok (Zemin Kat)">A Blok (Zemin Kat)</option>
-                  <option value="A Blok (1. Kat)">A Blok (1. Kat)</option>
-                  <option value="A Blok (2. Kat)">A Blok (2. Kat)</option>
-                  <option value="B Blok (Zemin Kat)">B Blok (Zemin Kat)</option>
-                  <option value="B Blok (1. Kat)">B Blok (1. Kat)</option>
-                  <option value="C Blok (Lojman)">C Blok (Lojman)</option>
-                  <option value="CUSTOM">➕ Yeni Kat / Blok Ekle...</option>
-                </select>
-                {showCustomKogus && (
-                  <input
-                    type="text"
-                    required
-                    placeholder="Yeni Kat / Blok Tanımını Yazınız"
-                    value={customKogusNo}
-                    onChange={(e) => setCustomKogusNo(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 text-xs text-white p-3 rounded-xl outline-none mt-1.5 animate-in slide-in-from-top-1 duration-150"
-                  />
+            {setupStep === 3 && (
+              <form onSubmit={handleCreateRoom} className="space-y-3">
+                {!selectedYerleske || !selectedKat ? (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 p-3 rounded-xl">Önce yerleşke ve kat tanımlayın.</p>
+                ) : (
+                  <>
+                    <p className="text-xs text-slate-600">
+                      <span className="font-bold">{selectedYerleske.ad}</span> / <span className="font-bold">{selectedKat.ad}</span>
+                    </p>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Oda no (Örn: 104)"
+                      value={odaNo}
+                      onChange={(e) => setOdaNo(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 p-3 rounded-xl"
+                    />
+                    <input
+                      type="number"
+                      required
+                      min={1}
+                      max={20}
+                      value={kapasite}
+                      onChange={(e) => setKapasite(Number(e.target.value))}
+                      className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 p-3 rounded-xl"
+                    />
+                    <select
+                      value={firmaTipi}
+                      onChange={(e) => setFirmaTipi(e.target.value as 'ANA_FIRMA' | 'TASERON')}
+                      className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 p-3 rounded-xl"
+                    >
+                      <option value="ANA_FIRMA">Ana Firma</option>
+                      <option value="TASERON">Taşeron</option>
+                    </select>
+                    <button type="submit" disabled={loadingRoom} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-3 rounded-xl cursor-pointer flex items-center justify-center gap-2">
+                      {loadingRoom ? <RefreshCw size={13} className="animate-spin" /> : <Plus size={14} />}
+                      3. Odayı Aç & Kaydet
+                    </button>
+                  </>
                 )}
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Oda Numarası *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Örn: 104"
-                  value={odaNo}
-                  onChange={(e) => setOdaNo(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-xs text-white p-3 rounded-xl outline-none"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Kapasite (Yatak Sayısı) *</label>
-                <input
-                  type="number"
-                  required
-                  min={1}
-                  max={20}
-                  value={kapasite}
-                  onChange={(e) => setKapasite(Number(e.target.value))}
-                  className="w-full bg-slate-50 border border-slate-200 text-xs text-white p-3 rounded-xl outline-none"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Atanan Firma Türü *</label>
-                <select
-                  required
-                  value={firmaTipi}
-                  onChange={(e) => setFirmaTipi(e.target.value as any)}
-                  className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-white rounded-xl p-3 outline-none"
-                >
-                  <option value="ANA_FIRMA">Kibritçi İnşaat (Ana Firma)</option>
-                  <option value="TASERON">Alt Yüklenici / Taşeron</option>
-                </select>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loadingRoom}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-3 rounded-xl transition cursor-pointer flex items-center justify-center space-x-2 shadow-lg shadow-emerald-500/10"
-              >
-                {loadingRoom ? <RefreshCw size={13} className="animate-spin" /> : <Plus size={14} />}
-                <span>Odayı Aç &amp; Kaydet</span>
-              </button>
-            </form>
+              </form>
+            )}
           </div>
 
           {/* Rooms Table List */}
@@ -1259,16 +1333,22 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
 
               <div className="space-y-1.5">
                 <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Kamp Yerleşkesi *</label>
-                <select
-                  required
-                  value={faaliyetYerleske}
-                  onChange={(e) => setFaaliyetYerleske(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-white rounded-xl p-3 outline-none"
-                >
-                  <option value="Merkez Konteyner Kampı">Merkez Konteyner Kampı</option>
-                  <option value="Kuzey Lojman Sahası">Kuzey Lojman Sahası</option>
-                  <option value="Güney Teknik Kampı">Güney Teknik Kampı</option>
-                </select>
+                {yerleskeler.length === 0 ? (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 p-3 rounded-xl">
+                    Önce &quot;Odalar&quot; sekmesinden yerleşke tanımlayın.
+                  </p>
+                ) : (
+                  <select
+                    required
+                    value={faaliyetYerleske}
+                    onChange={(e) => setFaaliyetYerleske(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none"
+                  >
+                    {yerleskeler.map(y => (
+                      <option key={y.id} value={y.ad}>{y.ad}</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div className="space-y-1.5">

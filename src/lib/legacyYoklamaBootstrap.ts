@@ -1,7 +1,7 @@
 import { AylikYoklamaMap, Personel } from '../types/erp';
 import { LEGACY_EXCEL_MONTHS } from '../data/legacyExcelYoklama';
 import { importAllLegacyExcelMonths } from './legacyYoklamaImport';
-import { iterateMonthYoklama } from './yoklamaUtils';
+import { iterateMonthYoklama, asYoklamaGunMap } from './yoklamaUtils';
 
 /** Veri güncellendiğinde artırın — otomatik yeniden birleştirme tetikler */
 export const LEGACY_YOKLAMA_VERSION = 8;
@@ -11,7 +11,7 @@ const STORAGE_KEY = 'kibritci_legacy_yoklama_v';
 function countGeldiInMonth(yoklamalar: AylikYoklamaMap, year: number, month: number): number {
   let total = 0;
   Object.values(yoklamalar).forEach(map => {
-    iterateMonthYoklama(map, year, month, (_d, data) => {
+    iterateMonthYoklama(asYoklamaGunMap(map), year, month, (_d, data) => {
       if (data?.durum === 'Geldi') total++;
     });
   });

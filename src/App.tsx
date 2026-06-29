@@ -58,6 +58,13 @@ import {
   syncArrayToFirestore,
   saveDocument
 } from './lib/firebase';
+import {
+  normalizeYetki,
+  getRoleHomeTab,
+  isMobileRole,
+  isTabRestrictedForUser,
+  sanitizeKisitliSayfalar,
+} from './lib/yetkiUtils';
 import { collection, onSnapshot, doc, getDoc, query, orderBy, limit } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { LoginScreen } from './components/LoginScreen';
@@ -712,20 +719,9 @@ export default function App() {
     if (!currentUser || !kullanicilar.length) return;
     const matched = kullanicilar.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
     if (matched) {
-      if (matched.yetki === 'FORMEN' && activeTab !== 'formen_ekrani') {
-        setActiveTab('formen_ekrani');
-      }
-      if (matched.yetki === 'GÜVENLİK' && activeTab !== 'guvenlik_ekrani') {
-        setActiveTab('guvenlik_ekrani');
-      }
-      if (matched.yetki === 'KAMPÇI' && activeTab !== 'kampci_ekrani') {
-        setActiveTab('kampci_ekrani');
-      }
-      if (matched.yetki === 'LOJİSTİK' && activeTab !== 'lojistik_ekrani') {
-        setActiveTab('lojistik_ekrani');
-      }
-      if (matched.yetki === 'DEPOCU' && activeTab !== 'depocu_ekrani') {
-        setActiveTab('depocu_ekrani');
+      const homeTab = getRoleHomeTab(matched.yetki);
+      if (homeTab && activeTab !== homeTab) {
+        setActiveTab(homeTab);
       }
       if (matched.imzaText) {
         setSignatureText(matched.imzaText);
@@ -1139,22 +1135,19 @@ export default function App() {
   }
 
   const matchedU = kullanicilar.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
-  const isYonetici = matchedU?.yetki === 'YÖNETİCİ' || 
+  const userYetki = normalizeYetki(matchedU?.yetki);
+  const isYonetici = userYetki === 'YÖNETİCİ' || 
                      currentUser?.email?.toLowerCase() === 'sametatak9@gmail.com' || 
                      currentUser?.email?.toLowerCase() === 'santiye@kibritci.com';
 
-  const hideSidebarAndTopbar = matchedU?.yetki === 'FORMEN' || 
-                               matchedU?.yetki === 'GÜVENLİK' || 
-                               matchedU?.yetki === 'KAMPÇI' || 
-                               matchedU?.yetki === 'LOJİSTİK' ||
-                               matchedU?.yetki === 'DEPOCU';
+  const hideSidebarAndTopbar = isMobileRole(userYetki);
 
-  const isAllowedFormen = matchedU?.yetki === 'FORMEN' || isYonetici;
-  const isAllowedGuvenlik = matchedU?.yetki === 'GÜVENLİK' || isYonetici;
-  const isAllowedKampci = matchedU?.yetki === 'KAMPÇI' || isYonetici;
-  const isAllowedLojistik = matchedU?.yetki === 'LOJİSTİK' || isYonetici;
-  const isAllowedDepocu = matchedU?.yetki === 'DEPOCU' || isYonetici;
-  const isTabRestricted = matchedU?.kisitliSayfalar?.includes(activeTab);
+  const isAllowedFormen = userYetki === 'FORMEN' || isYonetici;
+  const isAllowedGuvenlik = userYetki === 'GÜVENLİK' || isYonetici;
+  const isAllowedKampci = userYetki === 'KAMPÇI' || isYonetici;
+  const isAllowedLojistik = userYetki === 'LOJİSTİK' || isYonetici;
+  const isAllowedDepocu = userYetki === 'DEPOCU' || isYonetici;
+  const isTabRestricted = isTabRestrictedForUser(activeTab, userYetki, matchedU?.kisitliSayfalar);
 
   const renderAccessDenied = () => (
     <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center p-8 z-50 select-none text-white">
@@ -1168,11 +1161,8 @@ export default function App() {
         </p>
         <button 
           onClick={() => {
-            if (matchedU?.yetki === 'FORMEN') setActiveTab('formen_ekrani');
-            else if (matchedU?.yetki === 'GÜVENLİK') setActiveTab('guvenlik_ekrani');
-            else if (matchedU?.yetki === 'KAMPÇI') setActiveTab('kampci_ekrani');
-            else if (matchedU?.yetki === 'LOJİSTİK') setActiveTab('lojistik_ekrani');
-            else if (matchedU?.yetki === 'DEPOCU') setActiveTab('depocu_ekrani');
+            const homeTab = getRoleHomeTab(userYetki);
+            if (homeTab) setActiveTab(homeTab);
             else setActiveTab('ana_sayfa');
           }} 
           className="w-full bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-bold py-2.5 rounded-xl cursor-pointer transition shadow-lg"
@@ -1184,7 +1174,7 @@ export default function App() {
   );
 
   if (isMobileMode && currentUser) {
-    const role = matchedU?.yetki;
+    const role = userYetki;
     if (role === 'FORMEN') {
       return (
         <FormenScreen
@@ -1308,10 +1298,10 @@ export default function App() {
           onSignOut={handleSignOut} 
           onSignatureEdit={() => setShowSignatureModal(true)}
           isYonetici={isYonetici}
-          userYetki={matchedU?.yetki}
+          userYetki={userYetki}
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
-          kisitliSayfalar={matchedU?.kisitliSayfalar}
+          kisitliSayfalar={sanitizeKisitliSayfalar(userYetki, matchedU?.kisitliSayfalar)}
           onToggleMobileMode={() => {
             setIsMobileMode(true);
             setIsMobileDirect(false);
@@ -1478,6 +1468,7 @@ export default function App() {
                   faturalar={faturalar}
                   setFaturalar={setFaturalarWithSync}
                   irsaliyeler={irsaliyeler}
+                  setIrsaliyeler={setIrsaliyelerWithSync}
                   satinAlmaTalepleri={satinAlmaTalepleri}
                   cariKartlar={cariKartlar}
                   setCariKartlar={setCariKartlarWithSync}

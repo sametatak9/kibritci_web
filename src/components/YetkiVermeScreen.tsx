@@ -4,6 +4,7 @@ import {
   Settings, CheckSquare, Square, RefreshCw, HelpCircle
 } from 'lucide-react';
 import { Kullanici } from './AdminPanelScreen';
+import { PORTAL_PAGES, sanitizeKisitliSayfalar } from '../lib/yetkiUtils';
 
 interface YetkiVermeScreenProps {
   kullanicilar: Kullanici[];
@@ -12,35 +13,7 @@ interface YetkiVermeScreenProps {
   addNotification?: (mesaj: string) => void;
 }
 
-const ALL_PAGES = [
-  { key: "ana_sayfa", label: "Ana Sayfa Dashboard", group: "BAŞLANGIÇ" },
-  
-  { key: "personel", label: "Personel Yönetimi", group: "PERSONEL" },
-  { key: "yoklama", label: "Yoklama ve Puantaj", group: "PERSONEL" },
-  { key: "maas", label: "Maaş Hesaplama", group: "PERSONEL" },
-  { key: "personel_izin", label: "Personel İzin Formu", group: "PERSONEL" },
-  
-  { key: "kasa", label: "Haftalık Kasa", group: "FİNANS & ENVANTER" },
-  { key: "satin_alma", label: "Satın Alma Talep", group: "FİNANS & ENVANTER" },
-  { key: "cari_stok", label: "Cari ve Stok Kartları", group: "FİNANS & ENVANTER" },
-  { key: "evrak_aktarimi", label: "AI Belge Aktarımı", group: "FİNANS & ENVANTER" },
-  
-  { key: "arac", label: "Araç ve Demirbaş", group: "İDARİ İŞLER & SAHA" },
-  { key: "kamp", label: "Kamp Yönetimi", group: "İDARİ İŞLER & SAHA" },
-  { key: "saha", label: "Daily Saha Faaliyetleri", group: "İDARİ İŞLER & SAHA" },
-  { key: "tutanak", label: "Hazır Tutanaklar", group: "İDARİ İŞLER & SAHA" },
-  { key: "formen_ekrani", label: "Formen Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
-  { key: "guvenlik_ekrani", label: "Güvenlik & Kapı Kontrol", group: "İDARİ İŞLER & SAHA" },
-  { key: "kampci_ekrani", label: "Kampçı Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
-  { key: "lojistik_ekrani", label: "Şöför Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
-  { key: "depocu_ekrani", label: "Depocu Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
-  
-  { key: "sohbet", label: "Sohbet & Haberleşme", group: "RAPOR VE İLETİŞİM" },
-  { key: "eposta", label: "E-Posta Merkezi", group: "RAPOR VE İLETİŞİM" },
-  { key: "onay_islemleri", label: "Onay Havuzu & İmzalar", group: "RAPOR VE İLETİŞİM" },
-  
-  { key: "admin", label: "Üyelik & Admin Paneli", group: "ADMİNİSTRATOR" }
-];
+const ALL_PAGES = PORTAL_PAGES;
 
 export const YetkiVermeScreen: React.FC<YetkiVermeScreenProps> = ({
   kullanicilar,
@@ -104,7 +77,10 @@ export const YetkiVermeScreen: React.FC<YetkiVermeScreenProps> = ({
     setSuccessMsg(null);
 
     // Calculate restricted pages: pages that are NOT in allowedPageKeys
-    const restricted = ALL_PAGES.filter(p => !allowedPageKeys.includes(p.key)).map(p => p.key);
+    const restricted = sanitizeKisitliSayfalar(
+      selectedUser.yetki,
+      ALL_PAGES.filter(p => !allowedPageKeys.includes(p.key)).map(p => p.key)
+    );
 
     try {
       setKullanicilar(prev => prev.map(u => {

@@ -1,9 +1,17 @@
-import { AylikYoklamaMap, Personel, YoklamaDurum } from '../types/erp';
+import { AylikYoklamaMap, GunlukYoklama, Personel, YoklamaDurum } from '../types/erp';
 
 export interface YoklamaGunKaydi {
   durum: YoklamaDurum;
   mesaiSaati: number;
   gonderen?: string;
+}
+
+/** GunlukYoklama → iterateMonthYoklama uyumlu kayıt haritası */
+export function asYoklamaGunMap(
+  personMap: GunlukYoklama | Record<string, YoklamaGunKaydi> | undefined
+): Record<string, YoklamaGunKaydi> | undefined {
+  if (!personMap) return undefined;
+  return personMap as unknown as Record<string, YoklamaGunKaydi>;
 }
 
 export function yoklamaDateKey(year: number, month: number, day: number): string {
@@ -243,10 +251,10 @@ export function buildPersonelListForMonth(
   const ids = new Set<string>();
 
   personeller.forEach(p => {
-    if (isPersonelVisibleInMonth(p, year, month, yoklamalar[p.id])) ids.add(p.id);
+    if (isPersonelVisibleInMonth(p, year, month, asYoklamaGunMap(yoklamalar[p.id]))) ids.add(p.id);
   });
   Object.entries(yoklamalar).forEach(([id, map]) => {
-    if (personHasYoklamaInMonth(map, year, month)) ids.add(id);
+    if (personHasYoklamaInMonth(asYoklamaGunMap(map), year, month)) ids.add(id);
   });
 
   return Array.from(ids)

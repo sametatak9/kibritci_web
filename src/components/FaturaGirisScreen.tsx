@@ -6,11 +6,18 @@ import {
 import { Fatura, FaturaItem, Irsaliye, CariKart, StokKart, SatinAlmaTalebi } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
 import { fetchApiJson } from '../lib/apiClient';
+import { fileToAiPayload } from '../lib/aiFileUpload';
+import {
+  filterLinkedIrsaliyeler,
+  faturaIsLinked,
+  resolveSaIdFromIrsaliyeler,
+} from '../lib/documentLinkUtils';
 
 interface FaturaGirisScreenProps {
   faturalar: Fatura[];
   setFaturalar: React.Dispatch<React.SetStateAction<Fatura[]>>;
   irsaliyeler: Irsaliye[];
+  setIrsaliyeler?: React.Dispatch<React.SetStateAction<Irsaliye[]>>;
   satinAlmaTalepleri: SatinAlmaTalebi[];
   cariKartlar: CariKart[];
   setCariKartlar?: React.Dispatch<React.SetStateAction<CariKart[]>>;
@@ -24,6 +31,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
   faturalar,
   setFaturalar,
   irsaliyeler,
+  setIrsaliyeler,
   satinAlmaTalepleri,
   cariKartlar,
   setCariKartlar,
@@ -105,7 +113,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
     }
   };
 
-  const processFaturaAi = (file: File) => {
+  const processFaturaAi = async (file: File) => {
     const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
     if (!allowedTypes.includes(file.type)) {
       setFtParseError("Lütfen sadece PDF veya Görsel (PNG, JPG, WEBP) formatında Fatura yükleyiniz.");
@@ -116,50 +124,46 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
     setFtParseError(null);
     setFtParseSuccess(null);
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const rawBase64 = (reader.result as string).split(',')[1];
-        const resData = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
-          '/api/parse-fatura',
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fileBase64: rawBase64, mimeType: file.type }),
-          }
-        );
-        if (!resData.success) {
-          throw new Error(resData.error || 'Fatura belgesi çözümlenirken hata oluştu.');
+    try {
+      const { fileBase64, mimeType } = await fileToAiPayload(file);
+      const resData = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
+        '/api/parse-fatura',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileBase64, mimeType }),
         }
-
-        const parsed = resData.data;
-        setFtNo(parsed.faturaNo || "");
-        if (parsed.tarih) setFtDate(parsed.tarih);
-        if (parsed.firma) {
-          setFtSupplier(parsed.firma);
-          checkAndSuggestCari(parsed.firma);
-        }
-        if (parsed.kalemler && parsed.kalemler.length > 0) {
-          const formatted = parsed.kalemler.map((x: any, idx: number) => ({
-            id: `fti_ai_${Date.now()}_${idx}`,
-            urunAdi: x.urunAdi,
-            miktar: Number(x.miktar) || 0,
-            birim: x.birim || "ADET",
-            birimFiyat: Number(x.birimFiyat) || 0,
-            kdvOran: Number(x.kdvOran) || 20,
-            toplam: Number(x.toplam) || (Number(x.miktar) * Number(x.birimFiyat)) || 0
-          }));
-          setFtItems(formatted);
-          formatted.forEach((item: any) => checkAndSuggestStok(item.urunAdi, item.birim));
-        }
-        setFtParseSuccess(`Yapay Zeka Okuması Başarılı! No: ${parsed.faturaNo || ''}`);
-      } catch (err: any) {
-        setFtParseError(err.message || "Dosya çözümlenemedi.");
-      } finally {
-        setIsFtParsing(false);
+      );
+      if (!resData.success) {
+        throw new Error(resData.error || 'Fatura belgesi çözümlenirken hata oluştu.');
       }
-    };
-    reader.readAsDataURL(file);
+
+      const parsed = resData.data;
+      setFtNo(parsed.faturaNo || "");
+      if (parsed.tarih) setFtDate(parsed.tarih);
+      if (parsed.firma) {
+        setFtSupplier(parsed.firma);
+        checkAndSuggestCari(parsed.firma);
+      }
+      if (parsed.kalemler && parsed.kalemler.length > 0) {
+        const formatted = parsed.kalemler.map((x: any, idx: number) => ({
+          id: `fti_ai_${Date.now()}_${idx}`,
+          urunAdi: x.urunAdi,
+          miktar: Number(x.miktar) || 0,
+          birim: x.birim || "ADET",
+          birimFiyat: Number(x.birimFiyat) || 0,
+          kdvOran: Number(x.kdvOran) || 20,
+          toplam: Number(x.toplam) || (Number(x.miktar) * Number(x.birimFiyat)) || 0
+        }));
+        setFtItems(formatted);
+        formatted.forEach((item: any) => checkAndSuggestStok(item.urunAdi, item.birim));
+      }
+      setFtParseSuccess(`Yapay Zeka Okuması Başarılı! No: ${parsed.faturaNo || ''}`);
+    } catch (err: any) {
+      setFtParseError(err.message || "Dosya çözümlenemedi.");
+    } finally {
+      setIsFtParsing(false);
+    }
   };
 
   const checkAndSuggestCari = (name: string) => {
@@ -262,17 +266,32 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
     const calculatedSub = ftItems.reduce((acc, curr) => acc + curr.toplam, 0);
     const calculatedKdv = ftItems.reduce((acc, curr) => acc + (curr.toplam * (curr.kdvOran / 100)), 0);
     const calculatedGrand = calculatedSub + calculatedKdv;
+    const resolvedSaId = resolveSaIdFromIrsaliyeler(irsaliyeler, selectedIrsIds, ftSaLink || undefined);
+
+    const syncIrsaliyeLinks = (faturaNo: string) => {
+      if (!setIrsaliyeler || !faturaNo) return;
+      setIrsaliyeler(prev => prev.map(ir => {
+        if (selectedIrsIds.includes(ir.id)) {
+          return { ...ir, faturaNo };
+        }
+        if (ir.faturaNo === faturaNo && !selectedIrsIds.includes(ir.id)) {
+          return { ...ir, faturaNo: undefined };
+        }
+        return ir;
+      }));
+    };
 
     if (editingFtId) {
       setFaturalar(prev => prev.map(ft => {
         if (ft.id === editingFtId) {
+          syncIrsaliyeLinks(ftNo);
           return {
             ...ft,
             faturaNo: ftNo,
             tarih: ftDate,
             cariUnvan: ftSupplier,
             cariKartId: cariKartlar.find(c => c.unvan === ftSupplier)?.id || "",
-            saId: ftSaLink || undefined,
+            saId: resolvedSaId,
             toplamTutar: calculatedSub,
             kdvTutar: calculatedKdv,
             genelToplam: calculatedGrand,
@@ -292,7 +311,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
         tarih: ftDate,
         cariUnvan: ftSupplier,
         cariKartId: cariKartlar.find(c => c.unvan === ftSupplier)?.id || "",
-        saId: ftSaLink || undefined,
+        saId: resolvedSaId,
         toplamTutar: calculatedSub,
         kdvTutar: calculatedKdv,
         genelToplam: calculatedGrand,
@@ -302,6 +321,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
         imzaliEvrakUrl: ftSignedAttachmentUrl || undefined,
         bagliIrsaliyeler: selectedIrsIds
       };
+      syncIrsaliyeLinks(ftNo);
       setFaturalar(prev => [newFt, ...prev]);
     }
 
@@ -449,8 +469,8 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
   const handleCompareAndReport = async (ft: Fatura) => {
     setIsComparing(true);
     try {
-      const linkedIrs = irsaliyeler.filter(ir => ft.bagliIrsaliyeler.includes(ir.id));
-      const saTalebi = satinAlmaTalepleri.find(sa => sa.saId === ft.saId);
+      const linkedIrs = filterLinkedIrsaliyeler(irsaliyeler, ft.bagliIrsaliyeler);
+      const saTalebi = satinAlmaTalepleri.find(sa => sa.saId === (ft.saId || linkedIrs.find(ir => ir.saId)?.saId));
 
       const res = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
         '/api/compare-3way',
@@ -495,6 +515,9 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
     ft.cariUnvan.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const bagliFaturalar = filteredFaturalar.filter(faturaIsLinked);
+  const bagimsizFaturalar = filteredFaturalar.filter(ft => !faturaIsLinked(ft));
+
   const filteredReports = reports.filter(r => 
     r.faturaNo.toLowerCase().includes(reportSearchTerm.toLowerCase()) ||
     r.cariUnvan.toLowerCase().includes(reportSearchTerm.toLowerCase())
@@ -511,13 +534,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
             💳 Şantiye Fatura Kayıt ve Yapay Zeka Eşleştirme Paneli
           </h2>
         </div>
-        <div className="flex space-x-2">
-          <button
-            onClick={() => setActiveTab('liste')}
-            className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'liste' ? 'bg-[#2563eb] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
-          >
-            📋 Faturalar Listesi
-          </button>
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => {
               setActiveTab('giris');
@@ -525,13 +542,19 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
             }}
             className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'giris' ? 'bg-[#2563eb] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
           >
-            ➕ Yeni Fatura Girişi (AI)
+            1 · Fatura Giriş (Manuel / AI)
+          </button>
+          <button
+            onClick={() => setActiveTab('liste')}
+            className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'liste' ? 'bg-[#2563eb] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
+          >
+            2 · İrsaliye / SA ile Bağla
           </button>
           <button
             onClick={() => setActiveTab('karsilastir')}
             className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'karsilastir' ? 'bg-[#2563eb] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
           >
-            🔄 Karşılaştır &amp; Ödemeye Onayla
+            3 · 3&apos;lü / 2&apos;li AI Karşılaştır
           </button>
         </div>
       </div>
@@ -625,6 +648,8 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
                     onChange={(e) => {
                       const options = (Array.from(e.target.selectedOptions) as HTMLOptionElement[]).map(opt => opt.value);
                       setSelectedIrsIds(options);
+                      const autoSa = resolveSaIdFromIrsaliyeler(irsaliyeler, options, ftSaLink || undefined);
+                      if (autoSa) setFtSaLink(autoSa);
                     }}
                     className="w-full text-[10px] font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg h-20"
                   >
@@ -788,7 +813,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
         <div className="flex-grow flex flex-col lg:flex-row gap-6">
           <div className="flex-1 bg-white border border-slate-200 rounded-3xl flex flex-col overflow-hidden shadow-xs">
             <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <span className="font-extrabold text-[10px] text-slate-500 uppercase tracking-widest">📋 MEVCUT ŞANTİYE FATURALARI</span>
+              <span className="font-extrabold text-[10px] text-blue-700 uppercase tracking-widest">BAĞLI FATURALAR (İrsaliye / SA)</span>
               <input 
                 type="text"
                 placeholder="Fatura veya firma ara..."
@@ -797,39 +822,30 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
                 className="text-xs border p-2 rounded-xl bg-white w-48 sm:w-64"
               />
             </div>
-
             <div className="flex-grow overflow-y-auto p-4 space-y-4">
-              {filteredFaturalar.length === 0 ? (
-                <p className="text-xs text-slate-400 italic text-center py-6">Kayıtlı fatura bulunmuyor.</p>
+              {bagliFaturalar.length === 0 ? (
+                <p className="text-xs text-slate-400 italic text-center py-6">Bağlı fatura bulunmuyor.</p>
               ) : (
-                filteredFaturalar.map(ft => (
+                bagliFaturalar.map(ft => (
                   <div key={ft.id} className="border border-slate-100 rounded-2xl p-4 bg-white hover:shadow transition flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xs">
                     <div className="space-y-1.5 flex-1">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-mono bg-slate-900 text-amber-500 rounded px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider">No: {ft.faturaNo}</span>
-                        {ft.saId && <span className="font-mono bg-blue-50 border text-blue-700 px-2 py-0.5 rounded font-bold">Sipariş: {ft.saId}</span>}
+                      <div className="flex items-center flex-wrap gap-2">
+                        <span className="font-mono bg-slate-900 text-amber-500 rounded px-2.5 py-0.5 text-[9px] font-bold uppercase">No: {ft.faturaNo}</span>
+                        {ft.saId && <span className="font-mono bg-blue-50 border text-blue-700 px-2 py-0.5 rounded font-bold">SA: {ft.saId}</span>}
+                        {ft.bagliIrsaliyeler?.length > 0 && (
+                          <span className="font-mono bg-emerald-50 border text-emerald-700 px-2 py-0.5 rounded font-bold">
+                            {ft.bagliIrsaliyeler.length} irsaliye
+                          </span>
+                        )}
                       </div>
                       <h5 className="font-bold text-slate-950">Firma: {ft.cariUnvan} · Tarih: {ft.tarih}</h5>
                       <p className="text-[10px] text-slate-450 font-semibold">
-                        KDV Dahil Genel Toplam: <strong className="text-slate-900 font-extrabold">{ft.genelToplam.toLocaleString('tr-TR')} TL</strong> (Matrah: {ft.toplamTutar.toLocaleString('tr-TR')} TL)
+                        Genel Toplam: <strong className="text-slate-900">{ft.genelToplam.toLocaleString('tr-TR')} TL</strong>
                       </p>
                     </div>
-
-                    <div className="flex gap-2 text-[10px]">
-                      <button
-                        onClick={() => handlePreviewPdf(ft)}
-                        className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1"
-                      >
-                        <Printer size={13} />
-                        Kayıdı PDF Önizle
-                      </button>
-                      <button
-                        onClick={() => handleCompareAndReport(ft)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl font-black transition cursor-pointer flex items-center gap-1 shadow-sm"
-                      >
-                        <Sparkles size={13} />
-                        AI Eşleştir
-                      </button>
+                    <div className="flex flex-wrap gap-2 text-[10px]">
+                      <button onClick={() => handlePreviewPdf(ft)} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-xl font-bold cursor-pointer">PDF</button>
+                      <button onClick={() => handleCompareAndReport(ft)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl font-black cursor-pointer">AI Karşılaştır</button>
                       <button
                         onClick={() => {
                           setEditingFtId(ft.id);
@@ -839,24 +855,59 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
                           setFtSaLink(ft.saId || "");
                           setFtItems(ft.kalemler);
                           setSelectedIrsIds(ft.bagliIrsaliyeler);
-                          setFtAttachmentUrl(ft.evrakUrl || null);
-                          setFtSignedAttachmentUrl(ft.imzaliEvrakUrl || null);
                           setActiveTab('giris');
                         }}
-                        className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-250 px-3 py-1.5 rounded-xl font-bold transition cursor-pointer"
+                        className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-3 py-1.5 rounded-xl font-bold cursor-pointer"
                       >
-                        ✏️ Düzelt
+                        Düzenle
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="w-full lg:w-[480px] bg-white border border-slate-200 rounded-3xl flex flex-col overflow-hidden shadow-xs">
+            <div className="p-4 border-b border-slate-200 bg-slate-50/50">
+              <span className="font-extrabold text-[10px] text-slate-500 uppercase tracking-widest">BAĞIMSIZ FATURALAR</span>
+            </div>
+            <div className="flex-grow overflow-y-auto p-4 space-y-4">
+              {bagimsizFaturalar.length === 0 ? (
+                <p className="text-xs text-slate-400 italic text-center py-6">Bağımsız fatura yok.</p>
+              ) : (
+                bagimsizFaturalar.map(ft => (
+                  <div key={ft.id} className="border border-slate-100 rounded-2xl p-4 bg-white hover:shadow transition flex flex-col gap-3 text-xs">
+                    <div>
+                      <span className="font-mono bg-slate-100 border text-slate-700 px-2 py-0.5 rounded font-bold">No: {ft.faturaNo}</span>
+                      <h5 className="font-bold text-slate-900 mt-2">{ft.cariUnvan} · {ft.tarih}</h5>
+                      <p className="text-[10px] text-slate-500">{ft.genelToplam.toLocaleString('tr-TR')} TL</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingFtId(ft.id);
+                          setFtNo(ft.faturaNo);
+                          setFtDate(ft.tarih);
+                          setFtSupplier(ft.cariUnvan);
+                          setFtSaLink(ft.saId || "");
+                          setFtItems(ft.kalemler);
+                          setSelectedIrsIds(ft.bagliIrsaliyeler);
+                          setActiveTab('giris');
+                        }}
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl font-bold cursor-pointer"
+                      >
+                        Bağla / Düzenle
                       </button>
                       <button
                         onClick={() => {
                           if (window.confirm("Bu faturayı silmek istediğinize emin misiniz?")) {
                             setFaturalar(prev => prev.filter(x => x.id !== ft.id));
-                            alert("Fatura silindi.");
                           }
                         }}
-                        className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3 py-1.5 rounded-xl font-bold transition cursor-pointer"
+                        className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3 py-1.5 rounded-xl font-bold cursor-pointer"
                       >
-                        🗑️ Sil
+                        Sil
                       </button>
                     </div>
                   </div>

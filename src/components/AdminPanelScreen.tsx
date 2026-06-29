@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { sanitizeKisitliSayfalar } from '../lib/yetkiUtils';
 import { 
   Users, KeySquare, ShieldAlert, Trash2, CheckCircle, 
   XOctagon, UserCheck, AlertCircle, RefreshCw, Key,
@@ -131,7 +132,8 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
         }
         return {
           ...u,
-          yetki: newYetki
+          yetki: newYetki,
+          kisitliSayfalar: sanitizeKisitliSayfalar(newYetki, u.kisitliSayfalar),
         };
       }
       return u;

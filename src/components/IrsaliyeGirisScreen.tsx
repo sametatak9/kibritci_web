@@ -6,6 +6,8 @@ import {
 import { Irsaliye, IrsaliyeItem, SatinAlmaTalebi, CariKart, StokKart } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
 import { fetchApiJson } from '../lib/apiClient';
+import { fileToAiPayload } from '../lib/aiFileUpload';
+import { irsaliyeMatchesRef } from '../lib/documentLinkUtils';
 
 interface IrsaliyeGirisScreenProps {
   irsaliyeler: Irsaliye[];
@@ -111,7 +113,7 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
     }
   };
 
-  const processIrsaliyeAi = (file: File) => {
+  const processIrsaliyeAi = async (file: File) => {
     const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
     if (!allowedTypes.includes(file.type)) {
       setIrParseError("Lütfen sadece PDF veya Görsel (PNG, JPG, WEBP) formatında İrsaliye yükleyiniz.");
@@ -122,18 +124,16 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
     setIrParseError(null);
     setIrParseSuccess(null);
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const rawBase64 = (reader.result as string).split(',')[1];
-        const resData = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
-          '/api/parse-irsaliye',
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fileBase64: rawBase64, mimeType: file.type }),
-          }
-        );
+    try {
+      const { fileBase64, mimeType } = await fileToAiPayload(file);
+      const resData = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
+        '/api/parse-irsaliye',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileBase64, mimeType }),
+        }
+      );
         if (!resData.success) {
           throw new Error(resData.error || 'İrsaliye belgesi çözümlenirken hata oluştu.');
         }
@@ -156,13 +156,11 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
           formatted.forEach((item: any) => checkAndSuggestStok(item.urunAdi, item.birim));
         }
         setIrParseSuccess(`Yapay Zeka Okuması Başarılı! No: ${parsed.irsaliyeNo || ''}`);
-      } catch (err: any) {
-        setIrParseError(err.message || "Dosya çözümlenemedi.");
-      } finally {
-        setIsIrParsing(false);
-      }
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      setIrParseError(err.message || "Dosya çözümlenemedi.");
+    } finally {
+      setIsIrParsing(false);
+    }
   };
 
   const checkAndSuggestCari = (name: string) => {
@@ -357,13 +355,7 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
             🚛 Şantiye İrsaliye, Makbuz ve Fiş Giriş Paneli
           </h2>
         </div>
-        <div className="flex space-x-2">
-          <button
-            onClick={() => setActiveTab('liste')}
-            className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'liste' ? 'bg-[#10b981] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
-          >
-            📋 İrsaliye Listesi
-          </button>
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => {
               setActiveTab('giris');
@@ -371,13 +363,19 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
             }}
             className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'giris' ? 'bg-[#10b981] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
           >
-            ➕ Yeni İrsaliye Girişi (AI)
+            1 · İrsaliye Giriş (Manuel / AI)
+          </button>
+          <button
+            onClick={() => setActiveTab('liste')}
+            className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'liste' ? 'bg-[#10b981] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
+          >
+            2 · Satın Alma ile Eşleştir
           </button>
           <button
             onClick={() => setActiveTab('eslestir')}
             className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'eslestir' ? 'bg-[#10b981] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
           >
-            🔄 Eşleştir &amp; Birleştir
+            3 · SA–İrsaliye AI Karşılaştır
           </button>
         </div>
       </div>
@@ -593,7 +591,7 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
           {/* Linked waybills list */}
           <div className="flex-1 bg-white border border-slate-200 rounded-3xl flex flex-col overflow-hidden shadow-xs">
             <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <span className="font-extrabold text-[10px] text-slate-500 uppercase tracking-widest">🔄 SATIN ALMA BAĞLANTILI İRSALİYELER</span>
+              <span className="font-extrabold text-[10px] text-emerald-700 uppercase tracking-widest">SATIN ALMALI İRSALİYELER</span>
               <input 
                 type="text"
                 placeholder="İrsaliye no veya firma ara..."
@@ -633,14 +631,15 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                             if (setFaturalar) {
                               setFaturalar((prev: any[]) => prev.map(ft => {
                                 if (ft.faturaNo === selectedFaturaNo) {
-                                  const alreadyHas = ft.bagliIrsaliyeler.includes(ir.irsaliyeNo);
+                                  const alreadyHas = ft.bagliIrsaliyeler.some((ref: string) => irsaliyeMatchesRef(ir, ref));
                                   if (!alreadyHas) {
-                                    return { ...ft, bagliIrsaliyeler: [...ft.bagliIrsaliyeler, ir.irsaliyeNo] };
+                                    const saFromIr = ir.saId && !ft.saId ? { saId: ir.saId } : {};
+                                    return { ...ft, ...saFromIr, bagliIrsaliyeler: [...ft.bagliIrsaliyeler, ir.id] };
                                   }
                                 } else {
                                   return {
                                     ...ft,
-                                    bagliIrsaliyeler: ft.bagliIrsaliyeler.filter((id: string) => id !== ir.irsaliyeNo)
+                                    bagliIrsaliyeler: ft.bagliIrsaliyeler.filter((ref: string) => !irsaliyeMatchesRef(ir, ref))
                                   };
                                 }
                                 return ft;
@@ -684,7 +683,7 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
           {/* Standalone waybills list */}
           <div className="w-full lg:w-[480px] bg-white border border-slate-200 rounded-3xl flex flex-col overflow-hidden shadow-xs">
             <div className="p-4 border-b border-slate-200 bg-slate-50/50">
-              <span className="font-extrabold text-[10px] text-slate-500 uppercase tracking-widest">📋 SADE / DOĞRUDAN İRSALİYELER</span>
+              <span className="font-extrabold text-[10px] text-slate-500 uppercase tracking-widest">SATIN ALMASIZ İRSALİYELER</span>
             </div>
 
             <div className="flex-grow overflow-y-auto p-4 space-y-4">
@@ -722,14 +721,15 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                           if (setFaturalar) {
                             setFaturalar((prev: any[]) => prev.map(ft => {
                               if (ft.faturaNo === selectedFaturaNo) {
-                                const alreadyHas = ft.bagliIrsaliyeler.includes(ir.irsaliyeNo);
+                                const alreadyHas = ft.bagliIrsaliyeler.some((ref: string) => irsaliyeMatchesRef(ir, ref));
                                 if (!alreadyHas) {
-                                  return { ...ft, bagliIrsaliyeler: [...ft.bagliIrsaliyeler, ir.irsaliyeNo] };
+                                  const saFromIr = ir.saId && !ft.saId ? { saId: ir.saId } : {};
+                                  return { ...ft, ...saFromIr, bagliIrsaliyeler: [...ft.bagliIrsaliyeler, ir.id] };
                                 }
                               } else {
                                 return {
                                   ...ft,
-                                  bagliIrsaliyeler: ft.bagliIrsaliyeler.filter((id: string) => id !== ir.irsaliyeNo)
+                                  bagliIrsaliyeler: ft.bagliIrsaliyeler.filter((ref: string) => !irsaliyeMatchesRef(ir, ref))
                                 };
                               }
                               return ft;
