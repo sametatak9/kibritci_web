@@ -79,6 +79,8 @@ export interface KampFaaliyetSatiri {
   id: string;
   tarih: string;
   tarihLabel: string;
+  tarihDate: string;
+  tarihDay: string;
   faaliyetTipi: string;
   aciklama: string;
   siraNo: number;
@@ -86,12 +88,17 @@ export interface KampFaaliyetSatiri {
 
 export function prepareKampFaaliyetRaporu(items: { id?: string; tarih?: string; faaliyetTipi?: string; aciklama?: string }[]): KampFaaliyetSatiri[] {
   const sorted = [...items].sort((a, b) => (a.tarih || '').localeCompare(b.tarih || ''));
-  return sorted.map((kf, idx) => ({
-    id: kf.id || `kamp-${idx}`,
-    tarih: kf.tarih || '',
-    tarihLabel: formatReportDate(kf.tarih || ''),
-    faaliyetTipi: kf.faaliyetTipi || '—',
-    aciklama: kf.aciklama || '—',
-    siraNo: idx + 1,
-  }));
+  return sorted.map((kf, idx) => {
+    const { date, day } = formatReportDateParts(kf.tarih || '');
+    return {
+      id: kf.id || `kamp-${idx}`,
+      tarih: kf.tarih || '',
+      tarihLabel: formatReportDate(kf.tarih || ''),
+      tarihDate: date,
+      tarihDay: day,
+      faaliyetTipi: kf.faaliyetTipi || '—',
+      aciklama: kf.aciklama || '—',
+      siraNo: idx + 1,
+    };
+  });
 }
