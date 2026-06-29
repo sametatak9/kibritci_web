@@ -279,7 +279,7 @@ export default function App() {
         setLoadingMsg('Aylık personel puantaj cetvelleri yükleniyor...');
         let attData = await seedYoklamaIfEmpty(INITIAL_YOKLAMA);
 
-        const { bootstrapLegacyYoklama, markLegacyYoklamaBootstrapped } = await import('./lib/legacyYoklamaBootstrap');
+        const { bootstrapLegacyYoklama, markLegacyYoklamaBootstrapped, mayis2026NeedsBootstrap } = await import('./lib/legacyYoklamaBootstrap');
         const legacyMerge = bootstrapLegacyYoklama(personnelData, attData);
         if (legacyMerge) {
           personnelData = legacyMerge.personeller;
@@ -290,7 +290,10 @@ export default function App() {
               await saveDocument('personeller', p);
             }
           }
-          markLegacyYoklamaBootstrapped();
+          if (!mayis2026NeedsBootstrap(attData)) {
+            markLegacyYoklamaBootstrapped();
+          }
+          setLoadingMsg(`Excel yoklamaları Firestore'a kaydedildi (${legacyMerge.importedDays} gün)...`);
           console.log(`Legacy yoklama birleştirildi: ${legacyMerge.importedDays} gün`);
         }
 
@@ -330,7 +333,25 @@ export default function App() {
         setKampKayitlari(stayLogData);
 
         setLoadingMsg('Saha günlük faaliyet dökümleri arşivleniyor...');
-        const reportData = await seedCollectionIfEmpty('sahaFaaliyetleri', INITIAL_SAHA);
+        let reportData = await seedCollectionIfEmpty('sahaFaaliyetleri', INITIAL_SAHA);
+
+        const {
+          bootstrapLegacySahaFaaliyet,
+          markLegacySahaFaaliyetBootstrapped,
+          mayis2026SahaNeedsBootstrap,
+        } = await import('./lib/legacySahaFaaliyetBootstrap');
+        const sahaMerge = bootstrapLegacySahaFaaliyet(reportData);
+        if (sahaMerge) {
+          for (const sf of sahaMerge.filter(s => s.id.startsWith('SF-MAY26-'))) {
+            await saveDocument('sahaFaaliyetleri', sf);
+          }
+          reportData = sahaMerge;
+          if (!mayis2026SahaNeedsBootstrap(reportData)) {
+            markLegacySahaFaaliyetBootstrapped();
+          }
+          console.log(`Mayıs 2026 saha faaliyetleri yüklendi: ${sahaMerge.filter(s => s.id.startsWith('SF-MAY26-')).length} kayıt`);
+        }
+
         setSahaFaaliyetleri(reportData);
 
         setLoadingMsg('Hukuki ve resmi şantiye hazır tutanaklar yükleniyor...');

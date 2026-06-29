@@ -6,7 +6,6 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 registerApiRoutes(app);
 
-// CJS interop — serverless-http ESM'de cold start'ta patlayabiliyor
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const serverlessHttp = require('serverless-http');
 const slsHandler =
@@ -18,13 +17,12 @@ const slsHandler =
         binary: ['image/*', 'application/pdf', 'application/octet-stream'],
       });
 
-/** Vercel runtime açık (req, res) handler bekler — bare export crash verir */
-export default function vercelHandler(
+async function vercelHandler(
   req: express.Request,
   res: express.Response
-): Promise<unknown> | void {
+): Promise<unknown> {
   try {
-    return slsHandler(req, res);
+    return await slsHandler(req, res);
   } catch (err: unknown) {
     console.error('Vercel API crash:', err);
     const message = err instanceof Error ? err.message : 'Internal server error';
@@ -34,9 +32,11 @@ export default function vercelHandler(
   }
 }
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
+const vercelConfig = {
+  api: { bodyParser: false as const },
   maxDuration: 60,
 };
+
+// CJS export — root package.json "type":"module" api/ klasöründe api/package.json ile override edilir
+module.exports = vercelHandler;
+module.exports.config = vercelConfig;
