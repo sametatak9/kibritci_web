@@ -11,7 +11,8 @@ esbuild.buildSync({
   format: 'cjs',
   outfile: outFile,
   sourcemap: true,
-  packages: 'bundle',
+  // @google/genai node_modules'tan yüklensin — bundle ESM/CJS çakışması önlenir
+  packages: 'external',
 });
 
 console.log('Built Vercel API handler ->', outFile);
