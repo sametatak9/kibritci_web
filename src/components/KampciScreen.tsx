@@ -8,6 +8,7 @@ import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { createKampYerleske, createKampKat, katsForYerleske, createKampOdasi, deleteKampOdasi, hasLegacySeedRooms, purgeLegacyKampData, purgeAllKampData } from '../lib/kampYapisi';
 import { assignKampResident, evictKampResident, suggestPersonelKaydi } from '../lib/kampPlacementUtils';
+import { isProductionLive } from '../lib/productionDataGuard';
 import { buildKampciGunlukOzet } from '../lib/gunlukAkisUtils';
 import { buildWhatsAppUrl } from '../lib/mobilOnayUtils';
 import { KampHaftalikYoklamaTab } from './KampHaftalikYoklamaTab';
@@ -306,11 +307,11 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   };
 
   const handlePurgeAllKamp = async () => {
-    if (
-      !window.confirm(
-        'Tüm kamp verisi (yerleşke, kat, oda, konaklama) kalıcı silinecek. Devam edilsin mi?'
-      )
-    ) {
+    const msg = 'Tüm kamp verisi (yerleşke, kat, oda, konaklama) kalıcı silinecek.';
+    if (isProductionLive()) {
+      const typed = window.prompt(`${msg}\n\nCanlı sistem. Silmek için SIFIRLA yazın:`);
+      if (typed !== 'SIFIRLA') return;
+    } else if (!window.confirm(`${msg} Devam edilsin mi?`)) {
       return;
     }
     setClearingAll(true);

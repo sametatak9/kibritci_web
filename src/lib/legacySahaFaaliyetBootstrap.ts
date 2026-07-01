@@ -7,6 +7,7 @@ import {
   HAZIRAN_2026_SAHA_FAALIYETLERI,
   HAZIRAN_2026_SAHA_FAALIYET_COUNT,
 } from '../data/haziran2026SahaFaaliyetleri';
+import { isProductionLive } from './productionDataGuard';
 
 export const LEGACY_SAHA_FAALIYET_VERSION = 3;
 const STORAGE_KEY = 'kibritci_legacy_saha_faaliyet_v';
@@ -39,10 +40,14 @@ export function haziran2026SahaNeedsBootstrap(existing: SahaFaaliyeti[]): boolea
 }
 
 export function shouldBootstrapLegacySahaFaaliyet(existing: SahaFaaliyeti[]): boolean {
+  if (isProductionLive() && existing.length >= 40) return false;
+
+  const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+  if (stored === String(LEGACY_SAHA_FAALIYET_VERSION)) return false;
+
   if (mayis2026SahaNeedsBootstrap(existing)) return true;
   if (haziran2026SahaNeedsBootstrap(existing)) return true;
-  const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
-  return stored !== String(LEGACY_SAHA_FAALIYET_VERSION);
+  return false;
 }
 
 export function markLegacySahaFaaliyetBootstrapped(): void {

@@ -60,6 +60,11 @@ import {
   saveDocument
 } from './lib/firebase';
 import {
+  hasSubstantialYoklamaData,
+  initialSeedAllowed,
+  markProductionLive,
+} from './lib/productionDataGuard';
+import {
   normalizeYetki,
   getRoleHomeTab,
   isMobileRole,
@@ -292,11 +297,19 @@ export default function App() {
         setLoadingMsg('Güvenli veritabanı oturumu kontrol ediliyor...');
         
         setLoadingMsg('Şantiye personel kadrosu eşitleniyor...');
-        let personnelData = await seedCollectionIfEmpty('personeller', INITIAL_PERSONEL);
+        const allowDemoSeed = initialSeedAllowed();
+        let personnelData = await seedCollectionIfEmpty(
+          'personeller',
+          allowDemoSeed ? INITIAL_PERSONEL : []
+        );
         const personnelIdsBefore = new Set(personnelData.map(p => p.id));
 
         setLoadingMsg('Aylık personel puantaj cetvelleri yükleniyor...');
-        let attData = await seedYoklamaIfEmpty(INITIAL_YOKLAMA);
+        let attData = await seedYoklamaIfEmpty(allowDemoSeed ? INITIAL_YOKLAMA : {});
+
+        if (hasSubstantialYoklamaData(attData)) {
+          markProductionLive();
+        }
 
         const { bootstrapLegacyYoklama, markLegacyYoklamaBootstrapped, mayis2026NeedsBootstrap } = await import('./lib/legacyYoklamaBootstrap');
         const legacyMerge = bootstrapLegacyYoklama(personnelData, attData);
@@ -304,30 +317,40 @@ export default function App() {
           personnelData = legacyMerge.personeller;
           attData = legacyMerge.yoklamalar;
           console.log(`Legacy yoklama bellekte birleştirildi: ${legacyMerge.importedDays} gün`);
-          // Firestore kaydı arka planda — açılışı bloklamasın
-          const mergedPersonel = personnelData;
-          const mergedYoklama = attData;
-          const idsBefore = personnelIdsBefore;
-          void (async () => {
-            try {
-              await saveYoklamaDocument(mergedYoklama);
-              for (const p of mergedPersonel) {
-                if (!idsBefore.has(p.id)) {
-                  await saveDocument('personeller', p);
+          if (!hasSubstantialYoklamaData(attData)) {
+            const mergedPersonel = personnelData;
+            const mergedYoklama = attData;
+            const idsBefore = personnelIdsBefore;
+            void (async () => {
+              try {
+                await saveYoklamaDocument(mergedYoklama);
+                for (const p of mergedPersonel) {
+                  if (!idsBefore.has(p.id)) {
+                    await saveDocument('personeller', p);
+                  }
                 }
+                if (!mayis2026NeedsBootstrap(mergedYoklama)) {
+                  markLegacyYoklamaBootstrapped();
+                }
+                console.log('Legacy yoklama Firestore arka plan kaydı tamamlandı');
+              } catch (bgErr) {
+                console.error('Legacy yoklama arka plan kaydı başarısız (uygulama yine de açık):', bgErr);
               }
-              if (!mayis2026NeedsBootstrap(mergedYoklama)) {
-                markLegacyYoklamaBootstrapped();
-              }
-              console.log('Legacy yoklama Firestore arka plan kaydı tamamlandı');
-            } catch (bgErr) {
-              console.error('Legacy yoklama arka plan kaydı başarısız (uygulama yine de açık):', bgErr);
-            }
-          })();
+            })();
+          } else {
+            markLegacyYoklamaBootstrapped();
+            markProductionLive();
+          }
         }
 
         setPersoneller(personnelData);
         setYoklamalar(attData);
+        if (hasSubstantialYoklamaData(attData)) {
+          markProductionLive();
+        }
+        if (personnelData.length >= 20) {
+          markProductionLive();
+        }
 
         setLoadingMsg('Satın alma ve hakediş talepleri eşitleniyor...');
         const reqData = await seedCollectionIfEmpty('satinAlmaTalepleri', INITIAL_SATIN_ALMA);
@@ -368,22 +391,27 @@ export default function App() {
         if (sahaMerge) {
           reportData = sahaMerge;
           console.log(`Legacy saha faaliyet bellekte birleştirildi: ${reportData.length} kayıt`);
-          const mergedSaha = reportData;
-          void (async () => {
-            try {
-              for (const sf of mergedSaha) {
-                if (sf.id?.startsWith('SF-MAY26-') || sf.id?.startsWith('SF-HAZ26-')) {
-                  await saveDocument('sahaFaaliyetleri', sf);
+          if (reportData.length < 50) {
+            const mergedSaha = reportData;
+            void (async () => {
+              try {
+                for (const sf of mergedSaha) {
+                  if (sf.id?.startsWith('SF-MAY26-') || sf.id?.startsWith('SF-HAZ26-')) {
+                    await saveDocument('sahaFaaliyetleri', sf);
+                  }
                 }
+                if (!haziran2026SahaNeedsBootstrap(mergedSaha)) {
+                  markLegacySahaFaaliyetBootstrapped();
+                }
+                console.log('Legacy saha faaliyet Firestore kaydı tamamlandı');
+              } catch (bgErr) {
+                console.error('Legacy saha faaliyet arka plan kaydı başarısız:', bgErr);
               }
-              if (!haziran2026SahaNeedsBootstrap(mergedSaha)) {
-                markLegacySahaFaaliyetBootstrapped();
-              }
-              console.log('Legacy saha faaliyet Firestore kaydı tamamlandı');
-            } catch (bgErr) {
-              console.error('Legacy saha faaliyet arka plan kaydı başarısız:', bgErr);
-            }
-          })();
+            })();
+          } else {
+            markLegacySahaFaaliyetBootstrapped();
+            markProductionLive();
+          }
         }
         setSahaFaaliyetleri(reportData);
 
@@ -446,38 +474,11 @@ export default function App() {
         setDbStatus('synced');
       } catch (err) {
         console.error('Firebase synchronisation error: ', err);
-        setDbStatus('offline'); // fallback gracefully to offline sandbox simulation
-        
-        // Populate fallback sandbox state
-        setPersoneller(INITIAL_PERSONEL);
-        setYoklamalar(INITIAL_YOKLAMA);
-        setSatinAlmaTalepleri(INITIAL_SATIN_ALMA);
-        setIrsaliyeler(INITIAL_IRSALIYE);
-        setFaturalar(INITIAL_FATURA);
-        setKasaHareketleri(INITIAL_KASA);
-        setAraclar(INITIAL_ARAC);
-        setDemirbaslar([]);
-        setKampOdalari([]);
-        setKampKayitlari([]);
-        setSahaFaaliyetleri(INITIAL_SAHA);
-        setHazirTutanaklar(INITIAL_TUTANAK);
-        setCariKartlar(INITIAL_CARI);
-        setStokKartlar(INITIAL_STOK);
-        setEpostaGonderimleri(INITIAL_EPOSTA);
-        setKullanicilar([
-          { id: 'santiye@kibritci.com', email: 'santiye@kibritci.com', yetki: 'YÖNETİCİ', durum: 'AKTİF', kayitTarihi: '2026-06-19' }
-        ]);
-        setAracKmLoglari([
-          { id: 'log_1', tarih: '2026-06-15', plaka: '34 KBR 888', surucu: 'Ayhan Yılmaz', sabahKm: 41200, aksamKm: 41350, fark: 150 },
-          { id: 'log_2', tarih: '2026-06-16', plaka: '34 KBR 888', surucu: 'Ayhan Yılmaz', sabahKm: 41350, aksamKm: 41580, fark: 230 },
-          { id: 'log_3', tarih: '2026-06-17', plaka: '06 KBR 101', surucu: 'Mehmet Kaplan', sabahKm: 85400, aksamKm: 85920, fark: 520 },
-        ]);
-        setOperatorFaaliyetleri(INITIAL_OPERATOR_FAALIYET);
-        setTaseronKesintiRaporlari(INITIAL_TASERON_KESINTI);
-        setMaasOdemeleri(INITIAL_MAAS_ODEME);
-        setPersonelIslemGecmisi(INITIAL_PERSONEL_ISLEM);
-        setCariIslemGecmisi(INITIAL_CARI_ISLEM);
-        setStokIslemGecmisi(INITIAL_STOK_ISLEM);
+        setDbStatus('error');
+        alert(
+          'Veritabanı bağlantısı kurulamadı. Lütfen internet bağlantınızı kontrol edip sayfayı yenileyin. ' +
+          'Girdiğiniz veriler korunur; demo verisi yüklenmedi.'
+        );
       }
     }
 
@@ -500,30 +501,15 @@ export default function App() {
   }, [authLoading, currentUser, dbStatus]);
 
   const switchToOfflineMode = () => {
-    setDbStatus('offline');
-    setPersoneller(INITIAL_PERSONEL);
-    setYoklamalar(INITIAL_YOKLAMA);
-    setSatinAlmaTalepleri(INITIAL_SATIN_ALMA);
-    setIrsaliyeler(INITIAL_IRSALIYE);
-    setFaturalar(INITIAL_FATURA);
-    setKasaHareketleri(INITIAL_KASA);
-    setAraclar(INITIAL_ARAC);
-    setDemirbaslar([]);
-    setKampOdalari([]);
-    setKampKayitlari([]);
-    setSahaFaaliyetleri(INITIAL_SAHA);
-    setHazirTutanaklar(INITIAL_TUTANAK);
-    setCariKartlar(INITIAL_CARI);
-    setStokKartlar(INITIAL_STOK);
-    setEpostaGonderimleri(INITIAL_EPOSTA);
-    setKullanicilar([
-      { id: 'santiye@kibritci.com', email: 'santiye@kibritci.com', yetki: 'YÖNETİCİ', durum: 'AKTİF', kayitTarihi: '2026-06-19' }
-    ]);
-    setAracKmLoglari([
-      { id: 'log_1', tarih: '2026-06-15', plaka: '34 KBR 888', surucu: 'Ayhan Yılmaz', sabahKm: 41200, aksamKm: 41350, fark: 150 },
-      { id: 'log_2', tarih: '2026-06-16', plaka: '34 KBR 888', surucu: 'Ayhan Yılmaz', sabahKm: 41350, aksamKm: 41580, fark: 230 },
-      { id: 'log_3', tarih: '2026-06-17', plaka: '06 KBR 101', surucu: 'Mehmet Kaplan', sabahKm: 85400, aksamKm: 85920, fark: 520 },
-    ]);
+    if (
+      !window.confirm(
+        'Bağlantı beklenmeden devam edilecek. Demo verisi YÜKLENMEZ; yalnızca Firestore\'dan gelen kayıtlar görünür. Devam?'
+      )
+    ) {
+      return;
+    }
+    markProductionLive();
+    setDbStatus('synced');
   };
 
   // 1.5 Real-time Synchronization for core collections when in synced mode
@@ -560,6 +546,14 @@ export default function App() {
         list.push({ id: doc.id, ...doc.data() } as any);
       });
       setPersoneller(list);
+      if (list.length >= 20) markProductionLive();
+    });
+
+    const unsubYoklamalar = onSnapshot(doc(db, 'yoklamalar', 'global_yoklama_map'), (snap) => {
+      if (!snap.exists()) return;
+      const data = ((snap.data() as { data?: AylikYoklamaMap }).data) || {};
+      setYoklamalar(data);
+      if (hasSubstantialYoklamaData(data)) markProductionLive();
     });
 
     const unsubKullanicilar = onSnapshot(collection(db, 'kullanicilar'), (snapshot) => {
@@ -600,6 +594,7 @@ export default function App() {
         list.push({ id: doc.id, ...doc.data() } as any);
       });
       setKampOdalari(list);
+      if (list.length > 0) markProductionLive();
     });
 
     const unsubKampKayitlari = onSnapshot(collection(db, 'kampKayitlari'), (snapshot) => {
@@ -697,6 +692,7 @@ export default function App() {
       unsubFaturalar();
       unsubSatinAlma();
       unsubPersonel();
+      unsubYoklamalar();
       unsubKullanicilar();
       unsubSahaFaaliyetleri();
       unsubKasaHareketleri();
@@ -1119,6 +1115,26 @@ export default function App() {
   }
 
   // Full screen high fidelity, stylized loader screen during first startup
+  if (dbStatus === 'error') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-white p-8">
+        <AlertCircle className="text-rose-400 mb-4" size={48} />
+        <h1 className="text-lg font-bold mb-2">Veritabanı Bağlantı Hatası</h1>
+        <p className="text-sm text-slate-400 text-center max-w-md mb-6">
+          Kayıtlı verileriniz Firestore&apos;da güvendedir. Bağlantı kurulamadığı için demo verisi yüklenmedi.
+        </p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold px-6 py-3 rounded-xl"
+        >
+          <RefreshCw size={16} />
+          Sayfayı Yenile
+        </button>
+      </div>
+    );
+  }
+
   if (dbStatus === 'loading') {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-white p-8 select-none">
@@ -1148,7 +1164,7 @@ export default function App() {
                 onClick={switchToOfflineMode}
                 className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-extrabold text-[11px] py-2.5 px-4 rounded-xl transition duration-150 shadow-md flex items-center justify-center space-x-1.5 cursor-pointer"
               >
-                <span>⚡ BAĞLANTIYI ATLA & DEMO SİMÜLASYONUNDA ÇALIŞTIR</span>
+                <span>⚡ BEKLEMEYİ ATLA (demo verisi yüklenmez)</span>
               </button>
             </div>
           </div>

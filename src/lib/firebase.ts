@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
+import { shouldBlockMassDelete } from './productionDataGuard';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -157,9 +158,38 @@ export async function seedYoklamaIfEmpty(initialYoklama: any): Promise<any> {
   return {};
 }
 
-export async function saveYoklamaDocument(yoklamaMap: any): Promise<void> {
+export async function fetchYoklamaDocument(): Promise<Record<string, unknown>> {
+  const snapshot = await withTimeout(getDocs(collection(db, 'yoklamalar')));
+  const globalDoc = snapshot.docs.find((d) => d.id === 'global_yoklama_map');
+  if (globalDoc) return ((globalDoc.data() as { data?: Record<string, unknown> }).data) || {};
+  return {};
+}
+
+/** Uzak kayıttaki personelleri korur; yerel güncellemeler üstüne yazılır */
+export function mergeYoklamaMaps(
+  remote: Record<string, unknown>,
+  local: Record<string, unknown>
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...remote };
+  for (const [personId, days] of Object.entries(local || {})) {
+    const remoteDays = (result[personId] as Record<string, unknown>) || {};
+    result[personId] = { ...remoteDays, ...(days as Record<string, unknown>) };
+  }
+  return result;
+}
+
+export async function saveYoklamaDocument(yoklamaMap: Record<string, unknown>): Promise<void> {
   const docRef = doc(db, 'yoklamalar', 'global_yoklama_map');
-  await withTimeout(setDoc(docRef, cleanUndefined({ data: yoklamaMap })), 45000);
+  let payload = yoklamaMap;
+  try {
+    const remote = await fetchYoklamaDocument();
+    if (Object.keys(remote).length > 0) {
+      payload = mergeYoklamaMaps(remote, yoklamaMap);
+    }
+  } catch {
+    /* yerel kayıt */
+  }
+  await withTimeout(setDoc(docRef, cleanUndefined({ data: payload })), 45000);
 }
 
 /**
@@ -171,6 +201,10 @@ export async function syncArrayToFirestore<T extends { id: string }>(
   newArray: T[]
 ): Promise<void> {
   try {
+    if (shouldBlockMassDelete(collectionName, oldArray.length, newArray.length)) {
+      return;
+    }
+
     const oldMap = new Map(oldArray.map(item => [item.id, item]));
     const newMap = new Map(newArray.map(item => [item.id, item]));
 

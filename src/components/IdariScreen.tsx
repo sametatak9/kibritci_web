@@ -27,6 +27,7 @@ import {
   updateKampKatAdi,
 } from '../lib/kampYapisi';
 import { assignKampResident, evictKampResident, suggestPersonelKaydi } from '../lib/kampPlacementUtils';
+import { isProductionLive } from '../lib/productionDataGuard';
 import { compressImage } from '../lib/imageCompress';
 import { collection, onSnapshot, getDocs, doc, setDoc } from 'firebase/firestore';
 
@@ -418,11 +419,14 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   };
 
   const handlePurgeAllKampData = async () => {
-    if (
-      !window.confirm(
-        'TÜM kamp verisi (yerleşkeler, katlar, odalar, konaklama kayıtları) kalıcı olarak silinecek. Sayfa yenilense bile boş kalır. Devam edilsin mi?'
-      )
-    ) {
+    const msg =
+      'TÜM kamp verisi (yerleşkeler, katlar, odalar, konaklama kayıtları) kalıcı olarak silinecek.';
+    if (isProductionLive()) {
+      const typed = window.prompt(
+        `${msg}\n\nCanlı sistem aktif. Silmek için büyük harflerle SIFIRLA yazın:`
+      );
+      if (typed !== 'SIFIRLA') return;
+    } else if (!window.confirm(`${msg} Devam edilsin mi?`)) {
       return;
     }
     try {
