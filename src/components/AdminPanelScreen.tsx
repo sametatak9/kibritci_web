@@ -1,9 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { persistKullaniciRole, dedupeKullanicilarByEmail, saveKullanici, deleteKullaniciByEmail, findKullaniciByEmail } from '../lib/kullaniciUtils';
+import {
+  approveBekleyenSignup,
+  BekleyenUyelik,
+  createManualUser,
+  fetchApiPendingSignups,
+  mergePendingLists,
+  readLocalPendingQueue,
+  rejectBekleyenSignup,
+  subscribeBekleyenUyelikler,
+} from '../lib/bekleyenUyelik';
 import { 
   Users, KeySquare, ShieldAlert, Trash2, CheckCircle, 
   XOctagon, UserCheck, AlertCircle, RefreshCw, Key,
-  Eye, Check, Clipboard, CheckSquare, Save, Loader2
+  Eye, Check, Clipboard, CheckSquare, Save, Loader2, UserPlus, Clock
 } from 'lucide-react';
 import { fetchCollection, removeDocument, saveDocument } from '../lib/firebase';
 
@@ -69,13 +79,52 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
   addNotification
 }) => {
   const visibleKullanicilar = dedupeKullanicilarByEmail(kullanicilar);
-  const [activeTab, setActiveTab] = useState<'users' | 'errors'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'pending' | 'create' | 'errors'>('users');
   const [hataRaporlari, setHataRaporlari] = useState<HataRaporu[]>([]);
   const [loadingErrors, setLoadingErrors] = useState(false);
   const [selectedError, setSelectedError] = useState<HataRaporu | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [pendingRoles, setPendingRoles] = useState<Record<string, string>>({});
   const [savingRoleEmail, setSavingRoleEmail] = useState<string | null>(null);
+
+  const [firestorePending, setFirestorePending] = useState<BekleyenUyelik[]>([]);
+  const [apiPending, setApiPending] = useState<BekleyenUyelik[]>([]);
+  const [loadingPending, setLoadingPending] = useState(false);
+  const [pendingApproveRoles, setPendingApproveRoles] = useState<Record<string, string>>({});
+  const [approvingEmail, setApprovingEmail] = useState<string | null>(null);
+
+  const [createEmail, setCreateEmail] = useState('');
+  const [createPassword, setCreatePassword] = useState('');
+  const [createAd, setCreateAd] = useState('');
+  const [createSoyad, setCreateSoyad] = useState('');
+  const [createTcNo, setCreateTcNo] = useState('');
+  const [createYetki, setCreateYetki] = useState<string>('KAMPÇI');
+  const [creatingUser, setCreatingUser] = useState(false);
+
+  const mergedPending = mergePendingLists(
+    firestorePending,
+    apiPending,
+    readLocalPendingQueue()
+  );
+
+  const loadApiPending = useCallback(async () => {
+    setLoadingPending(true);
+    try {
+      const items = await fetchApiPendingSignups();
+      setApiPending(items);
+    } finally {
+      setLoadingPending(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'pending') return;
+    loadApiPending();
+    const unsub = subscribeBekleyenUyelikler(setFirestorePending, (err) =>
+      console.warn('bekleyenUyelikler dinleyici hatası:', err)
+    );
+    return () => unsub();
+  }, [activeTab, loadApiPending]);
 
   // Load error reports
   const loadErrorReports = async () => {
@@ -166,6 +215,91 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
       alert('Rol kaydedilemedi. Lütfen tekrar deneyin.');
     } finally {
       setSavingRoleEmail(null);
+    }
+  };
+
+  const handleApprovePending = async (record: BekleyenUyelik) => {
+    const yetki = pendingApproveRoles[record.email] || 'MİSAFİR';
+    setApprovingEmail(record.email);
+    try {
+      const created = await approveBekleyenSignup(record, yetki);
+      setKullanicilar((prev) =>
+        dedupeKullanicilarByEmail([
+          ...prev.filter((u) => u.email?.toLowerCase() !== record.email.toLowerCase()),
+          created as Kullanici,
+        ])
+      );
+      await loadApiPending();
+      alert(`✅ ${record.email} onaylandı ve "${yetki}" rolüyle oluşturuldu.`);
+      if (addNotification) {
+        addNotification(`${record.email} bekleyen kayıttan onaylandı (${yetki}).`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Onay başarısız. Firebase kotası dolu olabilir — yarın tekrar deneyin.');
+    } finally {
+      setApprovingEmail(null);
+    }
+  };
+
+  const handleRejectPending = async (record: BekleyenUyelik) => {
+    if (!confirm(`"${record.email}" bekleyen kaydını reddetmek istiyor musunuz?`)) return;
+    try {
+      await rejectBekleyenSignup(record);
+      await loadApiPending();
+      alert('Kayıt reddedildi.');
+    } catch {
+      alert('Kayıt reddedilemedi.');
+    }
+  };
+
+  const handleCreateManualUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createEmail.trim() || !createPassword.trim() || !createAd.trim() || !createSoyad.trim()) {
+      alert('E-posta, şifre, ad ve soyad zorunludur.');
+      return;
+    }
+    if (createPassword.trim().length < 6) {
+      alert('Şifre en az 6 karakter olmalıdır.');
+      return;
+    }
+    if (findKullaniciByEmail(kullanicilar, createEmail.trim())) {
+      alert('Bu e-posta zaten kayıtlı.');
+      return;
+    }
+
+    setCreatingUser(true);
+    try {
+      const { user, queued } = await createManualUser({
+        email: createEmail.trim(),
+        password: createPassword.trim(),
+        ad: createAd.trim(),
+        soyad: createSoyad.trim(),
+        tcNo: createTcNo.trim() || undefined,
+        yetki: createYetki,
+      });
+
+      if (queued) {
+        alert('Firebase kotası dolu. Kullanıcı bekleyen kayıtlar sekmesine alındı — oradan onaylayın.');
+        setActiveTab('pending');
+        await loadApiPending();
+      } else {
+        setKullanicilar((prev) => dedupeKullanicilarByEmail([...prev, user as Kullanici]));
+        alert(`✅ ${user.email} oluşturuldu (${createYetki}).`);
+        if (addNotification) {
+          addNotification(`Admin manuel kullanıcı oluşturdu: ${user.email} (${createYetki})`);
+        }
+        setCreateEmail('');
+        setCreatePassword('');
+        setCreateAd('');
+        setCreateSoyad('');
+        setCreateTcNo('');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Kullanıcı oluşturulamadı.');
+    } finally {
+      setCreatingUser(false);
     }
   };
 
@@ -272,7 +406,29 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
               }`}
             >
               <Users size={14} />
-              <span>ÜYE YETKİLENDİRME VE ROLLER ({visibleKullanicilar.length})</span>
+              <span>ÜYE YETKİLENDİRME ({visibleKullanicilar.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('pending')}
+              className={`px-4 py-3 text-xs font-extrabold flex items-center gap-2 transition-all outline-none cursor-pointer border-b-2 ${
+                activeTab === 'pending'
+                  ? 'border-amber-500 text-slate-900 font-black'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Clock size={14} className={mergedPending.length > 0 ? 'text-amber-500 animate-pulse' : ''} />
+              <span>BEKLEYEN KAYITLAR ({mergedPending.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('create')}
+              className={`px-4 py-3 text-xs font-extrabold flex items-center gap-2 transition-all outline-none cursor-pointer border-b-2 ${
+                activeTab === 'create'
+                  ? 'border-amber-500 text-slate-900 font-black'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <UserPlus size={14} />
+              <span>MANUEL KULLANICI OLUŞTUR</span>
             </button>
             <button
               onClick={() => setActiveTab('errors')}
@@ -283,9 +439,20 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
               }`}
             >
               <ShieldAlert size={14} className={hataRaporlari.some(h => h.status === 'YENİ') ? 'text-rose-500 animate-pulse' : ''} />
-              <span>SİSTEM HATA RAPORLARI ({hataRaporlari.length})</span>
+              <span>HATA RAPORLARI ({hataRaporlari.length})</span>
             </button>
           </div>
+
+          {activeTab === 'pending' && (
+            <button
+              onClick={loadApiPending}
+              disabled={loadingPending}
+              className="text-slate-500 hover:text-slate-800 p-1.5 hover:bg-slate-200 rounded transition outline-none cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+            >
+              <RefreshCw size={11} className={loadingPending ? 'animate-spin' : ''} />
+              <span>Yenile</span>
+            </button>
+          )}
 
           {activeTab === 'errors' && (
             <button
@@ -467,6 +634,172 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                 </div>
               )}
             </div>
+          )}
+
+          {/* TAB: BEKLEYEN KAYITLAR */}
+          {activeTab === 'pending' && (
+            <div className="space-y-3 max-w-5xl mx-auto w-full">
+              <p className="text-[10px] text-slate-500 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                Firebase kotası dolduğunda kayıt formundan gelen üyelikler buraya düşer. Rol seçip <strong>ONAYLA</strong> dediğinizde hesap oluşturulur.
+              </p>
+              {mergedPending.length === 0 ? (
+                <div className="py-16 text-center text-slate-400 flex flex-col items-center gap-2">
+                  <CheckCircle size={32} className="text-emerald-400" />
+                  <p className="text-xs font-semibold">Bekleyen kayıt yok.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {mergedPending.map((record) => (
+                    <div
+                      key={record.email}
+                      className="border border-slate-200 rounded-2xl p-4 bg-white flex flex-col md:flex-row md:items-center gap-4"
+                    >
+                      <div className="flex-grow min-w-0 space-y-1">
+                        <p className="font-bold text-slate-900 truncate">{record.email}</p>
+                        <p className="text-[11px] text-slate-600">
+                          {record.ad} {record.soyad} · TC: {record.tcNo}
+                        </p>
+                        <p className="text-[9px] text-slate-400 font-mono">
+                          {new Date(record.olusturulma).toLocaleString('tr-TR')} · {record.kaynak}
+                          {record.hataSebebi ? ` · ${record.hataSebebi}` : ''}
+                          {record.apiYedek ? ' · API yedek' : ''}
+                        </p>
+                      </div>
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+                        <select
+                          className="p-2 text-[11px] font-bold rounded-lg border bg-slate-50"
+                          value={pendingApproveRoles[record.email] ?? 'MİSAFİR'}
+                          onChange={(e) =>
+                            setPendingApproveRoles((prev) => ({
+                              ...prev,
+                              [record.email]: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="MİSAFİR">MİSAFİR</option>
+                          <option value="KAMPÇI">KAMPÇI</option>
+                          <option value="FORMEN">FORMEN</option>
+                          <option value="GÜVENLİK">GÜVENLİK</option>
+                          <option value="LOJİSTİK">LOJİSTİK</option>
+                          <option value="DEPOCU">DEPOCU</option>
+                          <option value="MUHASEBE">MUHASEBE</option>
+                          <option value="YÖNETİCİ">YÖNETİCİ</option>
+                        </select>
+                        <button
+                          type="button"
+                          disabled={approvingEmail === record.email}
+                          onClick={() => handleApprovePending(record)}
+                          className="flex items-center justify-center gap-1 px-3 py-2 text-[10px] font-black rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white cursor-pointer disabled:opacity-60"
+                        >
+                          {approvingEmail === record.email ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            <Check size={12} />
+                          )}
+                          ONAYLA
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRejectPending(record)}
+                          className="flex items-center justify-center gap-1 px-3 py-2 text-[10px] font-black rounded-lg bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 cursor-pointer"
+                        >
+                          <XOctagon size={12} />
+                          REDDET
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB: MANUEL KULLANICI */}
+          {activeTab === 'create' && (
+            <form
+              onSubmit={handleCreateManualUser}
+              className="max-w-lg mx-auto w-full space-y-4 bg-white border border-slate-200 rounded-2xl p-5"
+            >
+              <p className="text-[10px] text-slate-500">
+                Firebase kotası uygunsa kullanıcı anında oluşturulur. Kota doluysa bekleyen kayıtlara düşer.
+              </p>
+              <div>
+                <label className="text-[9px] font-bold text-slate-500 uppercase">E-posta *</label>
+                <input
+                  type="email"
+                  required
+                  value={createEmail}
+                  onChange={(e) => setCreateEmail(e.target.value)}
+                  className="w-full mt-1 p-2.5 text-xs border rounded-xl"
+                  placeholder="ornek@firma.com"
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-slate-500 uppercase">Şifre * (min 6)</label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={createPassword}
+                  onChange={(e) => setCreatePassword(e.target.value)}
+                  className="w-full mt-1 p-2.5 text-xs border rounded-xl"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[9px] font-bold text-slate-500 uppercase">Ad *</label>
+                  <input
+                    required
+                    value={createAd}
+                    onChange={(e) => setCreateAd(e.target.value)}
+                    className="w-full mt-1 p-2.5 text-xs border rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-slate-500 uppercase">Soyad *</label>
+                  <input
+                    required
+                    value={createSoyad}
+                    onChange={(e) => setCreateSoyad(e.target.value)}
+                    className="w-full mt-1 p-2.5 text-xs border rounded-xl"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-slate-500 uppercase">TC No (opsiyonel)</label>
+                <input
+                  value={createTcNo}
+                  onChange={(e) => setCreateTcNo(e.target.value)}
+                  className="w-full mt-1 p-2.5 text-xs border rounded-xl"
+                  maxLength={11}
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-slate-500 uppercase">Rol *</label>
+                <select
+                  value={createYetki}
+                  onChange={(e) => setCreateYetki(e.target.value)}
+                  className="w-full mt-1 p-2.5 text-xs font-bold border rounded-xl bg-slate-50"
+                >
+                  <option value="KAMPÇI">KAMPÇI</option>
+                  <option value="FORMEN">FORMEN</option>
+                  <option value="GÜVENLİK">GÜVENLİK</option>
+                  <option value="LOJİSTİK">LOJİSTİK</option>
+                  <option value="DEPOCU">DEPOCU</option>
+                  <option value="MUHASEBE">MUHASEBE</option>
+                  <option value="YÖNETİCİ">YÖNETİCİ</option>
+                  <option value="MİSAFİR">MİSAFİR</option>
+                </select>
+              </div>
+              <button
+                type="submit"
+                disabled={creatingUser}
+                className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs py-3 rounded-xl cursor-pointer disabled:opacity-60"
+              >
+                {creatingUser ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+                KULLANICI OLUŞTUR
+              </button>
+            </form>
           )}
 
           {/* TAB 2: SYSTEM ERRORS */}

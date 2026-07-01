@@ -7,9 +7,11 @@ import {
   Check, X, FileText, UserPlus, Upload, ShieldCheck, Edit2, ArrowLeft
 } from 'lucide-react';
 import { Personel, AylikYoklamaMap, YoklamaDurum, SahaFaaliyeti as SahaFaaliyetiType } from '../types/erp';
-import { db } from '../lib/firebase';
+import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { getYoklamaDay, setYoklamaDay } from '../lib/yoklamaUtils';
+import { buildFormenGunlukOzet } from '../lib/gunlukAkisUtils';
+import { buildWhatsAppUrl, isLegacySahaRecord } from '../lib/mobilOnayUtils';
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 interface FormenScreenProps {
@@ -51,7 +53,8 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   }, [isStandalone]);
 
   // Active Tab: 'yoklama' | 'saha_faaliyet' | 'faaliyet_gecmis' | 'personel_giris' | 'personel_listesi' | 'toplu_puantaj'
-  const [activeTab, setActiveTab] = useState<'yoklama' | 'saha_faaliyet' | 'faaliyet_gecmis' | 'personel_giris' | 'personel_listesi' | 'toplu_puantaj'>('yoklama');
+  const [activeTab, setActiveTab] = useState<'yoklama' | 'saha_faaliyet' | 'faaliyet_gecmis' | 'personel_giris' | 'personel_listesi' | 'toplu_puantaj' | 'gunluk_akis'>('yoklama');
+  const [sendingGunlukAkis, setSendingGunlukAkis] = useState(false);
 
   // Selected cell state for bulk weekly puantaj
   const [selectedCell, setSelectedCell] = useState<{
@@ -109,6 +112,16 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     const localToday = new Date(today.getTime() - (offset * 60 * 1000));
     return localToday.toISOString().split('T')[0];
   });
+
+  const formenEmail = currentUser?.email?.trim().toLowerCase() || '';
+  const visibleSahaFaaliyetleri = sahaFaaliyetleri.filter(
+    (f) =>
+      !isLegacySahaRecord(f.id) &&
+      ((f as SahaFaaliyetiType & { kaydedenFormen?: string }).kaydedenFormen
+        ? (f as SahaFaaliyetiType & { kaydedenFormen?: string }).kaydedenFormen === formenEmail
+        : f.tarih >= selectedDate)
+  );
+  const daySahaFaaliyetleri = visibleSahaFaaliyetleri.filter((f) => f.tarih === selectedDate);
 
   // Parsed date components
   const [year, month, day] = selectedDate.split('-').map(Number);
@@ -249,9 +262,9 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
         tarih: selectedDate,
         formen: currentUser?.email || 'Bilinmeyen Formen',
         tamamlamaTarihi: new Date().toISOString(),
-        durum: 'TAMAMLANDI',
-        notlar: "Formen günü tamamladı, puantaj ve saha raporları onaylandı.",
-        hazirlayan: currentUser?.displayName || 'Sahadaki Formen'
+        durum: 'ONAY BEKLİYOR',
+        notlar: "Formen günü tamamladı, puantaj ve saha raporları onay için gönderildi.",
+        hazirlayan: currentUser?.displayName || currentUser?.email || 'Sahadaki Formen'
       });
       await logActionToPersonelHistory('Günü Tamamladı', `${selectedDate.split('-').reverse().join('.')} tarihli iş gününü başarıyla tamamladı ve onay için ana programa bildirdi.`);
       alert("🎉 Şantiye iş günü başarıyla tamamlandı ve ana programa bildirildi!");
@@ -424,7 +437,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
       let completed = false;
       snapshot.forEach((doc) => {
         const d = doc.data();
-        if (d.tarih === selectedDate && d.formen?.toLowerCase() === currentUser?.email?.toLowerCase() && d.durum === 'TAMAMLANDI') {
+        if (d.tarih === selectedDate && d.formen?.toLowerCase() === currentUser?.email?.toLowerCase() && (d.durum === 'TAMAMLANDI' || d.durum === 'ONAY BEKLİYOR' || d.durum === 'ONAYLANDI')) {
           completed = true;
         }
       });
@@ -564,9 +577,9 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
       return;
     }
 
-    const newFaaliyet: SahaFaaliyetiType = {
+    const newFaaliyet: SahaFaaliyetiType & { kaydedenFormen?: string } = {
       id: `sf_${Date.now()}`,
-      personelId: currentUser?.uid || 'formen_uid', // Logged in foreman
+      personelId: currentUser?.uid || 'formen_uid',
       tarih: selectedDate,
       isNiteligi,
       parsel,
@@ -574,7 +587,8 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
       aciklama,
       fotoUrl: fotoUrl || undefined,
       ustaSayisi: sahaUstaSayisi,
-      isciSayisi: sahaIsciSayisi
+      isciSayisi: sahaIsciSayisi,
+      kaydedenFormen: formenEmail,
     };
 
     setSahaFaaliyetleri(prev => [newFaaliyet, ...prev]);
@@ -589,9 +603,53 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     setSahaIsciSayisi(0);
   };
 
+  const handleSendGunlukAkis = async () => {
+    if (!window.confirm(`${selectedDate} tarihli günlük akış raporunu yönetime göndermek istiyor musunuz?`)) return;
+    setSendingGunlukAkis(true);
+    try {
+      const gelenIsimler = activeStaff
+        .filter((p) => presentIds.includes(p.id))
+        .map((p) => `${p.ad} ${p.soyad}`);
+      const ozetMetin = buildFormenGunlukOzet({
+        tarih: selectedDate,
+        email: formenEmail,
+        gelen: presentIds.length,
+        gelmeyen: Math.max(0, activeStaff.length - presentIds.length),
+        toplam: activeStaff.length,
+        gelenIsimler,
+        sahaCount: daySahaFaaliyetleri.length,
+        girisCount: personelGirisListesi.filter((g) => g.tarih?.startsWith(selectedDate)).length,
+        cikisCount: isCikisTalepleriList.filter((c) => c.tarih?.startsWith(selectedDate)).length,
+      });
+      const raporId = `formen_akis_${selectedDate}_${formenEmail.replace(/[@.]/g, '-')}`;
+      await saveDocument('mobilGunlukAkisRaporlari', {
+        id: raporId,
+        tip: 'FORMEN',
+        tarih: selectedDate,
+        gonderenEmail: formenEmail,
+        ozetMetin,
+        yoklamaOzet: {
+          gelen: presentIds.length,
+          gelmeyen: Math.max(0, activeStaff.length - presentIds.length),
+          toplam: activeStaff.length,
+          isimler: gelenIsimler,
+        },
+        sahaFaaliyetSayisi: daySahaFaaliyetleri.length,
+        durum: 'ONAY BEKLİYOR',
+        olusturulma: new Date().toISOString(),
+      });
+      showStatus('success', 'Günlük akış raporu yönetim onayına gönderildi!');
+    } catch (err) {
+      console.error(err);
+      showStatus('error', 'Rapor gönderilemedi.');
+    } finally {
+      setSendingGunlukAkis(false);
+    }
+  };
+
   const handleSaveGunlukRapor = async () => {
     const reportId = `report_${selectedDate}`;
-    const dayActivities = sahaFaaliyetleri.filter(f => f.tarih === selectedDate);
+    const dayActivities = daySahaFaaliyetleri;
     const presentStaffNames = activeStaff
       .filter(p => presentIds.includes(p.id))
       .map(p => `${p.ad} ${p.soyad} (${p.gorev})`);
@@ -762,7 +820,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
               </div>
 
               {/* Segmented control tabs */}
-              <div className="grid grid-cols-6 gap-0.5 bg-slate-950 p-1 rounded-xl">
+              <div className="flex flex-wrap gap-1 bg-slate-950 p-1 rounded-xl">
                 <button
                   onClick={() => setActiveTab('yoklama')}
                   className={`py-1.5 rounded-lg text-[8px] font-extrabold flex flex-col items-center justify-center transition duration-150 cursor-pointer ${
@@ -815,7 +873,16 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                   }`}
                 >
                   <Users size={11} className="mb-0.5" />
-                  <span>Personeller</span>
+                  <span>Personel</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('gunluk_akis')}
+                  className={`flex-1 min-w-[4.5rem] py-1.5 rounded-lg text-[8px] font-extrabold flex flex-col items-center justify-center transition duration-150 cursor-pointer ${
+                    activeTab === 'gunluk_akis' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Send size={11} className="mb-0.5" />
+                  <span>Günlük Akış</span>
                 </button>
               </div>
             </div>
@@ -1358,7 +1425,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
 
                   <div className="bg-amber-50/60 border border-amber-200 p-3 rounded-2xl space-y-2">
                     <p className="text-[8.5px] font-bold text-amber-900 leading-normal">
-                      Bugün için girilen <strong>{sahaFaaliyetleri.filter(f => f.tarih === selectedDate).length} adet</strong> faaliyeti ve yoklama durumlarını tek bir resmi raporda birleştirip onaylayın.
+                      Bugün için girilen <strong>{daySahaFaaliyetleri.length} adet</strong> faaliyeti ve yoklama durumlarını tek bir resmi raporda birleştirip onaylayın.
                     </p>
                     
                     <button
@@ -1492,7 +1559,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                     </div>
 
                     <div className="space-y-3.5 divide-y divide-slate-100 max-h-96 overflow-y-auto pr-1">
-                      {sahaFaaliyetleri.filter(f => 
+                      {visibleSahaFaaliyetleri.filter(f => 
                         f.isNiteligi.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase()) ||
                         f.parsel.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase()) ||
                         (f.blok && f.blok.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase())) ||
@@ -1500,7 +1567,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                       ).length === 0 ? (
                         <p className="text-[9px] text-slate-400 italic text-center py-8">Aranan kriterlere uygun faaliyet bulunamadı.</p>
                       ) : (
-                        sahaFaaliyetleri
+                        visibleSahaFaaliyetleri
                           .filter(f => 
                             f.isNiteligi.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase()) ||
                             f.parsel.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase()) ||
@@ -1785,11 +1852,22 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
 _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                         </div>
                         <a
-                          href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
-                            `*KİBRİTÇİ ERP - YENİ PERSONEL İŞE GİRİŞ BİLDİRİMİ*\n----------------------------------------\n*Ad Soyad:* ${sonGirisTalebi.ad} ${sonGirisTalebi.soyad}\n*Görev/Branş:* ${sonGirisTalebi.gorev}\n*Tarih:* ${new Date().toLocaleDateString('tr-TR')}\n*Gönderen:* ${currentUser?.email || 'Bilinmeyen'}\n----------------------------------------\n_Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`
-                          )}`}
+                          href={buildWhatsAppUrl(
+                            `*KİBRİTÇİ ERP - YENİ PERSONEL İŞE GİRİŞ BİLDİRİMİ*\n----------------------------------------\n*Ad Soyad:* ${sonGirisTalebi.ad} ${sonGirisTalebi.soyad}\n*Görev/Branş:* ${sonGirisTalebi.gorev}\n*Tarih:* ${new Date().toLocaleDateString('tr-TR')}\n*Gönderen:* ${currentUser?.email || 'Bilinmeyen Formen'}\n*Kayıt Linki:* ${window.location.origin}/?view_giris=${sonGirisTalebi.id}\n----------------------------------------\n_Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`
+                          )}
                           target="_blank"
                           rel="noopener noreferrer"
+                          onClick={async () => {
+                            try {
+                              await setDoc(
+                                doc(db, 'personelGirisTalepleri', sonGirisTalebi.id),
+                                { durum: 'WP_GÖNDERİLDİ' },
+                                { merge: true }
+                              );
+                            } catch (e) {
+                              console.warn(e);
+                            }
+                          }}
                           className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[9px] py-2 rounded-lg flex items-center justify-center space-x-1 shadow-sm transition active:scale-95"
                         >
                           <span>💬 WhatsApp'tan Gönder</span>
@@ -2219,6 +2297,36 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                 </div>
               )}
 
+              {activeTab === 'gunluk_akis' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
+                    <h3 className="text-xs font-black text-slate-900">📋 Günlük Akış Özeti — {selectedDate.split('-').reverse().join('.')}</h3>
+                    <p className="text-[10px] text-slate-500">Formen: <strong>{formenEmail}</strong></p>
+                    <ul className="text-[10px] text-slate-700 space-y-1">
+                      <li>✓ Yoklama: {presentIds.length} geldi / {activeStaff.length} toplam</li>
+                      <li>✓ Saha faaliyeti: {daySahaFaaliyetleri.length} kayıt</li>
+                      <li>✓ Personel giriş talebi: {personelGirisListesi.filter((g) => g.tarih?.startsWith(selectedDate)).length}</li>
+                    </ul>
+                    {daySahaFaaliyetleri.length > 0 && (
+                      <div className="border-t pt-2 space-y-1">
+                        {daySahaFaaliyetleri.map((sf) => (
+                          <p key={sf.id} className="text-[9px] text-slate-600">• {sf.isNiteligi} — {sf.parsel}/{sf.blok}</p>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      disabled={sendingGunlukAkis}
+                      onClick={handleSendGunlukAkis}
+                      className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-60"
+                    >
+                      {sendingGunlukAkis ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
+                      GÜN SONU RAPORUNU YÖNETİME GÖNDER
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {activeTab === 'toplu_puantaj' && (
                 <div className="space-y-3.5 animate-in fade-in duration-150">
                   <div className="bg-white rounded-3xl border p-4 shadow-xs space-y-3">
@@ -2562,12 +2670,12 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                   </div>
 
                   <div className="space-y-3">
-                    {sahaFaaliyetleri.filter(f => f.tarih === selectedDate).length === 0 ? (
+                    {daySahaFaaliyetleri.length === 0 ? (
                       <div className="text-center py-4 bg-rose-50/50 border border-rose-100 rounded-xl text-rose-800 italic text-[9px]">
                         Bugün için girilmiş herhangi bir imalat faaliyeti bulunmamaktadır. Raporu göndermeden önce imalat girişi yapabilirsiniz.
                       </div>
                     ) : (
-                      sahaFaaliyetleri.filter(f => f.tarih === selectedDate).map((sf, idx) => (
+                      daySahaFaaliyetleri.map((sf, idx) => (
                         <div key={sf.id} className="border border-slate-200 rounded-xl p-3 bg-slate-50/30 space-y-1.5">
                           <div className="flex justify-between items-center border-b border-slate-150 pb-1.5">
                             <span className="font-black text-slate-900 text-[10.5px]">

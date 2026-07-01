@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Tent, Plus, Trash2, Camera, Check, RefreshCw, Eye, 
-  Search, UserPlus, ClipboardList, Package, Layers, MapPin, Sparkles, CheckCircle, Clock, X, ArrowRight, ShieldCheck, DoorOpen, LogOut
+  Search, UserPlus, ClipboardList, Package, Layers, MapPin, Sparkles, CheckCircle, Clock, X, ArrowRight, ShieldCheck, DoorOpen, LogOut, Image as ImageIcon, MessageSquare
 } from 'lucide-react';
 import { KampOdasi, KampKaydi, Personel, StokKart, KampYerleske, KampKat } from '../types/erp';
 import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { createKampYerleske, createKampKat, katsForYerleske, createKampOdasi, deleteKampOdasi, hasLegacySeedRooms, purgeLegacyKampData } from '../lib/kampYapisi';
-import { collection, onSnapshot, doc, updateDoc, query, orderBy } from 'firebase/firestore';
+import { buildKampciGunlukOzet } from '../lib/gunlukAkisUtils';
+import { buildWhatsAppUrl } from '../lib/mobilOnayUtils';
+import { collection, onSnapshot, doc, updateDoc, setDoc, query, orderBy } from 'firebase/firestore';
 
 interface KampciScreenProps {
   kampOdalari: KampOdasi[];
@@ -35,7 +37,8 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   addNotification
 }) => {
   // Tabs: 'rooms' (Oda & Kat Açma) | 'placement' (Kampa Yerleşim) | 'warehouse' (Depo Sayımı) | 'activities' (Günlük Faaliyetler)
-  const [activeSubTab, setActiveSubTab] = useState<'rooms' | 'placement' | 'warehouse' | 'activities'>('placement');
+  const [activeSubTab, setActiveSubTab] = useState<'rooms' | 'placement' | 'warehouse' | 'activities' | 'gunluk_akis' | 'personel_giris'>('placement');
+  const [sendingKampAkis, setSendingKampAkis] = useState(false);
   const [viewMode, setViewMode] = useState<'web' | 'mobile'>('web');
 
   // ─────────────────────────────────────────────────────────────
@@ -109,7 +112,8 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
     if (stokKartlar && stokKartlar.length > 0) {
       const dynamicMiktarlar: Record<string, number> = {};
       stokKartlar.forEach(item => {
-        dynamicMiktarlar[item.urunAdi] = 0;
+        const ad = item.stokAdi || item.urunAdi || 'Stok';
+        dynamicMiktarlar[ad] = 0;
       });
       setSayimMiktarlari(dynamicMiktarlar);
     }
@@ -124,6 +128,16 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   const [faaliyetAciklama, setFaaliyetAciklama] = useState('');
   const [faaliyetFoto, setFaaliyetFoto] = useState<string | null>(null);
   const [loadingFaaliyet, setLoadingFaaliyet] = useState(false);
+
+  // ─────────────────────────────────────────────────────────────
+  // 🚪 PERSONEL GİRİŞE YOLLA (Formen ile aynı onay akışı)
+  // ─────────────────────────────────────────────────────────────
+  const [yeniAd, setYeniAd] = useState('');
+  const [yeniSoyad, setYeniSoyad] = useState('');
+  const [yeniGorev, setYeniGorev] = useState('');
+  const [yeniKimlikFoto, setYeniKimlikFoto] = useState<string | null>(null);
+  const [sonGirisTalebi, setSonGirisTalebi] = useState<{ id: string; ad: string; soyad: string; gorev: string } | null>(null);
+  const [girisTalepleriList, setGirisTalepleriList] = useState<any[]>([]);
 
   // Real-time Firestore subscriptions for custom collections
   useEffect(() => {
@@ -166,13 +180,29 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       setKatlar(list);
     });
 
+    const girisColl = collection(db, 'personelGirisTalepleri');
+    const unsubGiris = onSnapshot(girisColl, (snap) => {
+      const list: any[] = [];
+      const email = currentUser?.email?.toLowerCase() || '';
+      snap.forEach((d) => {
+        const data = { id: d.id, ...d.data() };
+        const sender = String(data.gonderenKampci || data.gonderenFormen || '').toLowerCase();
+        if (sender === email && (data.kaynakPanel === 'KAMPÇI' || data.gonderenKampci)) {
+          list.push(data);
+        }
+      });
+      list.sort((a, b) => new Date(b.tarih).getTime() - new Date(a.tarih).getTime());
+      setGirisTalepleriList(list);
+    });
+
     return () => {
       unsubCounts();
       unsubActs();
       unsubYerleske();
       unsubKat();
+      unsubGiris();
     };
-  }, []);
+  }, [currentUser?.email]);
 
   useEffect(() => {
     if (yerleskeler.length > 0 && !selectedYerleskeId) {
@@ -526,6 +556,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
         id: sayimId,
         tarih: new Date().toISOString().slice(0, 10),
         sayimYapan: currentUser?.email || 'kampci_amiri',
+        kaydeden: currentUser?.email || 'kampci_amiri',
         kalemler: list,
         durum: 'ONAY BEKLİYOR',
         onaylayanIdariIsler: null,
@@ -590,6 +621,76 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       showStatus('error', 'Günlük faaliyet kaydedilirken hata oluştu.');
     } finally {
       setLoadingFaaliyet(false);
+    }
+  };
+
+  const handleSubmitKampGirisTalebi = async () => {
+    if (!yeniAd.trim() || !yeniSoyad.trim() || !yeniGorev.trim()) {
+      showStatus('error', 'Ad, soyad ve görev alanlarını doldurunuz.');
+      return;
+    }
+    if (!yeniKimlikFoto) {
+      showStatus('error', 'Kimlik fotoğrafı zorunludur.');
+      return;
+    }
+    try {
+      const requestID = `GIRIS-KAMP-${Date.now()}`;
+      const email = currentUser?.email || 'kampci';
+      await setDoc(doc(db, 'personelGirisTalepleri', requestID), {
+        ad: yeniAd.trim(),
+        soyad: yeniSoyad.trim(),
+        gorev: yeniGorev.trim(),
+        kimlikFotoUrl: yeniKimlikFoto,
+        durum: 'BEKLEMEDE',
+        tarih: new Date().toISOString(),
+        gonderenFormen: email,
+        gonderenKampci: email,
+        kaynakPanel: 'KAMPÇI',
+      });
+      setSonGirisTalebi({ id: requestID, ad: yeniAd.trim(), soyad: yeniSoyad.trim(), gorev: yeniGorev.trim() });
+      setYeniAd('');
+      setYeniSoyad('');
+      setYeniGorev('');
+      setYeniKimlikFoto(null);
+      showStatus('success', 'Giriş talebi oluşturuldu — yönetim onay havuzuna iletildi.');
+    } catch (err) {
+      console.error(err);
+      showStatus('error', 'Giriş talebi kaydedilemedi.');
+    }
+  };
+
+  const handleSendKampGunlukAkis = async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const email = currentUser?.email?.trim().toLowerCase() || 'kampci';
+    if (!window.confirm(`${today} kamp günlük akış raporunu yönetime göndermek istiyor musunuz?`)) return;
+    setSendingKampAkis(true);
+    try {
+      const ozetMetin = buildKampciGunlukOzet({
+        tarih: today,
+        email,
+        yerlesimCount: kampKayitlari.filter((k) => k.girisTarihi?.startsWith(today)).length,
+        sayimCount: depoSavimlari.filter((s) => s.tarih === today).length,
+        faaliyetCount: gunlukFaaliyetler.filter((f) => f.tarih === today).length,
+      });
+      await saveDocument('mobilGunlukAkisRaporlari', {
+        id: `kamp_akis_${today}_${email.replace(/[@.]/g, '-')}`,
+        tip: 'KAMPÇI',
+        tarih: today,
+        gonderenEmail: email,
+        ozetMetin,
+        kampIslemSayisi:
+          kampKayitlari.filter((k) => k.girisTarihi?.startsWith(today)).length +
+          depoSavimlari.filter((s) => s.tarih === today).length +
+          gunlukFaaliyetler.filter((f) => f.tarih === today).length,
+        durum: 'ONAY BEKLİYOR',
+        olusturulma: new Date().toISOString(),
+      });
+      showStatus('success', 'Kamp günlük akış raporu yönetim onayına gönderildi!');
+    } catch (err) {
+      console.error(err);
+      showStatus('error', 'Rapor gönderilemedi.');
+    } finally {
+      setSendingKampAkis(false);
     }
   };
 
@@ -661,6 +762,18 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveSubTab('personel_giris')}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center space-x-2 border cursor-pointer ${
+            activeSubTab === 'personel_giris'
+              ? 'bg-emerald-600 border-emerald-500 text-white shadow-md shadow-emerald-500/20'
+              : 'bg-white border-slate-200/80 text-slate-500 hover:bg-slate-50'
+          }`}
+        >
+          <DoorOpen size={14} />
+          <span>🚪 Girişe Yolla</span>
+        </button>
+
+        <button
           onClick={() => setActiveSubTab('rooms')}
           className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center space-x-2 border cursor-pointer ${
             activeSubTab === 'rooms' 
@@ -695,6 +808,18 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           <ClipboardList size={14} />
           <span>🧹 Günlük Faaliyetler</span>
         </button>
+
+        <button
+          onClick={() => setActiveSubTab('gunluk_akis')}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center space-x-2 border cursor-pointer ${
+            activeSubTab === 'gunluk_akis'
+              ? 'bg-amber-500 border-amber-400 text-slate-950 shadow-md shadow-amber-500/20'
+              : 'bg-white border-slate-200/80 text-slate-500 hover:bg-slate-50'
+          }`}
+        >
+          <Sparkles size={14} />
+          <span>📋 Günlük Akış</span>
+        </button>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
@@ -707,7 +832,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           <div className="lg:col-span-1 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
             <div>
               <span className="font-extrabold text-[10px] text-blue-400 uppercase tracking-wider">Lojmana Personel Yerleştir</span>
-              <h3 className="font-bold text-sm text-white mt-0.5">🔑 Check-In Giriş İşlemi</h3>
+              <h3 className="font-bold text-sm text-slate-800 mt-0.5">🔑 Check-In Giriş İşlemi</h3>
             </div>
 
             <form onSubmit={handlePlacementSubmit} className="space-y-4">
@@ -718,7 +843,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                   required
                   value={selectedRoomId}
                   onChange={(e) => setSelectedRoomId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-white rounded-xl p-3 outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none"
                 >
                   <option value="">-- Oda Seçiniz --</option>
                   {kampOdalari.map(r => {
@@ -740,7 +865,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                     type="button"
                     onClick={() => setPlacementType('DB')}
                     className={`py-1.5 rounded-lg text-[10px] font-bold text-center transition ${
-                      placementType === 'DB' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-white'
+                      placementType === 'DB' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
                     Kayıtlı Personel
@@ -749,7 +874,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                     type="button"
                     onClick={() => setPlacementType('MANUAL')}
                     className={`py-1.5 rounded-lg text-[10px] font-bold text-center transition ${
-                      placementType === 'MANUAL' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-white'
+                      placementType === 'MANUAL' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
                     Elle Giriş (Misafir/Taşeron)
@@ -772,7 +897,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                           placeholder="Personel adı veya görevi..."
                           value={searchPersonelQuery}
                           onChange={(e) => setSearchPersonelQuery(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 text-xs text-white pl-9 pr-3 py-2.5 rounded-xl outline-none"
+                          className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 pl-9 pr-3 py-2.5 rounded-xl outline-none"
                         />
                       </div>
                     </div>
@@ -796,7 +921,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                             }
                           }
                         }}
-                        className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-white rounded-xl p-3 outline-none"
+                        className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none"
                       >
                         <option value="">-- Personel Seçin --</option>
                         {filteredPersonel.slice(0, 30).map(p => (
@@ -819,7 +944,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                       placeholder="Örn: Ahmet Yılmaz"
                       value={manualPersonelIsim}
                       onChange={(e) => setManualPersonelIsim(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 text-xs text-white p-3 rounded-xl outline-none"
+                      className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 p-3 rounded-xl outline-none"
                     />
                   </div>
                 )}
@@ -834,7 +959,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                     type="button"
                     onClick={() => setFirmaType('DB')}
                     className={`py-1 rounded-md text-[9px] font-bold text-center transition ${
-                      firmaType === 'DB' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-white'
+                      firmaType === 'DB' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
                     Kayıtlı Firmalar
@@ -843,7 +968,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                     type="button"
                     onClick={() => setFirmaType('MANUAL')}
                     className={`py-1 rounded-md text-[9px] font-bold text-center transition ${
-                      firmaType === 'MANUAL' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-white'
+                      firmaType === 'MANUAL' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
                     Yeni Firma Yaz
@@ -857,7 +982,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                       required={firmaType === 'DB'}
                       value={selectedFirma}
                       onChange={(e) => setSelectedFirma(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-white rounded-xl p-3 outline-none"
+                      className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none"
                     >
                       <option value="">-- Firma Seçin --</option>
                       <option value="Özdemir Hafriyat A.Ş.">Özdemir Hafriyat A.Ş.</option>
@@ -876,7 +1001,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                       placeholder="Örn: Özdemir Hafriyat Ltd. Şti."
                       value={manualFirma}
                       onChange={(e) => setManualFirma(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 text-xs text-white p-3 rounded-xl outline-none"
+                      className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 p-3 rounded-xl outline-none"
                     />
                   </div>
                 )}
@@ -899,7 +1024,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
             <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-200 pb-3 gap-2">
               <div>
                 <span className="font-extrabold text-[10px] text-blue-400 uppercase tracking-wider">Mevcut Kamp Odaları &amp; Doluluk Durumu</span>
-                <h3 className="font-bold text-sm text-white mt-0.5">🏡 Lojman Odaları Listesi</h3>
+                <h3 className="font-bold text-sm text-slate-800 mt-0.5">🏡 Lojman Odaları Listesi</h3>
               </div>
               <div className="relative">
                 <Search size={12} className="absolute left-2.5 top-2.5 text-slate-500" />
@@ -908,7 +1033,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                   placeholder="Blok veya oda ara..."
                   value={searchRoomQuery}
                   onChange={(e) => setSearchRoomQuery(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 text-[10px] text-white pl-7 pr-2.5 py-1.5 rounded-lg outline-none w-44"
+                  className="bg-slate-50 border border-slate-200 text-[10px] text-slate-800 pl-7 pr-2.5 py-1.5 rounded-lg outline-none w-44"
                 />
               </div>
             </div>
@@ -933,7 +1058,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                         <div className="flex justify-between items-start">
                           <div>
                             <span className="font-mono text-[10px] text-slate-500 block">{room.yerleskeAdi}</span>
-                            <span className="font-black text-xs text-white block mt-0.5">{room.kogusNo} / Oda {room.odaNo}</span>
+                            <span className="font-black text-xs text-slate-800 block mt-0.5">{room.kogusNo} / Oda {room.odaNo}</span>
                           </div>
                           <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full border ${
                             room.durum === 'BOŞ' 
@@ -1156,7 +1281,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           <div className="lg:col-span-2 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
             <div>
               <span className="font-extrabold text-[10px] text-blue-400 uppercase tracking-wider">Şantiye Kamp Altyapısı</span>
-              <h3 className="font-bold text-sm text-white mt-0.5">📋 Tanımlı Odaların Listesi</h3>
+              <h3 className="font-bold text-sm text-slate-800 mt-0.5">📋 Tanımlı Odaların Listesi</h3>
             </div>
 
             <div className="overflow-x-auto">
@@ -1175,7 +1300,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                   {kampOdalari.map(r => (
                     <tr key={r.id} className="border-b border-slate-200/50 hover:bg-slate-900/30 transition">
                       <td className="py-3 font-mono text-slate-500">{r.yerleskeAdi}</td>
-                      <td className="py-3 font-bold text-white">{r.kogusNo}</td>
+                      <td className="py-3 font-bold text-slate-800">{r.kogusNo}</td>
                       <td className="py-3 font-bold text-amber-400">{r.odaNo}</td>
                       <td className="py-3 font-bold font-mono">{r.kapasite} Yatak</td>
                       <td className="py-3 text-[10px]">
@@ -1217,7 +1342,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           <div className="lg:col-span-1 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
             <div>
               <span className="font-extrabold text-[10px] text-blue-400 uppercase tracking-wider">Aylık / Haftalık Kamp Depo Sayımı</span>
-              <h3 className="font-bold text-sm text-white mt-0.5">📦 Yeni Depo Sayımı Gir</h3>
+              <h3 className="font-bold text-sm text-slate-800 mt-0.5">📦 Yeni Depo Sayımı Gir</h3>
             </div>
 
             <form onSubmit={handleSaveAudit} className="space-y-4">
@@ -1247,7 +1372,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                   placeholder="Sayım hakkında eklemek istediğiniz bir durum var mı?"
                   value={sayimNotlar}
                   onChange={(e) => setSayimNotlar(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-xs text-white p-2.5 rounded-xl outline-none h-16 resize-none"
+                  className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 p-2.5 rounded-xl outline-none h-16 resize-none"
                 />
               </div>
 
@@ -1266,7 +1391,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           <div className="lg:col-span-2 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
             <div>
               <span className="font-extrabold text-[10px] text-blue-400 uppercase tracking-wider">Kayıtlı Depo Sayım Arşivi</span>
-              <h3 className="font-bold text-sm text-white mt-0.5">📋 Sayım Kayıtları ve Onay Durumları</h3>
+              <h3 className="font-bold text-sm text-slate-800 mt-0.5">📋 Sayım Kayıtları ve Onay Durumları</h3>
             </div>
 
             <div className="space-y-4">
@@ -1279,7 +1404,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                     <div className="flex justify-between items-start border-b border-slate-200/60 pb-2">
                       <div>
                         <span className="text-[10px] text-slate-500 font-mono font-bold block">{sayim.tarih}</span>
-                        <span className="text-xs font-bold text-white block mt-0.5">Sorumlu: {sayim.sayimYapan}</span>
+                        <span className="text-xs font-bold text-slate-800 block mt-0.5">Sorumlu: {sayim.sayimYapan}</span>
                       </div>
                       
                       <div className="text-right">
@@ -1344,7 +1469,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           <div className="lg:col-span-1 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
             <div>
               <span className="font-extrabold text-[10px] text-blue-400 uppercase tracking-wider">Günlük Rutin &amp; İş Bildirimi</span>
-              <h3 className="font-bold text-sm text-white mt-0.5">🧹 Yeni Faaliyet Raporu</h3>
+              <h3 className="font-bold text-sm text-slate-800 mt-0.5">🧹 Yeni Faaliyet Raporu</h3>
             </div>
 
             <form onSubmit={handleSaveActivity} className="space-y-4">
@@ -1354,7 +1479,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                   required
                   value={faaliyetTipi}
                   onChange={(e) => setFaaliyetTipi(e.target.value as any)}
-                  className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-white rounded-xl p-3 outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none"
                 >
                   <option value="TEMİZLİK">🧹 TEMİZLİK (Koğuş, Banyo, Çamaşır)</option>
                   <option value="YEMEK">🍲 YEMEK (Yemekhane, Aşevi)</option>
@@ -1391,7 +1516,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                   placeholder="Yapılan rutin işlerin ayrıntısını yazınız..."
                   value={faaliyetAciklama}
                   onChange={(e) => setFaaliyetAciklama(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-xs text-white p-3 rounded-xl outline-none h-24 resize-none"
+                  className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 p-3 rounded-xl outline-none h-24 resize-none"
                 />
               </div>
 
@@ -1455,7 +1580,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           <div className="lg:col-span-2 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
             <div>
               <span className="font-extrabold text-[10px] text-blue-400 uppercase tracking-wider">Günlük Kamp Faaliyetleri</span>
-              <h3 className="font-bold text-sm text-white mt-0.5">📋 Son Raporlanan Aktiviteler</h3>
+              <h3 className="font-bold text-sm text-slate-800 mt-0.5">📋 Son Raporlanan Aktiviteler</h3>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1521,6 +1646,186 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {activeSubTab === 'personel_giris' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
+            <div>
+              <span className="font-extrabold text-[10px] text-emerald-500 uppercase tracking-wider">Personel İşe Giriş</span>
+              <h3 className="font-bold text-sm text-slate-800 mt-0.5">🚪 Girişe Yolla</h3>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Kamp alanına veya lojmana gelen yeni personelin kimlik fotoğrafını çekip bilgilerini girin.
+              Talep <strong>Onay Havuzu → Formen Belgeleri</strong> üzerinden yönetici onayına gider.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[9px] font-extrabold text-slate-500 uppercase block mb-1">Ad</label>
+                <input value={yeniAd} onChange={(e) => setYeniAd(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none" placeholder="Ad" />
+              </div>
+              <div>
+                <label className="text-[9px] font-extrabold text-slate-500 uppercase block mb-1">Soyad</label>
+                <input value={yeniSoyad} onChange={(e) => setYeniSoyad(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none" placeholder="Soyad" />
+              </div>
+            </div>
+            <div>
+              <label className="text-[9px] font-extrabold text-slate-500 uppercase block mb-1">Görev / Branş</label>
+              <input value={yeniGorev} onChange={(e) => setYeniGorev(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none" placeholder="Örn: Kamp Görevlisi, Aşçı" />
+            </div>
+            <div>
+              <label className="text-[9px] font-extrabold text-slate-500 uppercase block mb-1">Kimlik Fotoğrafı</label>
+              <div className="flex gap-3">
+                <label className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer w-24 h-20 shrink-0 text-slate-500">
+                  <Camera size={20} />
+                  <span className="text-[8px] font-bold mt-1">Çek</span>
+                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const r = new FileReader();
+                    r.onload = async (ev) => {
+                      if (ev.target?.result) setYeniKimlikFoto(await compressImage(ev.target.result as string));
+                    };
+                    r.readAsDataURL(file);
+                  }} />
+                </label>
+                <div className="flex-1 border border-slate-200 rounded-xl bg-slate-50 h-20 overflow-hidden flex items-center justify-center">
+                  {yeniKimlikFoto ? (
+                    <img src={yeniKimlikFoto} alt="Kimlik" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-[10px] text-slate-400 italic">Fotoğraf yok</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <button type="button" onClick={handleSubmitKampGirisTalebi} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-3 rounded-xl cursor-pointer flex items-center justify-center gap-2">
+              <UserPlus size={14} />
+              GİRİŞİNİ YAP VE GÖNDER
+            </button>
+
+            {sonGirisTalebi && (
+              <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl space-y-3">
+                <p className="text-xs text-emerald-800 font-bold">✅ Kayıt oluşturuldu — WhatsApp ile yönetime iletebilirsiniz</p>
+                <a
+                  href={buildWhatsAppUrl(
+                    `*KİBRİTÇİ ERP - KAMP PERSONEL İŞE GİRİŞ*\n*Ad Soyad:* ${sonGirisTalebi.ad} ${sonGirisTalebi.soyad}\n*Görev:* ${sonGirisTalebi.gorev}\n*Tarih:* ${new Date().toLocaleDateString('tr-TR')}\n*Gönderen Kampçı:* ${currentUser?.email || '-'}\n*Kayıt Linki:* ${window.location.origin}/?view_giris=${sonGirisTalebi.id}`
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={async () => {
+                    try {
+                      await setDoc(doc(db, 'personelGirisTalepleri', sonGirisTalebi.id), { durum: 'WP_GÖNDERİLDİ' }, { merge: true });
+                    } catch (e) { console.warn(e); }
+                  }}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <MessageSquare size={14} />
+                  WhatsApp&apos;tan Gönder
+                </a>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-3">
+            <h3 className="font-bold text-sm text-slate-800">📋 Giriş Talepleri Takibi</h3>
+            {girisTalepleriList.length === 0 ? (
+              <p className="text-xs text-slate-400 italic py-8 text-center">Henüz giriş talebi yok.</p>
+            ) : (
+              <div className="space-y-2 max-h-[480px] overflow-y-auto">
+                {girisTalepleriList.map((item) => (
+                  <div key={item.id} className="border border-slate-100 rounded-xl p-3 bg-slate-50">
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                        <span className="font-bold text-sm text-slate-800">{item.ad} {item.soyad}</span>
+                        <span className="text-[10px] text-slate-500 block">{item.gorev}</span>
+                      </div>
+                      <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full ${
+                        item.durum === 'ONAYLANDI' ? 'bg-emerald-100 text-emerald-800' :
+                        item.durum === 'WP_GÖNDERİLDİ' ? 'bg-blue-100 text-blue-800' :
+                        'bg-amber-100 text-amber-800'
+                      }`}>{item.durum || 'BEKLEMEDE'}</span>
+                    </div>
+                    {item.durum === 'ONAYLANDI' && (
+                      <a
+                        href={buildWhatsAppUrl(
+                          `*KİBRİTÇİ - GİRİŞ İZNİ ONAYLANDI*\n👤 ${item.ad} ${item.soyad}\n💼 ${item.gorev}\n✅ Kapı/güvenliğe bildirin.\n${window.location.origin}/?view_giris=${item.id}`
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-2 inline-flex text-[10px] font-bold text-emerald-700 hover:underline"
+                      >
+                        Kapıya WhatsApp ile bildir →
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeSubTab === 'gunluk_akis' && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5">
+          <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+            <div className="p-2 bg-amber-100 rounded-xl">
+              <Sparkles className="text-amber-600" size={22} />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-800">Günlük Akış Raporu</h3>
+              <p className="text-xs text-slate-500">Bugünkü yerleşim, depo sayımı ve faaliyet kayıtlarının özeti</p>
+            </div>
+          </div>
+
+          {(() => {
+            const today = new Date().toISOString().slice(0, 10);
+            const yerlesimToday = kampKayitlari.filter((k) => k.girisTarihi?.startsWith(today));
+            const sayimToday = depoSavimlari.filter((s) => s.tarih === today);
+            const faaliyetToday = gunlukFaaliyetler.filter((f) => f.tarih === today);
+            return (
+              <>
+                <ul className="text-sm text-slate-700 space-y-2 bg-slate-50 rounded-xl p-4">
+                  <li>📅 Tarih: <strong>{today.split('-').reverse().join('.')}</strong></li>
+                  <li>👤 Kampçı: <strong>{currentUser?.email || '—'}</strong></li>
+                  <li>🏕️ Yerleşim işlemi: <strong>{yerlesimToday.length}</strong></li>
+                  <li>📦 Depo sayım kaydı: <strong>{sayimToday.length}</strong></li>
+                  <li>🧹 Günlük faaliyet: <strong>{faaliyetToday.length}</strong></li>
+                </ul>
+
+                <pre className="text-xs whitespace-pre-wrap bg-slate-900 text-slate-100 rounded-xl p-4 font-mono leading-relaxed">
+                  {buildKampciGunlukOzet({
+                    tarih: today,
+                    email: currentUser?.email || 'kampci',
+                    yerlesimCount: yerlesimToday.length,
+                    sayimCount: sayimToday.length,
+                    faaliyetCount: faaliyetToday.length,
+                  })}
+                </pre>
+
+                <button
+                  type="button"
+                  onClick={handleSendKampGunlukAkis}
+                  disabled={sendingKampAkis}
+                  className="w-full py-3.5 rounded-xl font-bold text-sm bg-amber-500 hover:bg-amber-400 text-slate-950 disabled:opacity-50 transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {sendingKampAkis ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      Gönderiliyor…
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck size={16} />
+                      Gün Sonu Raporunu Yönetime Gönder
+                    </>
+                  )}
+                </button>
+              </>
+            );
+          })()}
         </div>
       )}
 

@@ -24,6 +24,8 @@ interface LojistikScreenProps {
 export const LojistikScreen: React.FC<LojistikScreenProps> = ({
   araclar,
   setAraclar,
+  aracKmLoglari,
+  setAracKmLoglari,
   currentUser,
   onSignOut,
   isStandalone = false
@@ -244,6 +246,40 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
       // Sync vehicle changes to Firestore
       for (const ar of updatedAracList) {
         await setDoc(doc(db, 'araclar', ar.id), ar);
+      }
+
+      setAraclar(updatedAracList);
+      if (setAracKmLoglari) {
+        const newLogs = Object.keys(rutinKmInputs)
+          .filter((plaka) => {
+            const sVal = parseFloat(rutinKmInputs[plaka]?.sabah) || null;
+            const aVal = parseFloat(rutinKmInputs[plaka]?.aksam) || null;
+            return sVal || aVal;
+          })
+          .map((plaka) => {
+            const sVal = parseFloat(rutinKmInputs[plaka]?.sabah) || 0;
+            const aVal = parseFloat(rutinKmInputs[plaka]?.aksam) || 0;
+            const logId = `log_${plaka}_${rutinTarih}`;
+            return {
+              id: logId,
+              tarih: rutinTarih,
+              plaka,
+              surucu: currentChauffeurName,
+              sabahKm: sVal,
+              aksamKm: aVal,
+              fark: aVal - sVal,
+              aciklama: rutinKmInputs[plaka]?.aciklama || '',
+            };
+          });
+        setAracKmLoglari((prev: any[]) => {
+          const merged = [...prev];
+          newLogs.forEach((log) => {
+            const idx = merged.findIndex((l) => l.id === log.id);
+            if (idx >= 0) merged[idx] = log;
+            else merged.push(log);
+          });
+          return merged;
+        });
       }
 
       showStatus('success', 'Günlük sabah/akşam kilometre sayaçları başarıyla kaydedildi!');

@@ -5,9 +5,17 @@ import {
   FileUp, ExternalLink, MessageSquare, AlertTriangle, Sparkles, Package, Tent, X
 } from 'lucide-react';
 import { SatinAlmaTalebi, Irsaliye, Fatura } from '../types/erp';
-import { db } from '../lib/firebase';
+import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { collection, doc, setDoc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
+import {
+  buildSingleApprovalUpdate,
+  buildWhatsAppUrl,
+  canApproveMobilDocuments,
+  isMobilDocPending,
+  normalizeKampFaaliyetForDisplay,
+  normalizeKampSayimForDisplay,
+} from '../lib/mobilOnayUtils';
 
 interface OnayIslemleriScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
@@ -36,7 +44,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   signatureStyle,
   addNotification
 }) => {
-  const [activeTab, setActiveTab] = useState<'satin_alma' | 'guvenlik_belgeleri' | 'kampci_belgeleri' | 'formen_belgeleri' | 'sofor_talepleri' | 'depocu_talepleri' | 'gecmis' | 'imzalar'>('satin_alma');
+  const [activeTab, setActiveTab] = useState<'satin_alma' | 'guvenlik_belgeleri' | 'kampci_belgeleri' | 'formen_belgeleri' | 'gunluk_loglar' | 'sofor_talepleri' | 'depocu_talepleri' | 'gecmis' | 'imzalar'>('satin_alma');
   const [selectedYoneticiEmail, setSelectedYoneticiEmail] = useState<string>('');
   const [stampText, setStampText] = useState<string>('🔵 ŞİRKET GENEL MÜDÜRÜ (E-İMZA)');
   const [customStamp, setCustomStamp] = useState<string>('');
@@ -55,6 +63,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
   const [kampSayimlar, setKampSayimlar] = useState<any[]>([]);
   const [kampFaaliyetler, setKampFaaliyetler] = useState<any[]>([]);
+  const [gunlukAkisRaporlari, setGunlukAkisRaporlari] = useState<any[]>([]);
 
   const [aracOnayTalepleri, setAracOnayTalepleri] = useState<any[]>([]);
   const [yolHarcamalari, setYolHarcamalari] = useState<any[]>([]);
@@ -342,37 +351,65 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
     };
   }, []);
 
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'mobilGunlukAkisRaporlari'), (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((d) => list.push({ id: d.id, ...d.data() }));
+      setGunlukAkisRaporlari(
+        list.sort(
+          (a, b) =>
+            new Date(b.olusturulma || 0).getTime() - new Date(a.olusturulma || 0).getTime()
+        )
+      );
+    });
+    return () => unsub();
+  }, []);
+
   const handleApproveKampItem = async (type: 'sayim' | 'faaliyet', id: string) => {
     try {
       const matchedUser = kullanicilar.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
       const role = matchedUser?.yetki || 'YÖNETİCİ';
-      
+      if (!canApproveMobilDocuments(role, currentUser?.email)) {
+        alert('Bu belgeyi onaylama yetkiniz bulunmuyor.');
+        return;
+      }
+
       const docRef = doc(db, type === 'sayim' ? 'kampDepoSayimlari' : 'kampGunlukFaaliyetleri', id);
-      const updateData: any = {};
-      
-      if (role === 'İDARİ_İŞLER') {
-        updateData.onaylayanIdariIsler = currentUser?.email || 'idari_isler@kibritci.com';
-      } else if (role === 'MUHASEBE') {
-        updateData.onaylayanMuhasebe = currentUser?.email || 'muhasebe@kibritci.com';
-      } else {
-        updateData.onaylayanIdariIsler = currentUser?.email || 'yonetici@kibritci.com';
-        updateData.onaylayanMuhasebe = currentUser?.email || 'yonetici@kibritci.com';
-      }
-      
-      const currentDoc = (type === 'sayim' ? kampSayimlar : kampFaaliyetler).find(x => x.id === id);
-      if (currentDoc) {
-        const hasIdari = updateData.onaylayanIdariIsler || currentDoc.onaylayanIdariIsler;
-        const hasMuhasebe = updateData.onaylayanMuhasebe || currentDoc.onaylayanMuhasebe;
-        if (hasIdari && hasMuhasebe) {
-          updateData.durum = 'ONAYLANDI';
-        }
-      }
-      
+      const updateData = buildSingleApprovalUpdate(currentUser?.email || 'yonetici@kibritci.com', role);
+
       await updateDoc(docRef, updateData);
-      alert(`Kamp ${type === 'sayim' ? 'depo sayımı' : 'günlük faaliyeti'} başarıyla onaylandı.`);
+      alert(`Kamp ${type === 'sayim' ? 'depo sayımı' : 'günlük faaliyeti'} onaylandı ve ana programa aktarıldı.`);
     } catch (err) {
       console.error(err);
       alert("Onaylama işlemi sırasında bir hata oluştu.");
+    }
+  };
+
+  const handleApproveGunlukAkis = async (id: string) => {
+    try {
+      const matchedUser = kullanicilar.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
+      const role = matchedUser?.yetki || 'YÖNETİCİ';
+      if (!canApproveMobilDocuments(role, currentUser?.email)) {
+        alert('Onay yetkiniz bulunmuyor.');
+        return;
+      }
+      await updateDoc(
+        doc(db, 'mobilGunlukAkisRaporlari', id),
+        buildSingleApprovalUpdate(currentUser?.email || 'yonetici@kibritci.com', role)
+      );
+      alert('Günlük akış raporu onaylandı.');
+    } catch (err) {
+      console.error(err);
+      alert('Onay başarısız.');
+    }
+  };
+
+  const handleRejectGunlukAkis = async (id: string) => {
+    if (!window.confirm('Bu günlük raporu reddetmek istiyor musunuz?')) return;
+    try {
+      await updateDoc(doc(db, 'mobilGunlukAkisRaporlari', id), { durum: 'REDDEDİLDİ' });
+    } catch (err) {
+      alert('Reddetme başarısız.');
     }
   };
 
@@ -989,21 +1026,21 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   const matchedUserObj = kullanicilar.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
   const currentUserRole = matchedUserObj?.yetki || 'YÖNETİCİ';
 
-  const pendingKampSayimlar = kampSayimlar.filter(doc => {
-    if (doc.durum === 'REDDEDİLDİ' || doc.durum === 'ONAYLANDI' || (doc.onaylayanIdariIsler && doc.onaylayanMuhasebe)) return false;
-    if (currentUserRole === 'İDARİ_İŞLER' && !doc.onaylayanIdariIsler) return true;
-    if (currentUserRole === 'MUHASEBE' && !doc.onaylayanMuhasebe) return true;
-    if (currentUserRole === 'YÖNETİCİ' && (!doc.onaylayanIdariIsler || !doc.onaylayanMuhasebe)) return true;
-    return false;
+  const pendingKampSayimlar = kampSayimlar.filter((doc) => {
+    if (!isMobilDocPending(doc)) return false;
+    return canApproveMobilDocuments(currentUserRole, currentUser?.email);
   });
 
-  const pendingKampFaaliyetler = kampFaaliyetler.filter(doc => {
-    if (doc.durum === 'REDDEDİLDİ' || doc.durum === 'ONAYLANDI' || (doc.onaylayanIdariIsler && doc.onaylayanMuhasebe)) return false;
-    if (currentUserRole === 'İDARİ_İŞLER' && !doc.onaylayanIdariIsler) return true;
-    if (currentUserRole === 'MUHASEBE' && !doc.onaylayanMuhasebe) return true;
-    if (currentUserRole === 'YÖNETİCİ' && (!doc.onaylayanIdariIsler || !doc.onaylayanMuhasebe)) return true;
-    return false;
+  const pendingKampFaaliyetler = kampFaaliyetler.filter((doc) => {
+    if (!isMobilDocPending(doc)) return false;
+    return canApproveMobilDocuments(currentUserRole, currentUser?.email);
   });
+
+  const pendingGunlukAkis = gunlukAkisRaporlari.filter(
+    (doc) =>
+      isMobilDocPending(doc) &&
+      canApproveMobilDocuments(currentUserRole, currentUser?.email)
+  );
 
   const pendingAracTalepleri = aracOnayTalepleri.filter(x => x.durum === 'ONAY BEKLİYOR');
   const pendingYolHarcamalari = yolHarcamalari.filter(x => x.durum === 'ONAY BEKLİYOR');
@@ -1013,7 +1050,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   const pendingSayimCount = depoSayimTalepleri.length;
   const pendingDepocuCount = pendingStokCount + pendingSayimCount;
 
-  const totalPendingCount = pendingRequests.length + pendingWaybills.length + pendingInvoices.length + pendingPersonelCount + pendingKampSayimlar.length + pendingKampFaaliyetler.length + pendingSoforCount + pendingDepocuCount;
+  const totalPendingCount = pendingRequests.length + pendingWaybills.length + pendingInvoices.length + pendingPersonelCount + pendingKampSayimlar.length + pendingKampFaaliyetler.length + pendingGunlukAkis.length + pendingSoforCount + pendingDepocuCount;
 
   // Gecmis onaylar list (approved or updated documents)
   const approvedRequests = satinAlmaTalepleri.filter(doc => doc.onayDurumu.includes('TAMAMLANDI') || doc.onayDurumu === 'ONAYLANDI' || doc.onayDurumu === 'DİJİTAL ONAYLANDI');
@@ -1268,6 +1305,14 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
             >
               <span className="flex items-center space-x-2"><UserCheck size={13} className={activeTab === 'formen_belgeleri' ? 'text-white' : 'text-sky-500'} /> <span>Formen Belgeleri</span></span>
               {pendingPersonelCount > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'formen_belgeleri' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800'}`}>{pendingPersonelCount}</span>}
+            </button>
+
+            <button 
+              onClick={() => setActiveTab('gunluk_loglar')}
+              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'gunluk_loglar' ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+              <span className="flex items-center space-x-2"><FileText size={13} className={activeTab === 'gunluk_loglar' ? 'text-white' : 'text-amber-500'} /> <span>Günlük Loglar</span></span>
+              {pendingGunlukAkis.length > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'gunluk_loglar' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'}`}>{pendingGunlukAkis.length}</span>}
             </button>
 
             <button 
@@ -1537,7 +1582,9 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                       </h3>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {pendingKampSayimlar.map(doc => (
+                        {pendingKampSayimlar.map(doc => {
+                          const view = normalizeKampSayimForDisplay(doc);
+                          return (
                           <div key={doc.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition space-y-3">
                             <div>
                               <div className="flex justify-between items-start">
@@ -1546,29 +1593,21 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                                 </span>
                                 <span className="text-[10px] text-slate-500 font-mono font-bold">{doc.tarih}</span>
                               </div>
-                              <p className="text-xs text-slate-200 font-bold mt-2.5">Kamp Alanı: {doc.kampAdi || 'Ana Kamp'}</p>
-                              <p className="text-[10.5px] text-slate-400 mt-1">Sayan Personel: {doc.sayanPersonel || 'Kamp Amiri'}</p>
+                              <p className="text-xs text-slate-200 font-bold mt-2.5">Kamp Alanı: {view.kampAdi}</p>
+                              <p className="text-[10.5px] text-slate-400 mt-1">Sayan: {view.sayanPersonel}</p>
+                              <p className="text-[10px] text-amber-400/80 mt-0.5">Gönderen: {view.kaydeden}</p>
                               
                               <div className="mt-2.5 p-2 bg-slate-900 rounded border border-slate-800 space-y-1.5">
                                 <div className="text-[10px] font-bold text-slate-400 border-b border-slate-800 pb-1 flex justify-between">
                                   <span>Malzeme / Stok</span>
                                   <span>Miktar</span>
                                 </div>
-                                {doc.sayimlar && Object.entries(doc.sayimlar).map(([malzeme, miktar]: any) => (
+                                {Object.entries(view.sayimlar).map(([malzeme, miktar]) => (
                                   <div key={malzeme} className="text-[10px] font-mono text-slate-300 flex justify-between">
                                     <span>{malzeme}</span>
-                                    <span className="font-bold text-white">{miktar} Adet</span>
+                                    <span className="font-bold text-white">{miktar}</span>
                                   </div>
                                 ))}
-                              </div>
-
-                              <div className="mt-2 text-[10px] flex gap-2">
-                                <span className={`px-2 py-0.5 rounded font-bold ${doc.onaylayanIdariIsler ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-900 text-slate-500'}`}>
-                                  İdari İşler: {doc.onaylayanIdariIsler ? '✅ ONAYLADI' : '⏳ BEKLİYOR'}
-                                </span>
-                                <span className={`px-2 py-0.5 rounded font-bold ${doc.onaylayanMuhasebe ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-900 text-slate-500'}`}>
-                                  Muhasebe: {doc.onaylayanMuhasebe ? '✅ ONAYLADI' : '⏳ BEKLİYOR'}
-                                </span>
                               </div>
                             </div>
 
@@ -1585,11 +1624,12 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                                 className="flex-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1"
                               >
                                 <Check size={11} />
-                                <span>Onayla ({currentUserRole === 'İDARİ_İŞLER' ? 'İdari' : currentUserRole === 'MUHASEBE' ? 'Muhasebe' : 'Tümü'})</span>
+                                <span>Onayla</span>
                               </button>
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -1603,7 +1643,9 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                       </h3>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {pendingKampFaaliyetler.map(doc => (
+                        {pendingKampFaaliyetler.map(doc => {
+                          const view = normalizeKampFaaliyetForDisplay(doc);
+                          return (
                           <div key={doc.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition space-y-3">
                             <div>
                               <div className="flex justify-between items-start">
@@ -1612,28 +1654,21 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                                 </span>
                                 <span className="text-[10px] text-slate-500 font-mono font-bold">{doc.tarih}</span>
                               </div>
-                              <p className="text-xs text-slate-200 font-bold mt-2.5">Kategori: {doc.kategori || 'Genel Rutin'}</p>
-                              <p className="text-[10.5px] text-slate-400 mt-1">Açıklama: {doc.aciklama}</p>
+                              <p className="text-xs text-slate-200 font-bold mt-2.5">Kategori: {view.kategori}</p>
+                              <p className="text-[10.5px] text-slate-400 mt-1">Yerleşke: {view.yerleske || '—'}</p>
+                              <p className="text-[10.5px] text-slate-400 mt-1">Açıklama: {view.aciklama}</p>
+                              <p className="text-[10px] text-amber-400/80 mt-0.5">Gönderen: {view.kaydeden}</p>
 
-                              {doc.photo && (
+                              {view.photo && (
                                 <div className="mt-2.5 rounded-xl overflow-hidden border border-slate-800 aspect-video bg-slate-900 flex items-center justify-center relative group">
                                   <img 
-                                    src={doc.photo} 
+                                    src={view.photo} 
                                     alt="Faaliyet" 
                                     className="w-full h-full object-cover group-hover:scale-105 transition duration-300" 
                                     referrerPolicy="no-referrer"
                                   />
                                 </div>
                               )}
-
-                              <div className="mt-2 text-[10px] flex gap-2">
-                                <span className={`px-2 py-0.5 rounded font-bold ${doc.onaylayanIdariIsler ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-900 text-slate-500'}`}>
-                                  İdari İşler: {doc.onaylayanIdariIsler ? '✅ ONAYLADI' : '⏳ BEKLİYOR'}
-                                </span>
-                                <span className={`px-2 py-0.5 rounded font-bold ${doc.onaylayanMuhasebe ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-900 text-slate-500'}`}>
-                                  Muhasebe: {doc.onaylayanMuhasebe ? '✅ ONAYLADI' : '⏳ BEKLİYOR'}
-                                </span>
-                              </div>
                             </div>
 
                             <div className="flex gap-2 pt-2.5 border-t border-slate-900">
@@ -1649,11 +1684,12 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                                 className="flex-1 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1"
                               >
                                 <Check size={11} />
-                                <span>Onayla ({currentUserRole === 'İDARİ_İŞLER' ? 'İdari' : currentUserRole === 'MUHASEBE' ? 'Muhasebe' : 'Tümü'})</span>
+                                <span>Onayla</span>
                               </button>
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -2028,6 +2064,64 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
             </div>
           )}
 
+          {activeTab === 'gunluk_loglar' && (
+            <div className="space-y-6">
+              <div className="border bg-slate-950 p-4.5 rounded-2xl border-slate-800/80 text-xs">
+                <span className="text-amber-400 font-bold block text-[11px] tracking-widest uppercase">📋 FORMEN & KAMPÇI GÜNLÜK AKIŞ RAPORLARI</span>
+                <p className="text-slate-400 mt-1 text-[11px]">
+                  Saha formenleri ve kampçıların gün sonu gönderdiği özet raporlar. İdari İşler, Muhasebe, Şantiye Şefi, Proje Müdürü veya Kurucu onayı ile arşive alınır.
+                </p>
+              </div>
+
+              {pendingGunlukAkis.length === 0 ? (
+                <div className="bg-slate-950 rounded-3xl p-12 text-center border border-slate-800">
+                  <p className="text-sm text-slate-300 font-bold">Onay bekleyen günlük rapor yok.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {pendingGunlukAkis.map((rapor) => (
+                    <div key={rapor.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-3">
+                      <div className="flex justify-between items-start">
+                        <span className="text-[10px] font-black text-amber-400 uppercase">{rapor.tip} · {rapor.tarih}</span>
+                        <span className="text-[9px] text-slate-500">{new Date(rapor.olusturulma).toLocaleString('tr-TR')}</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400">Gönderen: <strong className="text-slate-200">{rapor.gonderenEmail}</strong></p>
+                      <pre className="text-[9px] text-slate-300 whitespace-pre-wrap bg-slate-900 p-3 rounded-xl border border-slate-800 max-h-48 overflow-y-auto font-mono leading-relaxed">
+                        {rapor.ozetMetin}
+                      </pre>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleRejectGunlukAkis(rapor.id)}
+                          className="flex-1 bg-red-950 text-red-300 py-1.5 rounded-lg text-[10px] font-bold"
+                        >
+                          Reddet
+                        </button>
+                        <button
+                          onClick={() => handleApproveGunlukAkis(rapor.id)}
+                          className="flex-1 bg-emerald-600 text-white py-1.5 rounded-lg text-[10px] font-bold"
+                        >
+                          Onayla & Arşivle
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {gunlukAkisRaporlari.filter((r) => r.durum === 'ONAYLANDI').length > 0 && (
+                <div className="space-y-2 pt-4 border-t border-slate-200">
+                  <h3 className="text-xs font-black text-slate-600 uppercase">Onaylanmış Arşiv</h3>
+                  {gunlukAkisRaporlari.filter((r) => r.durum === 'ONAYLANDI').slice(0, 10).map((rapor) => (
+                    <div key={rapor.id} className="bg-white border p-3 rounded-xl text-[10px] flex justify-between">
+                      <span>{rapor.tip} · {rapor.tarih} · {rapor.gonderenEmail}</span>
+                      <span className="text-emerald-600 font-bold">✓ {rapor.onaylayanYetki}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'formen_belgeleri' && (
             <div className="space-y-6">
               
@@ -2150,18 +2244,27 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                             <button
                               onClick={async () => {
                                 const publicUrl = `${window.location.protocol}//${window.location.host}/?view_giris=${item.id}`;
-                                const waMsg = `*KİBRİTÇİ İNŞAAT - PERSONEL ŞANTİYE GİRİŞ ONAY TALEBİ*%0A%0A*Personel Bilgileri:*%0A👤 Adı Soyadı: ${item.ad} ${item.soyad}%0A💼 Görevi/Branşı: ${item.gorev}%0A👷 Gönderen Formen: ${item.gonderenFormen || 'Bilinmeyen'}%0A📅 Tarih: ${new Date(item.tarih).toLocaleString('tr-TR')}%0A%0A🪪 *Kimlik Görseli ve Personel Kartı (Sorgula):*%0A${publicUrl}%0A%0ASaha Girişi için evrak onayı bekleniyor. Lütfen onay paneline girip bu personelin İşe Giriş Bildirgesini yükleyerek kaydı tamamlayın.`;
-                                const waUrl = `https://wa.me/?text=${waMsg}`;
-                                
-                                // Set state to WP_GÖNDERİLDİ in database
+                                const waText = [
+                                  '*KİBRİTÇİ İNŞAAT - PERSONEL ŞANTİYE GİRİŞ ONAY TALEBİ*',
+                                  '',
+                                  `👤 Adı Soyadı: ${item.ad} ${item.soyad}`,
+                                  `💼 Görevi/Branşı: ${item.gorev}`,
+                                  `👷 Gönderen Formen: ${item.gonderenFormen || 'Bilinmeyen'}`,
+                                  `📅 Tarih: ${new Date(item.tarih).toLocaleString('tr-TR')}`,
+                                  '',
+                                  '🪪 Kimlik Görseli ve Personel Kartı (Sorgula):',
+                                  publicUrl,
+                                  '',
+                                  'Saha girişi için evrak onayı bekleniyor.',
+                                ].join('\n');
                                 try {
                                   await updateDoc(doc(db, 'personelGirisTalepleri', item.id), {
-                                    durum: 'WP_GÖNDERİLDİ'
+                                    durum: 'WP_GÖNDERİLDİ',
                                   });
-                                  window.open(waUrl, '_blank');
+                                  window.open(buildWhatsAppUrl(waText), '_blank');
                                 } catch (e) {
                                   console.error(e);
-                                  window.open(waUrl, '_blank');
+                                  window.open(buildWhatsAppUrl(waText), '_blank');
                                 }
                               }}
                               className="bg-blue-600 hover:bg-blue-750 active:scale-95 text-white font-extrabold text-[9px] py-1.5 px-3 rounded-xl flex items-center space-x-1.5 cursor-pointer border-b-2 border-blue-800 transition"
@@ -2176,9 +2279,18 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                             <button
                               onClick={() => {
                                 const publicUrl = `${window.location.protocol}//${window.location.host}/?view_giris=${item.id}`;
-                                const waMsg = `*KİBRİTÇİ İNŞAAT - GİRİŞ İZNİ ONAYLANDI*%0A%0A*Şantiye Giriş Kapısı / Güvenlik Nöbetçi Personeline:*%0A👤 *Personel:* ${item.ad} ${item.soyad}%0A💼 *Görevi:* ${item.gorev}%0A✅ *Bu personelin İşe Giriş Bildirgesi onaylanmıştır. Şantiyeye girişine izin verilmiştir.*%0A%0A🪪 *Kimlik Görseli ve Detaylar:*%0A${publicUrl}`;
-                                const waUrl = `https://wa.me/?text=${waMsg}`;
-                                window.open(waUrl, '_blank');
+                                const waText = [
+                                  '*KİBRİTÇİ İNŞAAT - GİRİŞ İZNİ ONAYLANDI*',
+                                  '',
+                                  'Şantiye Giriş Kapısı / Güvenlik Nöbetçi Personeline:',
+                                  `👤 Personel: ${item.ad} ${item.soyad}`,
+                                  `💼 Görevi: ${item.gorev}`,
+                                  '✅ İşe Giriş Bildirgesi onaylanmıştır. Şantiyeye girişine izin verilmiştir.',
+                                  '',
+                                  '🪪 Kimlik Görseli ve Detaylar:',
+                                  publicUrl,
+                                ].join('\n');
+                                window.open(buildWhatsAppUrl(waText), '_blank');
                               }}
                               className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-[9px] py-1.5 px-3 rounded-xl flex items-center space-x-1.5 cursor-pointer border-b-2 border-emerald-800 transition"
                             >
@@ -2230,9 +2342,23 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                                           return;
                                         }
                                         try {
+                                          const personelId = `p_${Date.now()}`;
+                                          await saveDocument('personeller', {
+                                            id: personelId,
+                                            ad: item.ad,
+                                            soyad: item.soyad,
+                                            gorev: item.gorev || 'İŞÇİ',
+                                            iseGirisTarihi: (item.tarih || new Date().toISOString()).slice(0, 10),
+                                            durum: true,
+                                            tcNo: item.tcNo || '',
+                                            netMaas: 0,
+                                          });
                                           await updateDoc(doc(db, 'personelGirisTalepleri', item.id), {
                                             durum: 'ONAYLANDI',
-                                            girisEvrakPdfUrl: uploadedPdfBase64
+                                            girisEvrakPdfUrl: uploadedPdfBase64,
+                                            personelId,
+                                            onaylayan: currentUser?.email,
+                                            onayTarihi: new Date().toISOString(),
                                           });
                                           setActivePdfUploadId(null);
                                           setUploadedPdfBase64(null);

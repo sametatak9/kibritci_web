@@ -36,7 +36,13 @@ export async function fetchApiJson<T = unknown>(
   }
 
   if (!res.ok) {
-    throw new Error((json as { error?: string }).error || `Sunucu hatası (${res.status})`);
+    const errMsg = (json as { error?: string }).error || `Sunucu hatası (${res.status})`;
+    if (res.status === 504) {
+      throw new Error(
+        `504 Gateway Timeout — AI işlemi Vercel süre limitini aştı. ${errMsg}`
+      );
+    }
+    throw new Error(errMsg);
   }
 
   return json as T;

@@ -22,16 +22,16 @@ export const auth = getAuth(app);
  * Helper to wrap any promise with a timeout
  */
 async function withTimeout<T>(promise: Promise<T>, ms = 12000): Promise<T> {
-  let timeoutId: any;
+  let timeoutId: ReturnType<typeof setTimeout>;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
-      reject(new Error("Firebase işlem zaman aşımına uğradı (Timeout)"));
+      reject(new Error('FIRESTORE_TIMEOUT'));
     }, ms);
   });
   try {
     return await Promise.race([promise, timeoutPromise]);
   } finally {
-    clearTimeout(timeoutId);
+    clearTimeout(timeoutId!);
   }
 }
 
@@ -79,6 +79,25 @@ function cleanUndefined(obj: any): any {
 export async function saveDocument<T extends { id: string }>(collectionName: string, item: T): Promise<void> {
   const docRef = doc(db, collectionName, item.id);
   await withTimeout(setDoc(docRef, cleanUndefined(item), { merge: true }), 15000);
+}
+
+/** Yeni üyelik — portal + kullanıcı kayıtlarını paralel yazar */
+export async function saveSignupDocuments(
+  emailKey: string,
+  portalData: Record<string, unknown>,
+  kullaniciData: Record<string, unknown>
+): Promise<void> {
+  const portalRef = doc(db, 'portalKullanicilar', emailKey);
+  const kullaniciRef = doc(db, 'kullanicilar', emailKey);
+  const payload = cleanUndefined({ ...kullaniciData, id: emailKey, email: emailKey });
+
+  await withTimeout(
+    Promise.all([
+      setDoc(portalRef, cleanUndefined(portalData), { merge: true }),
+      setDoc(kullaniciRef, payload, { merge: true }),
+    ]),
+    30000
+  );
 }
 
 /**

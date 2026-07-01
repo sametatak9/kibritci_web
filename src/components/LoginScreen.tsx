@@ -8,8 +8,13 @@ import {
   createUserWithEmailAndPassword,
   signInAnonymously
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, query, where, limit } from 'firebase/firestore';
 import { saveKullanici, saveKullaniciForSignup } from '../lib/kullaniciUtils';
+import {
+  buildBekleyenFromSignup,
+  isFirestoreWriteFailure,
+  queueSignupFallback,
+} from '../lib/bekleyenUyelik';
 import { Building2, Lock, Mail, Loader2, ArrowRight, CheckCircle2, AlertTriangle, ShieldCheck, User, Fingerprint, PenTool, Check, Trash, Smartphone } from 'lucide-react';
 
 function withReadTimeout<T>(promise: Promise<T>, ms = 8000): Promise<T> {
@@ -223,9 +228,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
         let matchedPersonelId: string | null = null;
         try {
-          const snap = await withReadTimeout(getDocs(collection(db, 'personeller')), 6000);
-          const matchedDoc = snap.docs.find(d => String(d.data().tcNo).trim() === tcNo.trim());
-          if (matchedDoc) matchedPersonelId = matchedDoc.id;
+          const personelQuery = query(
+            collection(db, 'personeller'),
+            where('tcNo', '==', tcNo.trim()),
+            limit(1)
+          );
+          const snap = await withReadTimeout(getDocs(personelQuery), 8000);
+          if (!snap.empty) matchedPersonelId = snap.docs[0].id;
         } catch (matchErr) {
           console.warn('Personel TC eşleştirmesi atlandı:', matchErr);
         }
@@ -238,13 +247,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             setLoading(false);
             return;
           }
-        } catch (checkErr: any) {
-          if (checkErr?.message === 'FIRESTORE_TIMEOUT') {
-            setErrorMsg('Veritabanı yanıt vermedi. Bağlantınızı kontrol edip tekrar deneyin.');
-            setLoading(false);
-            return;
+        } catch (checkErr: unknown) {
+          if ((checkErr as { message?: string })?.message === 'FIRESTORE_TIMEOUT') {
+            console.warn('Kayıt kontrolü zaman aşımı — devam ediliyor');
+            registrationState = 'none';
+          } else {
+            console.warn('Kayıt kontrolü atlandı, devam ediliyor:', checkErr);
           }
-          console.warn('Kayıt kontrolü atlandı, devam ediliyor:', checkErr);
         }
 
         const userPayload = {
@@ -295,18 +304,59 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         };
 
         try {
-          await withReadTimeout(
-            setDoc(doc(db, 'portalKullanicilar', emailLower), userPayload, { merge: true }),
-            12000
-          );
-          await saveKullaniciForSignup(kullaniciPayload);
+          const { imzaCanvas: _portalImza, ...portalPayload } = userPayload;
 
-          const finalUid = await resolveSignupAuthUid(emailLower, passTrim);
-          finishSignup(finalUid, { email: emailLower, uid: finalUid, isMock: true });
+          const persistSignup = () =>
+            saveKullaniciForSignup(kullaniciPayload, portalPayload as Record<string, unknown>);
+
+          try {
+            await persistSignup();
+          } catch (firstErr) {
+            if (!isFirestoreWriteFailure(firstErr)) throw firstErr;
+            console.warn('Doğrudan kayıt başarısız, admin onay kuyruğuna alınıyor...');
+            const bekleyen = buildBekleyenFromSignup({
+              email: emailLower,
+              password: passTrim,
+              ad: ad.trim(),
+              soyad: soyad.trim(),
+              tcNo: tcNo.trim(),
+              imzaText: userPayload.imzaText,
+              imzaStyle: imzaStyle,
+              imzaCanvas: imzaCanvas || undefined,
+              matchedPersonelId: matchedPersonelId,
+              hataSebebi: isFirestoreWriteFailure(firstErr) ? 'quota_or_timeout' : 'unknown',
+            });
+            const queueTarget = await queueSignupFallback(bekleyen);
+            setInfoMsg(
+              queueTarget === 'firestore'
+                ? 'Firebase kotası dolu. Kaydınız yönetici onay kuyruğuna alındı. Onaylandıktan sonra giriş yapabilirsiniz.'
+                : queueTarget === 'api'
+                  ? 'Firebase kotası dolu. Kaydınız sunucu yedek kuyruğuna alındı. Yönetici onayından sonra giriş yapabilirsiniz.'
+                  : 'Firebase kotası dolu. Kaydınız yerel yedek kuyruğa alındı. Lütfen yönetici ile iletişime geçin.'
+            );
+            return;
+          }
+
+          const fallbackUid = `u_${Date.now()}`;
+          finishSignup(fallbackUid, { email: emailLower, uid: fallbackUid, isMock: true });
+
+          void resolveSignupAuthUid(emailLower, passTrim)
+            .then((finalUid) => {
+              if (finalUid && finalUid !== fallbackUid) {
+                localStorage.setItem(
+                  'kibritci_portal_session',
+                  JSON.stringify({ email: emailLower, uid: finalUid })
+                );
+              }
+            })
+            .catch((authErr) => console.warn('Auth kaydı arka planda tamamlanamadı:', authErr));
+
           return;
-        } catch (signupErr: any) {
+        } catch (signupErr: unknown) {
           console.error('Üyelik kaydı hatası:', signupErr);
-          if (signupErr?.message === 'FIRESTORE_TIMEOUT') {
+          if (isFirestoreWriteFailure(signupErr)) {
+            setErrorMsg('Firebase yazma kotası dolu veya bağlantı yavaş. Lütfen bir süre sonra tekrar deneyin.');
+          } else if ((signupErr as { message?: string })?.message === 'FIRESTORE_TIMEOUT') {
             setErrorMsg('Kayıt zaman aşımına uğradı. İnternet bağlantınızı kontrol edip tekrar deneyin.');
           } else {
             setErrorMsg('Üyelik oluşturulamadı. Lütfen tekrar deneyin veya yöneticiye bildirin.');

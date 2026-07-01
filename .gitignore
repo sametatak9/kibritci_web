@@ -9,3 +9,4 @@ coverage/
 .env
 api/[...path].js
 api/[...path].js.map
+data/pending-signups.json

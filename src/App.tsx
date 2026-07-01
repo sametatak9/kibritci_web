@@ -359,33 +359,7 @@ export default function App() {
         setKampKayitlari(stayLogData);
 
         setLoadingMsg('Saha günlük faaliyet dökümleri arşivleniyor...');
-        let reportData = await seedCollectionIfEmpty('sahaFaaliyetleri', INITIAL_SAHA);
-
-        const {
-          bootstrapLegacySahaFaaliyet,
-          markLegacySahaFaaliyetBootstrapped,
-          mayis2026SahaNeedsBootstrap,
-        } = await import('./lib/legacySahaFaaliyetBootstrap');
-        const sahaMerge = bootstrapLegacySahaFaaliyet(reportData);
-        if (sahaMerge) {
-          reportData = sahaMerge;
-          const toSave = sahaMerge.filter(s => s.id.startsWith('SF-MAY26-'));
-          void (async () => {
-            try {
-              for (const sf of toSave) {
-                await saveDocument('sahaFaaliyetleri', sf);
-              }
-              if (!mayis2026SahaNeedsBootstrap(reportData)) {
-                markLegacySahaFaaliyetBootstrapped();
-              }
-              console.log(`Legacy saha faaliyet Firestore kaydı: ${toSave.length} kayıt`);
-            } catch (bgErr) {
-              console.error('Legacy saha faaliyet arka plan kaydı başarısız:', bgErr);
-            }
-          })();
-          console.log(`Legacy saha faaliyet bellekte: ${toSave.length} kayıt`);
-        }
-
+        const reportData = await seedCollectionIfEmpty('sahaFaaliyetleri', []);
         setSahaFaaliyetleri(reportData);
 
         setLoadingMsg('Hukuki ve resmi şantiye hazır tutanaklar yükleniyor...');
@@ -1218,6 +1192,7 @@ export default function App() {
           currentUser={currentUser}
           onSignOut={handleSignOut}
           isStandalone={true}
+          addNotification={addNotification}
         />
       );
     }
@@ -1246,6 +1221,7 @@ export default function App() {
           currentUser={currentUser}
           onSignOut={handleSignOut}
           isStandalone={true}
+          addNotification={addNotification}
         />
       );
     }

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Users, UserPlus, Trash2, CreditCard as Edit3, Camera, Search, ShieldCheck, Mail, Phone, MapPin, DollarSign, UserX, FileText, CloudUpload as UploadCloud, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, Loader as Loader2, Building2, History, Download } from 'lucide-react';
 import { Personel } from '../types/erp';
 import { fetchApiJson } from '../lib/apiClient';
+import { compressImage } from '../lib/imageCompress';
 
 interface PersonelScreenProps {
   personeller: Personel[];
@@ -67,7 +68,15 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     const reader = new FileReader();
     reader.onload = async () => {
       try {
-        const base64Data = (reader.result as string).split(',')[1];
+        let dataUrl = reader.result as string;
+        if (file.type.startsWith('image/')) {
+          dataUrl = await compressImage(dataUrl, 1200, 1200, 0.75);
+        } else if (file.size > 4 * 1024 * 1024) {
+          throw new Error(
+            'PDF dosyası çok büyük (4 MB üzeri). Vercel\'de zaman aşımı olmaması için daha küçük bir PDF veya belgenin fotoğrafını yükleyin.'
+          );
+        }
+        const base64Data = dataUrl.split(',')[1];
         const resData = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
           '/api/parse-sgk',
           {
@@ -111,7 +120,9 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
       } catch (err: any) {
         console.error("SGK/Dekont parsing error:", err);
         let userFriendlyMsg = err.message || "Belge çözümlenemedi. Lütfen dosyanızın geçerli bir SGK İşe Giriş Bildirgesi veya Ödeme Dekontu olduğundan emin olun.";
-        if (userFriendlyMsg.includes("503") || userFriendlyMsg.includes("UNAVAILABLE") || userFriendlyMsg.includes("high demand") || userFriendlyMsg.includes("experiencing high demand")) {
+        if (userFriendlyMsg.includes('504') || userFriendlyMsg.includes('zaman aşımı') || userFriendlyMsg.includes('timeout') || userFriendlyMsg.includes('Gateway')) {
+          userFriendlyMsg = 'Vercel sunucusu zaman aşımına uğradı (504). Çözüm: (1) Belgenin fotoğrafını (PDF yerine JPG) yükleyin, (2) Vercel Pro plana geçin (60 sn limit), (3) GEMINI_API_KEY tanımlı olduğundan emin olun.';
+        } else if (userFriendlyMsg.includes("503") || userFriendlyMsg.includes("UNAVAILABLE") || userFriendlyMsg.includes("high demand") || userFriendlyMsg.includes("experiencing high demand")) {
           userFriendlyMsg = "Yapay zeka servisi şu anda çok yoğun (Geçici 503 Hatası). Sunucu otomatik olarak yeniden denedi ancak yoğunluk devam ediyor. Lütfen birkaç saniye bekleyip tekrar dosya yüklemeyi deneyin veya Manuel Kayıt yöntemini kullanın.";
         }
         setParseError(userFriendlyMsg);

@@ -1,8 +1,64 @@
 import { Express } from 'express';
 import { Type } from '@google/genai';
 import { getGeminiClient, formatGeminiKeyHint, testGeminiConnection } from './gemini';
+import { generateGeminiWithFallback } from './geminiGenerate';
+import {
+  deletePendingSignup,
+  listPendingSignups,
+  upsertPendingSignup,
+} from './pendingSignupsStore';
 
 export function registerApiRoutes(app: Express): void {
+
+app.post("/api/pending-signup", (req, res) => {
+  try {
+    const { email, password, ad, soyad, tcNo } = req.body || {};
+    if (!email || !password || !ad || !soyad || !tcNo) {
+      return res.status(400).json({ error: 'email, password, ad, soyad, tcNo zorunludur' });
+    }
+    const emailKey = String(email).trim().toLowerCase();
+    const saved = upsertPendingSignup({
+      id: emailKey,
+      email: emailKey,
+      password: String(password),
+      ad: String(ad).trim(),
+      soyad: String(soyad).trim(),
+      tcNo: String(tcNo).trim(),
+      imzaText: req.body.imzaText,
+      imzaStyle: req.body.imzaStyle,
+      matchedPersonelId: req.body.matchedPersonelId ?? null,
+      kaynak: req.body.kaynak || 'kayit_formu',
+      durum: 'BEKLEMEDE',
+      olusturulma: req.body.olusturulma || new Date().toISOString(),
+      hataSebebi: req.body.hataSebebi || 'quota',
+      apiYedek: true,
+    });
+    return res.json({ success: true, item: saved });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Kayıt kuyruğuna alınamadı';
+    return res.status(500).json({ error: message });
+  }
+});
+
+app.get("/api/pending-signups", (_req, res) => {
+  try {
+    return res.json({ success: true, items: listPendingSignups() });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Liste okunamadı';
+    return res.status(500).json({ error: message });
+  }
+});
+
+app.delete("/api/pending-signups/:email", (req, res) => {
+  try {
+    const deleted = deletePendingSignup(req.params.email);
+    if (!deleted) return res.status(404).json({ error: 'Kayıt bulunamadı' });
+    return res.json({ success: true });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Silinemedi';
+    return res.status(500).json({ error: message });
+  }
+});
 
 app.get("/api/gemini-health", async (_req, res) => {
   const result = await testGeminiConnection();
@@ -45,7 +101,6 @@ app.post("/api/parse-daily-yoklama", async (req, res) => {
       return res.status(400).json({ error: "Missing fileBase64 or mimeType" });
     }
 
-    const ai = getGeminiClient();
     const imagePart = {
       inlineData: {
         mimeType: mimeType,
@@ -90,45 +145,23 @@ Provide the output strictly conforming to the response schema.
       required: ["tarih", "yoklamaKayitlari"]
     };
 
-    const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
-    let response;
-    let lastError;
+    const { text } = await generateGeminiWithFallback({
+      contents: [promptText, imagePart],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: responseSchema,
+        temperature: 0.1,
+      },
+      label: 'Günlük yoklama analizi',
+    });
 
-    for (const model of models) {
-      let retries = 3;
-      let delayMs = 1200;
-      for (let i = 0; i < retries; i++) {
-        try {
-          console.log(`Parsing daily yoklama with model: ${model} (Attempt ${i + 1}/${retries})...`);
-          response = await ai.models.generateContent({
-            model: model,
-            contents: [promptText, imagePart],
-            config: {
-              responseMimeType: "application/json",
-              responseSchema: responseSchema,
-              temperature: 0.1,
-            },
-          });
-          if (response?.text) break;
-        } catch (err) {
-          lastError = err;
-          console.warn(`Model ${model} failed for daily yoklama (attempt ${i + 1}):`, err);
-          if (i < retries - 1) await new Promise(r => setTimeout(r, delayMs));
-          delayMs *= 2;
-        }
-      }
-      if (response?.text) break;
-    }
-
-    if (!response || !response.text) {
-      throw lastError || new Error("All models failed to parse daily yoklama sheet");
-    }
-
-    const parsedData = JSON.parse(response.text);
+    const parsedData = JSON.parse(text);
     res.json({ success: true, data: parsedData });
   } catch (error: any) {
     console.error("Error in parse-daily-yoklama:", error);
-    res.status(500).json({ error: error.message || "Failed to parse daily yoklama sheet" });
+    const msg = error.message || "Failed to parse daily yoklama sheet";
+    const status = /zaman aşımı|timeout|504/i.test(msg) ? 504 : 500;
+    res.status(status).json({ error: msg });
   }
 });
 
@@ -233,8 +266,6 @@ app.post("/api/parse-sgk", async (req, res) => {
       return res.status(400).json({ error: "Missing fileBase64 or mimeType in request body" });
     }
 
-    const ai = getGeminiClient();
-
     const imagePart = {
       inlineData: {
         mimeType: mimeType,
@@ -273,91 +304,42 @@ If it is a DEKONT (Payment/Transfer Receipt):
 Provide the output strictly conforming to the response schema.
 `;
 
-    // Automatic retry with exponential backoff and fallback model to handle 503/429 errors gracefully
-    const modelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
-    let response;
-    let success = false;
-    let lastError: any = null;
+    const sgkResponseSchema = {
+      type: Type.OBJECT,
+      properties: {
+        tcNo: { type: Type.STRING, description: "11-digit Turkish TC Identification Number or receiver's TC" },
+        ad: { type: Type.STRING, description: "First name" },
+        soyad: { type: Type.STRING, description: "Last name" },
+        babaAdi: { type: Type.STRING, description: "Father's name" },
+        dogumTarihi: { type: Type.STRING, description: "Birthdate in YYYY-MM-DD format" },
+        iseGirisTarihi: { type: Type.STRING, description: "Employment start date or transfer date in YYYY-MM-DD format" },
+        cinsiyet: { type: Type.STRING, description: "Gender: 'Erkek' or 'Kadın'" },
+        adres: { type: Type.STRING, description: "Full residential address" },
+        il: { type: Type.STRING, description: "Residence province" },
+        ilce: { type: Type.STRING, description: "Residence district" },
+        gorev: { type: Type.STRING, description: "Role: 'İŞÇİ', 'FORMEN', 'USTA', 'MİMAR', 'MÜHENDİS', 'ŞEF', 'GÜVENLİK', or 'DEPOCU'" },
+        ibanNo: { type: Type.STRING, description: "Alıcı IBAN number starting with TR" },
+        bankaAdi: { type: Type.STRING, description: "Alıcı Bank name" }
+      },
+      required: ["ad", "soyad"]
+    };
 
-    for (const currentModel of modelsToTry) {
-      let retries = 3;
-      let delayMs = 1200;
-      for (let i = 0; i < retries; i++) {
-        try {
-          console.log(`Attempting SGK/Dekont parsing with model: ${currentModel} (Attempt ${i + 1}/${retries})...`);
-          response = await ai.models.generateContent({
-            model: currentModel,
-            contents: [imagePart, promptText],
-            config: {
-              responseMimeType: "application/json",
-              responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                  tcNo: { type: Type.STRING, description: "11-digit Turkish TC Identification Number or receiver's TC" },
-                  ad: { type: Type.STRING, description: "First name" },
-                  soyad: { type: Type.STRING, description: "Last name" },
-                  babaAdi: { type: Type.STRING, description: "Father's name" },
-                  dogumTarihi: { type: Type.STRING, description: "Birthdate in YYYY-MM-DD format" },
-                  iseGirisTarihi: { type: Type.STRING, description: "Employment start date or transfer date in YYYY-MM-DD format" },
-                  cinsiyet: { type: Type.STRING, description: "Gender: 'Erkek' or 'Kadın'" },
-                  adres: { type: Type.STRING, description: "Full residential address" },
-                  il: { type: Type.STRING, description: "Residence province" },
-                  ilce: { type: Type.STRING, description: "Residence district" },
-                  gorev: { type: Type.STRING, description: "Role: 'İŞÇİ', 'FORMEN', 'USTA', 'MİMAR', 'MÜHENDİS', 'ŞEF', 'GÜVENLİK', or 'DEPOCU'" },
-                  ibanNo: { type: Type.STRING, description: "Alıcı IBAN number starting with TR" },
-                  bankaAdi: { type: Type.STRING, description: "Alıcı Bank name" }
-                },
-                required: ["ad", "soyad"]
-              }
-            }
-          });
-          success = true;
-          break; // Success! exit retry loop
-        } catch (err: any) {
-          lastError = err;
-          const errorMsg = err.message || "";
-          const isTemporary = 
-            err.status === 503 || 
-            err.status === 429 ||
-            errorMsg.includes("503") ||
-            errorMsg.includes("UNAVAILABLE") ||
-            errorMsg.includes("429") ||
-            errorMsg.includes("high demand") ||
-            errorMsg.includes("experiencing high demand") ||
-            errorMsg.includes("Resource exhausted");
-
-          if (isTemporary && i < retries - 1) {
-            console.warn(`Temporary error with ${currentModel} (Attempt ${i + 1}/${retries}). Retrying in ${delayMs}ms... Error: ${errorMsg}`);
-            await new Promise((resolve) => setTimeout(resolve, delayMs));
-            delayMs *= 2;
-            continue;
-          }
-          break; // If non-temporary or max retries reached, exit retry loop to try next model
-        }
-      }
-      if (success) {
-        break; // Successfully got response, exit model selection loop
-      }
-    }
-
-    if (!success || !response) {
-      throw lastError || new Error("Failed to receive a response from Gemini API after trying multiple models.");
-    }
-
-    if (!response) {
-      throw new Error("Failed to receive a response from Gemini API after multiple attempts.");
-    }
-
-    const text = response.text;
-    if (!text) {
-      throw new Error("Empty response from Gemini API");
-    }
+    const { text } = await generateGeminiWithFallback({
+      contents: [imagePart, promptText],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: sgkResponseSchema,
+      },
+      label: 'SGK/Dekont analizi',
+    });
 
     const parsedData = JSON.parse(text);
     res.json({ success: true, data: parsedData });
   } catch (error: any) {
     console.error("Error parsing SGK PDF/Image via Gemini:", error);
-    res.status(500).json({ error: error.message || "Failed to parse SGK document" });
+    const msg = error.message || "Failed to parse SGK document";
+    const status = /zaman aşımı|timeout|504/i.test(msg) ? 504 : 500;
+    res.status(status).json({ error: msg });
   }
 });
 

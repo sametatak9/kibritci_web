@@ -1,5 +1,5 @@
 import { doc, setDoc } from 'firebase/firestore';
-import { db, fetchCollection, removeDocument, saveDocument } from './firebase';
+import { db, fetchCollection, removeDocument, saveDocument, saveSignupDocuments } from './firebase';
 import {
   applyRoleDefaults,
   isMobileRole,
@@ -115,11 +115,20 @@ export async function saveKullanici(user: KullaniciLike): Promise<KullaniciLike>
   return canonical;
 }
 
-/** Yeni üyelik — tüm koleksiyonu taramadan doğrudan yazar (hızlı kayıt) */
-export async function saveKullaniciForSignup(user: KullaniciLike): Promise<KullaniciLike> {
+/** Yeni üyelik — portal + kullanıcı paralel yazar */
+export async function saveKullaniciForSignup(
+  user: KullaniciLike,
+  portalData?: Record<string, unknown>
+): Promise<KullaniciLike> {
   const emailKey = kullaniciDocId(user.email);
   const canonical: KullaniciLike = { ...user, id: emailKey, email: emailKey };
-  await saveDocument('kullanicilar', canonical as KullaniciLike & { id: string });
+
+  if (portalData) {
+    await saveSignupDocuments(emailKey, portalData, canonical as Record<string, unknown>);
+  } else {
+    await saveDocument('kullanicilar', canonical as KullaniciLike & { id: string });
+  }
+
   void deleteDuplicateDocs(emailKey, emailKey).catch(() => undefined);
   return canonical;
 }
