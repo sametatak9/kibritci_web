@@ -339,30 +339,29 @@ export default function App() {
           personnelData = legacyMerge.personeller;
           attData = legacyMerge.yoklamalar;
           console.log(`Legacy yoklama bellekte birleştirildi: ${legacyMerge.importedDays} gün`);
-          if (!hasSubstantialYoklamaData(attData)) {
-            const mergedPersonel = personnelData;
-            const mergedYoklama = attData;
-            const idsBefore = personnelIdsBefore;
-            void (async () => {
-              try {
-                await saveYoklamaDocument(mergedYoklama);
-                for (const p of mergedPersonel) {
-                  if (!idsBefore.has(p.id)) {
-                    await saveDocument('personeller', p);
-                  }
+          const mergedPersonel = personnelData;
+          const mergedYoklama = attData;
+          const idsBefore = personnelIdsBefore;
+          void (async () => {
+            try {
+              // Legacy birleştirme sonrası yoklama her durumda Firestore'a yazılsın.
+              await saveYoklamaDocument(mergedYoklama);
+              for (const p of mergedPersonel) {
+                if (!idsBefore.has(p.id)) {
+                  await saveDocument('personeller', p);
                 }
-                if (!mayis2026NeedsBootstrap(mergedYoklama)) {
-                  markLegacyYoklamaBootstrapped();
-                }
-                console.log('Legacy yoklama Firestore arka plan kaydı tamamlandı');
-              } catch (bgErr) {
-                console.error('Legacy yoklama arka plan kaydı başarısız (uygulama yine de açık):', bgErr);
               }
-            })();
-          } else {
-            markLegacyYoklamaBootstrapped();
-            markProductionLive();
-          }
+              if (!mayis2026NeedsBootstrap(mergedYoklama)) {
+                markLegacyYoklamaBootstrapped();
+              }
+              if (hasSubstantialYoklamaData(mergedYoklama)) {
+                markProductionLive();
+              }
+              console.log('Legacy yoklama Firestore arka plan kaydı tamamlandı');
+            } catch (bgErr) {
+              console.error('Legacy yoklama arka plan kaydı başarısız (uygulama yine de açık):', bgErr);
+            }
+          })();
         }
 
         setPersoneller(personnelData);
