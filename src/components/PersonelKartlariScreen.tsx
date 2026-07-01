@@ -71,8 +71,17 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
     ? kampKayitlari.find(k => k.personelId === selectedPersonnel.id && k.durum === 'AKTIF')
     : null;
   const activeRoom = activeStay 
-    ? kampOdalari.find(r => r.id === activeStay.odaId)
+    ? kampOdalari.find(r => r.id === activeStay.odaId || r.id === activeStay.roomId)
     : null;
+
+  const personelStayHistory = selectedPersonnel
+    ? kampKayitlari
+        .filter((k) => {
+          if (k.personelId && k.personelId === selectedPersonnel.id) return true;
+          return k.personelIsim.trim().toLowerCase() === `${selectedPersonnel.ad} ${selectedPersonnel.soyad}`.trim().toLowerCase();
+        })
+        .sort((a, b) => (b.girisTarihi || '').localeCompare(a.girisTarihi || ''))
+    : [];
 
   // Leave records (from hazirTutanaklar or mock list)
   const leaveTutanaklar = selectedPersonnel
@@ -238,8 +247,36 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
                   </div>
                   <div className="space-y-0.5">
                     <p className="text-[9px] text-slate-400 uppercase font-bold">Yatakhane Lojman Odası</p>
-                    <p className="text-slate-900 mt-0.5">{activeRoom ? `${activeRoom.yerleskeAdi} / Oda ${activeRoom.odaNo}` : "Lojman Kaydı Yok"}</p>
+                    <p className="text-slate-900 mt-0.5">
+                      {activeRoom
+                        ? `${activeRoom.yerleskeAdi} / ${activeRoom.kogusNo} / Oda ${activeRoom.odaNo}`
+                        : activeStay?.yerleskeAdi
+                          ? `${activeStay.yerleskeAdi} / ${activeStay.katAdi || '-'} / Oda ${activeStay.odaNo || '-'}`
+                          : "Lojman Kaydı Yok"}
+                    </p>
                   </div>
+                </div>
+
+                <div className="bg-slate-50/50 p-2.5 rounded-xl border border-slate-150/50">
+                  <p className="text-[9px] text-slate-400 uppercase font-bold mb-1">Kamp Konaklama Geçmişi</p>
+                  {personelStayHistory.length === 0 ? (
+                    <p className="text-[10px] text-slate-500 italic">Kamp geçmiş kaydı yok.</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {personelStayHistory.slice(0, 4).map((k) => {
+                        const room = kampOdalari.find((r) => r.id === k.odaId || r.id === k.roomId);
+                        const roomText = room
+                          ? `${room.yerleskeAdi} / ${room.kogusNo} / Oda ${room.odaNo}`
+                          : `${k.yerleskeAdi || '-'} / ${k.katAdi || '-'} / Oda ${k.odaNo || '-'}`;
+                        return (
+                          <div key={k.id} className="text-[10px] text-slate-700 bg-white border border-slate-200 rounded-md px-2 py-1 flex justify-between gap-2">
+                            <span className="font-semibold truncate">{roomText}</span>
+                            <span className="text-slate-500 shrink-0">{k.girisTarihi} {k.cikisTarihi ? `→ ${k.cikisTarihi}` : '(Aktif)'}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

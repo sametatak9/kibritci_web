@@ -35,10 +35,14 @@ export async function assignKampResident(
   if (already) throw new Error(`${input.personelIsim} zaten başka bir odada aktif`);
 
   const reg: KampKaydi = {
-    id: `reg_${Date.now()}`,
+    id: `reg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     personelIsim: input.personelIsim.trim(),
     personelId: input.personelId,
     odaId: input.roomId,
+    roomId: input.roomId,
+    yerleskeAdi: targetRoom.yerleskeAdi,
+    katAdi: targetRoom.kogusNo,
+    odaNo: targetRoom.odaNo,
     girisTarihi: new Date().toISOString().slice(0, 10),
     durum: 'AKTIF',
     calistigiFirma: input.calistigiFirma,

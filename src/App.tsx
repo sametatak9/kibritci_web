@@ -62,7 +62,7 @@ import {
   saveDocument,
   fetchCollection,
 } from './lib/firebase';
-import { purgeLegacyKampIfNeeded } from './lib/kampYapisi';
+import { purgeLegacyKampIfNeeded, loadKampStateSnapshot } from './lib/kampYapisi';
 import { probeGeminiApi } from './lib/apiClient';
 import {
   hasSubstantialYoklamaData,
@@ -980,6 +980,14 @@ export default function App() {
     setKampKayitlari((prev) => (typeof updater === 'function' ? updater(prev) : updater));
   };
 
+  const reloadKampData = async () => {
+    const snapshot = await loadKampStateSnapshot();
+    setKampOdalari(snapshot.odalar);
+    setKampKayitlari(snapshot.kayitlar);
+    setKampYerleskeleri(snapshot.yerleskeler);
+    setKampKatlari(snapshot.katlar);
+  };
+
   const setSahaFaaliyetleriWithSync = (updater: SahaFaaliyetiType[] | ((s: SahaFaaliyetiType[]) => SahaFaaliyetiType[])) => {
     setSahaFaaliyetleri(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -1328,6 +1336,7 @@ export default function App() {
           setKampOdalari={setKampOdalariWithSync}
           kampKayitlari={kampKayitlari}
           setKampKayitlari={setKampKayitlariWithSync}
+          reloadKampData={reloadKampData}
           kampYerleskeleri={kampYerleskeleri}
           kampKatlari={kampKatlari}
           personeller={personeller}
@@ -1408,6 +1417,7 @@ export default function App() {
           setKampOdalari={setKampOdalariWithSync}
           kampKayitlari={kampKayitlari}
           setKampKayitlari={setKampKayitlariWithSync}
+          reloadKampData={reloadKampData}
           kampYerleskeleri={kampYerleskeleri}
           kampKatlari={kampKatlari}
           personeller={personeller}
@@ -1787,6 +1797,7 @@ export default function App() {
                   setKampOdalari={setKampOdalariWithSync}
                   kampKayitlari={kampKayitlari}
                   setKampKayitlari={setKampKayitlariWithSync}
+                  reloadKampData={reloadKampData}
                   kampYerleskeleri={kampYerleskeleri}
                   kampKatlari={kampKatlari}
                   sahaFaaliyetleri={sahaFaaliyetleri}
@@ -1868,6 +1879,7 @@ export default function App() {
                     setKampOdalari={setKampOdalariWithSync}
                     kampKayitlari={kampKayitlari}
                     setKampKayitlari={setKampKayitlariWithSync}
+                    reloadKampData={reloadKampData}
                     kampYerleskeleri={kampYerleskeleri}
                     kampKatlari={kampKatlari}
                     personeller={personeller}

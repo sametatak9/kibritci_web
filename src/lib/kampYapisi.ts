@@ -5,6 +5,10 @@ import { writeBatch, doc } from 'firebase/firestore';
 const KAMP_PURGE_TIMEOUT_MS = 90_000;
 let kampPurgeQueue: Promise<unknown> = Promise.resolve();
 
+function kampId(prefix: string): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function enqueueKampPurge<T>(task: () => Promise<T>): Promise<T> {
   const run = kampPurgeQueue.then(() =>
     Promise.race([
@@ -45,7 +49,7 @@ export async function createKampYerleske(ad: string, olusturan?: string): Promis
   const trimmed = ad.trim();
   if (!trimmed) throw new Error('Yerleşke adı boş olamaz');
   const item: KampYerleske = {
-    id: `ky_${Date.now()}`,
+    id: kampId('ky'),
     ad: trimmed,
     olusturmaTarihi: new Date().toISOString(),
     olusturan,
@@ -62,7 +66,7 @@ export async function createKampKat(
   const trimmed = ad.trim();
   if (!trimmed) throw new Error('Kat adı boş olamaz');
   const item: KampKat = {
-    id: `kk_${Date.now()}`,
+    id: kampId('kk'),
     yerleskeId: yerleske.id,
     yerleskeAdi: yerleske.ad,
     ad: trimmed,
@@ -134,7 +138,7 @@ export async function createKampOdasi(input: CreateKampOdasiInput): Promise<Kamp
     : await findOrCreateKat(yerleske, input.kogusNo);
 
   const room: KampOdasi = {
-    id: `room_${Date.now()}`,
+    id: kampId('room'),
     yerleskeAdi: yerleske.ad,
     kogusNo: kat.ad,
     yerleskeId: yerleske.id,
@@ -147,6 +151,65 @@ export async function createKampOdasi(input: CreateKampOdasiInput): Promise<Kamp
 
   await saveDocument('kampOdalari', room);
   return room;
+}
+
+export interface UpdateKampOdasiInput {
+  room: KampOdasi;
+  yerleskeAdi?: string;
+  kogusNo?: string;
+  odaNo?: string;
+  kapasite?: number;
+  firmaTipi?: 'ANA_FIRMA' | 'TASERON';
+  olusturan?: string;
+}
+
+/** Oda bilgisini günceller; gerekirse yeni yerleşke/kat yapısını otomatik oluşturur */
+export async function updateKampOdasi(input: UpdateKampOdasiInput): Promise<KampOdasi> {
+  const current = input.room;
+  const nextYerleskeAdi = (input.yerleskeAdi ?? current.yerleskeAdi).trim();
+  const nextKogusNo = (input.kogusNo ?? current.kogusNo).trim();
+  const nextOdaNo = (input.odaNo ?? current.odaNo).trim();
+  const nextKapasite = Number(input.kapasite ?? current.kapasite);
+  const nextFirmaTipi = input.firmaTipi ?? current.firmaTipi;
+
+  if (!nextYerleskeAdi || !nextKogusNo || !nextOdaNo) {
+    throw new Error('Yerleşke, kat/blok ve oda no zorunludur');
+  }
+  if (!Number.isFinite(nextKapasite) || nextKapasite < 1) {
+    throw new Error('Kapasite en az 1 olmalıdır');
+  }
+
+  const yerleske = await findOrCreateYerleske(nextYerleskeAdi, input.olusturan);
+  const kat = await findOrCreateKat(yerleske, nextKogusNo);
+
+  const updated: KampOdasi = {
+    ...current,
+    yerleskeAdi: yerleske.ad,
+    yerleskeId: yerleske.id,
+    kogusNo: kat.ad,
+    katId: kat.id,
+    odaNo: nextOdaNo,
+    kapasite: nextKapasite,
+    firmaTipi: nextFirmaTipi,
+  };
+
+  await saveDocument('kampOdalari', updated);
+  return updated;
+}
+
+export async function loadKampStateSnapshot(): Promise<{
+  odalar: KampOdasi[];
+  kayitlar: KampKaydi[];
+  yerleskeler: KampYerleske[];
+  katlar: KampKat[];
+}> {
+  const [odalar, kayitlar, yerleskeler, katlar] = await Promise.all([
+    fetchCollection<KampOdasi>('kampOdalari'),
+    fetchCollection<KampKaydi>('kampKayitlari'),
+    fetchCollection<KampYerleske>('kampYerleskeleri'),
+    fetchCollection<KampKat>('kampKatlari'),
+  ]);
+  return { odalar, kayitlar, yerleskeler, katlar };
 }
 
 export async function deleteKampOdasi(roomId: string): Promise<void> {

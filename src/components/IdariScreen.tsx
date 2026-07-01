@@ -25,6 +25,7 @@ import {
   purgeAllKampData,
   updateKampYerleskeAdi,
   updateKampKatAdi,
+  updateKampOdasi,
   isLegacyKampRoom,
 } from '../lib/kampYapisi';
 import { assignKampResident, evictKampResident, suggestPersonelKaydi } from '../lib/kampPlacementUtils';
@@ -44,6 +45,7 @@ interface IdariScreenProps {
   setKampOdalari: React.Dispatch<React.SetStateAction<KampOdasi[]>>;
   kampKayitlari: KampKaydi[];
   setKampKayitlari: React.Dispatch<React.SetStateAction<KampKaydi[]>>;
+  reloadKampData?: () => Promise<void>;
   kampYerleskeleri?: KampYerleske[];
   kampKatlari?: KampKat[];
   sahaFaaliyetleri: SahaFaaliyeti[];
@@ -68,6 +70,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   demirbaslar, setDemirbaslar,
   kampOdalari, setKampOdalari,
   kampKayitlari, setKampKayitlari,
+  reloadKampData,
   kampYerleskeleri = [],
   kampKatlari = [],
   sahaFaaliyetleri, setSahaFaaliyetleri,
@@ -299,6 +302,17 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     }
   };
 
+  const handleReloadKampData = async () => {
+    if (!reloadKampData) return;
+    try {
+      await reloadKampData();
+      alert('Kamp verileri yenilendi.');
+    } catch (err) {
+      console.error(err);
+      alert('Kamp verileri yenilenemedi.');
+    }
+  };
+
   const handleDeleteCampus = async (campName: string) => {
     if (!window.confirm(`"${campName}" yerleşkesini ve bu yerleşkeye bağlı tüm odaları ve sakin kayıtlarını silmek istediğinize emin misiniz?`)) return;
     try {
@@ -488,6 +502,29 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       alert('Kat/blok adı güncellendi.');
     } catch {
       alert('Kat güncellenemedi.');
+    }
+  };
+
+  const handleEditRoom = async (room: KampOdasi) => {
+    const yeniOdaNo = window.prompt('Yeni oda adı/no:', room.odaNo);
+    if (!yeniOdaNo) return;
+    const yeniKapasiteRaw = window.prompt('Yeni kapasite (yatak):', String(room.kapasite));
+    if (!yeniKapasiteRaw) return;
+    const yeniKapasite = Number(yeniKapasiteRaw);
+    if (!Number.isFinite(yeniKapasite) || yeniKapasite < 1) {
+      alert('Kapasite en az 1 olmalıdır.');
+      return;
+    }
+    try {
+      await updateKampOdasi({
+        room,
+        odaNo: yeniOdaNo.trim(),
+        kapasite: yeniKapasite,
+      });
+      alert('Oda bilgisi güncellendi.');
+    } catch (err) {
+      console.error(err);
+      alert('Oda güncellenemedi.');
     }
   };
 
@@ -2134,7 +2171,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 </div>
                 <div className="flex justify-between">
                   <span>Yerleşik Toplam Kadro:</span>
-                  <strong className="text-slate-800">{kampKayitlari.length} Personel</strong>
+                  <strong className="text-slate-800">{kampKayitlari.filter((k) => k.durum === 'AKTIF').length} Personel</strong>
                 </div>
                 <div className="flex justify-between">
                   <span>Toplam Yatak Kapasitesi:</span>
@@ -2180,6 +2217,15 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
               <span className="text-[10px] text-indigo-800 font-bold bg-indigo-50 px-2 py-0.5 rounded-full">
                 1 Kat Bir Kaç Odadan Oluşur
               </span>
+              {reloadKampData && (
+                <button
+                  type="button"
+                  onClick={handleReloadKampData}
+                  className="text-[10px] font-bold px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Yenile
+                </button>
+              )}
             </div>
 
             <div className="flex-grow overflow-y-auto p-4 space-y-6 bg-slate-50/20">
@@ -2208,7 +2254,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     {/* Rooms within this floor */}
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                       {floorRooms.map(room => {
-                        const occupants = kampKayitlari.filter(cr => cr.roomId === room.id || cr.odaId === room.id);
+                        const occupants = kampKayitlari.filter(cr => (cr.roomId === room.id || cr.odaId === room.id) && cr.durum === 'AKTIF');
                         const isFull = occupants.length >= room.kapasite;
 
                         return (
@@ -2265,6 +2311,13 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                                   🚫 Oda Maksimum Dolulukta
                                 </div>
                               )}
+                              <button
+                                onClick={() => handleEditRoom(room)}
+                                className="px-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded-lg border border-indigo-200 transition duration-150 cursor-pointer flex items-center justify-center text-[10px]"
+                                title="Oda Güncelle"
+                              >
+                                ✎
+                              </button>
                               <button
                                 onClick={() => handleDeleteRoom(room.id)}
                                 className="px-2 bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white rounded-lg border border-rose-200 transition duration-150 cursor-pointer flex items-center justify-center text-[10px]"
@@ -4224,14 +4277,14 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   <div className="bg-emerald-50 border border-emerald-150 rounded-xl p-3">
                     <span className="text-[8px] text-emerald-700 font-bold block uppercase tracking-wide">ANLIK KALAN PERSONEL</span>
                     <span className="text-base font-extrabold text-emerald-700 block mt-0.5">
-                      {kampKayitlari.length} Kadro
+                      {kampKayitlari.filter((k) => k.durum === 'AKTIF').length} Kadro
                     </span>
                   </div>
                   <div className="bg-amber-50 border border-amber-150 rounded-xl p-3">
                     <span className="text-[8px] text-amber-700 font-bold block uppercase tracking-wide">DOLULUK ORANI</span>
                     <span className="text-base font-extrabold text-amber-700 block mt-0.5">
                       {kampOdalari.reduce((acc, current) => acc + current.kapasite, 0) > 0 
-                        ? `% ${Math.round((kampKayitlari.length / kampOdalari.reduce((acc, current) => acc + current.kapasite, 0)) * 100)}` 
+                        ? `% ${Math.round((kampKayitlari.filter((k) => k.durum === 'AKTIF').length / kampOdalari.reduce((acc, current) => acc + current.kapasite, 0)) * 100)}` 
                         : "% 0"
                       }
                     </span>
@@ -4250,7 +4303,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                         
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                           {floorRooms.map(room => {
-                            const occupants = kampKayitlari.filter(cr => cr.roomId === room.id || cr.odaId === room.id);
+                            const occupants = kampKayitlari.filter(cr => (cr.roomId === room.id || cr.odaId === room.id) && cr.durum === 'AKTIF');
                             const isFull = occupants.length >= room.kapasite;
                             return (
                               <div key={room.id} className="bg-white border p-3 rounded-xl shadow-sm text-[10px] space-y-2 flex flex-col justify-between">

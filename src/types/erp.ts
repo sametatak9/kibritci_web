@@ -219,6 +219,9 @@ export interface KampKaydi {
   personelId?: string;
   odaId: string;
   roomId?: string;
+  yerleskeAdi?: string;
+  katAdi?: string;
+  odaNo?: string;
   girisTarihi: string;
   cikisTarihi?: string;
   durum: 'AKTIF' | 'PASIF';

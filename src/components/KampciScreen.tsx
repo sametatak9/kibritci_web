@@ -6,7 +6,7 @@ import {
 import { KampOdasi, KampKaydi, Personel, StokKart, KampYerleske, KampKat, CariKart, AylikYoklamaMap } from '../types/erp';
 import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
-import { createKampYerleske, createKampKat, katsForYerleske, createKampOdasi, deleteKampOdasi, hasLegacySeedRooms, purgeLegacyKampData, purgeAllKampData } from '../lib/kampYapisi';
+import { createKampYerleske, createKampKat, katsForYerleske, createKampOdasi, deleteKampOdasi, hasLegacySeedRooms, purgeLegacyKampData, purgeAllKampData, updateKampOdasi } from '../lib/kampYapisi';
 import { assignKampResident, evictKampResident, suggestPersonelKaydi } from '../lib/kampPlacementUtils';
 import { isProductionLive } from '../lib/productionDataGuard';
 import { buildKampciGunlukOzet } from '../lib/gunlukAkisUtils';
@@ -19,6 +19,7 @@ interface KampciScreenProps {
   setKampOdalari: React.Dispatch<React.SetStateAction<KampOdasi[]>>;
   kampKayitlari: KampKaydi[];
   setKampKayitlari: React.Dispatch<React.SetStateAction<KampKaydi[]>>;
+  reloadKampData?: () => Promise<void>;
   kampYerleskeleri?: KampYerleske[];
   kampKatlari?: KampKat[];
   personeller: Personel[];
@@ -37,6 +38,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   setKampOdalari,
   kampKayitlari,
   setKampKayitlari,
+  reloadKampData,
   kampYerleskeleri = [],
   kampKatlari = [],
   personeller,
@@ -446,6 +448,45 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
     } catch (err) {
       console.error(err);
       showStatus('error', 'Oda silinemedi.');
+    }
+  };
+
+  const handleReloadKamp = async () => {
+    if (!reloadKampData) {
+      showStatus('info', 'Canlı güncelleme açık. Veriler otomatik yenileniyor.');
+      return;
+    }
+    showStatus('info', 'Kamp verileri yenileniyor…', 0);
+    try {
+      await reloadKampData();
+      showStatus('success', 'Kamp verileri Firestore üzerinden yenilendi.');
+    } catch (err) {
+      console.error(err);
+      showStatus('error', 'Kamp verileri yenilenemedi.');
+    }
+  };
+
+  const handleUpdateRoom = async (room: KampOdasi) => {
+    const nextOdaNo = window.prompt('Yeni oda adı/no', room.odaNo);
+    if (!nextOdaNo) return;
+    const nextKapasiteRaw = window.prompt('Yeni kapasite (yatak)', String(room.kapasite));
+    if (!nextKapasiteRaw) return;
+    const nextKapasite = Number(nextKapasiteRaw);
+    if (!Number.isFinite(nextKapasite) || nextKapasite < 1) {
+      showStatus('error', 'Kapasite en az 1 olmalıdır.');
+      return;
+    }
+    try {
+      await updateKampOdasi({
+        room,
+        odaNo: nextOdaNo.trim(),
+        kapasite: nextKapasite,
+        olusturan: currentUser?.email,
+      });
+      showStatus('success', `Oda güncellendi: ${room.odaNo} → ${nextOdaNo.trim()}`);
+    } catch (err) {
+      console.error(err);
+      showStatus('error', 'Oda güncellenemedi.');
     }
   };
 
@@ -1175,6 +1216,13 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                   className="bg-slate-50 border border-slate-200 text-[10px] text-slate-800 pl-7 pr-2.5 py-1.5 rounded-lg outline-none w-44"
                 />
               </div>
+              <button
+                type="button"
+                onClick={handleReloadKamp}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1"
+              >
+                <RefreshCw size={11} /> Yenile
+              </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1256,6 +1304,12 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                             Tahliye Et
                           </button>
                         )}
+                        <button
+                          onClick={() => handleUpdateRoom(room)}
+                          className="bg-indigo-500/15 hover:bg-indigo-600 text-indigo-500 hover:text-white border border-indigo-500/20 hover:border-indigo-600 rounded-lg py-1.5 px-2.5 text-[9px] font-black uppercase tracking-wider cursor-pointer transition text-center"
+                        >
+                          Oda Güncelle
+                        </button>
                       </div>
 
                     </div>
@@ -1428,55 +1482,55 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
 
           {/* Rooms Table List */}
           <div className="lg:col-span-2 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
-            <div>
+            <div className="flex items-center justify-between gap-2">
+              <div>
               <span className="font-extrabold text-[10px] text-blue-400 uppercase tracking-wider">Şantiye Kamp Altyapısı</span>
               <h3 className="font-bold text-sm text-slate-800 mt-0.5">📋 Tanımlı Odaların Listesi</h3>
+              </div>
+              <button
+                type="button"
+                onClick={handleReloadKamp}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1"
+              >
+                <RefreshCw size={11} /> Yenile
+              </button>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300 border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 text-slate-500 font-extrabold text-[10px] uppercase tracking-wider">
-                    <th className="pb-3">Yerleşke</th>
-                    <th className="pb-3">Blok / Kat</th>
-                    <th className="pb-3">Oda No</th>
-                    <th className="pb-3">Kapasite</th>
-                    <th className="pb-3">Firma Tipi</th>
-                    <th className="pb-3 text-right">Eylemler</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {kampOdalari.map(r => (
-                    <tr key={r.id} className="border-b border-slate-200/50 hover:bg-slate-900/30 transition">
-                      <td className="py-3 font-mono text-slate-500">{r.yerleskeAdi}</td>
-                      <td className="py-3 font-bold text-slate-800">{r.kogusNo}</td>
-                      <td className="py-3 font-bold text-amber-400">{r.odaNo}</td>
-                      <td className="py-3 font-bold font-mono">{r.kapasite} Yatak</td>
-                      <td className="py-3 text-[10px]">
-                        <span className={`px-2 py-0.5 rounded font-bold border ${
-                          r.firmaTipi === 'ANA_FIRMA' ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' : 'bg-purple-500/10 border-purple-500/20 text-purple-400'
-                        }`}>
-                          {r.firmaTipi === 'ANA_FIRMA' ? 'Ana Firma' : 'Taşeron'}
-                        </span>
-                      </td>
-                      <td className="py-3 text-right">
-                        <button
-                          onClick={() => handleDeleteRoom(r.id, r.odaNo)}
-                          className="p-1.5 text-rose-400 hover:bg-rose-500/10 rounded transition cursor-pointer"
-                          title="Sil"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {kampOdalari.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="text-center py-8 text-slate-500 italic">Kayıtlı kamp odası bulunmuyor.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {kampOdalari.map((r) => (
+                <div key={r.id} className="border border-slate-200 rounded-xl p-3 bg-slate-50/60 space-y-2">
+                  <p className="text-[10px] font-bold text-slate-500">{r.yerleskeAdi} / {r.kogusNo}</p>
+                  <p className="text-xs font-black text-slate-800">Oda: {r.odaNo}</p>
+                  <p className="text-[10px] font-semibold text-slate-600">{r.kapasite} yatak</p>
+                  <span className={`inline-block px-2 py-0.5 rounded font-bold border text-[10px] ${
+                    r.firmaTipi === 'ANA_FIRMA' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-purple-50 border-purple-200 text-purple-700'
+                  }`}>
+                    {r.firmaTipi === 'ANA_FIRMA' ? 'Ana Firma' : 'Taşeron'}
+                  </span>
+                  <div className="pt-1 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateRoom(r)}
+                      className="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold py-1.5 rounded-lg transition cursor-pointer"
+                    >
+                      Oda Güncelle
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteRoom(r.id, r.odaNo)}
+                      className="bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold px-2.5 rounded-lg transition cursor-pointer"
+                      title="Sil"
+                    >
+                      Sil
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {kampOdalari.length === 0 && (
+                <div className="col-span-full text-center py-8 text-slate-500 italic border border-dashed rounded-xl bg-slate-50">
+                  Kayıtlı kamp odası bulunmuyor.
+                </div>
+              )}
             </div>
           </div>
         </div>
