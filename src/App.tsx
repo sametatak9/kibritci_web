@@ -56,6 +56,7 @@ import {
   seedCollectionIfEmpty,
   seedYoklamaIfEmpty,
   saveYoklamaDocument,
+  parseYoklamaSnapshotData,
   syncArrayToFirestore,
   saveDocument,
   fetchCollection,
@@ -564,7 +565,7 @@ export default function App() {
 
     const unsubYoklamalar = onSnapshot(doc(db, 'yoklamalar', 'global_yoklama_map'), (snap) => {
       if (!snap.exists()) return;
-      const data = ((snap.data() as { data?: AylikYoklamaMap }).data) || {};
+      const data = parseYoklamaSnapshotData(snap.data() as Record<string, unknown>) as AylikYoklamaMap;
       setYoklamalar(data);
       if (hasSubstantialYoklamaData(data)) markProductionLive();
     });

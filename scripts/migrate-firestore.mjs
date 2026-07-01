@@ -23,6 +23,7 @@ import {
   getDocs,
   doc,
   writeBatch,
+  setDoc,
 } from 'firebase/firestore';
 import { FIRESTORE_COLLECTIONS } from './firestore-collections.mjs';
 
@@ -86,6 +87,15 @@ async function auditAll(db, label) {
   return rows;
 }
 
+async function transformDocForTarget(name, docSnap) {
+  if (name === 'yoklamalar' && docSnap.id === 'global_yoklama_map') {
+    const src = docSnap.data();
+    const map = src.data || {};
+    return { dataJson: JSON.stringify(map) };
+  }
+  return docSnap.data();
+}
+
 async function copyCollection(sourceDb, targetDb, name, dryRun) {
   const { docs, error } = await countCollection(sourceDb, name);
   if (error) return { name, copied: 0, skipped: true, reason: error };
@@ -99,6 +109,19 @@ async function copyCollection(sourceDb, targetDb, name, dryRun) {
   const BATCH_SIZE = 400;
   for (let i = 0; i < docs.length; i += BATCH_SIZE) {
     const chunk = docs.slice(i, i + BATCH_SIZE);
+    const yoklamaHeavy =
+      name === 'yoklamalar' && chunk.some((d) => d.id === 'global_yoklama_map');
+
+    if (yoklamaHeavy) {
+      for (const d of chunk) {
+        const payload = await transformDocForTarget(name, d);
+        await setDoc(doc(targetDb, name, d.id), payload);
+        copied += 1;
+        process.stdout.write(`\r  ${name}: ${copied}/${docs.length}`);
+      }
+      continue;
+    }
+
     const batch = writeBatch(targetDb);
     for (const d of chunk) {
       batch.set(doc(targetDb, name, d.id), d.data());

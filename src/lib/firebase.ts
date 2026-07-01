@@ -149,6 +149,24 @@ export async function seedCollectionIfEmpty<T extends { id: string }>(
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as unknown as T);
 }
 
+export function parseYoklamaSnapshotData(
+  raw: Record<string, unknown> | undefined
+): Record<string, unknown> {
+  if (!raw) return {};
+  if (typeof raw.dataJson === 'string') {
+    try {
+      return JSON.parse(raw.dataJson) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  }
+  return (raw.data as Record<string, unknown>) || {};
+}
+
+function buildYoklamaFirestorePayload(map: Record<string, unknown>): { dataJson: string } {
+  return { dataJson: JSON.stringify(map) };
+}
+
 /**
  * Specifically seed yoklamalar because its keys are dynamic and the root is a nested map
  * Let's store yoklama in a single document 'all_yoklama' under collection 'yoklamalar' 
@@ -160,14 +178,14 @@ export async function seedYoklamaIfEmpty(initialYoklama: any): Promise<any> {
   
   if (snapshot.empty) {
     console.log(`Seeding dynamic yoklama map...`);
-    await withTimeout(setDoc(docRef, cleanUndefined({ data: initialYoklama })));
+    await withTimeout(setDoc(docRef, cleanUndefined(buildYoklamaFirestorePayload(initialYoklama))));
     return initialYoklama;
   }
   
   // Find 'global_yoklama_map' document
   const globalDoc = snapshot.docs.find(d => d.id === 'global_yoklama_map');
   if (globalDoc) {
-    return (globalDoc.data() as any).data || {};
+    return parseYoklamaSnapshotData(globalDoc.data() as Record<string, unknown>);
   }
   return {};
 }
@@ -175,7 +193,7 @@ export async function seedYoklamaIfEmpty(initialYoklama: any): Promise<any> {
 export async function fetchYoklamaDocument(): Promise<Record<string, unknown>> {
   const snapshot = await withTimeout(getDocs(collection(db, 'yoklamalar')));
   const globalDoc = snapshot.docs.find((d) => d.id === 'global_yoklama_map');
-  if (globalDoc) return ((globalDoc.data() as { data?: Record<string, unknown> }).data) || {};
+  if (globalDoc) return parseYoklamaSnapshotData(globalDoc.data() as Record<string, unknown>);
   return {};
 }
 
@@ -203,7 +221,7 @@ export async function saveYoklamaDocument(yoklamaMap: Record<string, unknown>): 
   } catch {
     /* yerel kayıt */
   }
-  await withTimeout(setDoc(docRef, cleanUndefined({ data: payload })), 45000);
+  await withTimeout(setDoc(docRef, cleanUndefined(buildYoklamaFirestorePayload(payload)), 45000));
 }
 
 /**
