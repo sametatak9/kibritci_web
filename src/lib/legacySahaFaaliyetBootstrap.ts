@@ -8,7 +8,7 @@ import {
   HAZIRAN_2026_SAHA_FAALIYET_COUNT,
 } from '../data/haziran2026SahaFaaliyetleri';
 
-export const LEGACY_SAHA_FAALIYET_VERSION = 2;
+export const LEGACY_SAHA_FAALIYET_VERSION = 3;
 const STORAGE_KEY = 'kibritci_legacy_saha_faaliyet_v';
 
 const LEGACY_PREFIXES = ['SF-MAY26-', 'SF-HAZ26-'];
