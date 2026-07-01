@@ -4,7 +4,7 @@ import { importAllLegacyExcelMonths } from './legacyYoklamaImport';
 import { iterateMonthYoklama, asYoklamaGunMap } from './yoklamaUtils';
 
 /** Veri güncellendiğinde artırın — otomatik yeniden birleştirme tetikler */
-export const LEGACY_YOKLAMA_VERSION = 8;
+export const LEGACY_YOKLAMA_VERSION = 9;
 
 const STORAGE_KEY = 'kibritci_legacy_yoklama_v';
 
@@ -23,8 +23,13 @@ export function mayis2026NeedsBootstrap(yoklamalar: AylikYoklamaMap): boolean {
   return countGeldiInMonth(yoklamalar, 2026, 5) < 200;
 }
 
+export function haziran2026NeedsBootstrap(yoklamalar: AylikYoklamaMap): boolean {
+  return countGeldiInMonth(yoklamalar, 2026, 6) < 200;
+}
+
 export function shouldBootstrapLegacyYoklama(yoklamalar: AylikYoklamaMap): boolean {
   if (mayis2026NeedsBootstrap(yoklamalar)) return true;
+  if (haziran2026NeedsBootstrap(yoklamalar)) return true;
   const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
   return stored !== String(LEGACY_YOKLAMA_VERSION);
 }

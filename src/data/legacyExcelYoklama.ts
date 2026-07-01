@@ -123,6 +123,7 @@ export const MART_2026_YOKLAMA: LegacyExcelMonthData = {
 
 import { NISAN_2026_YOKLAMA } from './nisan2026Yoklama';
 import { MAYIS_2026_YOKLAMA } from './mayis2026Yoklama';
+import { HAZIRAN_2026_YOKLAMA } from './haziran2026Yoklama';
 
 /** Şubat–Haziran arası tanımlı aylar — yeni aylar buraya eklenebilir */
 export const LEGACY_EXCEL_MONTHS: LegacyExcelMonthData[] = [
@@ -130,4 +131,5 @@ export const LEGACY_EXCEL_MONTHS: LegacyExcelMonthData[] = [
   MART_2026_YOKLAMA,
   NISAN_2026_YOKLAMA,
   MAYIS_2026_YOKLAMA,
+  HAZIRAN_2026_YOKLAMA,
 ];
