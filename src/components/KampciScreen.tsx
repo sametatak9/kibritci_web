@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Tent, Plus, Trash2, Camera, Check, RefreshCw, Eye, 
-  Search, UserPlus, ClipboardList, Package, Layers, MapPin, Sparkles, CheckCircle, Clock, X, ArrowRight, ShieldCheck, DoorOpen, LogOut, Image as ImageIcon, MessageSquare
+  Search, UserPlus, ClipboardList, Package, Layers, MapPin, Sparkles, CheckCircle, Clock, X, ArrowRight, ShieldCheck, DoorOpen, LogOut, Image as ImageIcon, MessageSquare, Calendar
 } from 'lucide-react';
-import { KampOdasi, KampKaydi, Personel, StokKart, KampYerleske, KampKat } from '../types/erp';
+import { KampOdasi, KampKaydi, Personel, StokKart, KampYerleske, KampKat, CariKart, AylikYoklamaMap } from '../types/erp';
 import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
-import { createKampYerleske, createKampKat, katsForYerleske, createKampOdasi, deleteKampOdasi, hasLegacySeedRooms, purgeLegacyKampData } from '../lib/kampYapisi';
+import { createKampYerleske, createKampKat, katsForYerleske, createKampOdasi, deleteKampOdasi, hasLegacySeedRooms, purgeLegacyKampData, purgeAllKampData } from '../lib/kampYapisi';
+import { assignKampResident, evictKampResident, suggestPersonelKaydi } from '../lib/kampPlacementUtils';
 import { buildKampciGunlukOzet } from '../lib/gunlukAkisUtils';
 import { buildWhatsAppUrl } from '../lib/mobilOnayUtils';
+import { KampHaftalikYoklamaTab } from './KampHaftalikYoklamaTab';
 import { collection, onSnapshot, doc, updateDoc, setDoc, query, orderBy } from 'firebase/firestore';
 
 interface KampciScreenProps {
@@ -16,7 +18,12 @@ interface KampciScreenProps {
   setKampOdalari: React.Dispatch<React.SetStateAction<KampOdasi[]>>;
   kampKayitlari: KampKaydi[];
   setKampKayitlari: React.Dispatch<React.SetStateAction<KampKaydi[]>>;
+  kampYerleskeleri?: KampYerleske[];
+  kampKatlari?: KampKat[];
   personeller: Personel[];
+  cariKartlar?: CariKart[];
+  yoklamalar?: AylikYoklamaMap;
+  setYoklamalar?: (updater: AylikYoklamaMap | ((y: AylikYoklamaMap) => AylikYoklamaMap)) => void;
   stokKartlar?: StokKart[];
   currentUser: any;
   onSignOut?: () => void;
@@ -29,15 +36,20 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   setKampOdalari,
   kampKayitlari,
   setKampKayitlari,
+  kampYerleskeleri = [],
+  kampKatlari = [],
   personeller,
+  cariKartlar = [],
+  yoklamalar = {},
+  setYoklamalar,
   stokKartlar = [],
   currentUser,
   onSignOut,
   isStandalone = false,
   addNotification
 }) => {
-  // Tabs: 'rooms' (Oda & Kat Açma) | 'placement' (Kampa Yerleşim) | 'warehouse' (Depo Sayımı) | 'activities' (Günlük Faaliyetler)
-  const [activeSubTab, setActiveSubTab] = useState<'rooms' | 'placement' | 'warehouse' | 'activities' | 'gunluk_akis' | 'personel_giris'>('placement');
+  // Tabs: 'rooms' | 'placement' | 'warehouse' | 'activities' | 'haftalik_yoklama' | ...
+  const [activeSubTab, setActiveSubTab] = useState<'rooms' | 'placement' | 'warehouse' | 'activities' | 'gunluk_akis' | 'personel_giris' | 'haftalik_yoklama'>('placement');
   const [sendingKampAkis, setSendingKampAkis] = useState(false);
   const [viewMode, setViewMode] = useState<'web' | 'mobile'>('web');
 
@@ -52,10 +64,8 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   };
 
   // ─────────────────────────────────────────────────────────────
-  // 🏕️ 1. YERLEŞKE / KAT / ODA — Kamp Yönetimi ile ortak Firestore yapısı
+  // 🏕️ 1. YERLEŞKE / KAT / ODA — App seviyesinde Firestore dinleyicisi ile senkron
   // ─────────────────────────────────────────────────────────────
-  const [yerleskeler, setYerleskeler] = useState<KampYerleske[]>([]);
-  const [katlar, setKatlar] = useState<KampKat[]>([]);
   const [setupStep, setSetupStep] = useState<1 | 2 | 3>(1);
   const [selectedYerleskeId, setSelectedYerleskeId] = useState('');
   const [selectedKatId, setSelectedKatId] = useState('');
@@ -67,7 +77,14 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   const [loadingRoom, setLoadingRoom] = useState(false);
   const [loadingYapı, setLoadingYapı] = useState(false);
   const [clearingLegacy, setClearingLegacy] = useState(false);
+  const [clearingAll, setClearingAll] = useState(false);
   const legacySeedRooms = hasLegacySeedRooms(kampOdalari);
+
+  const yerleskeler = kampYerleskeleri;
+  const katlar = kampKatlari;
+
+  const taseronCariler = cariKartlar.filter((c) => c.kartTipi === 'TASERON' && c.durum === 'AKTIF');
+  const [placementFirmaTipi, setPlacementFirmaTipi] = useState<'ANA_FIRMA' | 'TASERON'>('ANA_FIRMA');
 
   const selectedYerleske = yerleskeler.find(y => y.id === selectedYerleskeId);
   const selectedKat = katlar.find(k => k.id === selectedKatId);
@@ -165,21 +182,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       setGunlukFaaliyetler(list);
     });
 
-    // 3. Kamp yerleşke & kat yapısı (kampçı tanımlı)
-    const yerleskeColl = collection(db, 'kampYerleskeleri');
-    const katColl = collection(db, 'kampKatlari');
-    const unsubYerleske = onSnapshot(yerleskeColl, (snap) => {
-      const list: KampYerleske[] = [];
-      snap.forEach(d => list.push({ id: d.id, ...d.data() } as KampYerleske));
-      list.sort((a, b) => a.ad.localeCompare(b.ad, 'tr'));
-      setYerleskeler(list);
-    });
-    const unsubKat = onSnapshot(katColl, (snap) => {
-      const list: KampKat[] = [];
-      snap.forEach(d => list.push({ id: d.id, ...d.data() } as KampKat));
-      setKatlar(list);
-    });
-
+    // 3. Personel giriş talepleri
     const girisColl = collection(db, 'personelGirisTalepleri');
     const unsubGiris = onSnapshot(girisColl, (snap) => {
       const list: any[] = [];
@@ -198,8 +201,6 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
     return () => {
       unsubCounts();
       unsubActs();
-      unsubYerleske();
-      unsubKat();
       unsubGiris();
     };
   }, [currentUser?.email]);
@@ -268,7 +269,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
     setLoadingRoom(true);
     try {
       const savedOdaNo = odaNo;
-      const newRoom = await createKampOdasi({
+      await createKampOdasi({
         yerleskeAdi: selectedYerleske.ad,
         kogusNo: selectedKat.ad,
         odaNo: savedOdaNo,
@@ -278,8 +279,6 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
         katId: selectedKat.id,
         olusturan: currentUser?.email,
       });
-
-      setKampOdalari((prev) => [...prev, newRoom]);
       if (addNotification) {
         addNotification(`${selectedYerleske.ad} / ${selectedKat.ad} - Oda ${savedOdaNo} açıldı.`);
       }
@@ -294,15 +293,11 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   };
 
   const handleClearLegacyRooms = async () => {
-    if (!window.confirm('Demo ile gelen örnek yerleşke, kat ve odalar silinecek. Kendi yapınızı sıfırdan kurabilirsiniz. Devam edilsin mi?')) return;
+    if (!window.confirm('Demo ile gelen örnek yerleşke, kat ve odalar silinecek. Devam edilsin mi?')) return;
     setClearingLegacy(true);
     try {
       const result = await purgeLegacyKampData();
-      setKampOdalari((prev) => prev.filter((r) => !result.roomIds.includes(r.id)));
-      setKampKayitlari((prev) =>
-        prev.filter((k) => !result.roomIds.includes(k.odaId) && !result.roomIds.includes(k.roomId))
-      );
-      showStatus('success', `${result.roomIds.length} örnek oda temizlendi. Yerleşkenizi kurabilirsiniz.`);
+      showStatus('success', `${result.roomIds.length} örnek oda temizlendi.`);
     } catch {
       showStatus('error', 'Örnek odalar temizlenemedi.');
     } finally {
@@ -310,12 +305,34 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
     }
   };
 
+  const handlePurgeAllKamp = async () => {
+    if (
+      !window.confirm(
+        'Tüm kamp verisi (yerleşke, kat, oda, konaklama) kalıcı silinecek. Devam edilsin mi?'
+      )
+    ) {
+      return;
+    }
+    setClearingAll(true);
+    try {
+      const counts = await purgeAllKampData();
+      setSelectedYerleskeId('');
+      setSelectedKatId('');
+      showStatus(
+        'success',
+        `Sıfırlandı: ${counts.yerleskeler} yerleşke, ${counts.odalar} oda, ${counts.kayitlar} kayıt.`
+      );
+    } catch {
+      showStatus('error', 'Kamp verisi sıfırlanamadı.');
+    } finally {
+      setClearingAll(false);
+    }
+  };
+
   const handleDeleteRoom = async (id: string, name: string) => {
     if (!window.confirm(`${name} numaralı odayı silmek istediğinize emin misiniz?`)) return;
     try {
       await deleteKampOdasi(id);
-      setKampOdalari((prev) => prev.filter((r) => r.id !== id));
-      setKampKayitlari((prev) => prev.filter((k) => k.odaId !== id && k.roomId !== id));
       if (addNotification) {
         addNotification(`${name} nolu oda silindi.`);
       }
@@ -358,83 +375,53 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
     }
 
     let resolvedFirma = '';
-    if (firmaType === 'DB') {
-      resolvedFirma = selectedFirma || 'Belirtilmedi';
+    if (placementFirmaTipi === 'ANA_FIRMA') {
+      resolvedFirma = 'Ana Firma';
+    } else if (firmaType === 'DB') {
+      resolvedFirma = selectedFirma || '';
     } else {
-      resolvedFirma = manualFirma.trim() || 'Belirtilmedi';
+      resolvedFirma = manualFirma.trim();
     }
 
-    // Check capacity limit
     const targetRoom = kampOdalari.find(r => r.id === selectedRoomId);
     if (!targetRoom) {
       showStatus('error', 'Oda bulunamadı!');
       return;
     }
 
-    const currentOccupants = kampKayitlari.filter(
-      k => (k.odaId === selectedRoomId || k.roomId === selectedRoomId) && k.durum === 'AKTIF'
-    );
-
-    if (currentOccupants.length >= targetRoom.kapasite) {
-      showStatus('error', `Bu oda dolu! Kapasite sınırı: ${targetRoom.kapasite} kişi.`);
-      return;
-    }
-
-    // Check if person already checked in elsewhere
-    const alreadyRegistered = kampKayitlari.find(
-      k => k.durum === 'AKTIF' && (
-        (personelId && k.personelId === personelId) || 
-        (!personelId && k.personelIsim.toLowerCase() === personelIsim.toLowerCase())
-      )
-    );
-
-    if (alreadyRegistered) {
-      showStatus('error', `${personelIsim} zaten aktif bir odada yerleşmiş durumda!`);
+    if (placementFirmaTipi === 'TASERON' && !resolvedFirma) {
+      showStatus('error', 'Taşeron personel için firma bilgisi zorunludur.');
       return;
     }
 
     setLoadingPlacement(true);
     try {
-      const regId = `reg_${Date.now()}`;
-      const newReg: KampKaydi = {
-        id: regId,
+      await assignKampResident({
+        roomId: selectedRoomId,
         personelIsim,
         personelId,
-        odaId: selectedRoomId,
-        girisTarihi: new Date().toISOString().slice(0, 10),
-        durum: 'AKTIF',
-        calistigiFirma: resolvedFirma
-      };
+        calistigiFirma: resolvedFirma || undefined,
+        firmaTipi: placementFirmaTipi,
+        kampOdalari,
+        kampKayitlari,
+      });
 
-      // Save registration
-      await saveDocument('kampKayitlari', newReg);
       if (addNotification) {
-        addNotification(`${personelIsim} (${resolvedFirma}) adlı personel ${targetRoom.odaNo} nolu odaya yerleştirildi.`);
+        addNotification(`${personelIsim} (${resolvedFirma}) ${targetRoom.odaNo} nolu odaya yerleştirildi.`);
       }
 
-      // Update Room status
-      const updatedOccupancyCount = currentOccupants.length + 1;
-      let newRoomStatus: 'BOŞ' | 'DOLU' | 'KISMEN DOLU' = 'KISMEN DOLU';
-      if (updatedOccupancyCount >= targetRoom.kapasite) {
-        newRoomStatus = 'DOLU';
+      if (placementType === 'MANUAL' && placementFirmaTipi === 'TASERON') {
+        suggestPersonelKaydi(personelIsim, resolvedFirma);
       }
 
-      const updatedRoom: KampOdasi = {
-        ...targetRoom,
-        durum: newRoomStatus
-      };
-
-      await saveDocument('kampOdalari', updatedRoom);
-
-      // Reset
       setSelectedPersonelId('');
       setManualPersonelIsim('');
       setSelectedFirma('');
       setManualFirma('');
-      showStatus('success', `${personelIsim} (${resolvedFirma}) başarıyla ${targetRoom.odaNo} no'lu odaya yerleştirildi.`);
+      showStatus('success', `${personelIsim} başarıyla ${targetRoom.odaNo} no'lu odaya yerleştirildi.`);
     } catch (err) {
       console.error(err);
-      showStatus('error', 'Yerleşim yapılırken hata oluştu!');
+      showStatus('error', err instanceof Error ? err.message : 'Yerleşim yapılırken hata oluştu!');
     } finally {
       setLoadingPlacement(false);
     }
@@ -444,43 +431,16 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
     if (!window.confirm(`${reg.personelIsim} isimli personeli odadan çıkarmak (Check-out) istediğinize emin misiniz?`)) return;
 
     try {
-      // Find room
-      const targetRoom = kampOdalari.find(r => r.id === reg.odaId || r.id === (reg as any).roomId);
-      
-      const updatedReg: KampKaydi = {
-        ...reg,
-        durum: 'PASIF',
-        cikisTarihi: new Date().toISOString().slice(0, 10)
-      };
-
-      await saveDocument('kampKayitlari', updatedReg);
+      const targetRoom = kampOdalari.find(r => r.id === reg.odaId || r.id === reg.roomId);
+      await evictKampResident(reg, kampOdalari, kampKayitlari);
       if (addNotification) {
         const roomNo = targetRoom ? targetRoom.odaNo : 'oda';
-        addNotification(`${reg.personelIsim} isimli personel ${roomNo} nolu odadan çıkış yaptı.`);
+        addNotification(`${reg.personelIsim} ${roomNo} nolu odadan çıkış yaptı.`);
       }
-
-      if (targetRoom) {
-        const remainingOccupants = kampKayitlari.filter(
-          k => (k.odaId === targetRoom.id || (k as any).roomId === targetRoom.id) && k.durum === 'AKTIF' && k.id !== reg.id
-        );
-
-        let newRoomStatus: 'BOŞ' | 'DOLU' | 'KISMEN DOLU' = 'KISMEN DOLU';
-        if (remainingOccupants.length === 0) {
-          newRoomStatus = 'BOŞ';
-        }
-
-        const updatedRoom: KampOdasi = {
-          ...targetRoom,
-          durum: newRoomStatus
-        };
-
-        await saveDocument('kampOdalari', updatedRoom);
-      }
-
-      showStatus('success', `${reg.personelIsim} çıkış işlemi tamamlandı.`);
+      showStatus('success', `${reg.personelIsim} odadan çıkarıldı.`);
     } catch (err) {
       console.error(err);
-      showStatus('error', 'Çıkış işlemi başarısız.');
+      showStatus('error', 'Check-out işlemi başarısız!');
     }
   };
 
@@ -810,6 +770,18 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveSubTab('haftalik_yoklama')}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center space-x-2 border cursor-pointer ${
+            activeSubTab === 'haftalik_yoklama'
+              ? 'bg-violet-600 border-violet-500 text-white shadow-md shadow-violet-500/20'
+              : 'bg-white border-slate-200/80 text-slate-500 hover:bg-slate-50'
+          }`}
+        >
+          <Calendar size={14} />
+          <span>📅 Haftalık Yoklama</span>
+        </button>
+
+        <button
           onClick={() => setActiveSubTab('gunluk_akis')}
           className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center space-x-2 border cursor-pointer ${
             activeSubTab === 'gunluk_akis'
@@ -953,7 +925,26 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
               {/* STAGE 2: FİRMA SEÇ VEYA İSMİNİ YAZ */}
               <div className="border-t border-slate-850 pt-3 space-y-3">
                 <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest block">ADIM 2: Firma Bilgisi</span>
-                
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPlacementFirmaTipi('ANA_FIRMA')}
+                    className={`py-1.5 rounded-lg text-[10px] font-bold ${placementFirmaTipi === 'ANA_FIRMA' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+                  >
+                    Ana Firma
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPlacementFirmaTipi('TASERON')}
+                    className={`py-1.5 rounded-lg text-[10px] font-bold ${placementFirmaTipi === 'TASERON' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+                  >
+                    Taşeron
+                  </button>
+                </div>
+
+                {placementFirmaTipi === 'TASERON' && (
+                <>
                 <div className="grid grid-cols-2 gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200/60">
                   <button
                     type="button"
@@ -984,12 +975,13 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                       onChange={(e) => setSelectedFirma(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none"
                     >
-                      <option value="">-- Firma Seçin --</option>
-                      <option value="Özdemir Hafriyat A.Ş.">Özdemir Hafriyat A.Ş.</option>
-                      <option value="Yıldız İnşaat ve Altyapı">Yıldız İnşaat ve Altyapı</option>
-                      <option value="Aras Elektrik Mekanik">Aras Elektrik Mekanik</option>
-                      <option value="Merkez Beton A.Ş.">Merkez Beton A.Ş.</option>
-                      <option value="Doğu Mühendislik Grubu">Doğu Mühendislik Grubu</option>
+                      <option value="">-- Taşeron / Firma Seçin --</option>
+                      {taseronCariler.map((c) => (
+                        <option key={c.id} value={c.unvan}>{c.unvan}</option>
+                      ))}
+                      {cariKartlar.filter((c) => c.kartTipi !== 'TASERON' && c.durum === 'AKTIF').map((c) => (
+                        <option key={c.id} value={c.unvan}>{c.unvan}</option>
+                      ))}
                     </select>
                   </div>
                 ) : (
@@ -1004,6 +996,8 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                       className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 p-3 rounded-xl outline-none"
                     />
                   </div>
+                )}
+                </>
                 )}
               </div>
 
@@ -1154,6 +1148,15 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                 </button>
               </div>
             )}
+
+            <button
+              type="button"
+              onClick={handlePurgeAllKamp}
+              disabled={clearingAll}
+              className="w-full bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-[10px] font-bold py-2 rounded-lg cursor-pointer disabled:opacity-60"
+            >
+              {clearingAll ? 'Sıfırlanıyor...' : '⚠️ Tüm Kamp Verisini Sıfırla'}
+            </button>
 
             <div className="flex gap-1 text-[9px] font-bold">
               {[1, 2, 3].map(step => (
@@ -1766,6 +1769,18 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {activeSubTab === 'haftalik_yoklama' && setYoklamalar && (
+        <KampHaftalikYoklamaTab
+          kampOdalari={kampOdalari}
+          kampKayitlari={kampKayitlari}
+          yoklamalar={yoklamalar}
+          setYoklamalar={setYoklamalar}
+          personeller={personeller}
+          currentUser={currentUser}
+          addNotification={addNotification}
+        />
       )}
 
       {activeSubTab === 'gunluk_akis' && (

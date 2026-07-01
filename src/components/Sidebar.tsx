@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, Users, CalendarCheck2, CreditCard, ShoppingCart, Truck, KeySquare, FileText, Tent, Mail, ChartBar as BarChart3, BookOpen, Contact as Contact2, Package, LogOut, Wallet, Hop as Home, ShieldCheck, PenTool, MessageSquare, Smartphone, HardHat, Banknote } from 'lucide-react';
+import { Building2, Users, CalendarCheck2, CreditCard, ShoppingCart, Truck, KeySquare, FileText, Tent, Mail, ChartBar as BarChart3, BookOpen, Contact as Contact2, Package, LogOut, Wallet, Hop as Home, ShieldCheck, PenTool, MessageSquare, Smartphone, HardHat, Banknote, Images } from 'lucide-react';
 import { getRoleHomeTab, normalizeYetki } from '../lib/yetkiUtils';
 
 interface SidebarProps {
@@ -76,6 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { key: "arac", label: "Araç ve Demirbaş", icon: Truck },
         { key: "kamp", label: "Kamp Yönetimi", icon: Tent },
         { key: "saha", label: "Saha Faaliyetleri", icon: Building2 },
+        { key: "saha_kolaj", label: "Saha Kolaj Hazırla", icon: Images },
         { key: "tutanak", label: "Hazır Tutanaklar", icon: FileText },
         { key: "formen_ekrani", label: "Formen Mobil Paneli", icon: Contact2 },
         { key: "guvenlik_ekrani", label: "Güvenlik & Kapı Kontrol", icon: ShieldCheck },

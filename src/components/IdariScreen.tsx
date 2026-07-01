@@ -22,7 +22,11 @@ import {
   deriveCampusFloors,
   findOrCreateYerleske,
   purgeLegacyKampData,
+  purgeAllKampData,
+  updateKampYerleskeAdi,
+  updateKampKatAdi,
 } from '../lib/kampYapisi';
+import { assignKampResident, evictKampResident, suggestPersonelKaydi } from '../lib/kampPlacementUtils';
 import { compressImage } from '../lib/imageCompress';
 import { collection, onSnapshot, getDocs, doc, setDoc } from 'firebase/firestore';
 
@@ -36,6 +40,8 @@ interface IdariScreenProps {
   setKampOdalari: React.Dispatch<React.SetStateAction<KampOdasi[]>>;
   kampKayitlari: KampKaydi[];
   setKampKayitlari: React.Dispatch<React.SetStateAction<KampKaydi[]>>;
+  kampYerleskeleri?: KampYerleske[];
+  kampKatlari?: KampKat[];
   sahaFaaliyetleri: SahaFaaliyeti[];
   setSahaFaaliyetleri: React.Dispatch<React.SetStateAction<SahaFaaliyeti[]>>;
   hazirTutanaklar: HazirTutanak[];
@@ -58,6 +64,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   demirbaslar, setDemirbaslar,
   kampOdalari, setKampOdalari,
   kampKayitlari, setKampKayitlari,
+  kampYerleskeleri = [],
+  kampKatlari = [],
   sahaFaaliyetleri, setSahaFaaliyetleri,
   hazirTutanaklar, setHazirTutanaklar,
   cariKartlar, setCariKartlar,
@@ -225,28 +233,13 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [selectedRoomToAssign, setSelectedRoomToAssign] = useState<KampOdasi | null>(null);
   const [residentInputName, setResidentInputName] = useState("");
   const [residentInputFirma, setResidentInputFirma] = useState("");
+  const [residentPersonelId, setResidentPersonelId] = useState("");
+  const [residentFirmaTipi, setResidentFirmaTipi] = useState<'ANA_FIRMA' | 'TASERON'>('ANA_FIRMA');
+  const [residentFirmaKaynak, setResidentFirmaKaynak] = useState<'DB' | 'MANUAL'>('MANUAL');
+  const [assigningResident, setAssigningResident] = useState(false);
 
-  // Kamp yapısı — Kampçı Mobil ile ortak Firestore koleksiyonları
-  const [yerleskeler, setYerleskeler] = useState<KampYerleske[]>([]);
-  const [katlar, setKatlar] = useState<KampKat[]>([]);
-
-  useEffect(() => {
-    const unsubY = onSnapshot(collection(db, 'kampYerleskeleri'), (snap) => {
-      const list: KampYerleske[] = [];
-      snap.forEach((d) => list.push({ id: d.id, ...d.data() } as KampYerleske));
-      list.sort((a, b) => a.ad.localeCompare(b.ad, 'tr'));
-      setYerleskeler(list);
-    });
-    const unsubK = onSnapshot(collection(db, 'kampKatlari'), (snap) => {
-      const list: KampKat[] = [];
-      snap.forEach((d) => list.push({ id: d.id, ...d.data() } as KampKat));
-      setKatlar(list);
-    });
-    return () => {
-      unsubY();
-      unsubK();
-    };
-  }, []);
+  const yerleskeler = kampYerleskeleri;
+  const katlar = kampKatlari;
 
   const campuses = useMemo(
     () => deriveCampusNames(yerleskeler),
@@ -258,32 +251,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     [campuses, katlar]
   );
 
-  useEffect(() => {
-    if (currentSubTab !== 'kamp') return;
-    const purgeKey = 'kibritci_kamp_legacy_purged_v2';
-    if (sessionStorage.getItem(purgeKey) === '1') return;
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        const result = await purgeLegacyKampData();
-        if (cancelled) return;
-        if (result.roomIds.length > 0 || result.yerleskeIds.length > 0 || result.katIds.length > 0) {
-          setKampOdalari((prev) => prev.filter((r) => !result.roomIds.includes(r.id)));
-          setKampKayitlari((prev) =>
-            prev.filter((kk) => !result.roomIds.includes(kk.odaId) && !result.roomIds.includes(kk.roomId))
-          );
-        }
-        sessionStorage.setItem(purgeKey, '1');
-      } catch (err) {
-        console.warn('Eski kamp verisi temizlenemedi:', err);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentSubTab, setKampOdalari, setKampKayitlari]);
+  const taseronCariler = useMemo(
+    () => cariKartlar.filter((c) => c.kartTipi === 'TASERON' && c.durum === 'AKTIF'),
+    [cariKartlar]
+  );
 
   const [selectedYerleske, setSelectedYerleske] = useState("");
   const [selectedKat, setSelectedKat] = useState("");
@@ -419,14 +390,13 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     }
     try {
       const roomNo = newRoomNo;
-      const brandNewRoom = await createKampOdasi({
+      await createKampOdasi({
         yerleskeAdi: selectedYerleske,
         kogusNo: selectedKat,
         odaNo: roomNo,
         kapasite: Number(newRoomKapasite),
         firmaTipi: newRoomFirma,
       });
-      setKampOdalari((prev) => [...prev, brandNewRoom]);
       setNewRoomNo("");
       setShowNewRoomForm(false);
       alert(`${selectedYerleske} - ${selectedKat} bünyesinde Oda No ${roomNo} başarıyla açılmıştır.`);
@@ -438,11 +408,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const handleClearLegacyKampData = async () => {
     if (!window.confirm('Eski demo/örnek kamp yerleşkeleri ve odaları kalıcı olarak silinecek. Devam edilsin mi?')) return;
     try {
-      const result = await purgeLegacyKampData();
-      setKampOdalari((prev) => prev.filter((r) => !result.roomIds.includes(r.id)));
-      setKampKayitlari((prev) =>
-        prev.filter((kk) => !result.roomIds.includes(kk.odaId) && !result.roomIds.includes(kk.roomId))
-      );
+      await purgeLegacyKampData();
       setSelectedYerleske('');
       setSelectedKat('');
       alert('Eski örnek kamp verileri temizlendi. Yerleşkeleri sıfırdan oluşturabilirsiniz.');
@@ -451,39 +417,110 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     }
   };
 
-  const handleAssignResident = () => {
-    if (!selectedRoomToAssign || !residentInputName) return;
-    
-    // Add assignment record
-    const newReg: KampKaydi = {
-      id: `kk_${Date.now()}`,
-      personelIsim: residentInputName,
-      odaId: selectedRoomToAssign.id,
-      girisTarihi: new Date().toISOString().split('T')[0],
-      durum: 'AKTIF',
-      calistigiFirma: residentInputFirma
-    };
-
-    setKampKayitlari(prev => [...prev, newReg]);
-
-    // Update room status
-    setKampOdalari(prev => prev.map(room => {
-      if (room.id === selectedRoomToAssign.id) {
-        return { ...room, durum: "KISMEN DOLU" };
-      }
-      return room;
-    }));
-
-    setSelectedRoomToAssign(null);
-    setResidentInputName("");
-    setResidentInputFirma("");
-    alert("Personel seçilen odaya başarıyla yerleştirildi.");
+  const handlePurgeAllKampData = async () => {
+    if (
+      !window.confirm(
+        'TÜM kamp verisi (yerleşkeler, katlar, odalar, konaklama kayıtları) kalıcı olarak silinecek. Sayfa yenilense bile boş kalır. Devam edilsin mi?'
+      )
+    ) {
+      return;
+    }
+    try {
+      const counts = await purgeAllKampData();
+      setSelectedYerleske('');
+      setSelectedKat('');
+      alert(
+        `Kamp verisi sıfırlandı: ${counts.yerleskeler} yerleşke, ${counts.katlar} kat, ${counts.odalar} oda, ${counts.kayitlar} kayıt silindi.`
+      );
+    } catch {
+      alert('Kamp verisi sıfırlanırken hata oluştu.');
+    }
   };
 
-  const handleEvictResident = (id: string, roomId: string) => {
-    if (confirm("Seçili personeli odadan tahliye etmek istediğinize emin misiniz?")) {
-      setKampKayitlari(prev => prev.filter(k => k.id !== id));
-      alert("Tahliye işlemi gerçekleşti.");
+  const handleEditCampus = async (campName: string) => {
+    const y = yerleskeler.find((item) => item.ad === campName);
+    if (!y) return;
+    const yeniAd = window.prompt('Yeni yerleşke adı:', campName);
+    if (!yeniAd?.trim() || yeniAd.trim() === campName) return;
+    try {
+      await updateKampYerleskeAdi(y, yeniAd.trim());
+      if (selectedYerleske === campName) setSelectedYerleske(yeniAd.trim());
+      alert('Yerleşke adı güncellendi.');
+    } catch {
+      alert('Yerleşke güncellenemedi.');
+    }
+  };
+
+  const handleEditFloor = async (campName: string, floorName: string) => {
+    const kat = katlar.find((k) => k.yerleskeAdi === campName && k.ad === floorName);
+    if (!kat) return;
+    const yeniAd = window.prompt('Yeni kat/blok adı:', floorName);
+    if (!yeniAd?.trim() || yeniAd.trim() === floorName) return;
+    try {
+      await updateKampKatAdi(kat, yeniAd.trim());
+      if (selectedKat === floorName) setSelectedKat(yeniAd.trim());
+      alert('Kat/blok adı güncellendi.');
+    } catch {
+      alert('Kat güncellenemedi.');
+    }
+  };
+
+  const resetAssignModal = () => {
+    setSelectedRoomToAssign(null);
+    setResidentInputName('');
+    setResidentInputFirma('');
+    setResidentPersonelId('');
+    setResidentFirmaTipi('ANA_FIRMA');
+    setResidentFirmaKaynak('MANUAL');
+  };
+
+  const handleAssignResident = async () => {
+    if (!selectedRoomToAssign || !residentInputName.trim()) return;
+
+    const firma =
+      residentFirmaTipi === 'ANA_FIRMA'
+        ? 'Ana Firma'
+        : residentFirmaKaynak === 'DB'
+          ? residentInputFirma
+          : residentInputFirma.trim();
+
+    if (residentFirmaTipi === 'TASERON' && !firma) {
+      alert('Taşeron personel için firma bilgisi zorunludur.');
+      return;
+    }
+
+    setAssigningResident(true);
+    try {
+      await assignKampResident({
+        roomId: selectedRoomToAssign.id,
+        personelIsim: residentInputName.trim(),
+        personelId: residentPersonelId || undefined,
+        calistigiFirma: firma || undefined,
+        firmaTipi: residentFirmaTipi,
+        kampOdalari,
+        kampKayitlari,
+      });
+
+      if (!residentPersonelId && residentFirmaTipi === 'TASERON') {
+        suggestPersonelKaydi(residentInputName.trim(), firma);
+      }
+
+      resetAssignModal();
+      alert('Personel seçilen odaya başarıyla yerleştirildi.');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Yerleşim kaydedilemedi.');
+    } finally {
+      setAssigningResident(false);
+    }
+  };
+
+  const handleEvictResident = async (reg: KampKaydi) => {
+    if (!window.confirm('Seçili personeli odadan tahliye etmek istediğinize emin misiniz?')) return;
+    try {
+      await evictKampResident(reg, kampOdalari, kampKayitlari);
+      alert('Tahliye işlemi gerçekleşti.');
+    } catch {
+      alert('Tahliye sırasında hata oluştu.');
     }
   };
 
@@ -1888,14 +1925,24 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                         {campuses.map(camp => (
                           <div key={camp} className="text-[10px] bg-white p-1 px-2 rounded border font-semibold text-slate-700 flex justify-between items-center group">
                             <span>📍 {camp}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteCampus(camp)}
-                              className="text-red-500 hover:text-red-700 font-bold p-0.5 hover:bg-red-50 rounded transition cursor-pointer"
-                              title="Yerleşkeyi Sil"
-                            >
-                              ✕
-                            </button>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleEditCampus(camp)}
+                                className="text-blue-600 hover:text-blue-800 font-bold p-0.5 hover:bg-blue-50 rounded transition cursor-pointer text-[9px]"
+                                title="Düzenle"
+                              >
+                                ✎
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCampus(camp)}
+                                className="text-red-500 hover:text-red-700 font-bold p-0.5 hover:bg-red-50 rounded transition cursor-pointer"
+                                title="Yerleşkeyi Sil"
+                              >
+                                ✕
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1949,14 +1996,24 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                           (campusFloors[selectedYerleske] || []).map(fl => (
                             <div key={fl} className="text-[10px] bg-white p-1 px-2 rounded border font-semibold text-slate-700 flex justify-between items-center group">
                               <span>🏢 {fl}</span>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteFloor(selectedYerleske, fl)}
-                                className="text-red-500 hover:text-red-700 font-bold p-0.5 hover:bg-red-50 rounded transition cursor-pointer"
-                                title="Kat/Blok Sil"
-                              >
-                                ✕
-                              </button>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditFloor(selectedYerleske, fl)}
+                                  className="text-blue-600 hover:text-blue-800 font-bold p-0.5 hover:bg-blue-50 rounded transition cursor-pointer text-[9px]"
+                                  title="Düzenle"
+                                >
+                                  ✎
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteFloor(selectedYerleske, fl)}
+                                  className="text-red-500 hover:text-red-700 font-bold p-0.5 hover:bg-red-50 rounded transition cursor-pointer"
+                                  title="Kat/Blok Sil"
+                                >
+                                  ✕
+                                </button>
+                              </div>
                             </div>
                           ))
                         )}
@@ -2068,7 +2125,13 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     onClick={handleClearLegacyKampData}
                     className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-1.5 px-3 rounded-lg cursor-pointer transition text-[10px] uppercase tracking-wider flex items-center justify-center space-x-1 border border-slate-200"
                   >
-                    <span>🧹 Eski Örnek Kamp Verisini Temizle</span>
+                    <span>🧹 Eski Demo Verisini Temizle</span>
+                  </button>
+                  <button
+                    onClick={handlePurgeAllKampData}
+                    className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold py-1.5 px-3 rounded-lg cursor-pointer transition text-[10px] uppercase tracking-wider flex items-center justify-center space-x-1 border border-rose-200"
+                  >
+                    <span>⚠️ Tüm Kamp Verisini Sıfırla</span>
                   </button>
                 </div>
               </div>
@@ -2090,8 +2153,14 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
             </div>
 
             <div className="flex-grow overflow-y-auto p-4 space-y-6 bg-slate-50/20">
-              {/* Grouping logic by Floors (KogusNo) */}
-              {Array.from(new Set(kampOdalari.map(r => r.kogusNo))).map(floorKey => {
+              {kampOdalari.length === 0 ? (
+                <div className="text-center py-16 text-slate-500 space-y-2">
+                  <p className="text-sm font-bold">Henüz açılmış oda yok</p>
+                  <p className="text-xs">Sol panelden yerleşke → kat → oda oluşturun. Kampçı Mobil ile senkron çalışır.</p>
+                </div>
+              ) : (
+              /* Grouping logic by Floors (KogusNo) */
+              Array.from(new Set(kampOdalari.map(r => r.kogusNo))).map(floorKey => {
                 const floorRooms = kampOdalari.filter(r => r.kogusNo === floorKey);
                 
                 return (
@@ -2142,7 +2211,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                                     <div key={oc.id} className="flex justify-between items-center bg-white border border-slate-200 px-1.5 py-1 rounded text-[10px]">
                                       <span className="font-bold text-slate-800">👤 {oc.personelIsim}</span>
                                       <button 
-                                        onClick={() => handleEvictResident(oc.id, room.id)}
+                                        onClick={() => handleEvictResident(oc)}
                                         className="text-red-500 hover:text-red-700 font-bold transition text-[9px] cursor-pointer"
                                       >
                                         Tahliye Et
@@ -2180,7 +2249,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     </div>
                   </div>
                 );
-              })}
+              })
+              )}
             </div>
           </div>
 
@@ -2190,7 +2260,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
               <div className="bg-white rounded-2xl w-[440px] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
                 <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
                   <h4 className="font-display font-semibold text-sm">Odaya Personel Atama</h4>
-                  <button onClick={() => setSelectedRoomToAssign(null)} className="text-slate-400 hover:text-white font-bold cursor-pointer">✖</button>
+                  <button onClick={resetAssignModal} className="text-slate-400 hover:text-white font-bold cursor-pointer">✖</button>
                 </div>
 
                 <div className="p-5 space-y-4 text-xs">
@@ -2200,26 +2270,49 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     <span className="text-[10px] text-slate-600 block">{selectedRoomToAssign.kogusNo} · Oda No: {selectedRoomToAssign.odaNo}</span>
                   </div>
 
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setResidentFirmaTipi('ANA_FIRMA')}
+                      className={`py-1.5 rounded-lg text-[10px] font-bold ${residentFirmaTipi === 'ANA_FIRMA' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+                    >
+                      Ana Firma
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setResidentFirmaTipi('TASERON')}
+                      className={`py-1.5 rounded-lg text-[10px] font-bold ${residentFirmaTipi === 'TASERON' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+                    >
+                      Taşeron
+                    </button>
+                  </div>
+
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-500 uppercase">Yerleştirilecek Personel İsmi *</label>
                     <input 
                       type="text"
                       className="w-full text-xs font-semibold p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:border-blue-500 transition focus:outline-none"
-                      placeholder="Buraya elle yazabilir veya aşağıdaki veritabaından seçebilirsiniz"
+                      placeholder="Elle yazın veya aşağıdan seçin"
                       value={residentInputName}
                       onChange={(e) => setResidentInputName(e.target.value)}
                     />
                   </div>
 
-                  {/* Personel Bilgisi Database'den ve Elle Girişe Açık 2 Türlü de Serbest */}
                   <div className="space-y-1">
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Veritabanından Hızlı Personel Seçin</span>
-                    <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto border p-2 rounded-xl bg-slate-100/50">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Veritabanından Personel Seç</span>
+                    <div className="grid grid-cols-2 gap-1.5 max-h-28 overflow-y-auto border p-2 rounded-xl bg-slate-100/50">
                       {personeller.map(p => (
                         <button
                           key={p.id}
                           type="button"
-                          onClick={() => setResidentInputName(`${p.ad} ${p.soyad}`)}
+                          onClick={() => {
+                            setResidentInputName(`${p.ad} ${p.soyad}`);
+                            setResidentPersonelId(p.id);
+                            if (p.calistigiFirma || p.firma) {
+                              setResidentFirmaTipi('TASERON');
+                              setResidentInputFirma(p.calistigiFirma || p.firma || '');
+                            }
+                          }}
                           className="text-[10px] text-left bg-white border border-slate-200 hover:bg-blue-50 p-1.5 rounded font-medium text-slate-700 transition cursor-pointer flex items-center space-x-1"
                         >
                           <span>👤</span>
@@ -2228,11 +2321,58 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                       ))}
                     </div>
                   </div>
+
+                  {residentFirmaTipi === 'TASERON' && (
+                    <div className="space-y-2 border-t pt-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setResidentFirmaKaynak('DB')}
+                          className={`py-1 rounded text-[9px] font-bold ${residentFirmaKaynak === 'DB' ? 'bg-slate-800 text-white' : 'bg-slate-100'}`}
+                        >
+                          DB Taşeron
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setResidentFirmaKaynak('MANUAL')}
+                          className={`py-1 rounded text-[9px] font-bold ${residentFirmaKaynak === 'MANUAL' ? 'bg-slate-800 text-white' : 'bg-slate-100'}`}
+                        >
+                          Elle Gir
+                        </button>
+                      </div>
+                      {residentFirmaKaynak === 'DB' ? (
+                        <select
+                          className="w-full text-xs p-2 border rounded-lg"
+                          value={residentInputFirma}
+                          onChange={(e) => setResidentInputFirma(e.target.value)}
+                        >
+                          <option value="">-- Taşeron Seç --</option>
+                          {taseronCariler.map((c) => (
+                            <option key={c.id} value={c.unvan}>{c.unvan}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          className="w-full text-xs p-2 border rounded-lg"
+                          placeholder="Taşeron firma adı"
+                          value={residentInputFirma}
+                          onChange={(e) => setResidentInputFirma(e.target.value)}
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="p-4 border-t bg-slate-50 flex gap-2 justify-end">
-                  <button onClick={() => setSelectedRoomToAssign(null)} className="bg-slate-150 hover:bg-slate-200 text-slate-700 text-xs font-bold py-2 px-4 rounded-xl transition">İptal</button>
-                  <button onClick={handleAssignResident} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-4 rounded-xl transition shadow active:scale-95">Odaya Sakin Olarak Kaydet</button>
+                  <button onClick={resetAssignModal} className="bg-slate-150 hover:bg-slate-200 text-slate-700 text-xs font-bold py-2 px-4 rounded-xl transition">İptal</button>
+                  <button
+                    onClick={handleAssignResident}
+                    disabled={assigningResident}
+                    className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-bold py-2 px-4 rounded-xl transition shadow active:scale-95"
+                  >
+                    {assigningResident ? 'Kaydediliyor…' : 'Odaya Sakin Olarak Kaydet'}
+                  </button>
                 </div>
               </div>
             </div>

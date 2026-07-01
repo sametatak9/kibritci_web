@@ -20,6 +20,7 @@ export const PORTAL_PAGES = [
   { key: "arac", label: "Araç ve Demirbaş", group: "İDARİ İŞLER & SAHA" },
   { key: "kamp", label: "Kamp Yönetimi", group: "İDARİ İŞLER & SAHA" },
   { key: "saha", label: "Daily Saha Faaliyetleri", group: "İDARİ İŞLER & SAHA" },
+  { key: "saha_kolaj", label: "Saha Faaliyet Kolajı", group: "İDARİ İŞLER & SAHA" },
   { key: "tutanak", label: "Hazır Tutanaklar", group: "İDARİ İŞLER & SAHA" },
   { key: "formen_ekrani", label: "Formen Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
   { key: "guvenlik_ekrani", label: "Güvenlik & Kapı Kontrol", group: "İDARİ İŞLER & SAHA" },

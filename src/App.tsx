@@ -29,11 +29,12 @@ import { DepocuScreen } from './components/DepocuScreen';
 import { EvrakAktarimiScreen } from './components/EvrakAktarimiScreen';
 import { MobileManagerScreen } from './components/MobileManagerScreen';
 import { KibarHakedisScreen } from './components/KibarHakedisScreen';
+import { SahaKolajScreen } from './components/SahaKolajScreen';
 
 // Type definitions
 import { 
   Personel, AylikYoklamaMap, SatinAlmaTalebi, Irsaliye, Fatura, 
-  KasaHareketi, AracBakim, Demisbas, KampOdasi, KampKaydi, 
+  KasaHareketi, AracBakim, Demisbas, KampOdasi, KampKaydi, KampYerleske, KampKat,
   HazirTutanak, CariKart, StokKart, EpostaGonderim, SahaFaaliyeti as SahaFaaliyetiType,
   OperatorFaaliyet, TaseronKesintiRaporu, MaaşOdeme, PersonelIslemGecmisi, CariKartIslem, StokKartIslem
 } from './types/erp';
@@ -122,6 +123,8 @@ export default function App() {
   const [demirbaslar, setDemirbaslar] = useState<Demisbas[]>([]);
   const [kampOdalari, setKampOdalari] = useState<KampOdasi[]>([]);
   const [kampKayitlari, setKampKayitlari] = useState<KampKaydi[]>([]);
+  const [kampYerleskeleri, setKampYerleskeleri] = useState<KampYerleske[]>([]);
+  const [kampKatlari, setKampKatlari] = useState<KampKat[]>([]);
   const [sahaFaaliyetleri, setSahaFaaliyetleri] = useState<SahaFaaliyetiType[]>([]);
   const [hazirTutanaklar, setHazirTutanaklar] = useState<HazirTutanak[]>([]);
   
@@ -607,6 +610,22 @@ export default function App() {
       setKampKayitlari(list);
     });
 
+    const unsubKampYerleskeleri = onSnapshot(collection(db, 'kampYerleskeleri'), (snapshot) => {
+      const list: KampYerleske[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() } as any);
+      });
+      setKampYerleskeleri(list);
+    });
+
+    const unsubKampKatlari = onSnapshot(collection(db, 'kampKatlari'), (snapshot) => {
+      const list: KampKat[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() } as any);
+      });
+      setKampKatlari(list);
+    });
+
     const unsubStoklar = onSnapshot(collection(db, 'stokKartlar'), (snapshot) => {
       const list: StokKart[] = [];
       snapshot.forEach((doc) => {
@@ -683,6 +702,8 @@ export default function App() {
       unsubKasaHareketleri();
       unsubKampOdalari();
       unsubKampKayitlari();
+      unsubKampYerleskeleri();
+      unsubKampKatlari();
       unsubNotif();
       unsubStoklar();
       unsubAraclar();
@@ -1214,9 +1235,13 @@ export default function App() {
           setKampOdalari={setKampOdalariWithSync}
           kampKayitlari={kampKayitlari}
           setKampKayitlari={setKampKayitlariWithSync}
+          kampYerleskeleri={kampYerleskeleri}
+          kampKatlari={kampKatlari}
           personeller={personeller}
+          cariKartlar={cariKartlar}
+          yoklamalar={yoklamalar}
+          setYoklamalar={setYoklamalarWithSync}
           stokKartlar={stokKartlar}
-          setStokKartlar={setStokKartlarWithSync}
           currentUser={currentUser}
           onSignOut={handleSignOut}
           isStandalone={true}
@@ -1542,6 +1567,8 @@ export default function App() {
                   setKampOdalari={setKampOdalariWithSync}
                   kampKayitlari={kampKayitlari}
                   setKampKayitlari={setKampKayitlariWithSync}
+                  kampYerleskeleri={kampYerleskeleri}
+                  kampKatlari={kampKatlari}
                   sahaFaaliyetleri={sahaFaaliyetleri}
                   setSahaFaaliyetleri={setSahaFaaliyetleriWithSync}
                   hazirTutanaklar={hazirTutanaklar}
@@ -1557,6 +1584,10 @@ export default function App() {
                   setAracKmLoglari={setAracKmLoglariWithSync}
                   yoklamalar={yoklamalar}
                 />
+              )}
+
+              {activeTab === "saha_kolaj" && (
+                <SahaKolajScreen currentUser={currentUser} />
               )}
 
               {activeTab === "onay_islemleri" && (
@@ -1617,9 +1648,13 @@ export default function App() {
                     setKampOdalari={setKampOdalariWithSync}
                     kampKayitlari={kampKayitlari}
                     setKampKayitlari={setKampKayitlariWithSync}
+                    kampYerleskeleri={kampYerleskeleri}
+                    kampKatlari={kampKatlari}
                     personeller={personeller}
+                    cariKartlar={cariKartlar}
+                    yoklamalar={yoklamalar}
+                    setYoklamalar={setYoklamalarWithSync}
                     stokKartlar={stokKartlar}
-                    setStokKartlar={setStokKartlarWithSync}
                     currentUser={currentUser}
                     onSignOut={handleSignOut}
                     addNotification={addNotification}

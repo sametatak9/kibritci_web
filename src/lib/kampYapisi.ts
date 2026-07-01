@@ -236,3 +236,61 @@ export async function purgeLegacyKampData(): Promise<{ roomIds: string[]; yerles
 /** Realtime dinleyiciler için yardımcı */
 export { collection, onSnapshot } from 'firebase/firestore';
 export { db };
+
+/** Tüm kamp verisini kalıcı olarak siler (boş başlangıç) */
+export async function purgeAllKampData(): Promise<{
+  odalar: number;
+  kayitlar: number;
+  yerleskeler: number;
+  katlar: number;
+}> {
+  const counts = { odalar: 0, kayitlar: 0, yerleskeler: 0, katlar: 0 };
+  const specs: Array<[string, keyof typeof counts]> = [
+    ['kampOdalari', 'odalar'],
+    ['kampKayitlari', 'kayitlar'],
+    ['kampYerleskeleri', 'yerleskeler'],
+    ['kampKatlari', 'katlar'],
+  ];
+  for (const [col, key] of specs) {
+    const items = await fetchCollection<{ id: string }>(col);
+    counts[key] = items.length;
+    await Promise.all(items.map((i) => removeDocument(col, i.id)));
+  }
+  return counts;
+}
+
+export async function updateKampYerleskeAdi(yerleske: KampYerleske, yeniAd: string): Promise<void> {
+  const trimmed = yeniAd.trim();
+  if (!trimmed) throw new Error('Yerleşke adı boş olamaz');
+  await saveDocument('kampYerleskeleri', { ...yerleske, ad: trimmed });
+  const eskiAd = yerleske.ad;
+  const [rooms, kats] = await Promise.all([
+    fetchCollection<KampOdasi & { id: string }>('kampOdalari'),
+    fetchCollection<KampKat & { id: string }>('kampKatlari'),
+  ]);
+  await Promise.all([
+    ...rooms
+      .filter((r) => r.yerleskeId === yerleske.id || r.yerleskeAdi === eskiAd)
+      .map((r) => saveDocument('kampOdalari', { ...r, yerleskeAdi: trimmed, yerleskeId: yerleske.id })),
+    ...kats
+      .filter((k) => k.yerleskeId === yerleske.id)
+      .map((k) => saveDocument('kampKatlari', { ...k, yerleskeAdi: trimmed })),
+  ]);
+}
+
+export async function updateKampKatAdi(kat: KampKat, yeniAd: string, yeniSira?: number): Promise<void> {
+  const trimmed = yeniAd.trim();
+  if (!trimmed) throw new Error('Kat adı boş olamaz');
+  await saveDocument('kampKatlari', {
+    ...kat,
+    ad: trimmed,
+    sira: yeniSira ?? kat.sira,
+  });
+  const eskiAd = kat.ad;
+  const rooms = await fetchCollection<KampOdasi & { id: string }>('kampOdalari');
+  await Promise.all(
+    rooms
+      .filter((r) => r.katId === kat.id || (r.yerleskeAdi === kat.yerleskeAdi && r.kogusNo === eskiAd))
+      .map((r) => saveDocument('kampOdalari', { ...r, kogusNo: trimmed, katId: kat.id }))
+  );
+}

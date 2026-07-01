@@ -215,10 +215,12 @@ export interface KampKaydi {
   personelIsim: string;
   personelId?: string;
   odaId: string;
+  roomId?: string;
   girisTarihi: string;
   cikisTarihi?: string;
   durum: 'AKTIF' | 'PASIF';
   calistigiFirma?: string;
+  firmaTipi?: 'ANA_FIRMA' | 'TASERON';
 }
 
 export interface KampSarf {
@@ -252,6 +254,22 @@ export interface SahaFaaliyeti {
   aktifPersonelListesi?: string[];
   ustaSayisi?: number;
   isciSayisi?: number;
+}
+
+/** Ay bazlı saha faaliyet foto kolajı / dergi albümü */
+export interface SahaKolajFoto {
+  id: string;
+  albumKey: string;
+  yil: number;
+  ay: number;
+  imageUrl: string;
+  baslik?: string;
+  aciklama?: string;
+  grupAdi?: string;
+  sira: number;
+  dosyaAdi?: string;
+  yuklemeTarihi: string;
+  yukleyen?: string;
 }
 
 export interface HazirTutanak {

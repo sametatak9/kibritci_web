@@ -69,6 +69,7 @@ export const Topbar: React.FC<TopbarProps> = ({
       arac: "Araç ve Demirbaş Takibi",
       kamp: "Kamp Yönetimi",
       saha: "Daily Saha Faaliyetleri",
+      saha_kolaj: "Saha Faaliyet Kolajı",
       tutanak: "Hazır Tutanak Hazırlama",
       rapor: "Rapor & Analiz Merkezi",
       eposta: "E-Posta Yönetim Merkezi",
