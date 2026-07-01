@@ -131,7 +131,7 @@ export async function testGeminiConnection(): Promise<{
     const ai = getGeminiClient();
     let lastError: unknown = null;
 
-    for (const model of ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash']) {
+    for (const model of ['gemini-2.5-flash', 'gemini-2.0-flash']) {
       try {
         const response = await ai.models.generateContent({
           model,

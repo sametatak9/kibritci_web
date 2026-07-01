@@ -133,7 +133,7 @@ async function testGeminiConnection() {
   try {
     const ai = getGeminiClient();
     let lastError = null;
-    for (const model of ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"]) {
+    for (const model of ["gemini-2.5-flash", "gemini-2.0-flash"]) {
       try {
         const response = await ai.models.generateContent({
           model,
@@ -159,7 +159,7 @@ async function testGeminiConnection() {
 
 // src/server/geminiGenerate.ts
 var IS_VERCEL = Boolean(process.env.VERCEL);
-var GEMINI_MODEL_FALLBACK = IS_VERCEL ? ["gemini-2.0-flash", "gemini-1.5-flash"] : ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"];
+var GEMINI_MODEL_FALLBACK = IS_VERCEL ? ["gemini-2.0-flash", "gemini-2.5-flash"] : ["gemini-2.5-flash", "gemini-2.0-flash"];
 var MODELS = GEMINI_MODEL_FALLBACK;
 var MAX_RETRIES_PER_MODEL = IS_VERCEL ? 1 : 2;
 var RETRY_DELAY_MS = IS_VERCEL ? 350 : 1200;
