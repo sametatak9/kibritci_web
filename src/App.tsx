@@ -359,7 +359,29 @@ export default function App() {
         setKampKayitlari(stayLogData);
 
         setLoadingMsg('Saha günlük faaliyet dökümleri arşivleniyor...');
-        const reportData = await seedCollectionIfEmpty('sahaFaaliyetleri', []);
+        let reportData = await seedCollectionIfEmpty('sahaFaaliyetleri', []);
+        const { bootstrapLegacySahaFaaliyet, markLegacySahaFaaliyetBootstrapped, haziran2026SahaNeedsBootstrap } = await import('./lib/legacySahaFaaliyetBootstrap');
+        const sahaMerge = bootstrapLegacySahaFaaliyet(reportData);
+        if (sahaMerge) {
+          reportData = sahaMerge;
+          console.log(`Legacy saha faaliyet bellekte birleştirildi: ${reportData.length} kayıt`);
+          const mergedSaha = reportData;
+          void (async () => {
+            try {
+              for (const sf of mergedSaha) {
+                if (sf.id?.startsWith('SF-MAY26-') || sf.id?.startsWith('SF-HAZ26-')) {
+                  await saveDocument('sahaFaaliyetleri', sf);
+                }
+              }
+              if (!haziran2026SahaNeedsBootstrap(mergedSaha)) {
+                markLegacySahaFaaliyetBootstrapped();
+              }
+              console.log('Legacy saha faaliyet Firestore kaydı tamamlandı');
+            } catch (bgErr) {
+              console.error('Legacy saha faaliyet arka plan kaydı başarısız:', bgErr);
+            }
+          })();
+        }
         setSahaFaaliyetleri(reportData);
 
         setLoadingMsg('Hukuki ve resmi şantiye hazır tutanaklar yükleniyor...');

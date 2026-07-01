@@ -4,7 +4,7 @@ import { importAllLegacyExcelMonths } from './legacyYoklamaImport';
 import { iterateMonthYoklama, asYoklamaGunMap } from './yoklamaUtils';
 
 /** Veri güncellendiğinde artırın — otomatik yeniden birleştirme tetikler */
-export const LEGACY_YOKLAMA_VERSION = 9;
+export const LEGACY_YOKLAMA_VERSION = 10;
 
 const STORAGE_KEY = 'kibritci_legacy_yoklama_v';
 
