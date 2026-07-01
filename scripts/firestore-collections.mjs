@@ -31,6 +31,8 @@ export const FIRESTORE_COLLECTIONS = [
   'aracKmLoglari',
   'operatorFaaliyetleri',
   'taseronKesintiRaporlari',
+  'taseronEnerjiKayitlari',
+  'taseronYemekKayitlari',
   'maasOdemeleri',
   'personelIslemGecmisi',
   'cariIslemGecmisi',

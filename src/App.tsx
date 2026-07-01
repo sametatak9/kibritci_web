@@ -36,7 +36,7 @@ import {
   Personel, AylikYoklamaMap, SatinAlmaTalebi, Irsaliye, Fatura, 
   KasaHareketi, AracBakim, Demisbas, KampOdasi, KampKaydi, KampYerleske, KampKat,
   HazirTutanak, CariKart, StokKart, EpostaGonderim, SahaFaaliyeti as SahaFaaliyetiType,
-  OperatorFaaliyet, TaseronKesintiRaporu, MaaşOdeme, PersonelIslemGecmisi, CariKartIslem, StokKartIslem,
+  OperatorFaaliyet, TaseronKesintiRaporu, TaseronEnerjiKaydi, TaseronYemekKaydi, MaaşOdeme, PersonelIslemGecmisi, CariKartIslem, StokKartIslem,
   EvrakBaglantiGrubu, OnayliAnalizRaporu
 } from './types/erp';
 
@@ -46,7 +46,7 @@ import {
   INITIAL_SATIN_ALMA, INITIAL_IRSALIYE, INITIAL_FATURA, INITIAL_KASA, 
   INITIAL_ARAC, 
   INITIAL_SAHA, INITIAL_TUTANAK, INITIAL_EPOSTA,
-  INITIAL_OPERATOR_FAALIYET, INITIAL_TASERON_KESINTI, INITIAL_MAAS_ODEME,
+  INITIAL_OPERATOR_FAALIYET, INITIAL_TASERON_KESINTI, INITIAL_TASERON_ENERJI, INITIAL_TASERON_YEMEK, INITIAL_MAAS_ODEME,
   INITIAL_PERSONEL_ISLEM, INITIAL_CARI_ISLEM, INITIAL_STOK_ISLEM
 } from './data/mockData';
 
@@ -92,6 +92,8 @@ import { YetkiVermeScreen } from './components/YetkiVermeScreen';
 import { OperatorScreen } from './components/OperatorScreen';
 import { MaasOdeScreen } from './components/MaasOdeScreen';
 import { YapayZekaKarsilastirScreen } from './components/YapayZekaKarsilastirScreen';
+import { EvrakBaglamaScreen, EvrakBaglamaPrefill } from './components/EvrakBaglamaScreen';
+import { PublicGirisKayitScreen } from './components/PublicGirisKayitScreen';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>("ana_sayfa");
@@ -154,6 +156,8 @@ export default function App() {
   // Operator & Heavy Equipment Activity Logs
   const [operatorFaaliyetleri, setOperatorFaaliyetleri] = useState<OperatorFaaliyet[]>([]);
   const [taseronKesintiRaporlari, setTaseronKesintiRaporlari] = useState<TaseronKesintiRaporu[]>([]);
+  const [taseronEnerjiKayitlari, setTaseronEnerjiKayitlari] = useState<TaseronEnerjiKaydi[]>([]);
+  const [taseronYemekKayitlari, setTaseronYemekKayitlari] = useState<TaseronYemekKaydi[]>([]);
 
   // Salary Payment Records
   const [maasOdemeleri, setMaasOdemeleri] = useState<MaaşOdeme[]>([]);
@@ -166,6 +170,7 @@ export default function App() {
   // Public Personnel Boarding Document Viewer (WhatsApp link handler)
   const [publicViewGiris, setPublicViewGiris] = useState<any>(null);
   const [publicLoading, setPublicLoading] = useState<boolean>(false);
+  const [evrakBaglamaPrefill, setEvrakBaglamaPrefill] = useState<EvrakBaglamaPrefill | null>(null);
 
   // Error reporting state
   const [errorReport, setErrorReport] = useState<{ message: string; techDetails: string; contextInfo?: string } | null>(null);
@@ -264,7 +269,13 @@ export default function App() {
         if (snap.exists()) {
           setPublicViewGiris({ id: snap.id, ...snap.data() });
         } else {
-          alert('Aradığınız personel giriş talebi kaydı sistemde bulunamadı!');
+          setPublicViewGiris({
+            id: viewGirisId,
+            _notFound: true,
+            ad: '',
+            soyad: '',
+            gorev: '',
+          });
         }
         setPublicLoading(false);
       }).catch((err) => {
@@ -480,7 +491,13 @@ export default function App() {
 
         setLoadingMsg('Taşeron kesinti raporları arşivleniyor...');
         const loadedTaseron = await seedCollectionIfEmpty('taseronKesintiRaporlari', INITIAL_TASERON_KESINTI);
-        setTaseronKesintiRaporlari(loadedTaseron);
+        setTaseronKesintiRaporlari(loadedTaseron.map((r) => ({ ...r, kesintiTipi: r.kesintiTipi || 'IS_MAKINESI' })));
+
+        const loadedTaseronEnerji = await seedCollectionIfEmpty('taseronEnerjiKayitlari', INITIAL_TASERON_ENERJI);
+        setTaseronEnerjiKayitlari(loadedTaseronEnerji);
+
+        const loadedTaseronYemek = await seedCollectionIfEmpty('taseronYemekKayitlari', INITIAL_TASERON_YEMEK);
+        setTaseronYemekKayitlari(loadedTaseronYemek);
 
         setLoadingMsg('Maaş ödeme kayıtları senkronize ediliyor...');
         const loadedMaasOde = await seedCollectionIfEmpty('maasOdemeleri', INITIAL_MAAS_ODEME);
@@ -739,9 +756,26 @@ export default function App() {
     const unsubTaseronKesinti = onSnapshot(collection(db, 'taseronKesintiRaporlari'), (snapshot) => {
       const list: TaseronKesintiRaporu[] = [];
       snapshot.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() } as any);
+        const data = doc.data() as TaseronKesintiRaporu;
+        list.push({ ...data, id: doc.id, kesintiTipi: data.kesintiTipi || 'IS_MAKINESI' });
       });
       setTaseronKesintiRaporlari(list);
+    });
+
+    const unsubTaseronEnerji = onSnapshot(collection(db, 'taseronEnerjiKayitlari'), (snapshot) => {
+      const list: TaseronEnerjiKaydi[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() } as TaseronEnerjiKaydi);
+      });
+      setTaseronEnerjiKayitlari(list);
+    });
+
+    const unsubTaseronYemek = onSnapshot(collection(db, 'taseronYemekKayitlari'), (snapshot) => {
+      const list: TaseronYemekKaydi[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() } as TaseronYemekKaydi);
+      });
+      setTaseronYemekKayitlari(list);
     });
 
     const unsubMaasOde = onSnapshot(collection(db, 'maasOdemeleri'), (snapshot) => {
@@ -783,6 +817,8 @@ export default function App() {
       unsubCari();
       unsubOperator();
       unsubTaseronKesinti();
+      unsubTaseronEnerji();
+      unsubTaseronYemek();
       unsubMaasOde();
     };
   }, [dbStatus, currentUser]);
@@ -1040,6 +1076,22 @@ export default function App() {
     });
   };
 
+  const setTaseronEnerjiKayitlariWithSync = (updater: TaseronEnerjiKaydi[] | ((t: TaseronEnerjiKaydi[]) => TaseronEnerjiKaydi[])) => {
+    setTaseronEnerjiKayitlari(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setTimeout(() => syncArrayToFirestore('taseronEnerjiKayitlari', prev, next), 0);
+      return next;
+    });
+  };
+
+  const setTaseronYemekKayitlariWithSync = (updater: TaseronYemekKaydi[] | ((t: TaseronYemekKaydi[]) => TaseronYemekKaydi[])) => {
+    setTaseronYemekKayitlari(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setTimeout(() => syncArrayToFirestore('taseronYemekKayitlari', prev, next), 0);
+      return next;
+    });
+  };
+
   const setMaasOdemeleriWithSync = (updater: MaaşOdeme[] | ((m: MaaşOdeme[]) => MaaşOdeme[])) => {
     setMaasOdemeleri(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -1101,11 +1153,23 @@ export default function App() {
     }
   };
 
+  const navigateToEvrakBaglama = (prefill?: EvrakBaglamaPrefill) => {
+    if (prefill) setEvrakBaglamaPrefill(prefill);
+    setActiveTab('evrak_baglama');
+  };
+
   const handleTabNavigation = (targetTab: string) => {
     setActiveTab(targetTab);
   };
 
-  // Public image view check first
+  const closePublicGiris = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('view_giris');
+    window.history.replaceState({}, '', url.toString());
+    setPublicViewGiris(null);
+  };
+
+  // Public WhatsApp giriş linki — oturum gerekmez
   if (publicLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-slate-100 font-sans p-6">
@@ -1117,75 +1181,7 @@ export default function App() {
 
   if (publicViewGiris) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-100 font-sans p-4">
-        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col p-5 space-y-4">
-          
-          {/* Header */}
-          <div className="flex items-center space-x-3 pb-3 border-b border-slate-800">
-            <div className="w-10 h-10 bg-amber-500 rounded-2xl flex items-center justify-center text-slate-950 font-black">
-              🪪
-            </div>
-            <div>
-              <h2 className="text-sm font-black text-slate-100 tracking-wider">KİBRİTÇİ İNŞAAT</h2>
-              <p className="text-[10px] text-amber-500 font-mono uppercase font-black">PERSONEL KİMLİK SORGULAMA</p>
-            </div>
-          </div>
-
-          {/* Details */}
-          <div className="space-y-2 bg-slate-950/60 p-4 rounded-2xl border border-slate-850/60 text-xs">
-            <div className="flex justify-between py-1 border-b border-slate-900">
-              <span className="text-slate-500 font-bold">AD SOYAD:</span>
-              <span className="font-extrabold text-slate-100 uppercase">{publicViewGiris.ad} {publicViewGiris.soyad}</span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-slate-900">
-              <span className="text-slate-500 font-bold">GÖREV / BRANŞ:</span>
-              <span className="font-bold text-amber-400 uppercase">{publicViewGiris.gorev}</span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-slate-900">
-              <span className="text-slate-500 font-bold">TALEP TARİHİ:</span>
-              <span className="font-mono text-slate-300">{new Date(publicViewGiris.tarih).toLocaleString('tr-TR')}</span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-slate-900">
-              <span className="text-slate-500 font-bold">GÖNDEREN FORMEN:</span>
-              <span className="font-semibold text-slate-300">{publicViewGiris.gonderenFormen?.split('@')[0]}</span>
-            </div>
-            <div className="flex justify-between py-1">
-              <span className="text-slate-500 font-bold">ONAY DURUMU:</span>
-              <span className="font-black text-emerald-400 uppercase">{publicViewGiris.durum}</span>
-            </div>
-          </div>
-
-          {/* Image */}
-          <div className="space-y-1">
-            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-sans">PERSONEL KİMLİK BELGESİ FOTOĞRAFI</span>
-            <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden p-2 flex items-center justify-center min-h-[160px]">
-              {publicViewGiris.kimlikFotoUrl ? (
-                <img 
-                  src={publicViewGiris.kimlikFotoUrl} 
-                  alt="Kimlik Fotoğrafı" 
-                  className="max-h-64 object-contain rounded-lg border border-slate-800"
-                />
-              ) : (
-                <span className="text-xs text-slate-500 italic">Kimlik fotoğrafı yüklenmemiş.</span>
-              )}
-            </div>
-          </div>
-
-          {/* Footer buttons */}
-          <button
-            onClick={() => {
-              const url = new URL(window.location.href);
-              url.searchParams.delete('view_giris');
-              window.history.replaceState({}, '', url.toString());
-              setPublicViewGiris(null);
-            }}
-            className="w-full bg-slate-800 hover:bg-slate-750 text-slate-200 font-bold text-xs py-2.5 rounded-xl transition duration-150 cursor-pointer"
-          >
-            Sistem Giriş Paneline Git
-          </button>
-
-        </div>
-      </div>
+      <PublicGirisKayitScreen talep={publicViewGiris} onClose={closePublicGiris} />
     );
   }
 
@@ -1687,6 +1683,7 @@ export default function App() {
                   setStokKartlar={setStokKartlarWithSync}
                   currentUser={currentUser}
                   addNotification={addNotification}
+                  onNavigateToBaglama={navigateToEvrakBaglama}
                 />
               )}
 
@@ -1705,6 +1702,24 @@ export default function App() {
                   setStokKartlar={setStokKartlarWithSync}
                   currentUser={currentUser}
                   addNotification={addNotification}
+                  onNavigateToBaglama={navigateToEvrakBaglama}
+                />
+              )}
+
+              {activeTab === "evrak_baglama" && (
+                <EvrakBaglamaScreen
+                  satinAlmaTalepleri={satinAlmaTalepleri}
+                  irsaliyeler={irsaliyeler}
+                  faturalar={faturalar}
+                  setIrsaliyeler={setIrsaliyelerWithSync}
+                  setFaturalar={setFaturalarWithSync}
+                  evrakBaglantiGruplari={evrakBaglantiGruplari}
+                  setEvrakBaglantiGruplari={setEvrakBaglantiGruplariWithSync}
+                  prefill={evrakBaglamaPrefill}
+                  onClearPrefill={() => setEvrakBaglamaPrefill(null)}
+                  onNavigateToBaglama={navigateToEvrakBaglama}
+                  onNavigateToYz={() => setActiveTab('yz_karsilastir')}
+                  currentUser={currentUser}
                 />
               )}
 
@@ -1728,6 +1743,10 @@ export default function App() {
                   hazirTutanaklar={hazirTutanaklar}
                   taseronKesintiRaporlari={taseronKesintiRaporlari}
                   setTaseronKesintiRaporlari={setTaseronKesintiRaporlariWithSync}
+                  taseronEnerjiKayitlari={taseronEnerjiKayitlari}
+                  setTaseronEnerjiKayitlari={setTaseronEnerjiKayitlariWithSync}
+                  taseronYemekKayitlari={taseronYemekKayitlari}
+                  setTaseronYemekKayitlari={setTaseronYemekKayitlariWithSync}
                   addNotification={addNotification}
                   currentUser={currentUser}
                 />

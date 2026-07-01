@@ -7,6 +7,7 @@ import {
   Upload,
   ChevronDown,
   Archive,
+  Eye,
   X,
 } from 'lucide-react';
 import {
@@ -21,6 +22,13 @@ import { fetchApiJson } from '../lib/apiClient';
 import { getAnalizHavuzu } from '../lib/evrakBaglamaUtils';
 import { sendReportEmail } from '../lib/documentCompareUtils';
 import { compressImage } from '../lib/imageCompress';
+import { EvrakTabBilgi } from './EvrakTabBilgi';
+import { EvrakDetayModal, EvrakDetayPayload } from './EvrakDetayModal';
+import {
+  buildKibritciReportHtml,
+  downloadKibritciReportHtml,
+  openKibritciReportPrint,
+} from '../lib/kibritciReportTemplate';
 
 const ANALIZ_FOCUS_OPTIONS: CompareFocus[] = [
   'miktar',
@@ -59,6 +67,7 @@ export const YapayZekaKarsilastirScreen: React.FC<YapayZekaKarsilastirScreenProp
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [draftReport, setDraftReport] = useState('');
   const [draftGrupId, setDraftGrupId] = useState<string | null>(null);
+  const [detayPayload, setDetayPayload] = useState<EvrakDetayPayload | null>(null);
 
   const havuz = useMemo(
     () => getAnalizHavuzu(evrakBaglantiGruplari, faturalar, irsaliyeler, satinAlmaTalepleri),
@@ -117,12 +126,39 @@ export const YapayZekaKarsilastirScreen: React.FC<YapayZekaKarsilastirScreenProp
     }
   };
 
-  const printReport = (text: string, title: string) => {
-    const w = window.open('', '_blank');
-    if (!w) return;
-    w.document.write(`<html><head><title>${title}</title></head><body><pre style="font-family:sans-serif;white-space:pre-wrap;padding:24px">${text}</pre></body></html>`);
-    w.document.close();
-    w.print();
+  const printReport = (text: string, title: string, meta?: string[]) => {
+    const html = buildKibritciReportHtml({
+      title: 'YZ Evrak Analiz Raporu',
+      subtitle: title,
+      bodyHtml: text,
+      meta,
+    });
+    openKibritciReportPrint(html, title);
+  };
+
+  const downloadReportHtml = (text: string, title: string, meta?: string[]) => {
+    const html = buildKibritciReportHtml({
+      title: 'YZ Evrak Analiz Raporu',
+      subtitle: title,
+      bodyHtml: text,
+      meta,
+    });
+    downloadKibritciReportHtml(html, `kibritci-analiz-${Date.now()}`);
+  };
+
+  const openGrupDetay = (g: EvrakBaglantiGrubu) => {
+    const sa = g.saId ? satinAlmaTalepleri.find((s) => s.saId === g.saId) : undefined;
+    if (sa) {
+      setDetayPayload({ kind: 'sa', sa });
+      return;
+    }
+    const ir = irsaliyeler.find((i) => g.irsaliyeIds.includes(i.id));
+    if (ir) {
+      setDetayPayload({ kind: 'irsaliye', irsaliye: ir });
+      return;
+    }
+    const ft = g.faturaId ? faturalar.find((f) => f.id === g.faturaId) : undefined;
+    if (ft) setDetayPayload({ kind: 'fatura', fatura: ft });
   };
 
   const archiveReport = (imzaliUrl?: string) => {
@@ -173,6 +209,8 @@ export const YapayZekaKarsilastirScreen: React.FC<YapayZekaKarsilastirScreenProp
         </p>
       </header>
 
+      <EvrakTabBilgi tab="yz" />
+
       <section className="space-y-3">
         <h2 className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
           Analiz Havuzu ({havuz.length})
@@ -197,37 +235,56 @@ export const YapayZekaKarsilastirScreen: React.FC<YapayZekaKarsilastirScreenProp
                     <p className="text-xs font-bold text-slate-900">{g.cariUnvan || 'Evrak Grubu'}</p>
                     <p className="text-[10px] text-slate-500">{g.olusturmaTarihi} · Analiz bekliyor</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => openAnaliz(g)}
-                    className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-black rounded-xl cursor-pointer flex items-center gap-1.5"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" /> Analiz Yap
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openGrupDetay(g)}
+                      className="px-3 py-2 border border-slate-200 hover:bg-white text-slate-700 text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> Evrak Detay Gör
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openAnaliz(g)}
+                      className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-black rounded-xl cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" /> Analiz Yap
+                    </button>
+                  </div>
                 </div>
 
-                <div className="p-4 space-y-3 text-xs">
+                <div className="p-4 space-y-1 text-xs font-mono">
                   {sa && (
-                    <div className="border-l-4 border-blue-500 pl-3 py-1">
-                      <p className="font-bold text-blue-800">Satın Alma · {sa.saId}</p>
-                      <p className="text-slate-600">{sa.talepEden} · {sa.kalemler.length} kalem</p>
+                    <div className="flex items-center gap-2 py-1 border-l-2 border-blue-500 pl-3">
+                      <span className="text-blue-700 font-bold">SA</span>
+                      <span>{sa.saId}</span>
+                      <span className="text-slate-500 font-sans text-[10px]">
+                        · {sa.kalemler.length} kalem
+                      </span>
                     </div>
                   )}
                   {irs.map((ir) => (
-                    <div key={ir.id} className="border-l-4 border-emerald-500 pl-3 py-1">
-                      <p className="font-bold text-emerald-800">İrsaliye · {ir.irsaliyeNo}</p>
-                      <p className="text-slate-600">{ir.cariUnvan} · {ir.tarih}</p>
+                    <div
+                      key={ir.id}
+                      className="flex items-center gap-2 py-1 border-l-2 border-emerald-500 pl-6 ml-2"
+                    >
+                      <span className="text-emerald-700 font-bold">İRS</span>
+                      <span>{ir.irsaliyeNo}</span>
+                      <span className="text-slate-500 font-sans text-[10px]">· {ir.firma}</span>
                     </div>
                   ))}
                   {ft && (
-                    <div className="border-l-4 border-amber-500 pl-3 py-1">
-                      <p className="font-bold text-amber-900">Fatura · {ft.faturaNo}</p>
-                      <p className="text-slate-600">
-                        {ft.genelToplam.toLocaleString('tr-TR')} TL · {ft.tarih}
-                      </p>
+                    <div className="flex items-center gap-2 py-1 border-l-2 border-amber-500 pl-6 ml-2">
+                      <span className="text-amber-800 font-bold">FAT</span>
+                      <span>{ft.faturaNo}</span>
+                      <span className="text-slate-500 font-sans text-[10px]">
+                        · {ft.genelToplam.toLocaleString('tr-TR')} TL
+                      </span>
                     </div>
                   )}
+                </div>
 
+                <div className="px-4 pb-4 space-y-3 text-xs">
                   {g.kalemBaglantilari.length > 0 && (
                     <details className="bg-slate-50 rounded-xl p-3">
                       <summary className="font-bold text-[10px] uppercase text-slate-500 cursor-pointer flex items-center gap-1">
@@ -240,6 +297,7 @@ export const YapayZekaKarsilastirScreen: React.FC<YapayZekaKarsilastirScreenProp
                             {k.saMiktar != null && ` · SA:${k.saMiktar}`}
                             {k.irsaliyeMiktar != null && ` · İRS:${k.irsaliyeMiktar}`}
                             {k.faturaMiktar != null && ` · FAT:${k.faturaMiktar}`}
+                            {k.birim && ` ${k.birim}`}
                           </li>
                         ))}
                       </ul>
@@ -351,10 +409,26 @@ export const YapayZekaKarsilastirScreen: React.FC<YapayZekaKarsilastirScreenProp
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => printReport(draftReport, 'YZ Analiz Raporu')}
+                      onClick={() =>
+                        printReport(draftReport, 'YZ Analiz Raporu', [
+                          selectedGrup.saId ? `PO: ${selectedGrup.saId}` : '',
+                          `Odak: ${analizOdak.join(', ')}`,
+                        ].filter(Boolean))
+                      }
                       className="flex items-center gap-1 px-3 py-2 border rounded-xl font-bold cursor-pointer"
                     >
-                      <Printer className="w-3.5 h-3.5" /> PDF İndir
+                      <Printer className="w-3.5 h-3.5" /> PDF Yazdır
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        downloadReportHtml(draftReport, 'YZ Analiz', [
+                          selectedGrup.saId ? `PO: ${selectedGrup.saId}` : '',
+                        ].filter(Boolean))
+                      }
+                      className="flex items-center gap-1 px-3 py-2 border rounded-xl font-bold cursor-pointer"
+                    >
+                      <FileText className="w-3.5 h-3.5" /> HTML Kaydet
                     </button>
                     <button
                       type="button"
@@ -383,6 +457,12 @@ export const YapayZekaKarsilastirScreen: React.FC<YapayZekaKarsilastirScreenProp
           </div>
         </div>
       )}
+
+      <EvrakDetayModal
+        open={!!detayPayload}
+        payload={detayPayload}
+        onClose={() => setDetayPayload(null)}
+      />
     </div>
   );
 };

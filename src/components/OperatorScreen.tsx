@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { HardHat, Clock, Calendar, Building2, Camera, Save, Search, FileText, Trash2, CreditCard as Edit3, CircleCheck as CheckCircle, X, ChevronDown, ChevronUp, Truck, TriangleAlert as AlertTriangle, Download, Mail, ListFilter as Filter, Plus, Printer } from 'lucide-react';
 import { AracBakim, CariKart, OperatorFaaliyet, TaseronKesintiRaporu, Personel } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
+import { getTaseronCariKartlar } from '../lib/taseronUtils';
+import { indirIsMakinesiRaporu } from '../lib/taseronReportUtils';
 
 interface OperatorScreenProps {
   araclar: AracBakim[];
@@ -45,14 +47,17 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
   const [showKesintiModal, setShowKesintiModal] = useState(false);
   const [selectedAy, setSelectedAy] = useState(new Date().getMonth() + 1);
   const [selectedYil, setSelectedYil] = useState(new Date().getFullYear());
-  const [saatlikUcret, setSaatlikUcret] = useState(150);
+  const [makineKaynak, setMakineKaynak] = useState<'DEMIRBAS' | 'KIRALIK' | 'MANUEL'>('DEMIRBAS');
+  const [makineManuelAd, setMakineManuelAd] = useState('');
   const [raporFiltreFirma, setRaporFiltreFirma] = useState('');
   const [raporFiltreAy, setRaporFiltreAy] = useState(new Date().getMonth() + 1);
   const [raporFiltreYil, setRaporFiltreYil] = useState(new Date().getFullYear());
 
+  const taseronCariler = useMemo(() => getTaseronCariKartlar(cariKartlar), [cariKartlar]);
+
   const ismakineAraclari = useMemo(() => {
-    return araclar.filter(a => 
-      a.tur === 'İŞ MAKİNESİ' || 
+    return araclar.filter(a =>
+      a.tur === 'İŞ MAKİNESİ' ||
       a.markaModel?.toLowerCase().includes('excavator') ||
       a.markaModel?.toLowerCase().includes('jcb') ||
       a.markaModel?.toLowerCase().includes('kato') ||
@@ -95,8 +100,16 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
   };
 
   const handleKaydet = () => {
-    if (!selectedAracId || !selectedPersonelId || !yapilanIs) {
-      alert('Lütfen araç, operatör ve yapılan iş alanlarını doldurun.');
+    if (!selectedPersonelId || !yapilanIs) {
+      alert('Lütfen operatör ve yapılan iş alanlarını doldurun.');
+      return;
+    }
+    if (makineKaynak === 'MANUEL' && !makineManuelAd.trim()) {
+      alert('Elle giriş için makine adı/plaka girin.');
+      return;
+    }
+    if (makineKaynak !== 'MANUEL' && !selectedAracId) {
+      alert('Lütfen iş makinesi seçin.');
       return;
     }
 
@@ -115,10 +128,13 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
 
     const firmaId = firmaSecim === 'cari' ? selectedCariId : undefined;
 
+    const kaynak: OperatorFaaliyet['makineKaynak'] =
+      makineKaynak === 'MANUEL' ? 'MANUEL' : operatorTipi === 'KİRALIK' ? 'KIRALIK' : 'DEMIRBAS';
+
     const yeniFaaliyet: OperatorFaaliyet = {
       id: editingId || `of_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-      aracId: selectedAracId,
-      aracPlaka: arac?.plaka,
+      aracId: makineKaynak === 'MANUEL' ? `manuel_${Date.now()}` : selectedAracId,
+      aracPlaka: makineKaynak === 'MANUEL' ? makineManuelAd : arac?.plaka,
       operatorPersonelId: selectedPersonelId,
       operatorIsim: `${personel?.ad} ${personel?.soyad}`,
       operatorTipi,
@@ -134,6 +150,8 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
       temsilciAdSoyad: temsilciAdSoyad || undefined,
       temsilciTc: temsilciTc || undefined,
       operatorTc: personel?.tcNo,
+      makineKaynak: kaynak,
+      makineManuelAd: makineKaynak === 'MANUEL' ? makineManuelAd : undefined,
       onayDurumu: 'ONAYLANDI',
       kaydedenKullanici: currentUser?.email,
       kayitTarihi: new Date().toISOString()
@@ -281,18 +299,22 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
     const yeniRaporlar: TaseronKesintiRaporu[] = [];
     Object.entries(firmaGruplari).forEach(([firmaAdi, faaliyetler]) => {
       const toplamSaat = faaliyetler.reduce((s, f) => s + f.calismaSuresi, 0);
+      const cari = taseronCariler.find((c) => c.unvan === firmaAdi) || cariKartlar.find((c) => c.unvan === firmaAdi);
       const rapor: TaseronKesintiRaporu = {
         id: `tkr_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        kesintiTipi: 'IS_MAKINESI',
         taseronFirmaAdi: firmaAdi,
+        taseronFirmaId: cari?.id,
         donemAy: String(selectedAy).padStart(2, '0'),
         donemYil: String(selectedYil),
         toplamSaat: Math.round(toplamSaat * 100) / 100,
-        kesintiTutari: Math.round(toplamSaat * saatlikUcret * 100) / 100,
-        saatlikUcret,
+        kesintiTutari: 0,
+        saatlikUcret: 0,
+        ucretOnayBekliyor: true,
         faaliyetler,
         onayDurumu: 'TASLAK',
         olusturanKullanici: currentUser?.email || 'Sistem',
-        olusturmaTarihi: new Date().toISOString()
+        olusturmaTarihi: new Date().toISOString(),
       };
       yeniRaporlar.push(rapor);
     });
@@ -310,7 +332,7 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
     if (addNotification) {
       addNotification(`${yeniRaporlar.length} adet taşeron kesinti raporu oluşturuldu (${selectedAy}/${selectedYil}).`);
     }
-    alert(`${yeniRaporlar.length} adet taşeron kesinti raporu oluşturuldu!`);
+    alert(`${yeniRaporlar.length} adet kesinti raporu Taşeron sekmesine gönderildi. Yönetici saat ücretini girecek.`);
     setShowKesintiModal(false);
   };
 
@@ -369,13 +391,35 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
 
             <div className="space-y-3">
               <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">İş Makinesi</label>
-                <select value={selectedAracId} onChange={e => setSelectedAracId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-amber-500">
-                  <option value="">Seçiniz</option>
-                  {ismakineAraclari.map(a => (
-                    <option key={a.id} value={a.id}>{a.plaka} - {a.markaModel}</option>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Makine Kaynağı</label>
+                <div className="grid grid-cols-3 gap-2 mb-2">
+                  {(['DEMIRBAS', 'KIRALIK', 'MANUEL'] as const).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => setMakineKaynak(k)}
+                      className={`py-1.5 rounded-lg border text-[9px] font-bold ${makineKaynak === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 border-slate-200'}`}
+                    >
+                      {k === 'DEMIRBAS' ? 'Demirbaş' : k === 'KIRALIK' ? 'Kiralık' : 'Elle Giriş'}
+                    </button>
                   ))}
-                </select>
+                </div>
+                {makineKaynak === 'MANUEL' ? (
+                  <input
+                    type="text"
+                    value={makineManuelAd}
+                    onChange={(e) => setMakineManuelAd(e.target.value)}
+                    placeholder="Makine adı / plaka (elle)"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold"
+                  />
+                ) : (
+                  <select value={selectedAracId} onChange={e => setSelectedAracId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-amber-500">
+                    <option value="">İş Makinesi Seçiniz</option>
+                    {ismakineAraclari.map(a => (
+                      <option key={a.id} value={a.id}>{a.plaka} - {a.markaModel}</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div>
@@ -433,10 +477,14 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
                 </div>
                 {firmaSecim === 'cari' ? (
                   <select value={selectedCariId} onChange={e => setSelectedCariId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-amber-500">
-                    <option value="">Firma Seçin</option>
-                    {cariKartlar.filter(c => c.tur === 'TASERON' || c.tur === 'TEDARIKCI').map(c => (
-                      <option key={c.id} value={c.id}>{c.unvan} ({c.tur})</option>
-                    ))}
+                    <option value="">Taşeron Firma Seçin</option>
+                    {taseronCariler.length === 0 ? (
+                      <option value="" disabled>Cari kartlarda TASERON tipi kayıt yok</option>
+                    ) : (
+                      taseronCariler.map(c => (
+                        <option key={c.id} value={c.id}>{c.unvan} ({c.kod})</option>
+                      ))
+                    )}
                   </select>
                 ) : (
                   <input type="text" value={manuelFirma} onChange={e => setManuelFirma(e.target.value)} placeholder="Firma adı girin..." className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-amber-500" />
@@ -571,10 +619,9 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
                 {[2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Saatlik Ücret (TL)</label>
-              <input type="number" value={saatlikUcret} onChange={e => setSaatlikUcret(Number(e.target.value))} className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-amber-500 w-24" />
-            </div>
+            <p className="text-[10px] text-slate-500 w-full">
+              Saat ücreti yönetici tarafından <strong>Taşeron Kesintileri</strong> sekmesinde girilir. Burada sadece saat özeti gönderilir.
+            </p>
             <button onClick={() => setShowKesintiModal(true)} className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs py-2.5 px-5 rounded-xl transition flex items-center gap-1.5">
               <FileText size={14} /> Kesinti Raporu Oluştur
             </button>
@@ -586,8 +633,8 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
                 <h3 className="font-display font-black text-slate-800 text-sm">Taşeron Kesinti Raporu Oluştur</h3>
                 <p className="text-[11px] text-slate-500">{selectedAy}/{selectedYil} dönemine ait kesintiye tabi faaliyetler gruplanarak raporlanacaktır.</p>
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[10px] text-amber-800">
-                  <p><strong>Saatlik Ücret:</strong> {saatlikUcret} TL</p>
                   <p><strong>Dönem:</strong> {String(selectedAy).padStart(2, '0')}/{selectedYil}</p>
+                  <p className="mt-1">Rapor Taşeron sekmesine TASLAK olarak düşer; yönetici saat ücretini onaylar.</p>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={handleKesintiRaporuOlustur} className="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs py-2.5 rounded-xl transition">Oluştur</button>
@@ -625,14 +672,14 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
                         <div className="flex items-center gap-2 mb-1">
                           <span className="bg-blue-100 text-blue-800 text-[9px] font-black px-2 py-0.5 rounded-full">{rapor.taseronFirmaAdi}</span>
                           <span className="text-[10px] text-slate-400 font-mono">{rapor.donemAy}/{rapor.donemYil}</span>
-                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${rapor.onayDurumu === 'ONAYLANDI' ? 'bg-emerald-100 text-emerald-700' : rapor.onayDurumu === 'GONDERILDI' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}`}>
-                            {rapor.onayDurumu}
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${rapor.ucretOnayBekliyor ? 'bg-amber-100 text-amber-800' : rapor.onayDurumu === 'ONAYLANDI' ? 'bg-emerald-100 text-emerald-700' : rapor.onayDurumu === 'GONDERILDI' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                            {rapor.ucretOnayBekliyor ? 'ÜCRET BEKLİYOR' : rapor.onayDurumu}
                           </span>
                         </div>
                         <div className="grid grid-cols-3 gap-4 text-[10px] text-slate-600 mt-2">
                           <div><span className="text-slate-400">Toplam Saat:</span> <strong className="text-slate-800">{rapor.toplamSaat.toFixed(1)} sa</strong></div>
-                          <div><span className="text-slate-400">Saatlik Ücret:</span> <strong className="text-slate-800">{rapor.saatlikUcret} TL</strong></div>
-                          <div><span className="text-slate-400">Kesinti:</span> <strong className="text-rose-600">{rapor.kesintiTutari.toFixed(2)} TL</strong></div>
+                          <div><span className="text-slate-400">Saatlik Ücret:</span> <strong className="text-slate-800">{rapor.ucretOnayBekliyor ? 'Yönetici girecek' : `${rapor.saatlikUcret} TL`}</strong></div>
+                          <div><span className="text-slate-400">Kesinti:</span> <strong className="text-rose-600">{rapor.ucretOnayBekliyor ? '—' : `${rapor.kesintiTutari.toFixed(2)} TL`}</strong></div>
                         </div>
                         <div className="mt-2 text-[9px] text-slate-400">
                           Faaliyet Sayısı: {rapor.faaliyetler.length} | Oluşturan: {rapor.olusturanKullanici}
@@ -645,7 +692,7 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
                         {rapor.onayDurumu === 'ONAYLANDI' && (
                           <button onClick={() => handleRaporGonder(rapor)} className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600 transition" title="E-posta Gönder"><Mail size={12} /></button>
                         )}
-                        <button onClick={() => generatePDFReport(rapor.faaliyetler, `Kesinti_${rapor.taseronFirmaAdi}_${rapor.donemAy}_${rapor.donemYil}`)} className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-600 transition" title="İndir"><Download size={12} /></button>
+                        <button onClick={() => (rapor.ucretOnayBekliyor ? alert('Ücret onayı Taşeron sekmesinden yapılır.') : indirIsMakinesiRaporu(rapor))} className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-600 transition" title="İndir"><Download size={12} /></button>
                       </div>
                     </div>
                   </div>

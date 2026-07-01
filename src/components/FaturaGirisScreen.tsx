@@ -8,8 +8,8 @@ import { compressImage } from '../lib/imageCompress';
 import { fetchApiJson } from '../lib/apiClient';
 import { fileToAiPayload } from '../lib/aiFileUpload';
 import { faturaIsLinked } from '../lib/documentLinkUtils';
-import { EvrakBaglamaWizard } from './EvrakBaglamaWizard';
 import { BagliEvraklarListesi } from './BagliEvraklarListesi';
+import { EvrakTabBilgi } from './EvrakTabBilgi';
 
 interface FaturaGirisScreenProps {
   faturalar: Fatura[];
@@ -25,6 +25,7 @@ interface FaturaGirisScreenProps {
   setEvrakBaglantiGruplari: React.Dispatch<React.SetStateAction<EvrakBaglantiGrubu[]>>;
   currentUser?: any;
   addNotification?: (mesaj: string) => void;
+  onNavigateToBaglama?: (prefill?: { saId?: string; irIds?: string[]; faturaId?: string; anchor?: 'satin_alma' | 'irsaliye' | 'fatura' }) => void;
 }
 
 export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
@@ -41,13 +42,10 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
   setEvrakBaglantiGruplari,
   currentUser,
   addNotification
+  ,
+  onNavigateToBaglama
 }) => {
-  const [activeTab, setActiveTab] = useState<'giris' | 'baglama' | 'bagli'>('giris');
-  const [baglamaPrefill, setBaglamaPrefill] = useState<{
-    saId?: string;
-    irIds?: string[];
-    faturaId?: string;
-  } | null>(null);
+  const [activeTab, setActiveTab] = useState<'giris' | 'bagli'>('giris');
   
   // Form states
   const [ftNo, setFtNo] = useState("");
@@ -461,19 +459,21 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
             1 · Fatura Giriş (Manuel / AI)
           </button>
           <button
-            onClick={() => setActiveTab('baglama')}
-            className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'baglama' ? 'bg-[#2563eb] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
+            onClick={() => onNavigateToBaglama?.({ anchor: 'fatura' })}
+            className="px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200"
           >
-            2 · Bağlama (2 Aşama)
+            → Evrak Bağlama Merkezi
           </button>
           <button
             onClick={() => setActiveTab('bagli')}
             className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'bagli' ? 'bg-[#2563eb] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
           >
-            3 · Bağlı Evraklar
+            2 · Bağlı Evraklar
           </button>
         </div>
       </div>
+
+      {activeTab === 'giris' && <EvrakTabBilgi tab="fatura-giris" />}
 
       {activeTab === 'giris' && (
         <div className="flex flex-col lg:flex-row gap-6">
@@ -645,11 +645,10 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
                   setFtItems([]);
                   setFtNo("");
                   setFtSupplier("");
-                  setFtSaLink("");
-                  setSelectedIrsIds([]);
                   setFtAttachmentUrl(null);
                   setFtSignedAttachmentUrl(null);
-                  setActiveTab('liste');
+                  setEditingFtId(null);
+                  setActiveTab('giris');
                 }}
                 className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl text-center cursor-pointer transition text-xs"
               >
@@ -670,53 +669,11 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
             <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
               <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">💡 Finansal Uyarı</h4>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Bağlama «Bağlama» sekmesinde yapılır. YZ analiz için sol menüden «YZ Karşılaştır ve Yorumla» sekmesini kullanın.
+                Bağlama işlemi «Evrak Bağlama Merkezi» sekmesinde yapılır. YZ analiz için «YZ Karşılaştır ve Yorumla» menüsünü kullanın.
               </p>
             </div>
           </div>
 
-        </div>
-      )}
-
-      {activeTab === 'baglama' && setIrsaliyeler && (
-        <div className="space-y-4">
-          <EvrakBaglamaWizard
-            accent="blue"
-            anchorHint="fatura"
-            satinAlmaTalepleri={satinAlmaTalepleri}
-            irsaliyeler={irsaliyeler}
-            faturalar={faturalar}
-            setIrsaliyeler={setIrsaliyeler}
-            setFaturalar={setFaturalar}
-            setEvrakBaglantiGruplari={setEvrakBaglantiGruplari}
-            currentUser={currentUser}
-            prefillSaId={baglamaPrefill?.saId}
-            prefillIrIds={baglamaPrefill?.irIds}
-            prefillFaturaId={baglamaPrefill?.faturaId}
-            onComplete={() => {
-              setBaglamaPrefill(null);
-              setActiveTab('bagli');
-            }}
-          />
-          {bagimsizFaturalar.length > 0 && (
-            <div className="bg-white border rounded-2xl p-4">
-              <p className="text-[10px] font-bold uppercase text-slate-500 mb-2">Bağımsız faturalar ({bagimsizFaturalar.length})</p>
-              <div className="flex flex-wrap gap-2">
-                {bagimsizFaturalar.slice(0, 8).map((ft) => (
-                  <button
-                    key={ft.id}
-                    type="button"
-                    onClick={() => {
-                      setBaglamaPrefill({ faturaId: ft.id });
-                    }}
-                    className="text-[10px] font-bold px-2 py-1 bg-slate-100 rounded-lg cursor-pointer hover:bg-blue-50"
-                  >
-                    {ft.faturaNo}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -728,13 +685,15 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
           irsaliyeler={irsaliyeler}
           satinAlmaTalepleri={satinAlmaTalepleri}
           evrakBaglantiGruplari={evrakBaglantiGruplari}
+          setFaturalar={setFaturalar}
+          setIrsaliyeler={setIrsaliyeler}
           onEditBinding={(g) => {
-            setBaglamaPrefill({
+            onNavigateToBaglama?.({
               saId: g.saId,
               irIds: g.irsaliyeIds,
               faturaId: g.faturaId,
+              anchor: 'fatura',
             });
-            setActiveTab('baglama');
           }}
         />
       )}

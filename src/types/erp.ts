@@ -60,6 +60,7 @@ export interface SatinAlmaTalebi {
   aciklama: string;
   onayDurumu: 'ONAY BEKLİYOR' | '1. ONAY TAMAMLANDI' | '2. ONAY TAMAMLANDI' | 'REDDEDİLDİ' | 'KAPATILDI' | 'ONAYLANDI';
   imzaliEvrakUrl?: string;
+  imzaliEvrakUyumsuz?: boolean;
   gonderimTarihi?: string;
   kalemler: SatinAlmaItem[];
   eImzalar?: string[];
@@ -84,6 +85,7 @@ export interface Irsaliye {
   tarih: string;
   onayDurumu: 'ONAY BEKLİYOR' | '1. ONAY TAMAMLANDI' | '2. ONAY TAMAMLANDI' | 'FARK VAR — YÖNETİCİ BİLDİRİLDİ';
   imzaliEvrakUrl?: string;
+  imzaliEvrakUyumsuz?: boolean;
   fisEvrakUrl?: string;
   karsilastirmaRaporu?: string;
   kalemler: IrsaliyeItem[];
@@ -115,6 +117,7 @@ export interface Fatura {
   rapor?: string;
   evrakUrl?: string;
   imzaliEvrakUrl?: string;
+  imzaliEvrakUyumsuz?: boolean;
   kalemler: FaturaItem[];
   bagliIrsaliyeler: string[];
   eImzalar?: string[];
@@ -350,13 +353,48 @@ export interface OperatorFaaliyet {
   temsilciTc?: string;
   operatorTc?: string;
   kesintiYansitildi?: boolean;
+  makineKaynak?: 'DEMIRBAS' | 'KIRALIK' | 'MANUEL';
+  makineManuelAd?: string;
   onayDurumu: 'BEKLEMEDE' | 'ONAYLANDI' | 'REDDEDİLDİ';
   kaydedenKullanici?: string;
   kayitTarihi?: string;
 }
 
+export type TaseronKesintiTipi = 'IS_MAKINESI' | 'ENERJI' | 'CEZA' | 'YEMEK';
+
+export interface TaseronSayacOlcum {
+  ilkOkuma: number;
+  sonOkuma: number;
+  birimFiyat: number;
+}
+
+export interface TaseronEnerjiKaydi {
+  id: string;
+  taseronCariId: string;
+  taseronFirmaAdi: string;
+  donemAy: string;
+  donemYil: string;
+  elektrik: TaseronSayacOlcum;
+  su: TaseronSayacOlcum;
+  dogalgaz: TaseronSayacOlcum;
+  olusturmaTarihi: string;
+  olusturanKullanici?: string;
+}
+
+export interface TaseronYemekKaydi {
+  id: string;
+  taseronCariId: string;
+  taseronFirmaAdi: string;
+  tarih: string;
+  sabah: number;
+  ogle: number;
+  aksam: number;
+  notlar?: string;
+}
+
 export interface TaseronKesintiRaporu {
   id: string;
+  kesintiTipi: TaseronKesintiTipi;
   taseronFirmaAdi: string;
   taseronFirmaId?: string;
   donemAy: string;
@@ -364,7 +402,11 @@ export interface TaseronKesintiRaporu {
   toplamSaat: number;
   kesintiTutari: number;
   saatlikUcret: number;
+  /** Yönetici saat ücreti girmeden önce true */
+  ucretOnayBekliyor?: boolean;
   faaliyetler: OperatorFaaliyet[];
+  enerjiDetay?: TaseronEnerjiKaydi;
+  yemekOzet?: { sabah: number; ogle: number; aksam: number; gunSayisi: number };
   onayDurumu: 'TASLAK' | 'ONAYLANDI' | 'GONDERILDI';
   olusturanKullanici: string;
   olusturmaTarihi: string;
@@ -497,6 +539,13 @@ export interface KalemBaglantisi {
   irsaliyeMiktar?: number;
   faturaMiktar?: number;
   birim?: string;
+  /** Stok kartından gelen kalıcı birim (evrak bazlı override birimi etkilemez) */
+  stokKartBirim?: string;
+  /** Elle girilen miktar alanları — bir kez kaydedilir, birim data olarak saklanır */
+  manuelSaMiktar?: boolean;
+  manuelIrsaliyeMiktar?: boolean;
+  manuelFaturaMiktar?: boolean;
+  manuelBirim?: boolean;
   onaylandi: boolean;
 }
 

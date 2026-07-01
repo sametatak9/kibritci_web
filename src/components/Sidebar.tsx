@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, Users, CalendarCheck2, CreditCard, ShoppingCart, Truck, KeySquare, FileText, Tent, Mail, ChartBar as BarChart3, BookOpen, Contact as Contact2, Package, LogOut, Wallet, Hop as Home, ShieldCheck, PenTool, MessageSquare, Smartphone, HardHat, Banknote, Images, Sparkles } from 'lucide-react';
+import { Building2, Users, CalendarCheck2, CreditCard, ShoppingCart, Truck, KeySquare, FileText, Tent, Mail, ChartBar as BarChart3, BookOpen, Contact as Contact2, Package, LogOut, Wallet, Hop as Home, ShieldCheck, PenTool, MessageSquare, Smartphone, HardHat, Banknote, Images, Sparkles, Link2 } from 'lucide-react';
 import { getRoleAllowedTabs, normalizeYetki } from '../lib/yetkiUtils';
 
 interface SidebarProps {
@@ -57,8 +57,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { key: "satin_alma", label: "Satın Alma Talebi", icon: ShoppingCart },
         { key: "irsaliye_giris", label: "İrsaliye ve Fiş Girişi", icon: Truck },
         { key: "fatura_giris", label: "Fatura Girişi", icon: CreditCard },
+        { key: "evrak_baglama", label: "Evrak Bağlama", icon: Link2 },
         { key: "yz_karsilastir", label: "YZ Karşılaştır ve Yorumla", icon: Sparkles },
-        { key: "taseron_kesinti", label: "Taşeron Kesintileri", icon: Wallet },
+        { key: "taseron_kesinti", label: "Taşeron Yönetimi", icon: Wallet },
         { key: "cari_stok", label: "Cari ve Stok Kartları", icon: Package },
         { key: "evrak_aktarimi", label: "AI Belge Aktarımı", icon: BookOpen },
         { key: "kibar_hakedis", label: "ZER YAPI Hakediş", icon: CreditCard },

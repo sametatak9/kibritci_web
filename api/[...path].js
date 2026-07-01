@@ -582,6 +582,74 @@ Provide the output strictly conforming to the response schema.
       res.status(status).json({ error: msg });
     }
   });
+  app2.post("/api/parse-kimlik", async (req, res) => {
+    try {
+      const { onYuzBase64, arkaYuzBase64, mimeType } = req.body;
+      if (!onYuzBase64) {
+        return res.status(400).json({ error: "Kimlik \xF6n y\xFCz (onYuzBase64) zorunludur." });
+      }
+      const parts = [
+        {
+          inlineData: {
+            mimeType: mimeType || "image/jpeg",
+            data: onYuzBase64
+          }
+        }
+      ];
+      if (arkaYuzBase64) {
+        parts.push({
+          inlineData: {
+            mimeType: mimeType || "image/jpeg",
+            data: arkaYuzBase64
+          }
+        });
+      }
+      const promptText = `
+Analyze the uploaded image(s) of a Turkish Republic Identity Card (T.C. Kimlik Kart\u0131).
+The first image is the FRONT side. If a second image exists, it is the BACK side.
+
+Rules:
+1. Confirm whether the images show a valid Turkish ID card (not a random photo, selfie, or unrelated document).
+2. Extract readable fields from front: TC Kimlik No (11 digits), Ad, Soyad, Baba Ad\u0131, Do\u011Fum Tarihi (YYYY-MM-DD), Cinsiyet (Erkek/Kad\u0131n).
+3. If back side provided, use it to improve validation.
+4. Set kimlikGecerli=false if images are blurry, not an ID card, or missing critical front data.
+5. List missing field keys in eksikAlanlar (e.g. tcNo, ad, soyad, babaAdi, dogumTarihi, cinsiyet).
+6. Provide a short Turkish uyari message when kimlikGecerli is false.
+
+Output strictly as JSON per schema.
+`;
+      const kimlikSchema = {
+        type: import_genai2.Type.OBJECT,
+        properties: {
+          tcNo: { type: import_genai2.Type.STRING },
+          ad: { type: import_genai2.Type.STRING },
+          soyad: { type: import_genai2.Type.STRING },
+          babaAdi: { type: import_genai2.Type.STRING },
+          dogumTarihi: { type: import_genai2.Type.STRING },
+          cinsiyet: { type: import_genai2.Type.STRING },
+          seriNo: { type: import_genai2.Type.STRING },
+          kimlikGecerli: { type: import_genai2.Type.BOOLEAN },
+          kimlikTipi: { type: import_genai2.Type.STRING },
+          eksikAlanlar: { type: import_genai2.Type.ARRAY, items: { type: import_genai2.Type.STRING } },
+          uyari: { type: import_genai2.Type.STRING }
+        },
+        required: ["kimlikGecerli", "eksikAlanlar"]
+      };
+      const { text } = await generateGeminiWithFallback({
+        contents: [...parts, promptText],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: kimlikSchema
+        },
+        label: "Kimlik kart\u0131 analizi"
+      });
+      res.json({ success: true, data: JSON.parse(text) });
+    } catch (error) {
+      console.error("Error parsing kimlik:", error);
+      const msg = error.message || "Kimlik analizi ba\u015Far\u0131s\u0131z";
+      res.status(500).json({ error: msg });
+    }
+  });
   app2.post("/api/parse-irsaliye", async (req, res) => {
     try {
       const { fileBase64, mimeType } = req.body;

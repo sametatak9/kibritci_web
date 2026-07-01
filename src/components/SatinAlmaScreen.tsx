@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { SatinAlmaTalebi, SatinAlmaItem, CariKart, StokKart } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
+import { confirmSignedUploadWithMismatchCheck } from '../lib/evrakOnayUtils';
 
 interface SatinAlmaScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
@@ -228,25 +229,40 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
 
   const handleUploadSignedFile = (e: React.ChangeEvent<HTMLInputElement>, saId: string) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const rawBase64 = reader.result as string;
-        const compressed = await compressImage(rawBase64);
-        setSatinAlmaTalepleri(prev => prev.map(sa => {
-          if (sa.id === saId) {
-            return {
-              ...sa,
-              imzaliEvrakUrl: compressed,
-              onayDurumu: 'ONAYLANDI'
-            };
-          }
-          return sa;
-        }));
-        alert("Fiziksel ıslak imzalı evrak sisteme yüklendi! Talep onaylandı.");
-      };
-      reader.readAsDataURL(file);
-    }
+    if (!file) return;
+    const sa = satinAlmaTalepleri.find((s) => s.id === saId);
+    if (!sa) return;
+
+    const { proceed, uyumsuz } = confirmSignedUploadWithMismatchCheck(
+      file.name,
+      sa.saId,
+      'Satın Alma'
+    );
+    if (!proceed) return;
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const rawBase64 = reader.result as string;
+      const compressed = await compressImage(rawBase64);
+      setSatinAlmaTalepleri(prev => prev.map(item => {
+        if (item.id === saId) {
+          return {
+            ...item,
+            imzaliEvrakUrl: compressed,
+            imzaliEvrakUyumsuz: uyumsuz,
+            onayDurumu: 'ONAYLANDI'
+          };
+        }
+        return item;
+      }));
+      alert(
+        uyumsuz
+          ? 'İmzalı evrak yüklendi (⚠️ evrak no ile uyumsuz olabilir). Onaylandı olarak işaretlendi.'
+          : 'Fiziksel ıslak imzalı evrak sisteme yüklendi! Talep onaylandı.'
+      );
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const handlePreviewPdf = (sa: SatinAlmaTalebi) => {

@@ -236,7 +236,7 @@ export const INITIAL_EPOSTA: EpostaGonderim[] = [
   }
 ];
 
-import { OperatorFaaliyet, TaseronKesintiRaporu, MaaşOdeme, PersonelIslemGecmisi, CariKartIslem, StokKartIslem, IzinDilekcesi, IhbarTutanagi } from '../types/erp';
+import { OperatorFaaliyet, TaseronKesintiRaporu, TaseronEnerjiKaydi, TaseronYemekKaydi, MaaşOdeme, PersonelIslemGecmisi, CariKartIslem, StokKartIslem, IzinDilekcesi, IhbarTutanagi } from '../types/erp';
 
 export const INITIAL_OPERATOR_FAALIYET: OperatorFaaliyet[] = [
   {
@@ -278,6 +278,10 @@ export const INITIAL_OPERATOR_FAALIYET: OperatorFaaliyet[] = [
 ];
 
 export const INITIAL_TASERON_KESINTI: TaseronKesintiRaporu[] = [];
+
+export const INITIAL_TASERON_ENERJI: TaseronEnerjiKaydi[] = [];
+
+export const INITIAL_TASERON_YEMEK: TaseronYemekKaydi[] = [];
 
 export const INITIAL_MAAS_ODEME: MaaşOdeme[] = [];
 

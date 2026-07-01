@@ -30,6 +30,8 @@ import {
 import { assignKampResident, evictKampResident, suggestPersonelKaydi } from '../lib/kampPlacementUtils';
 import { isProductionLive } from '../lib/productionDataGuard';
 import { compressImage } from '../lib/imageCompress';
+import { warnIfDuplicateCari, warnIfDuplicateStok } from '../lib/duplicateNameUtils';
+import { exportHistoryReport } from '../lib/reportExport';
 import { collection, onSnapshot, getDocs, doc, setDoc } from 'firebase/firestore';
 
 interface IdariScreenProps {
@@ -1115,7 +1117,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const handleCreateCari = () => {
     if (!newCariUnvan) return;
     if (editingCariId) {
-      setCariKartlar(prev => prev.map(c => c.id === editingCariId ? { 
+      if (warnIfDuplicateCari(cariKartlar, newCariUnvan, editingCariId)) return;
+      setCariKartlar(prev => prev.map(c => c.id === editingCariId ? {
         ...c, 
         unvan: newCariUnvan, 
         kartTipi: newCariType,
@@ -1141,6 +1144,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       alert("Cari kart başarıyla güncellendi.");
       return;
     }
+    if (warnIfDuplicateCari(cariKartlar, newCariUnvan)) return;
     const newC: CariKart = {
       id: `c_${Date.now()}`,
       kartTipi: newCariType,
@@ -1172,6 +1176,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const handleCreateStok = () => {
     if (!newStokAdi) return;
     if (editingStokId) {
+      if (warnIfDuplicateStok(stokKartlar, newStokAdi, editingStokId)) return;
       setStokKartlar(prev => prev.map(s => s.id === editingStokId ? { 
         ...s, 
         stokAdi: newStokAdi, 
@@ -1185,6 +1190,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       alert("Stok kartı başarıyla güncellendi.");
       return;
     }
+    if (warnIfDuplicateStok(stokKartlar, newStokAdi)) return;
     const newS: StokKart = {
       id: `s_${Date.now()}`,
       stokKodu: `STK-${Math.random().toString(16).substring(2,6).toUpperCase()}`,
@@ -4431,7 +4437,54 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
               </div>
             </div>
 
-            <div className="p-4 border-t bg-slate-50 flex justify-between">
+            <div className="p-4 border-t bg-slate-50 flex flex-wrap gap-2 justify-between">
+              <div className="flex flex-wrap gap-2">
+              <button 
+                onClick={() => {
+                  exportHistoryReport({
+                    title: 'Kart Geçmiş Hareket Raporu',
+                    fileBase: `Kibritci_${historyModalData.type === 'cari' ? 'Cari' : 'Stok'}_Gecmis_${historyModalData.id}`,
+                    meta: [
+                      `Kart Tipi: ${historyModalData.type === 'cari' ? 'Cari Firma' : 'Stok Malzeme'}`,
+                      `Kart Adı: ${historyModalData.name}`,
+                      `Kart ID: ${historyModalData.id}`,
+                      `Rapor Tarihi: ${new Date().toLocaleString('tr-TR')}`,
+                    ],
+                    logs: historyList.map((log) => ({
+                      date: log.date,
+                      type: log.type,
+                      title: log.title,
+                      desc: log.desc,
+                    })),
+                    format: 'csv',
+                  });
+                }}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-4 rounded-xl transition cursor-pointer"
+              >
+                Excel (CSV) İndir
+              </button>
+              <button 
+                onClick={() => {
+                  exportHistoryReport({
+                    title: 'Kart Geçmiş Hareket Raporu',
+                    fileBase: `Kibritci_${historyModalData.type === 'cari' ? 'Cari' : 'Stok'}_Gecmis_${historyModalData.id}`,
+                    meta: [
+                      `Kart Tipi: ${historyModalData.type === 'cari' ? 'Cari Firma' : 'Stok Malzeme'}`,
+                      `Kart Adı: ${historyModalData.name}`,
+                    ],
+                    logs: historyList.map((log) => ({
+                      date: log.date,
+                      type: log.type,
+                      title: log.title,
+                      desc: log.desc,
+                    })),
+                    format: 'html',
+                  });
+                }}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2 px-4 rounded-xl transition cursor-pointer"
+              >
+                HTML İndir
+              </button>
               <button 
                 onClick={() => {
                   if (historyList.length === 0) {
@@ -4463,10 +4516,11 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   URL.revokeObjectURL(url);
                   alert("İşlem geçmişi raporu başarıyla .txt dosyası olarak indirildi.");
                 }}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2 px-5 rounded-xl transition cursor-pointer flex items-center space-x-1.5"
+                className="bg-slate-600 hover:bg-slate-700 text-white font-bold text-xs py-2 px-4 rounded-xl transition cursor-pointer"
               >
-                <span>💾 Raporu İndir (.txt)</span>
+                TXT İndir
               </button>
+              </div>
               <button 
                 onClick={() => setHistoryModalData(null)}
                 className="bg-slate-900 hover:bg-black text-white font-bold text-xs py-2 px-5 rounded-xl transition cursor-pointer"

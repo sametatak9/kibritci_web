@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link2, ChevronRight, CheckCircle2, Package, Truck, CreditCard } from 'lucide-react';
+import { Link2, ChevronRight, CheckCircle2, Package, Truck, CreditCard, Eye } from 'lucide-react';
 import {
   EvrakBaglantiGrubu,
   Fatura,
@@ -12,6 +12,8 @@ import {
   buildBaglantiGrubu,
   suggestKalemBaglantilari,
 } from '../lib/evrakBaglamaUtils';
+import { EvrakTabBilgi } from './EvrakTabBilgi';
+import { EvrakDetayModal, EvrakDetayPayload } from './EvrakDetayModal';
 
 export type BaglamaAnchor = 'satin_alma' | 'irsaliye' | 'fatura';
 
@@ -52,6 +54,9 @@ export const EvrakBaglamaWizard: React.FC<EvrakBaglamaWizardProps> = ({
   const [irIds, setIrIds] = useState<string[]>(prefillIrIds || []);
   const [faturaId, setFaturaId] = useState(prefillFaturaId || '');
   const [kalemLinks, setKalemLinks] = useState<KalemBaglantisi[]>([]);
+  const [detayPayload, setDetayPayload] = useState<EvrakDetayPayload | null>(null);
+
+  const tabBilgi = 'evrak-baglama';
 
   const accentBtn = accent === 'emerald' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700';
   const accentRing = accent === 'emerald' ? 'ring-emerald-500' : 'ring-blue-500';
@@ -93,6 +98,77 @@ export const EvrakBaglamaWizard: React.FC<EvrakBaglamaWizardProps> = ({
   const toggleKalemOnay = (id: string) => {
     setKalemLinks((prev) =>
       prev.map((k) => (k.id === id ? { ...k, onaylandi: !k.onaylandi } : k))
+    );
+  };
+
+  const updateKalemField = (
+    id: string,
+    field: 'saMiktar' | 'irsaliyeMiktar' | 'faturaMiktar' | 'birim',
+    raw: string
+  ) => {
+    setKalemLinks((prev) =>
+      prev.map((k) => {
+        if (k.id !== id) return k;
+        if (field === 'birim') {
+          return { ...k, birim: raw, manuelBirim: true };
+        }
+        const num = raw === '' ? undefined : Number(raw);
+        const flag =
+          field === 'saMiktar'
+            ? 'manuelSaMiktar'
+            : field === 'irsaliyeMiktar'
+              ? 'manuelIrsaliyeMiktar'
+              : 'manuelFaturaMiktar';
+        return { ...k, [field]: num, [flag]: true };
+      })
+    );
+  };
+
+  const MiktarCell = ({
+    value,
+    kalemId,
+    field,
+  }: {
+    value?: number;
+    kalemId: string;
+    field: 'saMiktar' | 'irsaliyeMiktar' | 'faturaMiktar';
+  }) => (
+    <input
+      type="number"
+      step="any"
+      min={0}
+      value={value ?? ''}
+      placeholder="—"
+      onChange={(e) => updateKalemField(kalemId, field, e.target.value)}
+      className="w-20 text-right border border-slate-200 rounded-lg px-1.5 py-1 text-xs bg-white"
+    />
+  );
+
+  const KalemOnizleme = ({
+    title,
+    kalemler,
+  }: {
+    title: string;
+    kalemler: { urunAdi: string; miktar?: number; birim?: string }[];
+  }) => {
+    if (!kalemler.length) return null;
+    return (
+      <div className="mt-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px]">
+        <p className="font-black text-slate-500 uppercase mb-1.5">{title} — kalem önizleme</p>
+        <ul className="space-y-1 max-h-24 overflow-y-auto">
+          {kalemler.slice(0, 8).map((k, i) => (
+            <li key={i} className="flex justify-between gap-2 text-slate-700">
+              <span className="truncate font-semibold">{k.urunAdi}</span>
+              <span className="shrink-0 font-mono text-slate-500">
+                {k.miktar ?? '—'} {k.birim ?? ''}
+              </span>
+            </li>
+          ))}
+          {kalemler.length > 8 && (
+            <li className="text-slate-400 italic">+{kalemler.length - 8} kalem daha…</li>
+          )}
+        </ul>
+      </div>
     );
   };
 
@@ -140,6 +216,8 @@ export const EvrakBaglamaWizard: React.FC<EvrakBaglamaWizardProps> = ({
 
   return (
     <div className="space-y-6">
+      <EvrakTabBilgi tab={tabBilgi} />
+
       <div className="flex items-center gap-3 text-xs font-bold uppercase tracking-wide">
         <span className={`px-3 py-1.5 rounded-full ${step === 1 ? accentBtn + ' text-white' : 'bg-slate-200 text-slate-600'}`}>
           1 · ID Bağlama
@@ -178,23 +256,47 @@ export const EvrakBaglamaWizard: React.FC<EvrakBaglamaWizardProps> = ({
 
           <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-4 space-y-4">
             <p className="text-xs text-slate-600">
-              Satın alma, irsaliye ve/veya fatura seçin. İsterseniz yalnızca irsaliye–fatura da bağlayabilirsiniz.
+              Satın alma, irsaliye ve fatura evraklarını bağımsız seçip eşleştirin. En az iki evrak türü
+              seçilmelidir. YZ karşılaştırma sırası: Satın Alma → İrsaliye → Fatura.
             </p>
 
             <div>
-              <label className="text-[10px] font-bold text-slate-500 uppercase">Satın Alma (PO)</label>
-              <select
-                value={saId}
-                onChange={(e) => setSaId(e.target.value)}
-                className="w-full mt-1 text-xs border rounded-xl p-2.5 bg-slate-50"
-              >
-                <option value="">— Seçiniz —</option>
-                {satinAlmaTalepleri.map((s) => (
-                  <option key={s.id} value={s.saId}>
-                    {s.saId} · {s.talepEden}
-                  </option>
-                ))}
-              </select>
+              <label className="text-[10px] font-bold text-slate-500 uppercase">
+                Satın Alma (PO) — isteğe bağlı
+              </label>
+              <div className="flex gap-2 mt-1">
+                <select
+                  value={saId}
+                  onChange={(e) => setSaId(e.target.value)}
+                  className="flex-1 text-xs border rounded-xl p-2.5 bg-slate-50"
+                >
+                  <option value="">— Seçiniz —</option>
+                  {satinAlmaTalepleri.map((s) => (
+                    <option key={s.id} value={s.saId}>
+                      {s.saId} · {s.talepEden}
+                    </option>
+                  ))}
+                </select>
+                {selectedSa && (
+                  <button
+                    type="button"
+                    onClick={() => setDetayPayload({ kind: 'sa', sa: selectedSa })}
+                    className="px-2.5 border rounded-xl text-[10px] font-bold hover:bg-slate-50 cursor-pointer flex items-center gap-1"
+                  >
+                    <Eye className="w-3 h-3" /> Detay
+                  </button>
+                )}
+              </div>
+              {selectedSa && (
+                <KalemOnizleme
+                  title={`SA ${selectedSa.saId}`}
+                  kalemler={selectedSa.kalemler.map((k) => ({
+                    urunAdi: k.urunAdi,
+                    miktar: k.miktar,
+                    birim: k.birim,
+                  }))}
+                />
+              )}
             </div>
 
             <div>
@@ -204,37 +306,80 @@ export const EvrakBaglamaWizard: React.FC<EvrakBaglamaWizardProps> = ({
                   <p className="p-3 text-xs text-slate-400 italic">İrsaliye yok</p>
                 ) : (
                   availableIrs.map((ir) => (
-                    <label
+                    <div
                       key={ir.id}
-                      className="flex items-center gap-2 p-2.5 text-xs hover:bg-slate-50 cursor-pointer"
+                      className="flex items-center gap-2 p-2.5 text-xs hover:bg-slate-50 border-b last:border-0"
                     >
-                      <input
-                        type="checkbox"
-                        checked={irIds.includes(ir.id)}
-                        onChange={() => toggleIr(ir.id)}
-                      />
-                      <span className="font-mono font-bold">{ir.irsaliyeNo}</span>
-                      <span className="text-slate-500">{ir.cariUnvan}</span>
-                    </label>
+                      <label className="flex items-center gap-2 flex-1 cursor-pointer min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={irIds.includes(ir.id)}
+                          onChange={() => toggleIr(ir.id)}
+                        />
+                        <span className="font-mono font-bold shrink-0">{ir.irsaliyeNo}</span>
+                        <span className="text-slate-500 truncate">{ir.firma}</span>
+                        <span className="text-slate-400 shrink-0">{ir.tarih}</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setDetayPayload({ kind: 'irsaliye', irsaliye: ir })}
+                        className="shrink-0 px-2 py-1 text-[9px] font-bold border rounded-lg hover:bg-white cursor-pointer"
+                      >
+                        Detay
+                      </button>
+                    </div>
                   ))
                 )}
               </div>
+              {selectedIrs.length > 0 && (
+                <KalemOnizleme
+                  title={`Seçili ${selectedIrs.length} irsaliye`}
+                  kalemler={selectedIrs.flatMap((ir) =>
+                    ir.kalemler.map((k) => ({
+                      urunAdi: `${ir.irsaliyeNo}: ${k.urunAdi}`,
+                      miktar: k.miktar,
+                      birim: k.birim,
+                    }))
+                  )}
+                />
+              )}
             </div>
 
             <div>
               <label className="text-[10px] font-bold text-slate-500 uppercase">Fatura</label>
-              <select
-                value={faturaId}
-                onChange={(e) => setFaturaId(e.target.value)}
-                className="w-full mt-1 text-xs border rounded-xl p-2.5 bg-slate-50"
-              >
-                <option value="">— Seçiniz —</option>
-                {faturalar.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.faturaNo} · {f.cariUnvan}
-                  </option>
-                ))}
-              </select>
+              <div className="flex gap-2 mt-1">
+                <select
+                  value={faturaId}
+                  onChange={(e) => setFaturaId(e.target.value)}
+                  className="flex-1 text-xs border rounded-xl p-2.5 bg-slate-50"
+                >
+                  <option value="">— Seçiniz —</option>
+                  {faturalar.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.faturaNo} · {f.cariUnvan}
+                    </option>
+                  ))}
+                </select>
+                {selectedFatura && (
+                  <button
+                    type="button"
+                    onClick={() => setDetayPayload({ kind: 'fatura', fatura: selectedFatura })}
+                    className="px-2.5 border rounded-xl text-[10px] font-bold hover:bg-slate-50 cursor-pointer flex items-center gap-1"
+                  >
+                    <Eye className="w-3 h-3" /> Detay
+                  </button>
+                )}
+              </div>
+              {selectedFatura && (
+                <KalemOnizleme
+                  title={`Fatura ${selectedFatura.faturaNo}`}
+                  kalemler={selectedFatura.kalemler.map((k) => ({
+                    urunAdi: k.urunAdi,
+                    miktar: k.miktar,
+                    birim: k.birim,
+                  }))}
+                />
+              )}
             </div>
 
             <button
@@ -292,10 +437,24 @@ export const EvrakBaglamaWizard: React.FC<EvrakBaglamaWizardProps> = ({
                       </button>
                     </td>
                     <td className="p-2 font-semibold">{k.urunAdi}</td>
-                    <td className="p-2 text-right">{k.saMiktar ?? '—'}</td>
-                    <td className="p-2 text-right">{k.irsaliyeMiktar ?? '—'}</td>
-                    <td className="p-2 text-right">{k.faturaMiktar ?? '—'}</td>
-                    <td className="p-2">{k.birim ?? '—'}</td>
+                    <td className="p-2 text-right">
+                      <MiktarCell value={k.saMiktar} kalemId={k.id} field="saMiktar" />
+                    </td>
+                    <td className="p-2 text-right">
+                      <MiktarCell value={k.irsaliyeMiktar} kalemId={k.id} field="irsaliyeMiktar" />
+                    </td>
+                    <td className="p-2 text-right">
+                      <MiktarCell value={k.faturaMiktar} kalemId={k.id} field="faturaMiktar" />
+                    </td>
+                    <td className="p-2">
+                      <input
+                        type="text"
+                        value={k.birim ?? ''}
+                        placeholder="birim"
+                        onChange={(e) => updateKalemField(k.id, 'birim', e.target.value)}
+                        className="w-16 border border-slate-200 rounded-lg px-1.5 py-1 text-xs"
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -319,6 +478,12 @@ export const EvrakBaglamaWizard: React.FC<EvrakBaglamaWizardProps> = ({
           </div>
         </div>
       )}
+
+      <EvrakDetayModal
+        open={!!detayPayload}
+        payload={detayPayload}
+        onClose={() => setDetayPayload(null)}
+      />
     </div>
   );
 };

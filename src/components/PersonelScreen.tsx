@@ -3,6 +3,7 @@ import { Users, UserPlus, Trash2, CreditCard as Edit3, Camera, Search, ShieldChe
 import { Personel } from '../types/erp';
 import { fetchApiJson } from '../lib/apiClient';
 import { compressImage } from '../lib/imageCompress';
+import { exportPersonelRows } from '../lib/reportExport';
 
 interface PersonelScreenProps {
   personeller: Personel[];
@@ -21,6 +22,9 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   const [dismissDateStr, setDismissDateStr] = useState<string>("");
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historyPersonel, setHistoryPersonel] = useState<Personel | null>(null);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportSelectedIds, setExportSelectedIds] = useState<Set<string>>(new Set());
+  const [exportFormat, setExportFormat] = useState<'html' | 'csv'>('csv');
 
   // SGK PDF parsing states
   const [regMethod, setRegMethod] = useState<'manual' | 'sgk_pdf'>('manual');
@@ -245,6 +249,42 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   const handleShowHistory = (p: Personel) => {
     setHistoryPersonel(p);
     setShowHistoryModal(true);
+  };
+
+  const toggleExportPersonel = (id: string) => {
+    setExportSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const runPersonelExport = () => {
+    const cols = [
+      { key: 'ad', label: 'Ad' },
+      { key: 'soyad', label: 'Soyad' },
+      { key: 'tcNo', label: 'TC No' },
+      { key: 'gorev', label: 'Görev' },
+      { key: 'telefonNo', label: 'Telefon' },
+      { key: 'iseGirisTarihi', label: 'İşe Giriş' },
+      { key: 'sgkDurumu', label: 'SGK' },
+      { key: 'firmaAdi', label: 'Firma' },
+    ];
+    const rows = personeller
+      .filter((p) => exportSelectedIds.has(p.id))
+      .map((p) => ({
+        ad: p.ad,
+        soyad: p.soyad,
+        tcNo: p.tcNo,
+        gorev: p.gorev,
+        telefonNo: p.telefonNo,
+        iseGirisTarihi: p.iseGirisTarihi,
+        sgkDurumu: p.sgkDurumu,
+        firmaAdi: p.firmaAdi || '',
+      }));
+    exportPersonelRows(rows, cols, `Kibritci_Personel_${Date.now()}`, exportFormat);
+    setShowExportModal(false);
   };
 
   const generateHistoryReport = () => {
@@ -845,7 +885,18 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
             </h4>
           </div>
 
-          <div className="relative w-64">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setExportSelectedIds(new Set(filteredPersonel.map((p) => p.id)));
+                setShowExportModal(true);
+              }}
+              className="flex items-center gap-1.5 text-[10px] font-bold px-3 py-2 bg-slate-900 text-white rounded-xl hover:bg-black cursor-pointer"
+            >
+              <Download size={12} /> Dışa Aktar
+            </button>
+            <div className="relative w-64">
             <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
               <span className="text-xs">🔍</span>
             </span>
@@ -856,6 +907,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+          </div>
           </div>
         </div>
 
@@ -1113,6 +1165,61 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                 Kapat
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showExportModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl border border-slate-150 p-5 w-full max-w-lg shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between shrink-0">
+              <h3 className="font-display font-bold text-sm uppercase tracking-wider">Personel Dışa Aktar</h3>
+              <button type="button" onClick={() => setShowExportModal(false)} className="text-slate-400 hover:text-slate-600 text-lg cursor-pointer">×</button>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setExportSelectedIds(new Set(personeller.map((p) => p.id)))}
+                className="text-[10px] font-bold px-3 py-1.5 bg-slate-100 rounded-lg cursor-pointer"
+              >
+                Tümünü Seç
+              </button>
+              <button
+                type="button"
+                onClick={() => setExportSelectedIds(new Set())}
+                className="text-[10px] font-bold px-3 py-1.5 bg-slate-100 rounded-lg cursor-pointer"
+              >
+                Seçimi Temizle
+              </button>
+              <select
+                value={exportFormat}
+                onChange={(e) => setExportFormat(e.target.value as 'html' | 'csv')}
+                className="text-[10px] font-bold px-2 py-1.5 border rounded-lg ml-auto"
+              >
+                <option value="csv">Excel (CSV)</option>
+                <option value="html">HTML</option>
+              </select>
+            </div>
+            <div className="overflow-y-auto flex-1 space-y-1 border rounded-xl p-2 max-h-64">
+              {personeller.map((p) => (
+                <label key={p.id} className="flex items-center gap-2 text-xs p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={exportSelectedIds.has(p.id)}
+                    onChange={() => toggleExportPersonel(p.id)}
+                  />
+                  <span className="font-semibold">{p.ad} {p.soyad}</span>
+                  <span className="text-slate-400 font-mono text-[10px]">{p.gorev}</span>
+                </label>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={runPersonelExport}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 rounded-xl cursor-pointer shrink-0"
+            >
+              {exportSelectedIds.size} Personeli İndir ({exportFormat === 'csv' ? 'Excel' : 'HTML'})
+            </button>
           </div>
         </div>
       )}

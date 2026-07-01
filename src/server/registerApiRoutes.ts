@@ -343,6 +343,81 @@ Provide the output strictly conforming to the response schema.
   }
 });
 
+// API endpoint to parse Turkish ID card (Kimlik) — front/back
+app.post("/api/parse-kimlik", async (req, res) => {
+  try {
+    const { onYuzBase64, arkaYuzBase64, mimeType } = req.body;
+    if (!onYuzBase64) {
+      return res.status(400).json({ error: "Kimlik ön yüz (onYuzBase64) zorunludur." });
+    }
+
+    const parts: object[] = [
+      {
+        inlineData: {
+          mimeType: mimeType || 'image/jpeg',
+          data: onYuzBase64,
+        },
+      },
+    ];
+    if (arkaYuzBase64) {
+      parts.push({
+        inlineData: {
+          mimeType: mimeType || 'image/jpeg',
+          data: arkaYuzBase64,
+        },
+      });
+    }
+
+    const promptText = `
+Analyze the uploaded image(s) of a Turkish Republic Identity Card (T.C. Kimlik Kartı).
+The first image is the FRONT side. If a second image exists, it is the BACK side.
+
+Rules:
+1. Confirm whether the images show a valid Turkish ID card (not a random photo, selfie, or unrelated document).
+2. Extract readable fields from front: TC Kimlik No (11 digits), Ad, Soyad, Baba Adı, Doğum Tarihi (YYYY-MM-DD), Cinsiyet (Erkek/Kadın).
+3. If back side provided, use it to improve validation.
+4. Set kimlikGecerli=false if images are blurry, not an ID card, or missing critical front data.
+5. List missing field keys in eksikAlanlar (e.g. tcNo, ad, soyad, babaAdi, dogumTarihi, cinsiyet).
+6. Provide a short Turkish uyari message when kimlikGecerli is false.
+
+Output strictly as JSON per schema.
+`;
+
+    const kimlikSchema = {
+      type: Type.OBJECT,
+      properties: {
+        tcNo: { type: Type.STRING },
+        ad: { type: Type.STRING },
+        soyad: { type: Type.STRING },
+        babaAdi: { type: Type.STRING },
+        dogumTarihi: { type: Type.STRING },
+        cinsiyet: { type: Type.STRING },
+        seriNo: { type: Type.STRING },
+        kimlikGecerli: { type: Type.BOOLEAN },
+        kimlikTipi: { type: Type.STRING },
+        eksikAlanlar: { type: Type.ARRAY, items: { type: Type.STRING } },
+        uyari: { type: Type.STRING },
+      },
+      required: ['kimlikGecerli', 'eksikAlanlar'],
+    };
+
+    const { text } = await generateGeminiWithFallback({
+      contents: [...parts, promptText],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: kimlikSchema,
+      },
+      label: 'Kimlik kartı analizi',
+    });
+
+    res.json({ success: true, data: JSON.parse(text) });
+  } catch (error: any) {
+    console.error('Error parsing kimlik:', error);
+    const msg = error.message || 'Kimlik analizi başarısız';
+    res.status(500).json({ error: msg });
+  }
+});
+
 // API endpoint to parse Waybill (İrsaliye) (PDF or Image)
 app.post("/api/parse-irsaliye", async (req, res) => {
   try {

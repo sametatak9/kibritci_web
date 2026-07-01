@@ -7,8 +7,9 @@ import { Irsaliye, IrsaliyeItem, SatinAlmaTalebi, CariKart, StokKart, Fatura, Ev
 import { compressImage } from '../lib/imageCompress';
 import { fetchApiJson } from '../lib/apiClient';
 import { fileToAiPayload } from '../lib/aiFileUpload';
-import { EvrakBaglamaWizard } from './EvrakBaglamaWizard';
 import { BagliEvraklarListesi } from './BagliEvraklarListesi';
+import { EvrakTabBilgi } from './EvrakTabBilgi';
+import { warnIfDuplicateStok } from '../lib/duplicateNameUtils';
 
 interface IrsaliyeGirisScreenProps {
   irsaliyeler: Irsaliye[];
@@ -24,6 +25,7 @@ interface IrsaliyeGirisScreenProps {
   setStokKartlar?: React.Dispatch<React.SetStateAction<StokKart[]>>;
   currentUser?: any;
   addNotification?: (mesaj: string) => void;
+  onNavigateToBaglama?: (prefill?: { saId?: string; irIds?: string[]; faturaId?: string; anchor?: 'satin_alma' | 'irsaliye' | 'fatura' }) => void;
 }
 
 export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
@@ -39,14 +41,10 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
   stokKartlar,
   setStokKartlar,
   currentUser,
-  addNotification
+  addNotification,
+  onNavigateToBaglama
 }) => {
-  const [activeTab, setActiveTab] = useState<'giris' | 'baglama' | 'bagli'>('giris');
-  const [baglamaPrefill, setBaglamaPrefill] = useState<{
-    saId?: string;
-    irIds?: string[];
-    faturaId?: string;
-  } | null>(null);
+  const [activeTab, setActiveTab] = useState<'giris' | 'bagli'>('giris');
 
   // Form states
   const [irNo, setIrNo] = useState("");
@@ -214,9 +212,7 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
 
   const handleCreateStok = () => {
     if (!suggestedStokName) return;
-    const exists = stokKartlar.some(s => s.stokAdi.toLowerCase().trim() === suggestedStokName.toLowerCase().trim());
-    if (exists) {
-      alert("Hata: Bu isimde bir stok zaten bulunmaktadır.");
+    if (warnIfDuplicateStok(stokKartlar, suggestedStokName)) {
       setShowStokSuggest(false);
       return;
     }
@@ -327,19 +323,21 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
             1 · İrsaliye Giriş (Manuel / AI)
           </button>
           <button
-            onClick={() => setActiveTab('baglama')}
-            className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'baglama' ? 'bg-[#10b981] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
+            onClick={() => onNavigateToBaglama?.({ anchor: 'irsaliye' })}
+            className="px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200"
           >
-            2 · Bağlama (2 Aşama)
+            → Evrak Bağlama Merkezi
           </button>
           <button
             onClick={() => setActiveTab('bagli')}
             className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'bagli' ? 'bg-[#10b981] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
           >
-            3 · Bağlı Evraklar
+            2 · Bağlı Evraklar
           </button>
         </div>
       </div>
+
+      {activeTab === 'giris' && <EvrakTabBilgi tab="irsaliye-giris" />}
 
       {activeTab === 'giris' && (
         <div className="flex flex-col lg:flex-row gap-6">
@@ -408,7 +406,7 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
               </div>
 
               <p className="text-[10px] text-emerald-700 font-medium bg-emerald-50 border border-emerald-100 rounded-xl p-2.5">
-                PO ve fatura bağlama «Bağlama» sekmesinde 2 aşamalı yapılır. YZ analiz için «YZ Karşılaştır» menüsünü kullanın.
+                PO ve fatura bağlama «Evrak Bağlama Merkezi» sekmesinde yapılır. YZ analiz için «YZ Karşılaştır» menüsünü kullanın.
               </p>
 
               {/* Add items */}
@@ -420,7 +418,17 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                     list="stok-datalist"
                     placeholder="Malzeme Adı"
                     value={tempProduct.name}
-                    onChange={(e) => setTempProduct(prev => ({ ...prev, name: e.target.value }))}
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      const matched = stokKartlar.find(
+                        (s) => s.stokAdi.toLowerCase().trim() === name.toLowerCase().trim()
+                      );
+                      setTempProduct((prev) => ({
+                        ...prev,
+                        name,
+                        unit: matched?.birim || prev.unit,
+                      }));
+                    }}
                     className="col-span-2 p-1.5 border border-slate-200 rounded-lg text-[10px]"
                   />
                   <datalist id="stok-datalist">
@@ -536,29 +544,6 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
         </div>
       )}
 
-      {activeTab === 'baglama' && setFaturalar && (
-        <div className="space-y-4">
-          <EvrakBaglamaWizard
-            accent="emerald"
-            anchorHint="irsaliye"
-            satinAlmaTalepleri={satinAlmaTalepleri}
-            irsaliyeler={irsaliyeler}
-            faturalar={faturalar}
-            setIrsaliyeler={setIrsaliyeler}
-            setFaturalar={setFaturalar}
-            setEvrakBaglantiGruplari={setEvrakBaglantiGruplari}
-            currentUser={currentUser}
-            prefillSaId={baglamaPrefill?.saId}
-            prefillIrIds={baglamaPrefill?.irIds}
-            prefillFaturaId={baglamaPrefill?.faturaId}
-            onComplete={() => {
-              setBaglamaPrefill(null);
-              setActiveTab('bagli');
-            }}
-          />
-        </div>
-      )}
-
       {activeTab === 'bagli' && (
         <BagliEvraklarListesi
           mode="irsaliye"
@@ -567,13 +552,15 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
           irsaliyeler={irsaliyeler}
           satinAlmaTalepleri={satinAlmaTalepleri}
           evrakBaglantiGruplari={evrakBaglantiGruplari}
+          setFaturalar={setFaturalar}
+          setIrsaliyeler={setIrsaliyeler}
           onEditBinding={(g) => {
-            setBaglamaPrefill({
+            onNavigateToBaglama?.({
               saId: g.saId,
               irIds: g.irsaliyeIds,
               faturaId: g.faturaId,
+              anchor: 'irsaliye',
             });
-            setActiveTab('baglama');
           }}
         />
       )}

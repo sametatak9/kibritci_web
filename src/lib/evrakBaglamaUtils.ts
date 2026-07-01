@@ -165,7 +165,7 @@ export function buildBaglantiGrubu(
   const sa = input.saId ? satinAlmaTalepleri.find((s) => s.saId === input.saId) : undefined;
   const cari =
     fatura?.cariUnvan ||
-    irsaliyeler.find((ir) => input.irsaliyeIds.includes(ir.id))?.cariUnvan ||
+    irsaliyeler.find((ir) => input.irsaliyeIds.includes(ir.id))?.firma ||
     sa?.talepEden;
 
   return {
@@ -241,7 +241,7 @@ export function deriveBaglantiGruplariFromEntities(
         onaylandi: true,
       })),
       durum: 'ANALIZ_BEKLIYOR',
-      cariUnvan: ir.cariUnvan,
+      cariUnvan: ir.firma,
     });
   }
 
