@@ -1,5 +1,5 @@
 import { KampKat, KampKaydi, KampOdasi, KampYerleske } from '../types/erp';
-import { db, fetchCollection, removeDocument, saveDocument } from './firebase';
+import { db, fetchCollection, removeDocument, saveDocument, withTimeout } from './firebase';
 import { writeBatch, doc } from 'firebase/firestore';
 
 export async function createKampYerleske(ad: string, olusturan?: string): Promise<KampYerleske> {
@@ -128,15 +128,20 @@ export async function deleteKampOdasiCascade(roomId: string): Promise<void> {
 
 async function batchDeleteDocuments(collectionName: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
-  const unique = [...new Set(ids)];
+  const unique = [...new Set(ids.filter(Boolean))];
   const CHUNK = 400;
   for (let i = 0; i < unique.length; i += CHUNK) {
     const batch = writeBatch(db);
     unique.slice(i, i + CHUNK).forEach((id) => {
       batch.delete(doc(db, collectionName, id));
     });
-    await batch.commit();
+    await withTimeout(batch.commit(), 60000);
   }
+}
+
+async function verifyCollectionEmpty(collectionName: string): Promise<number> {
+  const remaining = await fetchCollection<{ id: string }>(collectionName);
+  return remaining.length;
 }
 
 export interface KampMetaState {
@@ -145,6 +150,7 @@ export interface KampMetaState {
   purgedBy?: string;
   clearedRoomCount?: number;
   version?: number;
+  neverSeedDemo?: boolean;
 }
 
 export async function getKampMetaState(): Promise<KampMetaState | null> {
@@ -163,6 +169,7 @@ export async function saveKampDemoPurgedState(
     purgedBy,
     clearedRoomCount,
     version: 1,
+    neverSeedDemo: true,
   });
 }
 
@@ -249,8 +256,9 @@ const LEGACY_SEED_YERLESKELER = new Set([
 export function isLegacyKampRoom(room: KampOdasi): boolean {
   if (LEGACY_SEED_YERLESKELER.has(room.yerleskeAdi)) return true;
   if (room.id.startsWith('ko_room_')) return true;
-  if (room.kapasite === 6 && /^[A-D]-\d{2,3}$/.test(room.odaNo || '')) {
-    const yerleske = room.yerleskeAdi || '';
+  if (/^[A-D]\s*Yerleşkesi$/i.test((room.yerleskeAdi || '').trim())) return true;
+  if (/^[A-D]-\d{2,3}$/.test(room.odaNo || '')) {
+    const yerleske = (room.yerleskeAdi || '').trim();
     if (/^[A-D]\s/.test(yerleske) || LEGACY_SEED_YERLESKELER.has(yerleske)) return true;
   }
   return false;
@@ -306,6 +314,11 @@ export async function purgeLegacyKampData(purgedBy?: string): Promise<{
 
   await saveKampDemoPurgedState(legacyRooms.length, purgedBy);
 
+  const remainingLegacy = (await fetchCollection<KampOdasi>('kampOdalari')).filter(isLegacyKampRoom);
+  if (remainingLegacy.length > 0) {
+    throw new Error(`${remainingLegacy.length} örnek oda Firestore'dan silinemedi`);
+  }
+
   return {
     roomIds: legacyRooms.map((r) => r.id),
     kayitIds: legacyKayitlar.map((k) => k.id),
@@ -338,7 +351,33 @@ export async function purgeAllKampData(): Promise<{
     await batchDeleteDocuments(col, items.map((i) => i.id));
   }
   await saveKampDemoPurgedState(counts.odalar, 'purgeAll');
+
+  const [remainOdalar, remainKayit, remainYerleske, remainKat] = await Promise.all([
+    verifyCollectionEmpty('kampOdalari'),
+    verifyCollectionEmpty('kampKayitlari'),
+    verifyCollectionEmpty('kampYerleskeleri'),
+    verifyCollectionEmpty('kampKatlari'),
+  ]);
+  if (remainOdalar + remainKayit + remainYerleske + remainKat > 0) {
+    throw new Error(
+      `Silme tamamlanamadı: ${remainOdalar} oda, ${remainKayit} kayıt, ${remainYerleske} yerleşke, ${remainKat} kat kaldı`
+    );
+  }
+
   return counts;
+}
+
+/** Uygulama açılışında eski demo odaları otomatik temizler */
+export async function purgeLegacyKampIfNeeded(triggeredBy = 'auto-boot'): Promise<{
+  purged: boolean;
+  roomIds: string[];
+}> {
+  const rooms = await fetchCollection<KampOdasi & { id: string }>('kampOdalari');
+  if (!hasLegacySeedRooms(rooms)) {
+    return { purged: false, roomIds: [] };
+  }
+  const result = await purgeLegacyKampData(triggeredBy);
+  return { purged: true, roomIds: result.roomIds };
 }
 
 export async function updateKampYerleskeAdi(yerleske: KampYerleske, yeniAd: string): Promise<void> {

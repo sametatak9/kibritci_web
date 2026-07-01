@@ -57,8 +57,10 @@ import {
   seedYoklamaIfEmpty,
   saveYoklamaDocument,
   syncArrayToFirestore,
-  saveDocument
+  saveDocument,
+  fetchCollection,
 } from './lib/firebase';
+import { purgeLegacyKampIfNeeded } from './lib/kampYapisi';
 import {
   hasSubstantialYoklamaData,
   initialSeedAllowed,
@@ -377,7 +379,16 @@ export default function App() {
         setDemirbaslar(toolData);
 
         setLoadingMsg('Yatakhane ve kamp oda yerleşimleri düzenleniyor...');
-        const roomData = await seedCollectionIfEmpty('kampOdalari', []);
+        await seedCollectionIfEmpty('kampOdalari', []);
+        try {
+          const legacyPurge = await purgeLegacyKampIfNeeded('app-boot');
+          if (legacyPurge.purged) {
+            console.log(`Demo kamp odaları temizlendi: ${legacyPurge.roomIds.length} oda`);
+          }
+        } catch (purgeErr) {
+          console.error('Demo kamp odaları otomatik temizlenemedi:', purgeErr);
+        }
+        const roomData = await fetchCollection<KampOdasi>('kampOdalari');
         setKampOdalari(roomData);
 
         setLoadingMsg('Yatakhane personel giriş-çıkış kayıtları eşitleniyor...');

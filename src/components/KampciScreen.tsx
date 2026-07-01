@@ -389,7 +389,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
     const msg = 'Tüm kamp verisi (yerleşke, kat, oda, konaklama) kalıcı silinecek.';
     if (isProductionLive()) {
       const typed = window.prompt(`${msg}\n\nCanlı sistem. Silmek için SIFIRLA yazın:`);
-      if (typed !== 'SIFIRLA') return;
+      if (typed?.trim() !== 'SIFIRLA') return;
     } else if (!window.confirm(`${msg} Devam edilsin mi?`)) {
       return;
     }
@@ -402,8 +402,9 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
         'success',
         `Sıfırlandı: ${counts.yerleskeler} yerleşke, ${counts.odalar} oda, ${counts.kayitlar} kayıt.`
       );
-    } catch {
-      showStatus('error', 'Kamp verisi sıfırlanamadı.');
+    } catch (err) {
+      console.error(err);
+      showStatus('error', err instanceof Error ? err.message : 'Kamp verisi sıfırlanamadı.');
     } finally {
       setClearingAll(false);
     }

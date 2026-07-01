@@ -428,8 +428,11 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       alert(
         `${result.roomIds.length} örnek oda, ${result.kayitIds.length} yerleşim kaydı silindi ve Firestore'a kaydedildi. Sayfa yenilense bile geri gelmez.`
       );
-    } catch {
-      alert('Silme ve kaydetme sırasında hata oluştu.');
+    } catch (err) {
+      console.error(err);
+      alert(
+        `Silme ve kaydetme sırasında hata oluştu: ${err instanceof Error ? err.message : 'Bilinmeyen hata'}`
+      );
     }
   };
 
@@ -440,7 +443,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       const typed = window.prompt(
         `${msg}\n\nCanlı sistem aktif. Silmek için büyük harflerle SIFIRLA yazın:`
       );
-      if (typed !== 'SIFIRLA') return;
+      if (typed?.trim() !== 'SIFIRLA') return;
     } else if (!window.confirm(`${msg} Devam edilsin mi?`)) {
       return;
     }
@@ -451,8 +454,11 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       alert(
         `Kamp verisi sıfırlandı: ${counts.yerleskeler} yerleşke, ${counts.katlar} kat, ${counts.odalar} oda, ${counts.kayitlar} kayıt silindi.`
       );
-    } catch {
-      alert('Kamp verisi sıfırlanırken hata oluştu.');
+    } catch (err) {
+      console.error(err);
+      alert(
+        `Kamp verisi sıfırlanırken hata oluştu: ${err instanceof Error ? err.message : 'Bilinmeyen hata'}`
+      );
     }
   };
 

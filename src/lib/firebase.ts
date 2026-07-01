@@ -22,7 +22,7 @@ export const auth = getAuth(app);
 /**
  * Helper to wrap any promise with a timeout
  */
-async function withTimeout<T>(promise: Promise<T>, ms = 12000): Promise<T> {
+export async function withTimeout<T>(promise: Promise<T>, ms = 12000): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout>;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
@@ -120,6 +120,9 @@ export async function seedCollectionIfEmpty<T extends { id: string }>(
   const snapshot = await withTimeout(getDocs(colRef));
   
   if (snapshot.empty) {
+    if (initialItems.length === 0) {
+      return [];
+    }
     console.log(`Seeding initial data for ${collectionName}...`);
     const batch = writeBatch(db);
     
