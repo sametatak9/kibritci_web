@@ -3,9 +3,10 @@ import { db, removeDocument, saveDocument } from './firebase';
 import {
   KullaniciLike,
   kullaniciDocId,
+  resolveRolePermissions,
   saveKullaniciForSignup,
 } from './kullaniciUtils';
-import { applyRoleDefaults, isMobileRole, normalizeYetki } from './yetkiUtils';
+import { isMobileRole, normalizeYetki } from './yetkiUtils';
 
 export const BEKLEYEN_COLLECTION = 'bekleyenUyelikler';
 const LOCAL_QUEUE_KEY = 'kibritci_bekleyen_uyelik_queue';
@@ -186,7 +187,7 @@ export async function approveBekleyenSignup(
     createdAt: record.olusturulma,
   };
 
-  const kullaniciPayload = applyRoleDefaults(
+  const kullaniciPayload = await resolveRolePermissions(
     {
       id: emailKey,
       email: emailKey,
@@ -231,7 +232,6 @@ export async function createManualUser(input: {
 }): Promise<{ user: KullaniciLike; queued: boolean }> {
   const emailKey = kullaniciDocId(input.email);
   const normalizedYetki = normalizeYetki(input.yetki);
-  const mobileRole = isMobileRole(normalizedYetki);
   const now = new Date().toISOString();
 
   const portalPayload = {
@@ -247,12 +247,12 @@ export async function createManualUser(input: {
     createdAt: now,
   };
 
-  const kullaniciPayload = applyRoleDefaults(
+  const kullaniciPayload = await resolveRolePermissions(
     {
       id: emailKey,
       email: emailKey,
       yetki: normalizedYetki,
-      durum: mobileRole ? 'AKTİF' : 'AKTİF',
+      durum: 'AKTİF',
       kayitTarihi: now.split('T')[0],
       ad: input.ad.trim(),
       soyad: input.soyad.trim(),

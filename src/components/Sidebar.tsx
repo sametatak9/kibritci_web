@@ -1,6 +1,6 @@
 import React from 'react';
 import { Building2, Users, CalendarCheck2, CreditCard, ShoppingCart, Truck, KeySquare, FileText, Tent, Mail, ChartBar as BarChart3, BookOpen, Contact as Contact2, Package, LogOut, Wallet, Hop as Home, ShieldCheck, PenTool, MessageSquare, Smartphone, HardHat, Banknote, Images } from 'lucide-react';
-import { getRoleHomeTab, normalizeYetki } from '../lib/yetkiUtils';
+import { getRoleAllowedTabs, normalizeYetki } from '../lib/yetkiUtils';
 
 interface SidebarProps {
   activeTab: string;
@@ -30,7 +30,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   kisitliSayfalar = []
 }) => {
   const normalizedYetki = normalizeYetki(userYetki);
-  const roleHomeTab = getRoleHomeTab(normalizedYetki);
+  const roleAllowedTabs = getRoleAllowedTabs(normalizedYetki);
 
   const menuItems = [
     {
@@ -106,9 +106,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return {
       ...group,
       items: group.items.filter(item => {
-        // Mobil saha rolleri yalnızca kendi panelini görür (kisitliSayfalar'dan muaf)
-        if (roleHomeTab) {
-          return item.key === roleHomeTab;
+        if (roleAllowedTabs) {
+          return roleAllowedTabs.includes(item.key as typeof roleAllowedTabs[number]);
         }
 
         if (kisitliSayfalar && kisitliSayfalar.includes(item.key)) {

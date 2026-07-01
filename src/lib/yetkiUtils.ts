@@ -36,21 +36,28 @@ export const PORTAL_PAGES = [
 
 export type PortalPageKey = (typeof PORTAL_PAGES)[number]["key"];
 
-/** Mobil saha rolleri → ana panel sekmesi */
-export const MOBILE_ROLE_HOME_TAB: Record<string, PortalPageKey> = {
-  FORMEN: "formen_ekrani",
-  GÜVENLİK: "guvenlik_ekrani",
-  KAMPÇI: "kampci_ekrani",
-  LOJİSTİK: "lojistik_ekrani",
-  DEPOCU: "depocu_ekrani",
+/** Mobil saha rolleri → erişilebilir panel sekmeleri */
+export const MOBILE_ROLE_ALLOWED_TABS: Record<string, PortalPageKey[]> = {
+  FORMEN: ['formen_ekrani', 'personel'],
+  GÜVENLİK: ['guvenlik_ekrani'],
+  KAMPÇI: ['kampci_ekrani'],
+  LOJİSTİK: ['lojistik_ekrani'],
+  DEPOCU: ['depocu_ekrani'],
 };
 
+/** @deprecated MOBILE_ROLE_ALLOWED_TABS kullanın */
+export const MOBILE_ROLE_HOME_TAB: Record<string, PortalPageKey> = Object.fromEntries(
+  Object.entries(MOBILE_ROLE_ALLOWED_TABS).map(([role, tabs]) => [role, tabs[0]])
+) as Record<string, PortalPageKey>;
+
 const YETKI_ALIASES: Record<string, string> = {
-  KAMPCI: "KAMPÇI",
-  KAMPCİ: "KAMPÇI",
-  GUVENLIK: "GÜVENLİK",
-  LOJISTIK: "LOJİSTİK",
-  DEPO: "DEPOCU",
+  KAMPCI: 'KAMPÇI',
+  KAMPCİ: 'KAMPÇI',
+  GUVENLIK: 'GÜVENLİK',
+  LOJISTIK: 'LOJİSTİK',
+  DEPO: 'DEPOCU',
+  ŞOFÖR: 'LOJİSTİK',
+  SOFOR: 'LOJİSTİK',
 };
 
 export function normalizeYetki(yetki?: string | null): string {
@@ -59,24 +66,47 @@ export function normalizeYetki(yetki?: string | null): string {
   return YETKI_ALIASES[v] ?? v;
 }
 
-export function getRoleHomeTab(yetki?: string | null): PortalPageKey | null {
+export function getRoleAllowedTabs(yetki?: string | null): PortalPageKey[] | null {
   const normalized = normalizeYetki(yetki);
-  return MOBILE_ROLE_HOME_TAB[normalized] ?? null;
+  return MOBILE_ROLE_ALLOWED_TABS[normalized] ?? null;
+}
+
+export function getRoleHomeTab(yetki?: string | null): PortalPageKey | null {
+  const allowed = getRoleAllowedTabs(yetki);
+  return allowed?.[0] ?? null;
 }
 
 export function isMobileRole(yetki?: string | null): boolean {
-  return getRoleHomeTab(yetki) !== null;
+  return getRoleAllowedTabs(yetki) !== null;
 }
 
-/** Rol ana paneli kısıtlamalardan muaf; mobil roller sadece kendi paneline erişir */
+/** Tek panel — tam ekran mobil (Formen hariç; o personel sekmesine de erişir) */
+export function isStandaloneMobileRole(yetki?: string | null): boolean {
+  const allowed = getRoleAllowedTabs(yetki);
+  return !!allowed && allowed.length === 1;
+}
+
+export function getMobileRoleDisplayName(yetki?: string | null): string {
+  const n = normalizeYetki(yetki);
+  const labels: Record<string, string> = {
+    FORMEN: 'Formen Mobil + Personel',
+    KAMPÇI: 'Kampçı Mobil',
+    GÜVENLİK: 'Güvenlik Mobil',
+    LOJİSTİK: 'Şöför Mobil',
+    DEPOCU: 'Depocu Mobil',
+  };
+  return labels[n] || n;
+}
+
+/** Rol ana paneli kısıtlamalardan muaf; mobil roller yalnızca tanımlı panellere erişir */
 export function isTabRestrictedForUser(
   tab: string,
   yetki?: string | null,
   kisitliSayfalar?: string[] | null
 ): boolean {
-  const homeTab = getRoleHomeTab(yetki);
-  if (homeTab) {
-    return tab !== homeTab;
+  const allowed = getRoleAllowedTabs(yetki);
+  if (allowed) {
+    return !allowed.includes(tab as PortalPageKey);
   }
   if (!kisitliSayfalar?.length) return false;
   return kisitliSayfalar.includes(tab);
@@ -92,14 +122,13 @@ export function sanitizeKisitliSayfalar(
   return kisitliSayfalar.filter((k) => k !== homeTab);
 }
 
-/** Mobil saha rolleri yalnızca kendi panel sekmesini görür */
+/** Mobil saha rolleri yalnızca tanımlı panel sekmelerini görür */
 export function buildKisitliSayfalarForRole(yetki?: string | null): string[] | undefined {
-  const normalized = normalizeYetki(yetki);
-  const homeTab = getRoleHomeTab(normalized);
-  if (homeTab) {
-    return PORTAL_PAGES.map((p) => p.key).filter((k) => k !== homeTab);
+  const allowed = getRoleAllowedTabs(yetki);
+  if (allowed) {
+    return PORTAL_PAGES.map((p) => p.key).filter((k) => !allowed.includes(k));
   }
-  if (normalized === "MİSAFİR") {
+  if (normalizeYetki(yetki) === 'MİSAFİR') {
     return PORTAL_PAGES.map((p) => p.key);
   }
   return undefined;
@@ -147,9 +176,15 @@ export function applyRoleDefaults<T extends { yetki?: string; kisitliSayfalar?: 
 ): T & { yetki: string; kisitliSayfalar?: string[] } {
   const yetki = normalizeYetki(newYetki);
   const autoRestricted = buildKisitliSayfalarForRole(yetki);
+  if (autoRestricted) {
+    return { ...user, yetki, kisitliSayfalar: autoRestricted };
+  }
+  if (isMobileRole(user.yetki)) {
+    return { ...user, yetki, kisitliSayfalar: [] };
+  }
   return {
     ...user,
     yetki,
-    kisitliSayfalar: autoRestricted ?? sanitizeKisitliSayfalar(yetki, user.kisitliSayfalar),
+    kisitliSayfalar: sanitizeKisitliSayfalar(yetki, user.kisitliSayfalar ?? []),
   };
 }

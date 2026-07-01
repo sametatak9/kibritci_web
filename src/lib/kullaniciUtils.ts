@@ -10,6 +10,7 @@ import {
   isMobileRole,
   normalizeYetki,
 } from './yetkiUtils';
+import { loadYetkiSablonlari } from './yetkiSablonUtils';
 
 async function withTimeout<T>(promise: Promise<T>, ms = 20000): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout>;
@@ -170,6 +171,34 @@ export async function saveKullaniciForSignup(
   return canonical;
 }
 
+export async function resolveRolePermissions(
+  user: KullaniciLike,
+  newYetki: string
+): Promise<KullaniciLike & { yetki: string }> {
+  const yetki = normalizeYetki(newYetki);
+  const withDefaults = applyRoleDefaults(user, yetki);
+
+  if (isMobileRole(yetki)) {
+    return withDefaults;
+  }
+
+  try {
+    const sablonlar = await loadYetkiSablonlari();
+    const sablon = sablonlar.find((s) => normalizeYetki(s.yetki) === yetki);
+    if (sablon) {
+      return {
+        ...withDefaults,
+        kisitliSayfalar: sablon.kisitliSayfalar,
+        saltOkunurSayfalar: sablon.saltOkunurSayfalar ?? [],
+      };
+    }
+  } catch (err) {
+    console.warn('Yetki şablonu yüklenemedi, varsayılan kısıtlar kullanılıyor:', err);
+  }
+
+  return withDefaults;
+}
+
 export async function persistKullaniciRole<T extends KullaniciLike>(
   kullanicilar: T[],
   targetId: string,
@@ -183,7 +212,7 @@ export async function persistKullaniciRole<T extends KullaniciLike>(
   const emailKey = kullaniciDocId(target.email);
   const normalizedYetki = normalizeYetki(newYetki);
   const mobileRole = isMobileRole(normalizedYetki);
-  const withRole = applyRoleDefaults(target, normalizedYetki);
+  const withRole = await resolveRolePermissions(target, normalizedYetki);
 
   const updated: KullaniciLike = {
     ...withRole,

@@ -18,6 +18,7 @@ import {
 import { AdminYetkiSablonTab } from './AdminYetkiSablonTab';
 import { isFirestoreWriteFailure } from '../lib/bekleyenUyelik';
 import { fetchCollection, removeDocument, saveDocument } from '../lib/firebase';
+import { getMobileRoleDisplayName, isMobileRole } from '../lib/yetkiUtils';
 
 export interface Kullanici {
   id: string; // auth uid
@@ -209,7 +210,12 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
         delete next[email];
         return next;
       });
-      alert(`✅ ${email} — yetki "${newYetki}" kalıcı olarak kaydedildi.`);
+      alert(
+        `✅ ${email} — "${newYetki}" rolü kaydedildi.\n` +
+          (isMobileRole(newYetki)
+            ? `Erişim: ${getMobileRoleDisplayName(newYetki)} (aynı rolde sınırsız kullanıcı açılabilir).`
+            : 'Masaüstü rol şablonu uygulandı.')
+      );
       if (addNotification) {
         addNotification(`${email} kullanıcısının rolü "${newYetki}" olarak kaydedildi.`);
       }
@@ -607,11 +613,11 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                                   <option value="KABA_İŞLER_ŞEFİ">🧱 Kaba İşler Şefi</option>
                                   <option value="DİZAYN_ŞEFİ">📐 Dizayn Şefi</option>
                                   <option value="PARSEL_ŞEFİ">🗺️ Parsel Şefi</option>
-                                  <option value="FORMEN">👷 FORMEN (Saha Mobil)</option>
-                                  <option value="KAMPÇI">⛺ KAMPÇI (Kamp Amiri)</option>
-                                  <option value="GÜVENLİK">👮 GÜVENLİK (Kapı Kontrol)</option>
-                                  <option value="LOJİSTİK">🚚 LOJİSTİK (Şoför Mobil)</option>
-                                  <option value="DEPOCU">📦 DEPOCU (Depo Mobil)</option>
+                                  <option value="FORMEN">👷 FORMEN — Mobil Panel + Personel Yönetimi</option>
+                                  <option value="KAMPÇI">⛺ KAMPÇI — Yalnızca Kampçı Mobil</option>
+                                  <option value="GÜVENLİK">👮 GÜVENLİK — Yalnızca Güvenlik Mobil</option>
+                                  <option value="LOJİSTİK">🚚 ŞOFÖR / LOJİSTİK — Yalnızca Şoför Mobil</option>
+                                  <option value="DEPOCU">📦 DEPOCU — Yalnızca Depocu Mobil</option>
                                   <option value="MİSAFİR">⏳ MİSAFİR (Erişimsiz)</option>
                                 </select>
                                 {(pendingRoles[user.email] ?? user.yetki) !== user.yetki && (

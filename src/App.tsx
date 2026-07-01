@@ -70,6 +70,7 @@ import {
   normalizeYetki,
   getRoleHomeTab,
   isMobileRole,
+  isStandaloneMobileRole,
   isTabRestrictedForUser,
   sanitizeKisitliSayfalar,
 } from './lib/yetkiUtils';
@@ -170,6 +171,7 @@ export default function App() {
     { sender: 'assistant', text: 'Merhaba! Ben Kibritçi Şantiye Yapay Zeka Asistanıyım. Size bugün nasıl yardımcı olabilirim?' }
   ]);
   const [assistantLoading, setAssistantLoading] = useState(false);
+  const roleHomeRoutedRef = useRef(false);
 
   useEffect(() => {
     (window as any).showErrorModal = (err: any, contextInfo?: string) => {
@@ -756,28 +758,31 @@ export default function App() {
     }
   }, [currentUser, kullanicilar, authLoading, dbStatus]);
 
-  // Auto-redirect FORMEN to their mobile screen
+  // İlk girişte mobil saha rolünü ana paneline yönlendir (sekme değişiminde tekrar etme)
   useEffect(() => {
     if (!currentUser || !kullanicilar.length) return;
     const matched = findKullaniciByEmail(kullanicilar, currentUser?.email);
-    if (matched) {
-      const homeTab = getRoleHomeTab(matched.yetki);
-      if (homeTab && activeTab !== homeTab) {
-        setActiveTab(homeTab);
-      }
-      if (matched.imzaText) {
-        setSignatureText(matched.imzaText);
-        localStorage.setItem('kibritci_sig_text', matched.imzaText);
-      }
-      if (matched.imzaStyle) {
-        setSignatureStyle(matched.imzaStyle);
-        localStorage.setItem('kibritci_sig_style', matched.imzaStyle);
-      }
+    if (!matched) return;
+
+    const homeTab = getRoleHomeTab(matched.yetki);
+    if (homeTab && !roleHomeRoutedRef.current) {
+      roleHomeRoutedRef.current = true;
+      setActiveTab(homeTab);
     }
-  }, [currentUser, kullanicilar, activeTab]);
+
+    if (matched.imzaText) {
+      setSignatureText(matched.imzaText);
+      localStorage.setItem('kibritci_sig_text', matched.imzaText);
+    }
+    if (matched.imzaStyle) {
+      setSignatureStyle(matched.imzaStyle);
+      localStorage.setItem('kibritci_sig_style', matched.imzaStyle);
+    }
+  }, [currentUser, kullanicilar]);
 
   const handleSignOut = async () => {
     try {
+      roleHomeRoutedRef.current = false;
       localStorage.removeItem('kibritci_portal_session');
       await signOut(auth);
       setCurrentUser(null);
@@ -1194,7 +1199,10 @@ export default function App() {
                      currentUser?.email?.toLowerCase() === 'sametatak9@gmail.com' || 
                      currentUser?.email?.toLowerCase() === 'santiye@kibritci.com';
 
-  const hideSidebarAndTopbar = isMobileRole(userYetki) && isMobileMode;
+  const hideSidebarAndTopbar = isStandaloneMobileRole(userYetki) && isMobileMode;
+
+  const isActiveStandaloneFieldUser =
+    matchedU?.durum === 'AKTİF' && isStandaloneMobileRole(userYetki) && !isYonetici;
 
   const isAllowedFormen = userYetki === 'FORMEN' || isYonetici;
   const isAllowedGuvenlik = userYetki === 'GÜVENLİK' || isYonetici;
@@ -1226,6 +1234,70 @@ export default function App() {
       </div>
     </div>
   );
+
+  if (currentUser && isActiveStandaloneFieldUser) {
+    if (userYetki === 'GÜVENLİK') {
+      return (
+        <GuvenlikScreen
+          personeller={personeller}
+          currentUser={currentUser}
+          onSignOut={handleSignOut}
+          userYetki={matchedU?.yetki}
+          isStandalone={true}
+        />
+      );
+    }
+    if (userYetki === 'KAMPÇI') {
+      return (
+        <KampciScreen
+          kampOdalari={kampOdalari}
+          setKampOdalari={setKampOdalariWithSync}
+          kampKayitlari={kampKayitlari}
+          setKampKayitlari={setKampKayitlariWithSync}
+          kampYerleskeleri={kampYerleskeleri}
+          kampKatlari={kampKatlari}
+          personeller={personeller}
+          cariKartlar={cariKartlar}
+          yoklamalar={yoklamalar}
+          setYoklamalar={setYoklamalarWithSync}
+          stokKartlar={stokKartlar}
+          currentUser={currentUser}
+          onSignOut={handleSignOut}
+          isStandalone={true}
+          addNotification={addNotification}
+        />
+      );
+    }
+    if (userYetki === 'LOJİSTİK') {
+      return (
+        <LojistikScreen
+          irsaliyeler={irsaliyeler}
+          setIrsaliyeler={setIrsaliyelerWithSync}
+          satinAlmaTalepleri={satinAlmaTalepleri}
+          araclar={araclar}
+          setAraclar={setAraclarWithSync}
+          aracKmLoglari={aracKmLoglari}
+          setAracKmLoglari={setAracKmLoglariWithSync}
+          currentUser={currentUser}
+          onSignOut={handleSignOut}
+          isStandalone={true}
+        />
+      );
+    }
+    if (userYetki === 'DEPOCU') {
+      return (
+        <DepocuScreen
+          stokKartlar={stokKartlar}
+          setStokKartlar={setStokKartlarWithSync}
+          personeller={personeller}
+          currentUser={currentUser}
+          onSignOut={handleSignOut}
+          isStandalone={true}
+          addNotification={addNotification}
+        />
+      );
+    }
+  }
 
   if (isMobileMode && currentUser) {
     const role = userYetki;
