@@ -1,5 +1,6 @@
-import { KampKat, KampOdasi, KampYerleske } from '../types/erp';
+import { KampKat, KampKaydi, KampOdasi, KampYerleske } from '../types/erp';
 import { db, fetchCollection, removeDocument, saveDocument } from './firebase';
+import { writeBatch, doc } from 'firebase/firestore';
 
 export async function createKampYerleske(ad: string, olusturan?: string): Promise<KampYerleske> {
   const trimmed = ad.trim();
@@ -110,7 +111,59 @@ export async function createKampOdasi(input: CreateKampOdasiInput): Promise<Kamp
 }
 
 export async function deleteKampOdasi(roomId: string): Promise<void> {
-  await removeDocument('kampOdalari', roomId);
+  await deleteKampOdasiCascade(roomId);
+}
+
+/** Oda + bağlı konaklama kayıtlarını Firestore'dan siler */
+export async function deleteKampOdasiCascade(roomId: string): Promise<void> {
+  const kayitlar = await fetchCollection<KampKaydi & { id: string }>('kampKayitlari');
+  const linked = kayitlar.filter(
+    (k) => k.odaId === roomId || k.roomId === roomId
+  );
+  await Promise.all([
+    removeDocument('kampOdalari', roomId),
+    ...linked.map((k) => removeDocument('kampKayitlari', k.id)),
+  ]);
+}
+
+async function batchDeleteDocuments(collectionName: string, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const unique = [...new Set(ids)];
+  const CHUNK = 400;
+  for (let i = 0; i < unique.length; i += CHUNK) {
+    const batch = writeBatch(db);
+    unique.slice(i, i + CHUNK).forEach((id) => {
+      batch.delete(doc(db, collectionName, id));
+    });
+    await batch.commit();
+  }
+}
+
+export interface KampMetaState {
+  id: string;
+  demoPurgedAt?: string;
+  purgedBy?: string;
+  clearedRoomCount?: number;
+  version?: number;
+}
+
+export async function getKampMetaState(): Promise<KampMetaState | null> {
+  const list = await fetchCollection<KampMetaState>('kampMeta');
+  return list.find((m) => m.id === 'global') ?? null;
+}
+
+/** Örnek/demo kamp silindikten sonra kalıcı işaret — yenilemede geri gelmesin */
+export async function saveKampDemoPurgedState(
+  clearedRoomCount: number,
+  purgedBy?: string
+): Promise<void> {
+  await saveDocument('kampMeta', {
+    id: 'global',
+    demoPurgedAt: new Date().toISOString(),
+    purgedBy,
+    clearedRoomCount,
+    version: 1,
+  });
 }
 
 export async function deleteKampKat(katId: string): Promise<void> {
@@ -194,7 +247,13 @@ const LEGACY_SEED_YERLESKELER = new Set([
 ]);
 
 export function isLegacyKampRoom(room: KampOdasi): boolean {
-  return LEGACY_SEED_YERLESKELER.has(room.yerleskeAdi) || room.id.startsWith('ko_room_');
+  if (LEGACY_SEED_YERLESKELER.has(room.yerleskeAdi)) return true;
+  if (room.id.startsWith('ko_room_')) return true;
+  if (room.kapasite === 6 && /^[A-D]-\d{2,3}$/.test(room.odaNo || '')) {
+    const yerleske = room.yerleskeAdi || '';
+    if (/^[A-D]\s/.test(yerleske) || LEGACY_SEED_YERLESKELER.has(yerleske)) return true;
+  }
+  return false;
 }
 
 export function isLegacyKampYerleske(ad: string): boolean {
@@ -212,22 +271,44 @@ export async function clearLegacySeedRooms(rooms: KampOdasi[]): Promise<string[]
   return toDelete.map((r) => r.id);
 }
 
-/** Eski demo yerleşke, kat ve odalarını Firestore'dan temizler */
-export async function purgeLegacyKampData(): Promise<{ roomIds: string[]; yerleskeIds: string[]; katIds: string[] }> {
-  const rooms = await fetchCollection<KampOdasi & { id: string }>('kampOdalari');
-  const legacyRooms = rooms.filter((r) => isLegacyKampRoom(r));
-  await Promise.all(legacyRooms.map((r) => deleteKampOdasi(r.id)));
+/** Eski demo yerleşke, kat ve odalarını Firestore'dan temizler ve kalıcı kaydeder */
+export async function purgeLegacyKampData(purgedBy?: string): Promise<{
+  roomIds: string[];
+  kayitIds: string[];
+  yerleskeIds: string[];
+  katIds: string[];
+}> {
+  const [rooms, kayitlar, yerleskeler, katlar] = await Promise.all([
+    fetchCollection<KampOdasi & { id: string }>('kampOdalari'),
+    fetchCollection<KampKaydi & { id: string }>('kampKayitlari'),
+    fetchCollection<KampYerleske & { id: string }>('kampYerleskeleri'),
+    fetchCollection<KampKat & { id: string }>('kampKatlari'),
+  ]);
 
-  const yerleskeler = await fetchCollection<KampYerleske & { id: string }>('kampYerleskeleri');
+  const legacyRooms = rooms.filter(isLegacyKampRoom);
+  const legacyRoomIdSet = new Set(legacyRooms.map((r) => r.id));
+
+  const legacyKayitlar = kayitlar.filter(
+    (k) =>
+      legacyRoomIdSet.has(k.odaId || '') ||
+      legacyRoomIdSet.has(k.roomId || '') ||
+      k.odaId?.startsWith('ko_room_') ||
+      k.roomId?.startsWith('ko_room_')
+  );
+
   const legacyYerleskeler = yerleskeler.filter((y) => isLegacyKampYerleske(y.ad));
-  await Promise.all(legacyYerleskeler.map((y) => deleteKampYerleske(y.id)));
-
-  const katlar = await fetchCollection<KampKat & { id: string }>('kampKatlari');
   const legacyKatlar = katlar.filter((k) => isLegacyKampYerleske(k.yerleskeAdi));
-  await Promise.all(legacyKatlar.map((k) => deleteKampKat(k.id)));
+
+  await batchDeleteDocuments('kampOdalari', legacyRooms.map((r) => r.id));
+  await batchDeleteDocuments('kampKayitlari', legacyKayitlar.map((k) => k.id));
+  await batchDeleteDocuments('kampYerleskeleri', legacyYerleskeler.map((y) => y.id));
+  await batchDeleteDocuments('kampKatlari', legacyKatlar.map((k) => k.id));
+
+  await saveKampDemoPurgedState(legacyRooms.length, purgedBy);
 
   return {
     roomIds: legacyRooms.map((r) => r.id),
+    kayitIds: legacyKayitlar.map((k) => k.id),
     yerleskeIds: legacyYerleskeler.map((y) => y.id),
     katIds: legacyKatlar.map((k) => k.id),
   };
@@ -254,8 +335,9 @@ export async function purgeAllKampData(): Promise<{
   for (const [col, key] of specs) {
     const items = await fetchCollection<{ id: string }>(col);
     counts[key] = items.length;
-    await Promise.all(items.map((i) => removeDocument(col, i.id)));
+    await batchDeleteDocuments(col, items.map((i) => i.id));
   }
+  await saveKampDemoPurgedState(counts.odalar, 'purgeAll');
   return counts;
 }
 

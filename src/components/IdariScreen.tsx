@@ -25,6 +25,7 @@ import {
   purgeAllKampData,
   updateKampYerleskeAdi,
   updateKampKatAdi,
+  isLegacyKampRoom,
 } from '../lib/kampYapisi';
 import { assignKampResident, evictKampResident, suggestPersonelKaydi } from '../lib/kampPlacementUtils';
 import { isProductionLive } from '../lib/productionDataGuard';
@@ -407,14 +408,28 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   };
 
   const handleClearLegacyKampData = async () => {
-    if (!window.confirm('Eski demo/örnek kamp yerleşkeleri ve odaları kalıcı olarak silinecek. Devam edilsin mi?')) return;
+    if (
+      !window.confirm(
+        'Örnek/demo kamp odaları Firestore\'dan kalıcı silinecek ve boş durum kaydedilecek. Devam edilsin mi?'
+      )
+    ) {
+      return;
+    }
     try {
-      await purgeLegacyKampData();
+      const result = await purgeLegacyKampData();
+      if (result.roomIds.length === 0 && kampOdalari.some(isLegacyKampRoom)) {
+        alert(
+          'Örnek odalar tanımlanamadı. "Tüm Kamp Verisini Sıfırla" ile tüm yapıyı temizleyebilirsiniz.'
+        );
+        return;
+      }
       setSelectedYerleske('');
       setSelectedKat('');
-      alert('Eski örnek kamp verileri temizlendi. Yerleşkeleri sıfırdan oluşturabilirsiniz.');
+      alert(
+        `${result.roomIds.length} örnek oda, ${result.kayitIds.length} yerleşim kaydı silindi ve Firestore'a kaydedildi. Sayfa yenilense bile geri gelmez.`
+      );
     } catch {
-      alert('Temizlik sırasında hata oluştu.');
+      alert('Silme ve kaydetme sırasında hata oluştu.');
     }
   };
 
@@ -2127,9 +2142,9 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
 
                   <button
                     onClick={handleClearLegacyKampData}
-                    className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-1.5 px-3 rounded-lg cursor-pointer transition text-[10px] uppercase tracking-wider flex items-center justify-center space-x-1 border border-slate-200"
+                    className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-3 rounded-lg cursor-pointer transition text-[10px] uppercase tracking-wider flex items-center justify-center space-x-1"
                   >
-                    <span>🧹 Eski Demo Verisini Temizle</span>
+                    <span>🗑️ Örnek Odaları Sil ve Kaydet</span>
                   </button>
                   <button
                     onClick={handlePurgeAllKampData}

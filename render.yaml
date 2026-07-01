@@ -1,7 +1,8 @@
-# Render Blueprint — https://render.com/docs/blueprint-spec
+# Render Blueprint — tek servis: kibritci-erp
+# Not: Aynı repo için ikinci bir Web Service bağlamayın; çift deploy olur.
 services:
   - type: web
-    name: kibritci-web
+    name: kibritci-erp
     runtime: node
     plan: free
     buildCommand: npm install && npm run build

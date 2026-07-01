@@ -294,13 +294,26 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   };
 
   const handleClearLegacyRooms = async () => {
-    if (!window.confirm('Demo ile gelen örnek yerleşke, kat ve odalar silinecek. Devam edilsin mi?')) return;
+    if (
+      !window.confirm(
+        'Örnek/demo odalar kalıcı silinecek ve Firestore\'a boş hali kaydedilecek. Devam edilsin mi?'
+      )
+    ) {
+      return;
+    }
     setClearingLegacy(true);
     try {
-      const result = await purgeLegacyKampData();
-      showStatus('success', `${result.roomIds.length} örnek oda temizlendi.`);
+      const result = await purgeLegacyKampData(currentUser?.email);
+      if (result.roomIds.length === 0 && legacySeedRooms) {
+        showStatus('error', 'Örnek oda eşleşmedi. Tüm kampı sıfırlamayı deneyin.');
+      } else {
+        showStatus(
+          'success',
+          `${result.roomIds.length} örnek oda silindi ve kaydedildi. Yenilemede geri gelmez.`
+        );
+      }
     } catch {
-      showStatus('error', 'Örnek odalar temizlenemedi.');
+      showStatus('error', 'Örnek odalar silinemedi veya kaydedilemedi.');
     } finally {
       setClearingLegacy(false);
     }
@@ -1145,7 +1158,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                   disabled={clearingLegacy}
                   className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-2 rounded-lg cursor-pointer disabled:opacity-60"
                 >
-                  {clearingLegacy ? 'Temizleniyor...' : 'Örnek Odaları Temizle'}
+                  {clearingLegacy ? 'Siliniyor ve kaydediliyor…' : 'Örnek Odaları Sil ve Kaydet'}
                 </button>
               </div>
             )}
