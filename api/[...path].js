@@ -60,6 +60,19 @@ function formatGeminiKeyHint(format) {
       return "GEMINI_API_KEY ortam de\u011Fi\u015Fkeni tan\u0131ml\u0131 de\u011Fil.";
   }
 }
+function isGeminiQuotaError(error) {
+  const raw = error instanceof Error ? error.message : String(error);
+  if (/429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota/i.test(raw)) {
+    return true;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    const inner = parsed?.error?.message ?? parsed?.message ?? "";
+    return /429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota/i.test(String(inner));
+  } catch {
+    return false;
+  }
+}
 function parseGeminiError(error) {
   const raw = error instanceof Error ? error.message : String(error);
   let msg = raw;
@@ -133,9 +146,8 @@ async function testGeminiConnection() {
         }
       } catch (err) {
         lastError = err;
-        const parsed = parseGeminiError(err);
-        if (!/429|RESOURCE_EXHAUSTED|quota/i.test(parsed)) {
-          return { ok: false, keyInfo, error: parsed };
+        if (!isGeminiQuotaError(err)) {
+          return { ok: false, keyInfo, error: parseGeminiError(err) };
         }
       }
     }

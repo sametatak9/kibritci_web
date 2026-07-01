@@ -124,6 +124,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
           userFriendlyMsg = 'Sunucu zaman aşımına uğradı (504). Çözüm: (1) Belgenin fotoğrafını (PDF yerine JPG) yükleyin, (2) https://kibritci-erp.onrender.com adresini kullanın, (3) Render\'da GEMINI_API_KEY tanımlı olduğundan emin olun.';
         } else if (userFriendlyMsg.includes('kibritci-web-1') || userFriendlyMsg.includes('boş yanıt') || userFriendlyMsg.includes('404')) {
           userFriendlyMsg = 'Yapay zeka sunucusuna ulaşılamadı. Lütfen siteyi https://kibritci-erp.onrender.com adresinden açın (eski kibritci-web-1 adresi artık çalışmıyor).';
+        } else if (/429|RESOURCE_EXHAUSTED|quota exceeded|kota doldu/i.test(userFriendlyMsg)) {
+          userFriendlyMsg = 'Gemini günlük ücretsiz kota doldu (model başına ~20 istek). Yarın tekrar deneyin veya Google AI Studio\'da faturalandırmayı açın: https://ai.dev/rate-limit';
         } else if (userFriendlyMsg.includes("503") || userFriendlyMsg.includes("UNAVAILABLE") || userFriendlyMsg.includes("high demand") || userFriendlyMsg.includes("experiencing high demand")) {
           userFriendlyMsg = "Yapay zeka servisi şu anda çok yoğun (Geçici 503 Hatası). Sunucu otomatik olarak yeniden denedi ancak yoğunluk devam ediyor. Lütfen birkaç saniye bekleyip tekrar dosya yüklemeyi deneyin veya Manuel Kayıt yöntemini kullanın.";
         }

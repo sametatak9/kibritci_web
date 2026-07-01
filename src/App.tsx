@@ -1546,7 +1546,8 @@ export default function App() {
 
         {geminiApiAlert && !hideSidebarAndTopbar && (
           <div className="shrink-0 border-b border-amber-500/40 bg-amber-950/90 px-4 py-2 text-[11px] leading-relaxed text-amber-100">
-            <span className="font-bold text-amber-300">Yapay zeka API uyarısı:</span> {geminiApiAlert}
+            <span className="font-bold text-amber-300">Yapay zeka API uyarısı:</span>{' '}
+            <span className="whitespace-pre-line">{geminiApiAlert}</span>
           </div>
         )}
 
