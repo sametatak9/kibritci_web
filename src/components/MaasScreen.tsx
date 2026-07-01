@@ -9,12 +9,36 @@ interface MaasScreenProps {
   personeller: Personel[];
   yoklamalar: AylikYoklamaMap;
   maasOdemeleri: MaaşOdeme[];
+  initialMonth?: number;
+  initialYear?: number;
+  onPeriodChange?: (month: number, year: number) => void;
+  onSaveHesapTaslaklari?: (payload: {
+    month: number;
+    year: number;
+    rows: Array<{
+      personel: Personel;
+      brutMaas: number;
+      mesaiUcreti: number;
+      toplamHakedis: number;
+      kesintiToplami: number;
+      netOdeme: number;
+    }>;
+  }) => void;
   onOpenMaasOdeme?: () => void;
 }
 
-export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar, maasOdemeleri, onOpenMaasOdeme }) => {
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+export const MaasScreen: React.FC<MaasScreenProps> = ({
+  personeller,
+  yoklamalar,
+  maasOdemeleri,
+  initialMonth,
+  initialYear,
+  onPeriodChange,
+  onSaveHesapTaslaklari,
+  onOpenMaasOdeme,
+}) => {
+  const [selectedMonth, setSelectedMonth] = useState(initialMonth ?? (new Date().getMonth() + 1));
+  const [selectedYear, setSelectedYear] = useState(initialYear ?? new Date().getFullYear());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -115,6 +139,34 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar,
 
   const [showMaasRaporu, setShowMaasRaporu] = useState(false);
 
+  React.useEffect(() => {
+    if (typeof initialMonth === 'number') setSelectedMonth(initialMonth);
+  }, [initialMonth]);
+
+  React.useEffect(() => {
+    if (typeof initialYear === 'number') setSelectedYear(initialYear);
+  }, [initialYear]);
+
+  React.useEffect(() => {
+    onPeriodChange?.(selectedMonth, selectedYear);
+  }, [selectedMonth, selectedYear, onPeriodChange]);
+
+  const handleSaveHesapTaslaklari = () => {
+    if (!onSaveHesapTaslaklari) return;
+    onSaveHesapTaslaklari({
+      month: selectedMonth,
+      year: selectedYear,
+      rows: calculatedSalaries.map((row) => ({
+        personel: row.personel,
+        brutMaas: row.totalBaseHakedis,
+        mesaiUcreti: row.totalOvertimeHakedis,
+        toplamHakedis: row.totalBaseHakedis + row.totalOvertimeHakedis,
+        kesintiToplami: row.cutAmount,
+        netOdeme: row.netPayable,
+      })),
+    });
+  };
+
   return (
     <div className="flex-grow p-3 sm:p-4 lg:p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col font-sans gap-4 lg:gap-6 select-none bg-slate-50/50">
       
@@ -166,6 +218,16 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar,
             >
               <span>📄 Maaş Raporu</span>
             </button>
+            {onSaveHesapTaslaklari && (
+              <button
+                type="button"
+                onClick={handleSaveHesapTaslaklari}
+                className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-[11px] px-3 py-1.5 rounded-lg transition shadow-sm cursor-pointer"
+                title="Maaş hesaplarını Maaş Ödeme taslağına kaydet"
+              >
+                Maaş Hesabını Kaydet
+              </button>
+            )}
             <span className="font-semibold text-slate-600">Dönem:</span>
             <select 
               value={selectedMonth} 

@@ -10,6 +10,9 @@ interface MaasOdeScreenProps {
   maasOdemeleri: MaaşOdeme[];
   setMaasOdemeleri: React.Dispatch<React.SetStateAction<MaaşOdeme[]>>;
   currentUser: any;
+  initialMonth?: number;
+  initialYear?: number;
+  onPeriodChange?: (month: number, year: number) => void;
 }
 
 export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
@@ -17,10 +20,13 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
   yoklamalar,
   maasOdemeleri,
   setMaasOdemeleri,
-  currentUser
+  currentUser,
+  initialMonth,
+  initialYear,
+  onPeriodChange,
 }) => {
-  const [selectedAy, setSelectedAy] = useState(new Date().getMonth() + 1);
-  const [selectedYil, setSelectedYil] = useState(new Date().getFullYear());
+  const [selectedAy, setSelectedAy] = useState(initialMonth ?? (new Date().getMonth() + 1));
+  const [selectedYil, setSelectedYil] = useState(initialYear ?? new Date().getFullYear());
   const [searchQuery, setSearchQuery] = useState('');
   const [showOdendiHavuzu, setShowOdendiHavuzu] = useState(false);
   const [expandedPersonel, setExpandedPersonel] = useState<string | null>(null);
@@ -28,6 +34,18 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
   const [kesintiTur, setKesintiTur] = useState<MaasKesinti['tur']>('DIGER');
   const [kesintiAciklama, setKesintiAciklama] = useState('');
   const [kesintiTutar, setKesintiTutar] = useState('');
+
+  React.useEffect(() => {
+    if (typeof initialMonth === 'number') setSelectedAy(initialMonth);
+  }, [initialMonth]);
+
+  React.useEffect(() => {
+    if (typeof initialYear === 'number') setSelectedYil(initialYear);
+  }, [initialYear]);
+
+  React.useEffect(() => {
+    onPeriodChange?.(selectedAy, selectedYil);
+  }, [selectedAy, selectedYil, onPeriodChange]);
 
   const daysInMonth = useMemo(() => new Date(selectedYil, selectedAy, 0).getDate(), [selectedAy, selectedYil]);
   const monthPersoneller = useMemo(

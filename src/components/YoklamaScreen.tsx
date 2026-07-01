@@ -919,10 +919,10 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                             className={`w-7 h-7 rounded-md border font-bold text-[9px] flex items-center justify-center transition shadow-sm ${
                               isActiveDay
                                 ? `hover:scale-105 active:scale-95 cursor-pointer ${getStatusColor(dayData.durum)}`
-                                : 'bg-slate-200 border-slate-300 text-slate-400 opacity-60'
+                                : 'bg-slate-900 border-slate-800 text-white opacity-90'
                             }`}
                           >
-                            {isActiveDay ? getStatusAbbreviation(dayData.durum) : 'Ç'}
+                            {isActiveDay ? getStatusAbbreviation(dayData.durum) : '■'}
                           </button>
                           
                           {isActiveDay && dayData.gonderen && (
@@ -947,7 +947,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                               className={`w-7 text-[8px] font-bold font-mono text-center rounded border py-0.5 focus:outline-none ${
                                 isActiveDay
                                   ? 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600 focus:border-blue-500'
-                                  : 'bg-slate-100 border-slate-200 text-slate-300'
+                                  : 'bg-slate-900 border-slate-800 text-slate-500'
                               }`}
                             />
                           </div>

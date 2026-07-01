@@ -113,9 +113,6 @@ export function isDayActiveForPersonel(
   day: number,
   personMap?: Record<string, YoklamaGunKaydi>
 ): boolean {
-  const dayData = personMap ? getYoklamaDay(personMap, year, month, day) : undefined;
-  if (dayData?.durum && dayData.durum !== 'Girilmedi') return true;
-
   if (p.iseGirisTarihi) {
     const [hireY, hireM, hireD] = p.iseGirisTarihi.split('-').map(Number);
     const currentDateVal = year * 10000 + month * 100 + day;
@@ -128,6 +125,9 @@ export function isDayActiveForPersonel(
     const exitDateVal = exitY * 10000 + exitM * 100 + exitD;
     if (currentDateVal > exitDateVal) return false;
   }
+
+  const dayData = personMap ? getYoklamaDay(personMap, year, month, day) : undefined;
+  if (dayData?.durum && dayData.durum !== 'Girilmedi') return true;
   return true;
 }
 

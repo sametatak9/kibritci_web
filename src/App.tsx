@@ -129,6 +129,10 @@ export default function App() {
   // Global State Engine
   const [personeller, setPersoneller] = useState<Personel[]>([]);
   const [yoklamalar, setYoklamalar] = useState<AylikYoklamaMap>({});
+  const [payrollPeriod, setPayrollPeriod] = useState<{ month: number; year: number }>({
+    month: new Date().getMonth() + 1,
+    year: new Date().getFullYear(),
+  });
   const [satinAlmaTalepleri, setSatinAlmaTalepleri] = useState<SatinAlmaTalebi[]>([]);
   const [irsaliyeler, setIrsaliyeler] = useState<Irsaliye[]>([]);
   const [faturalar, setFaturalar] = useState<Fatura[]>([]);
@@ -1107,6 +1111,111 @@ export default function App() {
     });
   };
 
+  const handlePayrollPeriodChange = (month: number, year: number) => {
+    setPayrollPeriod((prev) => {
+      if (prev.month === month && prev.year === year) return prev;
+      return { month, year };
+    });
+  };
+
+  const handleSaveMaasHesapTaslaklari = (payload: {
+    month: number;
+    year: number;
+    rows: Array<{
+      personel: Personel;
+      brutMaas: number;
+      mesaiUcreti: number;
+      toplamHakedis: number;
+      kesintiToplami: number;
+      netOdeme: number;
+    }>;
+  }) => {
+    setMaasOdemeleriWithSync((prev) => {
+      const next = [...prev];
+      for (const row of payload.rows) {
+        const idx = next.findIndex(
+          (m) => m.personelId === row.personel.id && m.ay === payload.month && m.yil === payload.year
+        );
+        if (idx >= 0) {
+          const existing = next[idx];
+          if (existing.odendi) continue;
+          const kesintiToplami = existing.kesintiToplami || row.kesintiToplami || 0;
+          next[idx] = {
+            ...existing,
+            brutMaas: Math.round(row.brutMaas * 100) / 100,
+            mesaiUcreti: Math.round(row.mesaiUcreti * 100) / 100,
+            toplamHakedis: Math.round(row.toplamHakedis * 100) / 100,
+            kesintiToplami,
+            netOdeme: Math.round((row.toplamHakedis - kesintiToplami) * 100) / 100,
+            iban: row.personel.ibanNo || existing.iban || '',
+            bankaAdi: row.personel.bankaAdi || existing.bankaAdi || '',
+            tcNo: row.personel.tcNo || existing.tcNo || '',
+            personelAdSoyad: `${row.personel.ad} ${row.personel.soyad}`,
+          };
+          continue;
+        }
+
+        next.push({
+          id: `mo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          personelId: row.personel.id,
+          personelAdSoyad: `${row.personel.ad} ${row.personel.soyad}`,
+          ay: payload.month,
+          yil: payload.year,
+          brutMaas: Math.round(row.brutMaas * 100) / 100,
+          mesaiUcreti: Math.round(row.mesaiUcreti * 100) / 100,
+          toplamHakedis: Math.round(row.toplamHakedis * 100) / 100,
+          kesintiToplami: Math.round((row.kesintiToplami || 0) * 100) / 100,
+          netOdeme: Math.round(row.netOdeme * 100) / 100,
+          odendi: false,
+          iban: row.personel.ibanNo || '',
+          bankaAdi: row.personel.bankaAdi || '',
+          tcNo: row.personel.tcNo || '',
+          kesintiler: [],
+          notlar: 'Maas hesap ekranindan otomatik taslak olusturuldu.',
+        });
+      }
+      return next;
+    });
+    setActiveTab('maas_odeme');
+    alert(`Maaş hesap taslakları ${payload.month}. ay / ${payload.year} dönemi için Maaş Ödeme ekranına aktarıldı.`);
+  };
+
+  useEffect(() => {
+    if (!personeller.length) return;
+    setYoklamalarWithSync((prev) => {
+      let changed = false;
+      const next: AylikYoklamaMap = { ...prev };
+
+      for (const p of personeller) {
+        const exit = (p.istenCikisTarihi || '').trim();
+        if (!exit) continue;
+        const [exitY, exitM, exitD] = exit.split('-').map(Number);
+        if (!exitY || !exitM || !exitD) continue;
+        const exitVal = exitY * 10000 + exitM * 100 + exitD;
+        const personMap = next[p.id];
+        if (!personMap) continue;
+        const personNext: Record<string, any> = { ...personMap };
+
+        Object.keys(personNext).forEach((key) => {
+          const parts = key.split('-');
+          if (parts.length !== 3) return;
+          const y = Number(parts[0]);
+          const m = Number(parts[1]);
+          const d = Number(parts[2]);
+          if (!y || !m || !d) return;
+          const dayVal = y * 10000 + m * 100 + d;
+          if (dayVal > exitVal && personNext[key]) {
+            delete personNext[key];
+            changed = true;
+          }
+        });
+        next[p.id] = personNext as any;
+      }
+
+      return changed ? next : prev;
+    });
+  }, [personeller]);
+
   const setPersonelIslemGecmisiWithSync = (updater: PersonelIslemGecmisi[] | ((p: PersonelIslemGecmisi[]) => PersonelIslemGecmisi[])) => {
     setPersonelIslemGecmisi(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -1653,6 +1762,10 @@ export default function App() {
                   personeller={personeller} 
                   yoklamalar={yoklamalar} 
                   maasOdemeleri={maasOdemeleri}
+                  initialMonth={payrollPeriod.month}
+                  initialYear={payrollPeriod.year}
+                  onPeriodChange={handlePayrollPeriodChange}
+                  onSaveHesapTaslaklari={handleSaveMaasHesapTaslaklari}
                   onOpenMaasOdeme={() => setActiveTab('maas_odeme')}
                 />
               )}
@@ -2000,6 +2113,9 @@ export default function App() {
                     maasOdemeleri={maasOdemeleri}
                     setMaasOdemeleri={setMaasOdemeleriWithSync}
                     currentUser={currentUser}
+                    initialMonth={payrollPeriod.month}
+                    initialYear={payrollPeriod.year}
+                    onPeriodChange={handlePayrollPeriodChange}
                   />
                 ) : renderAccessDenied()
               )}
