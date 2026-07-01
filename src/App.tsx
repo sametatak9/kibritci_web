@@ -62,6 +62,7 @@ import {
   fetchCollection,
 } from './lib/firebase';
 import { purgeLegacyKampIfNeeded } from './lib/kampYapisi';
+import { probeGeminiApi } from './lib/apiClient';
 import {
   hasSubstantialYoklamaData,
   initialSeedAllowed,
@@ -119,6 +120,7 @@ export default function App() {
   // Realtime Cloud Connection Monitor Status
   const [dbStatus, setDbStatus] = useState<'loading' | 'synced' | 'error' | 'offline'>('loading');
   const [loadingMsg, setLoadingMsg] = useState('Google Cloud Veritabanı bağlantısı kuruluyor...');
+  const [geminiApiAlert, setGeminiApiAlert] = useState<string | null>(null);
 
   // Global State Engine
   const [personeller, setPersoneller] = useState<Personel[]>([]);
@@ -513,6 +515,16 @@ export default function App() {
     }, 35000);
     return () => clearTimeout(failSafe);
   }, [authLoading, currentUser, dbStatus]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setGeminiApiAlert(null);
+      return;
+    }
+    probeGeminiApi().then((r) => {
+      setGeminiApiAlert(r.ok ? null : r.message);
+    });
+  }, [currentUser]);
 
   const switchToOfflineMode = () => {
     if (
@@ -1464,6 +1476,12 @@ export default function App() {
               localStorage.setItem('kibritci_mobile_direct', 'false');
             }}
           />
+        )}
+
+        {geminiApiAlert && !hideSidebarAndTopbar && (
+          <div className="shrink-0 border-b border-amber-500/40 bg-amber-950/90 px-4 py-2 text-[11px] leading-relaxed text-amber-100">
+            <span className="font-bold text-amber-300">Yapay zeka API uyarısı:</span> {geminiApiAlert}
+          </div>
         )}
 
         {/* Dynamic Inner Screens Router wrapper */}
