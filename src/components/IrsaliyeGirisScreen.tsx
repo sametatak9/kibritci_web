@@ -8,6 +8,17 @@ import { compressImage } from '../lib/imageCompress';
 import { fetchApiJson } from '../lib/apiClient';
 import { fileToAiPayload } from '../lib/aiFileUpload';
 import { irsaliyeMatchesRef } from '../lib/documentLinkUtils';
+import { CompareLaunchPayload, CompareFocus } from '../lib/documentCompareTypes';
+import { DocumentCompareWizard } from './DocumentCompareWizard';
+import { CompareDirectiveModal } from './CompareDirectiveModal';
+
+interface PendingPoolCompare {
+  saId?: string;
+  irIds: string[];
+  faturaId?: string;
+  title: string;
+  detail: string;
+}
 
 interface IrsaliyeGirisScreenProps {
   irsaliyeler: Irsaliye[];
@@ -37,6 +48,8 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
   addNotification
 }) => {
   const [activeTab, setActiveTab] = useState<'liste' | 'giris' | 'eslestir'>('liste');
+  const [compareLaunch, setCompareLaunch] = useState<CompareLaunchPayload | null>(null);
+  const [pendingPoolCompare, setPendingPoolCompare] = useState<PendingPoolCompare | null>(null);
   
   // Form states
   const [irNo, setIrNo] = useState("");
@@ -65,9 +78,6 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
   const [suggestedStokUnit, setSuggestedStokUnit] = useState("ADET");
 
   // Comparison Report Modal state
-  const [compareReportResult, setCompareReportResult] = useState<any | null>(null);
-  const [isComparing, setIsComparing] = useState(false);
-
   // Filter for matching
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -305,41 +315,37 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
     alert("İrsaliye başarıyla kaydedildi.");
   };
 
-  const handleMergeAndCompare = async (sa: SatinAlmaTalebi, linkedIrs: Irsaliye[]) => {
-    setIsComparing(true);
-    try {
-      const res = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
-        '/api/compare-3way',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            saTalebi: sa,
-            irsaliyeler: linkedIrs,
-            fatura: { faturaNo: 'ON-DEMAND-MERGE', kalemler: [], toplamTutar: 0, kdvTutar: 0, genelToplam: 0 },
-          }),
-        }
-      );
-      if (!res.success) {
-        throw new Error(res.error || "Yapay zeka karşılaştırması başarısız oldu.");
-      }
-      setCompareReportResult({
-        saId: sa.saId,
-        report: res.data.reportText,
-        status: res.data.status,
-        discrepancies: res.data.discrepancies
-      });
-    } catch (err: any) {
-      alert("Hata: " + err.message);
-    } finally {
-      setIsComparing(false);
-    }
-  };
-
-  const filteredIrsaliyeler = irsaliyeler.filter(ir => 
+  const filteredIrsaliyeler = irsaliyeler.filter(ir =>
     ir.irsaliyeNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
     ir.firma.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const openCompareForIrsaliye = (ir: Irsaliye) => {
+    if (!ir.saId) {
+      alert('Karşılaştırma için önce bu irsaliyeyi bir Satın Alma siparişine bağlayın.');
+      return;
+    }
+    const irIds = irsaliyeler.filter(i => i.saId === ir.saId).map(i => i.id);
+    setPendingPoolCompare({
+      saId: ir.saId,
+      irIds,
+      title: `PO ${ir.saId} · İrsaliye ${ir.irsaliyeNo}`,
+      detail: `${ir.firma} · ${ir.kalemler.length} kalem · aynı PO'ya bağlı ${irIds.length} irsaliye`,
+    });
+  };
+
+  const handlePoolCompareDirective = (focus: CompareFocus[], customInstructions: string) => {
+    if (!pendingPoolCompare) return;
+    setCompareLaunch({
+      saId: pendingPoolCompare.saId,
+      irIds: pendingPoolCompare.irIds,
+      compareFocus: focus,
+      customInstructions,
+      emphasizeFocus: true,
+    });
+    setPendingPoolCompare(null);
+    setActiveTab('eslestir');
+  };
 
   const saLinkedIrs = filteredIrsaliyeler.filter(ir => ir.saId);
   const standaloneIrs = filteredIrsaliyeler.filter(ir => !ir.saId);
@@ -369,13 +375,13 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
             onClick={() => setActiveTab('liste')}
             className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'liste' ? 'bg-[#10b981] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
           >
-            2 · Satın Alma ile Eşleştir
+            2 · Havuz & Bağlama (Bağlı / Bağımsız)
           </button>
           <button
             onClick={() => setActiveTab('eslestir')}
             className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'eslestir' ? 'bg-[#10b981] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
           >
-            3 · SA–İrsaliye AI Karşılaştır
+            3 · Karşılaştırma & Rapor
           </button>
         </div>
       </div>
@@ -657,7 +663,15 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center space-x-3">
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => openCompareForIrsaliye(ir)}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl font-black text-[10px] cursor-pointer"
+                      >
+                        Karşılaştır →
+                      </button>
+                      <div className="flex items-center space-x-3">
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border ${
                         ir.onayDurumu === '1. ONAY TAMAMLANDI'
                           ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
@@ -673,6 +687,7 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                           <input type="file" onChange={(e) => handleSignedFileChange(e, ir.id)} className="hidden" accept="image/*,application/pdf" />
                         </label>
                       )}
+                    </div>
                     </div>
                   </div>
                 ))
@@ -706,8 +721,22 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                       Kalemler: {ir.kalemler.map(x => `${x.urunAdi} (${x.miktar} ${x.birim})`).join(', ')}
                     </div>
 
-                    <div className="mt-1 flex items-center space-x-1 text-xs">
-                      <span className="text-[9px] text-slate-450 font-bold uppercase">Fatura Eşleme:</span>
+                    <div className="mt-1 flex items-center space-x-1 text-xs flex-wrap gap-1">
+                      <span className="text-[9px] text-slate-450 font-bold uppercase">Satın Alma:</span>
+                      <select
+                        value={ir.saId || ""}
+                        onChange={(e) => {
+                          const saId = e.target.value || undefined;
+                          setIrsaliyeler(prev => prev.map(item => item.id === ir.id ? { ...item, saId } : item));
+                        }}
+                        className="text-[10px] font-semibold border rounded px-1 py-0.5 bg-amber-50/50"
+                      >
+                        <option value="">— PO Bağla —</option>
+                        {satinAlmaTalepleri.map(sa => (
+                          <option key={sa.id} value={sa.saId}>{sa.saId}</option>
+                        ))}
+                      </select>
+                      <span className="text-[9px] text-slate-450 font-bold uppercase">Fatura:</span>
                       <select
                         value={ir.faturaNo || ""}
                         onChange={(e) => {
@@ -747,6 +776,15 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                     </div>
 
                     <div className="flex gap-2 border-t pt-2.5 text-[10px]">
+                      {ir.saId && (
+                        <button
+                          type="button"
+                          onClick={() => openCompareForIrsaliye(ir)}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 rounded-lg font-black transition cursor-pointer text-center"
+                        >
+                          Karşılaştır →
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           setEditingIrId(ir.id);
@@ -785,195 +823,25 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
       )}
 
       {activeTab === 'eslestir' && (
-        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs flex-grow flex flex-col overflow-hidden max-h-[calc(100vh-190px)]">
-          <div className="border-b pb-3 mb-4 flex justify-between items-center shrink-0">
-            <h4 className="font-display font-bold text-xs text-slate-800 uppercase tracking-widest">🔄 Satın Alma ve İrsaliye Birleştirme &amp; Eşleştirme</h4>
-            <span className="text-[10px] text-slate-450 font-semibold italic">* Eşleştirme işlemleri yapay zeka yardımıyla birim dönüşümlerine göre doğrulanır.</span>
-          </div>
-
-          <div className="flex-1 overflow-y-auto space-y-6">
-            {satinAlmaTalepleri.map(sa => {
-              const linkedIrs = irsaliyeler.filter(ir => ir.saId === sa.saId);
-              return (
-                <div key={sa.id} className="border border-slate-200 rounded-2xl p-4 bg-slate-50/40 space-y-3.5">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-2.5">
-                    <div>
-                      <span className="font-mono bg-slate-900 text-amber-500 rounded px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider">SIPARİŞ: {sa.saId}</span>
-                      <h5 className="font-bold text-slate-950 mt-1">{sa.cariFirma} · Sipariş Tarihi: {sa.tarih}</h5>
-                    </div>
-                    <button
-                      onClick={() => handleMergeAndCompare(sa, linkedIrs)}
-                      disabled={isComparing}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-xl text-[10px] font-black tracking-wide cursor-pointer transition shadow-md disabled:bg-blue-300"
-                    >
-                      {isComparing ? "Yapay Zeka İnceliyor..." : "Birleştir & Raporla (AI)"}
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 text-xs font-semibold">
-                    <div>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">📦 Sipariş Edilen Kalemler:</p>
-                      <ul className="mt-1 space-y-1 text-slate-700">
-                        {sa.kalemler.map(k => (
-                          <li key={k.id} className="bg-white p-2 rounded-lg border border-slate-100 flex justify-between">
-                            <span>{k.urunAdi}</span>
-                            <span className="font-mono text-slate-900">{k.miktar} {k.birim}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">🚛 Teslim Edilen İrsaliyeler ({linkedIrs.length} adet):</p>
-                      <ul className="mt-1 space-y-1.5">
-                        {linkedIrs.length === 0 ? (
-                          <li className="text-[10px] text-slate-450 italic py-2">Bu siparişe bağlı henüz irsaliye girilmemiştir.</li>
-                        ) : (
-                          linkedIrs.map(ir => (
-                            <li key={ir.id} className="bg-white p-2 rounded-lg border border-slate-100 text-[11px]">
-                              <div className="flex justify-between font-bold text-slate-900">
-                                <span>No: {ir.irsaliyeNo}</span>
-                                <span>{ir.tarih}</span>
-                              </div>
-                              <div className="text-slate-500 font-medium text-[10px] mt-1">
-                                {ir.kalemler.map(x => `${x.urunAdi} (${x.miktar} ${x.birim})`).join(', ')}
-                              </div>
-                            </li>
-                          ))
-                        )}
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* AI Comparison Results output overlay */}
-          {compareReportResult && (
-            <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-              <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-100 flex flex-col h-[550px]">
-                <div className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0">
-                  <h3 className="font-display font-bold text-xs tracking-wider uppercase text-amber-500">✨ YAPAY ZEKA KONSOLİDE TESLİMAT KONTROL RAPORU</h3>
-                  <button 
-                    onClick={() => setCompareReportResult(null)}
-                    className="text-slate-450 hover:text-white font-bold cursor-pointer text-xs"
-                  >
-                    ✖
-                  </button>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto p-6 space-y-5 text-xs text-slate-700 leading-relaxed">
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-150 flex items-center justify-between">
-                    <span className="font-bold">Eşleşen Sipariş: {compareReportResult.saId}</span>
-                    <span className={`px-2.5 py-0.5 rounded-full font-black text-[9px] border uppercase ${
-                      compareReportResult.status === 'SORUNSUZ ONAY' 
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
-                        : 'bg-rose-50 text-rose-800 border-rose-100'
-                    }`}>
-                      {compareReportResult.status}
-                    </span>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">BULGULAR &amp; RAPOR DETAYI</span>
-                    <div className="bg-slate-950 text-slate-350 p-4 rounded-xl font-mono text-[10px] whitespace-pre-wrap leading-relaxed">
-                      {compareReportResult.report}
-                    </div>
-                  </div>
-
-                  {compareReportResult.discrepancies.length > 0 && (
-                    <div className="space-y-1.5 bg-rose-50/50 border border-rose-100 p-3.5 rounded-xl text-rose-900">
-                      <span className="text-[9px] font-bold text-rose-700 uppercase tracking-widest block">⚠️ TESPİT EDİLEN UYUMSUZLUKLAR:</span>
-                      <ul className="list-disc pl-4 space-y-1 text-[11px] font-semibold">
-                        {compareReportResult.discrepancies.map((d: string, idx: number) => (
-                          <li key={idx}>{d}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-
-                <div className="p-4 bg-slate-50 border-t flex justify-end shrink-0">
-                  <button
-                    onClick={() => {
-                      const htmlContent = `
-                        <html>
-                          <head>
-                            <meta charset="utf-8">
-                            <title>Kibritçi İnşaat - Eşleştirme Raporu</title>
-                            <style>
-                              body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #1e293b; line-height: 1.6; }
-                              .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #1e3a8a; padding-bottom: 15px; margin-bottom: 25px; }
-                              .logo { font-weight: 950; font-size: 22px; color: #1e3a8a; display: flex; align-items: center; gap: 8px; }
-                              .logo svg { fill: #1e3a8a; }
-                              .title { text-align: right; }
-                              .title h2 { margin: 0; font-size: 16px; color: #0f172a; }
-                              .title p { margin: 2px 0 0 0; font-size: 10px; font-weight: bold; color: #64748b; }
-                              .status-badge { display: inline-block; padding: 6px 12px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase; margin-bottom: 20px; }
-                              .status-ok { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
-                              .status-err { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
-                              .report-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; font-family: monospace; font-size: 11px; white-space: pre-wrap; margin-bottom: 30px; border-left: 5px solid #1e3a8a; }
-                              .sig-title { margin-top: 40px; font-size: 11px; font-weight: bold; color: #1e3a8a; border-bottom: 2px dashed #cbd5e1; padding-bottom: 5px; text-transform: uppercase; }
-                              .sig-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-top: 15px; }
-                              .sig-col { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; text-align: center; font-size: 10px; min-height: 80px; display: flex; flex-direction: column; justify-content: space-between; background: #fff; }
-                            </style>
-                          </head>
-                          <body>
-                            <div class="header">
-                              <div class="logo">
-                                <svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 2L2 22h20L12 2zm0 3.5L18.5 19H5.5L12 5.5z"/></svg>
-                                KİBRİTÇİ İNŞAAT A.Ş.
-                              </div>
-                              <div class="title">
-                                <h2>PO & İRSALİYE EŞLEŞTİRME RAPORU</h2>
-                                <p>SİPARİŞ NO: ${compareReportResult.saId}</p>
-                              </div>
-                            </div>
-
-                            <div class="status-badge ${compareReportResult.status === 'SORUNSUZ ONAY' ? 'status-ok' : 'status-err'}">
-                              DURUM: ${compareReportResult.status}
-                            </div>
-
-                            <div class="report-box">${compareReportResult.report}</div>
-
-                            <div class="sig-title">🖋️ YETKİLİ ONAY VE İMZA KANALLARI</div>
-                            <div class="sig-grid">
-                              <div class="sig-col">
-                                <span style="font-weight:bold; color:#475569;">Hazırlayan</span>
-                                <span style="font-weight:bold; margin-top:10px;">${currentUser?.email ? currentUser.email.split('@')[0].toUpperCase() : 'ŞANTİYE'}</span>
-                              </div>
-                              <div class="sig-col">
-                                <span style="font-weight:bold; color:#475569;">Muhasebe</span>
-                                <span style="color:#94a3b8; font-style:italic;">İmza Yetkisi</span>
-                              </div>
-                              <div class="sig-col">
-                                <span style="font-weight:bold; color:#475569;">Şantiye Şefi</span>
-                                <span style="color:#10b981; font-weight:850; margin-top:10px;">✓ ONAYLANDI</span>
-                              </div>
-                              <div class="sig-col">
-                                <span style="font-weight:bold; color:#475569;">Proje Müdürü</span>
-                                <span style="color:#10b981; font-weight:850; margin-top:10px;">✓ ONAYLANDI</span>
-                              </div>
-                            </div>
-                          </body>
-                        </html>
-                      `;
-                      const blob = new Blob([htmlContent], { type: 'text/html' });
-                      const url = URL.createObjectURL(blob);
-                      const win = window.open(url, '_blank');
-                      if (win) win.print();
-                    }}
-                    className="bg-slate-900 hover:bg-slate-950 text-white font-bold text-xs py-2.5 px-6 rounded-xl transition cursor-pointer"
-                  >
-                    Raporu PDF Olarak İndir
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-        </div>
+        <DocumentCompareWizard
+          mode="irsaliye"
+          accent="emerald"
+          storageKey="kibritci_irsaliye_comparison_reports"
+          satinAlmaTalepleri={satinAlmaTalepleri}
+          irsaliyeler={irsaliyeler}
+          launchConfig={compareLaunch}
+          onLaunchConsumed={() => setCompareLaunch(null)}
+        />
       )}
+
+      <CompareDirectiveModal
+        open={!!pendingPoolCompare}
+        accent="emerald"
+        evrakTitle={pendingPoolCompare?.title ?? ''}
+        evrakDetail={pendingPoolCompare?.detail}
+        onClose={() => setPendingPoolCompare(null)}
+        onConfirm={handlePoolCompareDirective}
+      />
 
       {/* ➕ CARİ SUGGEST MODAL */}
       {showCariSuggest && (

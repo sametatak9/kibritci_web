@@ -12,6 +12,17 @@ import {
   faturaIsLinked,
   resolveSaIdFromIrsaliyeler,
 } from '../lib/documentLinkUtils';
+import { CompareLaunchPayload, CompareFocus } from '../lib/documentCompareTypes';
+import { DocumentCompareWizard } from './DocumentCompareWizard';
+import { CompareDirectiveModal } from './CompareDirectiveModal';
+
+interface PendingPoolCompare {
+  saId?: string;
+  irIds: string[];
+  faturaId?: string;
+  title: string;
+  detail: string;
+}
 
 interface FaturaGirisScreenProps {
   faturalar: Fatura[];
@@ -41,6 +52,8 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
   addNotification
 }) => {
   const [activeTab, setActiveTab] = useState<'liste' | 'giris' | 'karsilastir'>('liste');
+  const [compareLaunch, setCompareLaunch] = useState<CompareLaunchPayload | null>(null);
+  const [pendingPoolCompare, setPendingPoolCompare] = useState<PendingPoolCompare | null>(null);
   
   // Form states
   const [ftNo, setFtNo] = useState("");
@@ -69,23 +82,8 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
   const [suggestedStokCat, setSuggestedStokCat] = useState("Kaba İnşaat İmalatı");
   const [suggestedStokUnit, setSuggestedStokUnit] = useState("ADET");
 
-  // Multi-Match AI states
-  const [isComparing, setIsComparing] = useState(false);
-  const [compareReportResult, setCompareReportResult] = useState<any | null>(null);
-  
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
-  const [reportSearchTerm, setReportSearchTerm] = useState("");
-  
-  // Combined reports list (persisted in local state / firestore simulation)
-  const [reports, setReports] = useState<any[]>(() => {
-    try {
-      const stored = localStorage.getItem('kibritci_fatura_comparison_reports');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -466,51 +464,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
     if (win) win.print();
   };
 
-  const handleCompareAndReport = async (ft: Fatura) => {
-    setIsComparing(true);
-    try {
-      const linkedIrs = filterLinkedIrsaliyeler(irsaliyeler, ft.bagliIrsaliyeler);
-      const saTalebi = satinAlmaTalepleri.find(sa => sa.saId === (ft.saId || linkedIrs.find(ir => ir.saId)?.saId));
-
-      const res = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
-        '/api/compare-3way',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            saTalebi: saTalebi || { saId: 'BAĞLANTI YOK', kalemler: [] },
-            irsaliyeler: linkedIrs,
-            fatura: ft,
-          }),
-        }
-      );
-      if (!res.success) {
-        throw new Error(res.error || "Yapay zeka karşılaştırması başarısız oldu.");
-      }
-
-      const newReport = {
-        id: `rep_${Date.now()}`,
-        faturaNo: ft.faturaNo,
-        tarih: new Date().toISOString().split('T')[0],
-        cariUnvan: ft.cariUnvan,
-        status: res.data.status,
-        report: res.data.reportText,
-        discrepancies: res.data.discrepancies
-      };
-
-      const updatedReports = [newReport, ...reports];
-      setReports(updatedReports);
-      localStorage.setItem('kibritci_fatura_comparison_reports', JSON.stringify(updatedReports));
-
-      setCompareReportResult(newReport);
-    } catch (err: any) {
-      alert("Hata: " + err.message);
-    } finally {
-      setIsComparing(false);
-    }
-  };
-
-  const filteredFaturalar = faturalar.filter(ft => 
+  const filteredFaturalar = faturalar.filter(ft =>
     ft.faturaNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
     ft.cariUnvan.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -518,10 +472,35 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
   const bagliFaturalar = filteredFaturalar.filter(faturaIsLinked);
   const bagimsizFaturalar = filteredFaturalar.filter(ft => !faturaIsLinked(ft));
 
-  const filteredReports = reports.filter(r => 
-    r.faturaNo.toLowerCase().includes(reportSearchTerm.toLowerCase()) ||
-    r.cariUnvan.toLowerCase().includes(reportSearchTerm.toLowerCase())
-  );
+  const openCompareForFatura = (ft: Fatura) => {
+    const linkedIrs = filterLinkedIrsaliyeler(irsaliyeler, ft.bagliIrsaliyeler);
+    const saId = ft.saId || linkedIrs.find(ir => ir.saId)?.saId;
+    if (!saId && linkedIrs.length === 0) {
+      alert('Karşılaştırma için faturayı en az bir irsaliye veya Satın Alma siparişine bağlayın.');
+      return;
+    }
+    setPendingPoolCompare({
+      saId,
+      irIds: linkedIrs.map(i => i.id),
+      faturaId: ft.id,
+      title: `Fatura ${ft.faturaNo}`,
+      detail: `${ft.cariUnvan} · ${linkedIrs.length} irsaliye${saId ? ` · PO ${saId}` : ''}`,
+    });
+  };
+
+  const handlePoolCompareDirective = (focus: CompareFocus[], customInstructions: string) => {
+    if (!pendingPoolCompare) return;
+    setCompareLaunch({
+      saId: pendingPoolCompare.saId,
+      irIds: pendingPoolCompare.irIds,
+      faturaId: pendingPoolCompare.faturaId,
+      compareFocus: focus,
+      customInstructions,
+      emphasizeFocus: true,
+    });
+    setPendingPoolCompare(null);
+    setActiveTab('karsilastir');
+  };
 
   return (
     <div className="flex-grow p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col font-sans select-none bg-slate-50/50 space-y-6">
@@ -548,13 +527,13 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
             onClick={() => setActiveTab('liste')}
             className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'liste' ? 'bg-[#2563eb] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
           >
-            2 · İrsaliye / SA ile Bağla
+            2 · Havuz & Bağlama (Bağlı / Bağımsız)
           </button>
           <button
             onClick={() => setActiveTab('karsilastir')}
             className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'karsilastir' ? 'bg-[#2563eb] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
           >
-            3 · 3&apos;lü / 2&apos;li AI Karşılaştır
+            3 · Karşılaştırma & Rapor
           </button>
         </div>
       </div>
@@ -845,7 +824,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
                     </div>
                     <div className="flex flex-wrap gap-2 text-[10px]">
                       <button onClick={() => handlePreviewPdf(ft)} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-xl font-bold cursor-pointer">PDF</button>
-                      <button onClick={() => handleCompareAndReport(ft)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl font-black cursor-pointer">AI Karşılaştır</button>
+                      <button onClick={() => openCompareForFatura(ft)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl font-black cursor-pointer">Karşılaştır →</button>
                       <button
                         onClick={() => {
                           setEditingFtId(ft.id);
@@ -884,6 +863,15 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
                       <p className="text-[10px] text-slate-500">{ft.genelToplam.toLocaleString('tr-TR')} TL</p>
                     </div>
                     <div className="flex gap-2">
+                      {faturaIsLinked(ft) && (
+                        <button
+                          type="button"
+                          onClick={() => openCompareForFatura(ft)}
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl font-bold cursor-pointer"
+                        >
+                          Karşılaştır →
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           setEditingFtId(ft.id);
@@ -919,151 +907,26 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
       )}
 
       {activeTab === 'karsilastir' && (
-        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs flex-grow flex flex-col overflow-hidden max-h-[calc(100vh-190px)]">
-          <div className="border-b pb-3 mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 shrink-0">
-            <h4 className="font-display font-bold text-xs text-slate-800 uppercase tracking-widest">🔄 Karşılaştırma Raporları Arşivi</h4>
-            <input 
-              type="text"
-              placeholder="Rapor ara..."
-              value={reportSearchTerm}
-              onChange={(e) => setReportSearchTerm(e.target.value)}
-              className="text-xs border p-2 rounded-xl bg-white w-48 sm:w-64"
-            />
-          </div>
-
-          <div className="flex-grow overflow-y-auto space-y-4">
-            {filteredReports.length === 0 ? (
-              <p className="text-xs text-slate-400 italic text-center py-6">Kayıtlı rapor bulunmuyor.</p>
-            ) : (
-              filteredReports.map(rep => (
-                <div key={rep.id} className="border border-slate-200 rounded-2xl p-4 bg-slate-50/30 space-y-3 text-xs text-slate-700">
-                  <div className="flex justify-between items-center border-b pb-2.5">
-                    <div>
-                      <h5 className="font-bold text-slate-950">Fatura: {rep.faturaNo} · Firma: {rep.cariUnvan}</h5>
-                      <p className="text-[10px] text-slate-450 font-mono mt-0.5">Rapor Tarihi: {rep.tarih}</p>
-                    </div>
-                    <span className={`px-2.5 py-0.5 rounded-full font-black text-[9px] border uppercase ${
-                      rep.status === 'SORUNSUZ ONAY' 
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
-                        : 'bg-rose-50 text-rose-800 border-rose-100'
-                    }`}>
-                      {rep.status}
-                    </span>
-                  </div>
-
-                  <div className="bg-slate-950 text-slate-350 p-4 rounded-xl font-mono text-[10px] whitespace-pre-wrap leading-relaxed">
-                    {rep.report}
-                  </div>
-
-                  {rep.discrepancies?.length > 0 && (
-                    <div className="space-y-1 bg-rose-50/50 p-3 rounded-lg text-rose-900 border border-rose-100">
-                      <span className="text-[9px] font-bold text-rose-700 uppercase tracking-widest block">Uyumsuzluklar:</span>
-                      <ul className="list-disc pl-4 space-y-0.5">
-                        {rep.discrepancies.map((d: string, idx: number) => (
-                          <li key={idx}>{d}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  <div className="flex gap-2 justify-end pt-1">
-                    <button
-                      onClick={() => {
-                        const htmlContent = `
-                          <html>
-                            <head>
-                              <meta charset="utf-8">
-                              <title>Kibritçi İnşaat - Karşılaştırma Raporu</title>
-                              <style>
-                                body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #1e293b; line-height: 1.6; }
-                                .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #1e3a8a; padding-bottom: 15px; margin-bottom: 25px; }
-                                .logo { font-weight: 950; font-size: 22px; color: #1e3a8a; display: flex; align-items: center; gap: 8px; }
-                                .logo svg { fill: #1e3a8a; }
-                                .title { text-align: right; }
-                                .title h2 { margin: 0; font-size: 16px; color: #0f172a; }
-                                .title p { margin: 2px 0 0 0; font-size: 10px; font-weight: bold; color: #64748b; }
-                                .status-badge { display: inline-block; padding: 6px 12px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase; margin-bottom: 20px; }
-                                .status-ok { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
-                                .status-err { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
-                                .report-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; font-family: monospace; font-size: 11px; white-space: pre-wrap; margin-bottom: 30px; border-left: 5px solid #1e3a8a; }
-                                .sig-title { margin-top: 40px; font-size: 11px; font-weight: bold; color: #1e3a8a; border-bottom: 2px dashed #cbd5e1; padding-bottom: 5px; text-transform: uppercase; }
-                                .sig-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 15px; }
-                                .sig-col { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center; font-size: 10px; min-height: 80px; display: flex; flex-direction: column; justify-content: space-between; background: #fff; }
-                                .sig-title-block { font-weight: bold; color: #475569; border-bottom: 1px solid #f1f5f9; padding-bottom: 4px; }
-                              </style>
-                            </head>
-                            <body>
-                              <div class="header">
-                                <div class="logo">
-                                  <svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 2L2 22h20L12 2zm0 3.5L18.5 19H5.5L12 5.5z"/></svg>
-                                  KİBRİTÇİ İNŞAAT A.Ş.
-                                </div>
-                                <div class="title">
-                                  <h2>3 YÖNLÜ DENETİM & KARŞILAŞTIRMA RAPORU</h2>
-                                  <p>FATURA NO: ${rep.faturaNo}</p>
-                                </div>
-                              </div>
-
-                              <div class="status-badge ${rep.status === 'SORUNSUZ ONAY' ? 'status-ok' : 'status-err'}">
-                                DURUM: ${rep.status}
-                              </div>
-
-                              <div class="report-box">${rep.report}</div>
-
-                              <div class="sig-title">🖋️ YETKİLİ ONAY VE İMZA KANALLARI</div>
-                              <div class="sig-grid">
-                                <div class="sig-col">
-                                  <span class="sig-title-block">Hazırlayan</span>
-                                  <span style="font-weight:bold; margin-top:10px;">ŞANTİYE</span>
-                                </div>
-                                <div class="sig-col">
-                                  <span class="sig-title-block">Muhasebe</span>
-                                  <span style="color:#94a3b8; font-style:italic;">İmza Yetkisi</span>
-                                </div>
-                                <div class="sig-col">
-                                  <span class="sig-title-block">Satın Alma Md.</span>
-                                  <span style="color:#94a3b8; font-style:italic;">İmza Yetkisi</span>
-                                </div>
-                                <div class="sig-col">
-                                  <span class="sig-title-block">Şantiye Şefi</span>
-                                  <span style="color:#10b981; font-weight:850; margin-top:10px;">✓ ONAYLANDI</span>
-                                </div>
-                                <div class="sig-col">
-                                  <span class="sig-title-block">Proje Müdürü</span>
-                                  <span style="color:#10b981; font-weight:850; margin-top:10px;">✓ ONAYLANDI</span>
-                                </div>
-                              </div>
-                            </body>
-                          </html>
-                        `;
-                        const win = window.open("", "_blank");
-                        win?.document.write(htmlContent);
-                        win?.print();
-                      }}
-                      className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2 rounded-xl font-bold transition cursor-pointer"
-                    >
-                      Raporu PDF Olarak İndir
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (window.confirm("Bu raporu silmek istediğinize emin misiniz?")) {
-                          const updated = reports.filter(r => r.id !== rep.id);
-                          setReports(updated);
-                          localStorage.setItem('kibritci_fatura_comparison_reports', JSON.stringify(updated));
-                        }
-                      }}
-                      className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-4 py-2 rounded-xl font-bold transition cursor-pointer"
-                    >
-                      Raporu Sil
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-        </div>
+        <DocumentCompareWizard
+          mode="fatura"
+          accent="blue"
+          storageKey="kibritci_fatura_comparison_reports"
+          satinAlmaTalepleri={satinAlmaTalepleri}
+          irsaliyeler={irsaliyeler}
+          faturalar={faturalar}
+          launchConfig={compareLaunch}
+          onLaunchConsumed={() => setCompareLaunch(null)}
+        />
       )}
+
+      <CompareDirectiveModal
+        open={!!pendingPoolCompare}
+        accent="blue"
+        evrakTitle={pendingPoolCompare?.title ?? ''}
+        evrakDetail={pendingPoolCompare?.detail}
+        onClose={() => setPendingPoolCompare(null)}
+        onConfirm={handlePoolCompareDirective}
+      />
 
       {/* ➕ CARİ SUGGEST MODAL */}
       {showCariSuggest && (

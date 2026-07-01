@@ -676,7 +676,7 @@ Provide the output strictly conforming to the response schema.
   });
   app2.post("/api/compare-3way", async (req, res) => {
     try {
-      const { saTalebi, irsaliyeler, fatura } = req.body;
+      const { saTalebi, irsaliyeler, fatura, compareFocus, customInstructions, userEdits } = req.body;
       if (!fatura) {
         return res.status(400).json({ error: "Missing fatura data in request body" });
       }
@@ -694,6 +694,14 @@ Provide the output strictly conforming to the response schema.
         },
         required: ["status", "discrepancies", "reportText"]
       };
+      const focusList = Array.isArray(compareFocus) && compareFocus.length ? compareFocus.join(", ") : "miktar, \xFCr\xFCn ad\u0131, birim, firma, fiyat, kg-ton d\xF6n\xFC\u015F\xFCm\xFC";
+      const editsBlock = Array.isArray(userEdits) && userEdits.length ? `
+
+KULLANICI KAR\u015EILA\u015ETIRMA \xD6NCES\u0130 MANUEL D\xDCZENLEMELER (raporun EN ALTINDA ayr\u0131 b\xF6l\xFCmde listele):
+${JSON.stringify(userEdits, null, 2)}` : "";
+      const customBlock = customInstructions?.trim() ? `
+
+KULLANICI TAL\u0130MATI (\xF6ncelikli): ${customInstructions.trim()}` : "";
       const promptText = `
 You are an expert construction auditor and accountant.
 Perform a strict 3-way match audit between:
@@ -705,6 +713,10 @@ ${JSON.stringify(irsaliyeler || "No waybills linked", null, 2)}
 
 3. Gelen Fatura (Invoice):
 ${JSON.stringify(fatura, null, 2)}
+
+KULLANICI SADECE \u015EUNLARI KAR\u015EILA\u015ETIRMANI \u0130ST\u0130YOR: ${focusList}
+${customBlock}
+${editsBlock}
 
 Perform a comparison of:
 - Item names / categories (normalize differences like typo variants, e.g. "Stablize" vs "Stabilize", "M\u0131c\u0131r", "Grovak", "Ta\u015F Tozu").
@@ -724,6 +736,7 @@ Audit Rules:
 - If all quantities and items match perfectly (meaning what was ordered matches what was delivered, which in turn matches what was billed), return status as "SORUNSUZ ONAY".
 - If there is any discrepancy (e.g., delivered quantity is different from billed quantity, or items on invoice don't exist in waybills or PO), list them in 'discrepancies' and return status as "SORUNLU".
 - Write a beautifully styled Turkish markdown report summary in 'reportText'. Explain details clearly to a site manager.
+- If userEdits were provided, add a final section "Kullan\u0131c\u0131 D\xFCzenlemeleri" listing each change.
 
 Provide the response strictly conforming to the requested schema.
 `;
