@@ -1,0 +1,10 @@
+{
+  "projectId": "kibritci-erp",
+  "appId": "FIREBASE_CONSOLE_WEB_APP_ID",
+  "apiKey": "FIREBASE_CONSOLE_API_KEY",
+  "authDomain": "kibritci-erp.firebaseapp.com",
+  "storageBucket": "kibritci-erp.firebasestorage.app",
+  "messagingSenderId": "FIREBASE_CONSOLE_SENDER_ID",
+  "measurementId": "",
+  "firestoreDatabaseId": ""
+}

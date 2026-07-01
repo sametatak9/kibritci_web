@@ -13,3 +13,20 @@ services:
         value: production
       - key: GEMINI_API_KEY
         sync: false
+      # kibritci-erp Firebase — Console > Project settings > Web app değerleri
+      # Tanımlanmazsa firebase-applet-config.json (learned-spark) kullanılır.
+      - key: VITE_FIREBASE_PROJECT_ID
+        sync: false
+      - key: VITE_FIREBASE_API_KEY
+        sync: false
+      - key: VITE_FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: VITE_FIREBASE_STORAGE_BUCKET
+        sync: false
+      - key: VITE_FIREBASE_MESSAGING_SENDER_ID
+        sync: false
+      - key: VITE_FIREBASE_APP_ID
+        sync: false
+      # kibritci-erp (default) DB için boş bırakın veya tanımlamayın
+      - key: VITE_FIREBASE_FIRESTORE_DATABASE_ID
+        sync: false

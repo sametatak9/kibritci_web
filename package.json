@@ -13,7 +13,13 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test:gemini": "tsx scratch/test_gemini.ts"
+    "test:gemini": "tsx scratch/test_gemini.ts",
+    "migrate:firestore:audit": "node scripts/migrate-firestore.mjs --audit-only",
+    "migrate:firestore:dry-run": "node scripts/migrate-firestore.mjs --dry-run",
+    "migrate:firestore": "node scripts/migrate-firestore.mjs --execute",
+    "migrate:firestore:verify": "node scripts/migrate-firestore.mjs --verify-only",
+    "migrate:ensure-config": "node scripts/ensure-target-config.mjs",
+    "migrate:full": "node scripts/run-full-migration.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.10.0",
