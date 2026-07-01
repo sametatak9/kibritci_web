@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Tent, Plus, Trash2, Camera, Check, RefreshCw, Eye, 
   Search, UserPlus, ClipboardList, Package, Layers, MapPin, Sparkles, CheckCircle, Clock, X, ArrowRight, ShieldCheck, DoorOpen, LogOut, Image as ImageIcon, MessageSquare, Calendar
@@ -94,7 +94,73 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   // ─────────────────────────────────────────────────────────────
   // 👥 2. YERLEŞİM (CHECK-IN / OUT) STATE
   // ─────────────────────────────────────────────────────────────
+  const [placementYerleskeId, setPlacementYerleskeId] = useState('');
+  const [placementKatId, setPlacementKatId] = useState('');
   const [selectedRoomId, setSelectedRoomId] = useState('');
+
+  const placementYerleskeOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const room of kampOdalari) {
+      const key = room.yerleskeId || room.yerleskeAdi;
+      if (key) seen.set(key, room.yerleskeAdi);
+    }
+    return [...seen.entries()]
+      .map(([id, ad]) => ({ id, ad }))
+      .sort((a, b) => a.ad.localeCompare(b.ad, 'tr'));
+  }, [kampOdalari]);
+
+  const placementKatOptions = useMemo(() => {
+    if (!placementYerleskeId) return [] as KampKat[];
+    const yerleske = placementYerleskeOptions.find(y => y.id === placementYerleskeId);
+    const yerleskeAd = yerleske?.ad || '';
+    const yerleskeRecord = yerleskeler.find(y => y.id === placementYerleskeId || y.ad === yerleskeAd);
+
+    if (yerleskeRecord) {
+      const kats = katsForYerleske(katlar, yerleskeRecord.id).filter(k =>
+        kampOdalari.some(r =>
+          (r.yerleskeId === yerleskeRecord.id || r.yerleskeAdi === yerleskeRecord.ad) &&
+          (r.katId === k.id || r.kogusNo === k.ad)
+        )
+      );
+      if (kats.length > 0) {
+        return kats.sort((a, b) => a.sira - b.sira || a.ad.localeCompare(b.ad, 'tr'));
+      }
+    }
+
+    const seen = new Map<string, string>();
+    kampOdalari
+      .filter(r => r.yerleskeId === placementYerleskeId || r.yerleskeAdi === yerleskeAd)
+      .forEach(r => {
+        const key = r.katId || r.kogusNo;
+        if (key) seen.set(key, r.kogusNo);
+      });
+
+    return [...seen.entries()]
+      .map(([id, ad]) => ({
+        id,
+        ad,
+        yerleskeId: placementYerleskeId,
+        yerleskeAdi: yerleskeAd,
+        sira: 0,
+        olusturmaTarihi: '',
+      }))
+      .sort((a, b) => a.ad.localeCompare(b.ad, 'tr'));
+  }, [placementYerleskeId, kampOdalari, katlar, yerleskeler, placementYerleskeOptions]);
+
+  const placementOdaOptions = useMemo(() => {
+    if (!placementYerleskeId || !placementKatId) return [];
+    const yerleske = placementYerleskeOptions.find(y => y.id === placementYerleskeId);
+    const kat = placementKatOptions.find(k => k.id === placementKatId);
+    if (!yerleske || !kat) return [];
+
+    return kampOdalari
+      .filter(r => {
+        const yerleskeMatch = r.yerleskeId === placementYerleskeId || r.yerleskeAdi === yerleske.ad;
+        const katMatch = r.katId === placementKatId || r.kogusNo === kat.ad;
+        return yerleskeMatch && katMatch;
+      })
+      .sort((a, b) => a.odaNo.localeCompare(b.odaNo, 'tr', { numeric: true }));
+  }, [placementYerleskeId, placementKatId, kampOdalari, placementYerleskeOptions, placementKatOptions]);
   const [placementType, setPlacementType] = useState<'DB' | 'MANUAL'>('DB');
   const [selectedPersonelId, setSelectedPersonelId] = useState('');
   const [manualPersonelIsim, setManualPersonelIsim] = useState('');
@@ -362,8 +428,8 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   // ─────────────────────────────────────────────────────────────
   const handlePlacementSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedRoomId) {
-      showStatus('error', 'Lütfen yerleşim yapılacak odayı seçin!');
+    if (!placementYerleskeId || !placementKatId || !selectedRoomId) {
+      showStatus('error', 'Lütfen sırayla yerleşke, kat ve oda seçin!');
       return;
     }
 
@@ -822,25 +888,56 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
             </div>
 
             <form onSubmit={handlePlacementSubmit} className="space-y-4">
-              {/* Target Room Selection */}
+              {/* Target Room Selection — yerleşke → kat → oda */}
               <div className="space-y-1.5">
                 <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Yerleşim Yapılacak Oda *</label>
-                <select
-                  required
-                  value={selectedRoomId}
-                  onChange={(e) => setSelectedRoomId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none"
-                >
-                  <option value="">-- Oda Seçiniz --</option>
-                  {kampOdalari.map(r => {
-                    const currentCount = kampKayitlari.filter(k => (k.odaId === r.id || k.roomId === r.id) && k.durum === 'AKTIF').length;
-                    return (
-                      <option key={r.id} value={r.id}>
-                        {r.yerleskeAdi} - {r.kogusNo} - Oda: {r.odaNo} ({currentCount}/{r.kapasite} Yatak)
-                      </option>
-                    );
-                  })}
-                </select>
+                <div className="grid grid-cols-1 gap-1.5">
+                  <select
+                    value={placementYerleskeId}
+                    onChange={(e) => {
+                      setPlacementYerleskeId(e.target.value);
+                      setPlacementKatId('');
+                      setSelectedRoomId('');
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 text-[10px] font-bold text-slate-800 rounded-lg px-2.5 py-2 outline-none"
+                  >
+                    <option value="">1. Yerleşke seçin</option>
+                    {placementYerleskeOptions.map(y => (
+                      <option key={y.id} value={y.id}>{y.ad}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={placementKatId}
+                    disabled={!placementYerleskeId}
+                    onChange={(e) => {
+                      setPlacementKatId(e.target.value);
+                      setSelectedRoomId('');
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 text-[10px] font-bold text-slate-800 rounded-lg px-2.5 py-2 outline-none disabled:opacity-50"
+                  >
+                    <option value="">2. Kat seçin</option>
+                    {placementKatOptions.map(k => (
+                      <option key={k.id} value={k.id}>{k.ad}</option>
+                    ))}
+                  </select>
+                  <select
+                    required
+                    value={selectedRoomId}
+                    disabled={!placementKatId}
+                    onChange={(e) => setSelectedRoomId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 text-[10px] font-bold text-slate-800 rounded-lg px-2.5 py-2 outline-none disabled:opacity-50"
+                  >
+                    <option value="">3. Oda seçin</option>
+                    {placementOdaOptions.map(r => {
+                      const currentCount = kampKayitlari.filter(k => (k.odaId === r.id || k.roomId === r.id) && k.durum === 'AKTIF').length;
+                      return (
+                        <option key={r.id} value={r.id}>
+                          Oda {r.odaNo} ({currentCount}/{r.kapasite} yatak)
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
               </div>
 
               {/* Source Type Toggle */}
