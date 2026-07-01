@@ -1946,7 +1946,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                       onClick={handleCreateCampus}
                       className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg cursor-pointer transition shadow active:scale-95 text-xs"
                     >
-                      + Yeni Yerleşke Ekle
+                      + Yeni Yerleşke Ekle ve Kaydet
                     </button>
 
                     <div className="pt-2 border-t mt-2">
@@ -2012,7 +2012,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                       onClick={handleCreateFloor}
                       className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg cursor-pointer transition shadow active:scale-95 text-xs"
                     >
-                      + Bu Yerleşkeye Kat/Blok Ekle
+                      + Bu Yerleşkeye Kat/Blok Ekle ve Kaydet
                     </button>
 
                     <div className="pt-2 border-t mt-2">
@@ -2119,7 +2119,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                       disabled={(campusFloors[selectedYerleske] || []).length === 0}
                       className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-lg cursor-pointer transition shadow active:scale-95 disabled:bg-slate-350 disabled:cursor-not-allowed"
                     >
-                      + Yeni Koğuş Odası Aç
+                      + Yeni Koğuş Odası Aç ve Kaydet
                     </button>
                   </div>
                 )}

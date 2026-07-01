@@ -114,14 +114,22 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
 
   const placementYerleskeOptions = useMemo(() => {
     const seen = new Map<string, string>();
+
+    // Primary source: centrally managed campus definitions
+    for (const y of yerleskeler) {
+      if (y.id && y.ad) seen.set(y.id, y.ad);
+    }
+
+    // Fallback source: legacy rooms that may not have normalized structure
     for (const room of kampOdalari) {
       const key = room.yerleskeId || room.yerleskeAdi;
       if (key) seen.set(key, room.yerleskeAdi);
     }
+
     return [...seen.entries()]
       .map(([id, ad]) => ({ id, ad }))
       .sort((a, b) => a.ad.localeCompare(b.ad, 'tr'));
-  }, [kampOdalari]);
+  }, [yerleskeler, kampOdalari]);
 
   const placementKatOptions = useMemo(() => {
     if (!placementYerleskeId) return [] as KampKat[];
@@ -130,12 +138,9 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
     const yerleskeRecord = yerleskeler.find(y => y.id === placementYerleskeId || y.ad === yerleskeAd);
 
     if (yerleskeRecord) {
-      const kats = katsForYerleske(katlar, yerleskeRecord.id).filter(k =>
-        kampOdalari.some(r =>
-          (r.yerleskeId === yerleskeRecord.id || r.yerleskeAdi === yerleskeRecord.ad) &&
-          (r.katId === k.id || r.kogusNo === k.ad)
-        )
-      );
+      // Do not require an existing room for a floor to be selectable.
+      // This keeps Kampçı and Kamp Yönetimi in sync as soon as floor is created.
+      const kats = katsForYerleske(katlar, yerleskeRecord.id);
       if (kats.length > 0) {
         return kats.sort((a, b) => a.sira - b.sira || a.ad.localeCompare(b.ad, 'tr'));
       }
@@ -588,24 +593,6 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   };
 
   const handleSelectRoomForPlacement = (roomId: string) => {
-    const room = kampOdalari.find((r) => r.id === roomId);
-    if (room) {
-      const yerleskeOpt = placementYerleskeOptions.find(
-        (y) => y.id === room.yerleskeId || y.ad === room.yerleskeAdi
-      );
-      const nextYerleskeId = yerleskeOpt?.id || room.yerleskeId || '';
-      setPlacementYerleskeId(nextYerleskeId);
-
-      const nextKatId =
-        room.katId ||
-        katlar.find(
-          (k) =>
-            (k.yerleskeId === nextYerleskeId || k.yerleskeAdi === room.yerleskeAdi) &&
-            k.ad === room.kogusNo
-        )?.id ||
-        '';
-      setPlacementKatId(nextKatId);
-    }
     setSelectedRoomId(roomId);
     setActiveSubTab('placement');
     showStatus('success', 'Oda seçildi. Şimdi personeli seçerek kampa yerleştirebilirsiniz.');
@@ -1356,8 +1343,8 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                     className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 p-3 rounded-xl"
                   />
                 </div>
-                <button type="submit" disabled={loadingYapı} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-3 rounded-xl cursor-pointer">
-                  {loadingYapı ? 'Kaydediliyor...' : '1. Yerleşkeyi Oluştur'}
+                    <button type="submit" disabled={loadingYapı} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-3 rounded-xl cursor-pointer">
+                      {loadingYapı ? 'Kaydediliyor...' : '1. Yerleşkeyi Oluştur ve Kaydet'}
                 </button>
               </form>
             )}
@@ -1388,7 +1375,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                       className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 p-3 rounded-xl"
                     />
                     <button type="submit" disabled={loadingYapı} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-3 rounded-xl cursor-pointer">
-                      {loadingYapı ? 'Kaydediliyor...' : '2. Kat Ekle'}
+                      {loadingYapı ? 'Kaydediliyor...' : '2. Kat Ekle ve Kaydet'}
                     </button>
                   </>
                 )}
