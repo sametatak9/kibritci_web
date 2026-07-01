@@ -588,6 +588,24 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   };
 
   const handleSelectRoomForPlacement = (roomId: string) => {
+    const room = kampOdalari.find((r) => r.id === roomId);
+    if (room) {
+      const yerleskeOpt = placementYerleskeOptions.find(
+        (y) => y.id === room.yerleskeId || y.ad === room.yerleskeAdi
+      );
+      const nextYerleskeId = yerleskeOpt?.id || room.yerleskeId || '';
+      setPlacementYerleskeId(nextYerleskeId);
+
+      const nextKatId =
+        room.katId ||
+        katlar.find(
+          (k) =>
+            (k.yerleskeId === nextYerleskeId || k.yerleskeAdi === room.yerleskeAdi) &&
+            k.ad === room.kogusNo
+        )?.id ||
+        '';
+      setPlacementKatId(nextKatId);
+    }
     setSelectedRoomId(roomId);
     setActiveSubTab('placement');
     showStatus('success', 'Oda seçildi. Şimdi personeli seçerek kampa yerleştirebilirsiniz.');

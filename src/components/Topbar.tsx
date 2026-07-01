@@ -126,10 +126,10 @@ export const Topbar: React.FC<TopbarProps> = ({
     .toUpperCase();
 
   return (
-    <header className="h-[56px] bg-slate-900 border-b border-slate-800 px-4 md:px-6 flex items-center justify-between shrink-0 font-sans select-none relative text-slate-100 shadow-md">
+    <header className="h-[56px] bg-slate-900 border-b border-slate-800 px-3 md:px-6 flex items-center justify-between shrink-0 font-sans select-none relative text-slate-100 shadow-md gap-2">
       
       {/* Left Area: Sidebar Toggle & Section Title */}
-      <div className="flex items-center space-x-3 text-[13px]">
+      <div className="flex items-center space-x-2 md:space-x-3 text-[13px] min-w-0">
         <button 
           onClick={onToggleSidebar}
           className="lg:hidden p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition duration-150 cursor-pointer shadow-xs"
@@ -139,13 +139,13 @@ export const Topbar: React.FC<TopbarProps> = ({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 min-w-0">
           <div className="flex items-center space-x-1.5">
             <KibritciLogo size="sm" showText={false} className="h-5" />
             <span className="text-slate-200 font-black tracking-wider text-[11px] uppercase">KİBRİTÇİ ERP</span>
           </div>
           <span className="text-slate-650 hidden sm:inline">/</span>
-          <span className="font-bold text-white tracking-wide text-xs">
+          <span className="font-bold text-white tracking-wide text-xs truncate max-w-[160px] sm:max-w-[260px] md:max-w-[340px]">
             {formatTabName(currentTab)}
           </span>
         </div>
@@ -181,29 +181,29 @@ export const Topbar: React.FC<TopbarProps> = ({
       </div>
 
       {/* Right Area: Status Indicator, User Profile Pill, Mobile Mode & Notifications */}
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center space-x-2 md:space-x-4 min-w-0">
         
         {/* Live system status indicator badge */}
         {dbStatus === 'loading' && (
-          <div className="hidden md:flex items-center bg-blue-500/10 text-blue-400 border border-blue-500/20 py-1 px-3 rounded-full text-[10px] font-bold space-x-1.5 animate-pulse">
+          <div className="hidden sm:flex items-center bg-blue-500/10 text-blue-400 border border-blue-500/20 py-1 px-3 rounded-full text-[10px] font-bold space-x-1.5 animate-pulse">
             <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-ping" />
             <span>Bulut Eşitleniyor...</span>
           </div>
         )}
         {dbStatus === 'synced' && (
-          <div className="hidden md:flex items-center bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 py-1 px-3 rounded-full text-[10px] font-bold space-x-1.5">
+          <div className="hidden sm:flex items-center bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 py-1 px-3 rounded-full text-[10px] font-bold space-x-1.5">
             <CheckCircle size={11} className="stroke-[3] text-emerald-450" />
             <span>Realtime Aktif</span>
           </div>
         )}
         {dbStatus === 'error' && (
-          <div className="hidden md:flex items-center bg-rose-500/10 text-rose-400 border border-rose-500/20 py-1 px-3 rounded-full text-[10px] font-bold space-x-1.5">
+          <div className="hidden sm:flex items-center bg-rose-500/10 text-rose-400 border border-rose-500/20 py-1 px-3 rounded-full text-[10px] font-bold space-x-1.5">
             <span className="w-1.5 h-1.5 bg-rose-500 rounded-full" />
             <span>Bağlantı Kesildi</span>
           </div>
         )}
         {dbStatus === 'offline' && (
-          <div className="hidden md:flex items-center bg-slate-800 text-slate-400 border border-slate-700 py-1 px-3 rounded-full text-[10px] font-bold space-x-1.5">
+          <div className="hidden sm:flex items-center bg-slate-800 text-slate-400 border border-slate-700 py-1 px-3 rounded-full text-[10px] font-bold space-x-1.5">
             <span className="w-1.5 h-1.5 bg-slate-500 rounded-full" />
             <span>Çevrimdışı Mod</span>
           </div>
@@ -211,7 +211,7 @@ export const Topbar: React.FC<TopbarProps> = ({
 
         {/* User Card with Avatar Initials */}
         {currentUser && (
-          <div className="flex items-center space-x-2 bg-slate-800/50 border border-slate-800 hover:bg-slate-800/80 transition duration-150 rounded-xl p-1 pr-3 max-w-[190px] md:max-w-none">
+          <div className="flex items-center space-x-2 bg-slate-800/50 border border-slate-800 hover:bg-slate-800/80 transition duration-150 rounded-xl p-1 pr-2 md:pr-3 max-w-[140px] sm:max-w-[190px] md:max-w-none">
             <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-amber-500 to-orange-600 text-white font-black text-[10px] flex items-center justify-center shadow-sm shrink-0">
               {userInitials}
             </div>
@@ -222,7 +222,7 @@ export const Topbar: React.FC<TopbarProps> = ({
         )}
 
         {/* Global Action Icons (Search simulation / Notifications) */}
-        <div className="flex items-center space-x-3.5 border-l border-slate-850 pl-3.5 relative" ref={dropdownRef}>
+        <div className="flex items-center space-x-2 md:space-x-3.5 border-l border-slate-850 pl-2 md:pl-3.5 relative shrink-0" ref={dropdownRef}>
           
           {/* Mobil Görünüm (Must remain exactly as is) */}
           {onToggleMobileMode && (
@@ -251,7 +251,7 @@ export const Topbar: React.FC<TopbarProps> = ({
 
           {/* Notifications Dropdown Panel */}
           {showDropdown && (
-            <div className="absolute right-0 top-9 w-80 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl z-50 text-xs text-slate-300 p-3.5 space-y-3 flex flex-col max-h-96 animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className="absolute right-0 top-9 w-[min(20rem,calc(100vw-1rem))] bg-slate-900 border border-slate-800 rounded-2xl shadow-xl z-50 text-xs text-slate-300 p-3.5 space-y-3 flex flex-col max-h-96 animate-in fade-in slide-in-from-top-2 duration-150">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2 shrink-0">
                 <span className="font-extrabold text-white flex items-center space-x-1.5">
                   <span>🔔</span>

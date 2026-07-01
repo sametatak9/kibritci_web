@@ -362,7 +362,7 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
   }, [taseronKesintiRaporlari, raporFiltreFirma, raporFiltreAy, raporFiltreYil]);
 
   return (
-    <div className="flex-grow p-6 space-y-6 overflow-y-auto h-full font-sans bg-slate-50">
+    <div className="flex-grow p-3 sm:p-4 lg:p-6 space-y-4 lg:space-y-6 overflow-y-auto h-full font-sans bg-slate-50">
       {/* Header */}
       <div className="bg-slate-900 text-white p-5 rounded-3xl shadow-md border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="space-y-1">
@@ -372,7 +372,7 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
           </h2>
           <p className="text-[10px] text-slate-400">JCB, KATO, Kiralık ve diğer iş makinelerinin günlük faaliyet kayıtları, taşeron kesinti raporları ve arşiv.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full md:w-auto">
           <button onClick={() => setActiveSubTab('faaliyet')} className={`px-4 py-2 rounded-xl text-xs font-bold transition ${activeSubTab === 'faaliyet' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Faaliyet Girişi</button>
           <button onClick={() => setActiveSubTab('rapor')} className={`px-4 py-2 rounded-xl text-xs font-bold transition ${activeSubTab === 'rapor' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Kesinti Raporları</button>
           <button onClick={() => setActiveSubTab('arsiv')} className={`px-4 py-2 rounded-xl text-xs font-bold transition ${activeSubTab === 'arsiv' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Arşiv</button>
@@ -541,15 +541,15 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
 
           {/* List */}
           <div className="xl:col-span-2 bg-white border rounded-2xl p-5 shadow-sm space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+            <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 pb-3">
               <h3 className="font-display font-black text-slate-800 text-xs uppercase tracking-wider flex items-center gap-2">
                 <FileText size={14} className="text-amber-500" />
                 Faaliyet Kayıtları
               </h3>
-              <div className="flex gap-2">
-                <div className="relative">
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                <div className="relative w-full sm:w-auto">
                   <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Ara..." className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:border-amber-500 w-40" />
+                  <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Ara..." className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:border-amber-500 w-full sm:w-40" />
                 </div>
                 <button onClick={handleGunRaporla} className="bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1">
                   <Printer size={12} /> Gün Raporu
@@ -620,7 +620,7 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
               </select>
             </div>
             <p className="text-[10px] text-slate-500 w-full">
-              Saat ücreti yönetici tarafından <strong>Taşeron Kesintileri</strong> sekmesinde girilir. Burada sadece saat özeti gönderilir.
+              Saat ücreti yönetici tarafından <strong>Taşeron Yönetimi</strong> sekmesinde girilir. Burada sadece saat özeti gönderilir.
             </p>
             <button onClick={() => setShowKesintiModal(true)} className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs py-2.5 px-5 rounded-xl transition flex items-center gap-1.5">
               <FileText size={14} /> Kesinti Raporu Oluştur
@@ -645,10 +645,10 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
           )}
 
           <div className="bg-white border rounded-2xl p-5 shadow-sm">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-3 mb-4">
+            <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 pb-3 mb-4">
               <h3 className="font-display font-black text-slate-800 text-xs uppercase tracking-wider">Oluşturulan Kesinti Raporları</h3>
-              <div className="flex gap-2">
-                <input type="text" value={raporFiltreFirma} onChange={e => setRaporFiltreFirma(e.target.value)} placeholder="Firma ara..." className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-amber-500 w-32" />
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                <input type="text" value={raporFiltreFirma} onChange={e => setRaporFiltreFirma(e.target.value)} placeholder="Firma ara..." className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-amber-500 w-full sm:w-32" />
                 <select value={raporFiltreAy} onChange={e => setRaporFiltreAy(Number(e.target.value))} className="bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-amber-500">
                   {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{String(i + 1).padStart(2, '0')}</option>)}
                 </select>
@@ -706,7 +706,7 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
       {/* ARŞİV */}
       {activeSubTab === 'arsiv' && (
         <div className="bg-white border rounded-2xl p-5 shadow-sm space-y-4">
-          <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+          <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 pb-3">
             <h3 className="font-display font-black text-slate-800 text-xs uppercase tracking-wider">Operatör Faaliyet Arşivi</h3>
             <div className="flex gap-2">
               <select value={raporFiltreAy} onChange={e => setRaporFiltreAy(Number(e.target.value))} className="bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-amber-500">

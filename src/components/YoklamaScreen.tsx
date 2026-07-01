@@ -429,7 +429,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   };
 
   return (
-    <div className="flex-grow p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col font-sans gap-6 select-none bg-slate-50/50">
+    <div className="flex-grow p-3 sm:p-4 lg:p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col font-sans gap-4 lg:gap-6 select-none bg-slate-50/50">
       
       {/* Filters Row Card */}
       <div className="bg-white border border-[#e2e8f0] rounded-xl p-4 shadow-sm flex flex-col gap-4 shrink-0">
@@ -544,7 +544,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
             </button>
 
             {/* Search */}
-            <div className="relative w-40 ml-2">
+            <div className="relative w-full sm:w-40 sm:ml-2">
               <span className="absolute inset-y-0 left-0 pl-2 flex items-center text-slate-400">
                 <span className="text-[10px]">🔍</span>
               </span>
@@ -999,8 +999,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
           <div className="bg-white rounded-2xl w-full max-w-7xl shadow-2xl flex flex-col overflow-hidden my-4">
             
             {/* Modal Actions Header */}
-            <div className="bg-slate-900 text-white p-4 flex justify-between items-center px-6 shrink-0 print:hidden">
-              <div className="flex items-center space-x-4">
+            <div className="bg-slate-900 text-white p-4 flex flex-wrap justify-between items-center gap-3 px-6 shrink-0 print:hidden">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xl">🖨️</span>
                 <h3 className="font-display font-bold text-sm">
                   {printModal === 'BOS' ? 'Boş Şablon Şantiye Puantaj Cetveli Baskı Önizleme' : printModal === 'GUNLUK_BOS' ? 'Boş Günlük Şablon Şantiye Puantaj Cetveli' : 'Dolu Güncel Şantiye Puantaj Cetveli Raporu'}
@@ -1020,7 +1020,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                   </button>
                 </div>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={handlePrint}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow cursor-pointer"
@@ -1070,7 +1070,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
             </div>
 
             {/* Document Body (Strictly styled like A4 Landscape paper) */}
-            <div className="flex-1 overflow-auto bg-white p-12 text-slate-900 printable-document font-sans">
+            <div className="flex-1 overflow-auto bg-white p-4 sm:p-8 lg:p-12 text-slate-900 printable-document font-sans">
               
               {/* Report Header Wrapper */}
               <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-center">
@@ -1514,7 +1514,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                 onClick={() => setShowBireyselModal(false)}
                 className="bg-slate-900 hover:bg-slate-950 text-white font-bold text-xs py-2.5 px-6 rounded-xl transition duration-150 cursor-pointer shadow-md"
               >
-                Kapat &amp; Uygula
+                Kapat
               </button>
             </div>
 

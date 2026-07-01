@@ -267,9 +267,9 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({ currentUser })
         </div>
       </div>
 
-      <div className="no-print flex-1 flex gap-4 overflow-hidden min-h-0">
+      <div className="no-print flex-1 flex flex-col lg:flex-row gap-4 min-h-0">
         {/* Sol: Ay seç & yükle */}
-        <div className="w-[300px] shrink-0 bg-white border border-slate-200 rounded-2xl flex flex-col overflow-hidden shadow-sm">
+        <div className="w-full lg:w-[300px] lg:shrink-0 bg-white border border-slate-200 rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
           <div className="bg-amber-600 text-white p-4">
             <span className="text-[10px] font-bold uppercase tracking-wider text-amber-100">Albüm Seçimi</span>
             <h3 className="font-bold text-sm flex items-center gap-2 mt-1">
@@ -405,7 +405,7 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({ currentUser })
         </div>
 
         {/* Orta: Foto grid */}
-        <div className="flex-1 bg-white border border-slate-200 rounded-2xl flex flex-col overflow-hidden shadow-sm min-w-0">
+        <div className="flex-1 min-w-0 bg-white border border-slate-200 rounded-2xl flex flex-col overflow-hidden shadow-sm">
           <div className="p-3 border-b flex items-center justify-between">
             <span className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-2">
               <Layers size={14} />
@@ -481,7 +481,7 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({ currentUser })
         </div>
 
         {/* Sağ: Metadata edit */}
-        <div className="w-[280px] shrink-0 bg-white border border-slate-200 rounded-2xl flex flex-col overflow-hidden shadow-sm">
+        <div className="w-full lg:w-[280px] lg:shrink-0 bg-white border border-slate-200 rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
           <div className="p-4 border-b bg-slate-50">
             <h3 className="font-bold text-xs text-slate-800 uppercase tracking-wider">Foto Bilgisi</h3>
             <p className="text-[10px] text-slate-500 mt-0.5">Dergide görünecek başlık ve açıklama</p>
@@ -612,14 +612,14 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({ currentUser })
       {/* Preview modal */}
       {showPreview && (
         <div className="no-print fixed inset-0 z-50 bg-slate-950/80 flex flex-col">
-          <div className="flex items-center justify-between p-4 bg-slate-900 text-white shrink-0">
+          <div className="flex flex-wrap items-center justify-between gap-2 p-4 bg-slate-900 text-white shrink-0">
             <div className="flex items-center gap-3">
               <Eye size={18} />
               <span className="font-bold text-sm">
                 {viewMode === 'dergi' ? 'Dergi Önizleme' : 'Kolaj Önizleme'} — {albumBaslik(yil, ay)}
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => setViewMode('dergi')}

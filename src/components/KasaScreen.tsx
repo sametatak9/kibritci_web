@@ -209,7 +209,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
   });
 
   return (
-    <div className="flex-grow p-6 h-full flex flex-col font-sans gap-6 select-none bg-slate-50">
+    <div className="flex-grow p-3 sm:p-4 lg:p-6 h-full flex flex-col font-sans gap-4 lg:gap-6 select-none bg-slate-50">
       
       {/* Dynamic Module Header Section aligned with style */}
       <div className="flex items-center justify-between shrink-0 border-b pb-4 border-slate-200">
@@ -254,10 +254,10 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
       </div>
 
       {/* Main split dashboard view */}
-      <div className="flex-1 flex gap-6 overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
         
         {/* Left side Form creator */}
-        <div className="w-[380px] shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
+        <div className="w-full lg:w-[380px] lg:shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
           
           {/* Header styling exactly matching screenshot blue/amber block */}
           <div className={`p-4 shrink-0 shadow-sm flex items-center justify-between text-white ${editingId ? 'bg-amber-600' : 'bg-[#2563EB]'}`}>
@@ -433,10 +433,10 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
         </div>
 
         {/* Right side Table history */}
-        <div className="flex-1 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
+        <div className="flex-1 min-w-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
           
           {/* Header toolbar exactly matching screenshot style */}
-          <div className="px-5 py-4 border-b border-[#e2e8f0] bg-slate-50/50 flex items-center justify-between gap-4 shrink-0">
+          <div className="px-5 py-4 border-b border-[#e2e8f0] bg-slate-50/50 flex flex-wrap items-center justify-between gap-3 shrink-0">
             <div className="flex items-center space-x-2">
               <h4 className="font-bold text-sm text-slate-800 uppercase tracking-widest">Kasa Hareketleri Defteri</h4>
             </div>
@@ -492,10 +492,10 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
           </div>
 
           {/* List area customized exactly as visual table with custom headers */}
-          <div className="flex-1 overflow-y-auto flex flex-col min-w-0">
+          <div className="flex-1 overflow-auto flex flex-col min-w-0">
             
             {/* Headers row exactly mimicking table headers */}
-            <div className="grid grid-cols-5 bg-slate-100/80 border-b border-slate-250 text-[10px] font-bold text-slate-500 uppercase tracking-wider py-2 px-4 shadow-3xs shrink-0 select-none">
+            <div className="grid grid-cols-5 min-w-[720px] bg-slate-100/80 border-b border-slate-250 text-[10px] font-bold text-slate-500 uppercase tracking-wider py-2 px-4 shadow-3xs shrink-0 select-none">
               <div>Tarih</div>
               <div>Tip</div>
               <div>Tutar</div>
@@ -512,7 +512,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
                 {filteredHareketler.map(kh => (
                   <div 
                     key={kh.id} 
-                    className={`grid grid-cols-5 items-center py-2.5 px-4 text-xs transition cursor-default group ${
+                    className={`grid grid-cols-5 min-w-[720px] items-center py-2.5 px-4 text-xs transition cursor-default group ${
                       editingId === kh.id ? 'bg-amber-50' : 'hover:bg-amber-500/5'
                     }`}
                   >
@@ -589,7 +589,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
           <div className="p-3 border-t bg-slate-50/50 flex justify-end shrink-0 select-none">
             <button 
               onClick={() => setShowWeeklyReportModal(true)}
-              className="bg-amber-500 hover:bg-amber-600 border border-amber-600 text-white text-[11px] font-bold py-1.5 px-3 rounded-lg flex items-center space-x-1.5 transition cursor-pointer"
+              className="bg-amber-500 hover:bg-amber-600 border border-amber-600 text-white text-[11px] font-bold py-1.5 px-3 rounded-lg flex items-center space-x-1.5 transition cursor-pointer text-left"
             >
               <Printer size={12} />
               <span>📊 Haftalık Kasa PDF Raporu Al</span>
@@ -645,8 +645,8 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
           <div className="bg-white rounded-2xl w-full max-w-7xl shadow-2xl flex flex-col overflow-hidden my-4 text-slate-900">
             
             {/* Modal Actions Header */}
-            <div className="bg-slate-900 text-white p-4 flex justify-between items-center px-6 shrink-0 print:hidden">
-              <div className="flex items-center space-x-2">
+            <div className="bg-slate-900 text-white p-4 flex flex-wrap justify-between items-center gap-3 px-6 shrink-0 print:hidden">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xl">💰</span>
                 <h3 className="font-display font-bold text-sm">
                   Haftalık Kasa Gelir / Gider Defteri Baskı Önizlemesi
@@ -699,7 +699,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
             </div>
 
             {/* Document Body Area suitable for landscape rendering */}
-            <div className="flex-1 overflow-auto bg-white p-12 text-slate-900 kasa-report-printable-area font-sans">
+            <div className="flex-1 overflow-auto bg-white p-4 sm:p-8 lg:p-12 text-slate-900 kasa-report-printable-area font-sans">
               
               {/* Report Corporate Header */}
               <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-center">

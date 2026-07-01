@@ -1493,7 +1493,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-100 text-slate-800 font-sans">
+    <div className="flex h-screen w-screen overflow-x-hidden bg-slate-100 text-slate-800 font-sans">
       
       {/* Sidebar - responsive custom figma menu */}
       {!hideSidebarAndTopbar && (
@@ -1547,7 +1547,7 @@ export default function App() {
         )}
 
         {/* Dynamic Inner Screens Router wrapper */}
-        <main className="flex-1 overflow-y-auto relative bg-slate-50">
+        <main className="flex-1 overflow-auto relative bg-slate-50">
           
           {(() => {
             const matchedUser = findKullaniciByEmail(kullanicilar, currentUser?.email);
@@ -1642,7 +1642,7 @@ export default function App() {
                 <MaasScreen 
                   personeller={personeller} 
                   yoklamalar={yoklamalar} 
-                  setYoklamalar={setYoklamalarWithSync}
+                  onOpenMaasOdeme={() => setActiveTab('maas_odeme')}
                 />
               )}
 
@@ -1964,27 +1964,31 @@ export default function App() {
               )}
 
               {activeTab === "operator" && (
-                <OperatorScreen
-                  araclar={araclar}
-                  personeller={personeller}
-                  cariKartlar={cariKartlar}
-                  operatorFaaliyetleri={operatorFaaliyetleri}
-                  setOperatorFaaliyetleri={setOperatorFaaliyetleriWithSync}
-                  taseronKesintiRaporlari={taseronKesintiRaporlari}
-                  setTaseronKesintiRaporlari={setTaseronKesintiRaporlariWithSync}
-                  currentUser={currentUser}
-                  addNotification={addNotification}
-                />
+                isYonetici ? (
+                  <OperatorScreen
+                    araclar={araclar}
+                    personeller={personeller}
+                    cariKartlar={cariKartlar}
+                    operatorFaaliyetleri={operatorFaaliyetleri}
+                    setOperatorFaaliyetleri={setOperatorFaaliyetleriWithSync}
+                    taseronKesintiRaporlari={taseronKesintiRaporlari}
+                    setTaseronKesintiRaporlari={setTaseronKesintiRaporlariWithSync}
+                    currentUser={currentUser}
+                    addNotification={addNotification}
+                  />
+                ) : renderAccessDenied()
               )}
 
               {activeTab === "maas_odeme" && (
-                <MaasOdeScreen
-                  personeller={personeller}
-                  yoklamalar={yoklamalar}
-                  maasOdemeleri={maasOdemeleri}
-                  setMaasOdemeleri={setMaasOdemeleriWithSync}
-                  currentUser={currentUser}
-                />
+                isYonetici ? (
+                  <MaasOdeScreen
+                    personeller={personeller}
+                    yoklamalar={yoklamalar}
+                    maasOdemeleri={maasOdemeleri}
+                    setMaasOdemeleri={setMaasOdemeleriWithSync}
+                    currentUser={currentUser}
+                  />
+                ) : renderAccessDenied()
               )}
             </>
           )}

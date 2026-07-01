@@ -8,13 +8,13 @@ import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 interface MaasScreenProps {
   personeller: Personel[];
   yoklamalar: AylikYoklamaMap;
+  onOpenMaasOdeme?: () => void;
 }
 
-export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar }) => {
+export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar, onOpenMaasOdeme }) => {
   const [selectedMonth, setSelectedMonth] = useState(6);
   const [selectedYear, setSelectedYear] = useState(2026);
   const [avansCuts, setAvansCuts] = useState<{ [personelId: string]: number }>({});
-  const [paidStatus, setPaidStatus] = useState<{ [personelId: string]: boolean }>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -30,13 +30,6 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
     setAvansCuts(prev => ({
       ...prev,
       [personelId]: amount
-    }));
-  };
-
-  const togglePaidStatus = (personelId: string) => {
-    setPaidStatus(prev => ({
-      ...prev,
-      [personelId]: !prev[personelId]
     }));
   };
 
@@ -130,7 +123,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
   const [showMaasRaporu, setShowMaasRaporu] = useState(false);
 
   return (
-    <div className="flex-grow p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col font-sans gap-6 select-none bg-slate-50/50">
+    <div className="flex-grow p-3 sm:p-4 lg:p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col font-sans gap-4 lg:gap-6 select-none bg-slate-50/50">
       
       {/* Top Total Statistics Odometer Center */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 shrink-0">
@@ -163,15 +156,15 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
             </h4>
           </div>
 
-          <div className="flex items-center space-x-3 text-xs">
-            <div className="relative">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <div className="relative w-full sm:w-auto">
               <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input 
                 type="text" 
                 value={searchQuery} 
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Personel ara..."
-                className="pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 outline-none focus:border-amber-500 w-44"
+                className="pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 outline-none focus:border-amber-500 w-full sm:w-44"
               />
             </div>
             <button
@@ -180,7 +173,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
             >
               <span>📄 Maaş Raporu</span>
             </button>
-            <span>Dönem:</span>
+            <span className="font-semibold text-slate-600">Dönem:</span>
             <select 
               value={selectedMonth} 
               onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
@@ -190,30 +183,33 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
                 <option key={m} value={m}>{m}. Ay</option>
               ))}
             </select>
+            {onOpenMaasOdeme && (
+              <button
+                type="button"
+                onClick={onOpenMaasOdeme}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] px-3 py-1.5 rounded-lg transition shadow-sm cursor-pointer"
+              >
+                Maaş Ödeme Ekranına Git
+              </button>
+            )}
           </div>
         </div>
 
         {/* Scrollable list items panel */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {calculatedSalaries.map(({ personel, hakedisDays, totalOvertimeHours, totalBaseHakedis, totalOvertimeHakedis, cutAmount, netPayable, geldiGun, izinliGun, pazarGun, tatilGun, yokGun, raporluGun, hourlyWage, hourlyOvertimeRate }) => {
-            const isPaid = paidStatus[personel.id] || false;
-            
             return (
               <div 
                 key={personel.id}
-                className={`border rounded-xl p-4 flex flex-col gap-4 transition duration-200 ${
-                  isPaid 
-                    ? 'bg-emerald-50/20 border-emerald-500/30' 
-                    : 'bg-white border-slate-150 hover:border-slate-200'
-                }`}
+                className="border rounded-xl p-4 flex flex-col gap-4 transition duration-200 bg-white border-slate-150 hover:border-slate-200"
               >
                 
                 {/* Top row: Avatar, Identity, Stats, Payment */}
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                   {/* Personel Avatar and Identity */}
-                  <div className="flex items-center gap-3 w-64 shrink-0">
+                  <div className="flex items-center gap-3 w-full md:w-64 md:shrink-0 min-w-0">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs ring-1 ${
-                      isPaid ? 'bg-emerald-100 text-emerald-800 ring-emerald-200' : 'bg-slate-100 text-slate-500 ring-slate-200'
+                      'bg-slate-100 text-slate-500 ring-slate-200'
                     }`}>
                       {personel.ad[0]}{personel.soyad[0]}
                     </div>
@@ -228,7 +224,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
                   </div>
 
                   {/* Days and Overtime analysis stats */}
-                  <div className="flex items-center space-x-6 shrink-0">
+                  <div className="flex flex-wrap items-center gap-4 md:gap-6 md:shrink-0">
                     <div className="text-center">
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block">Hakediş Gün</span>
                       <span className="text-xs font-semibold text-slate-800">{hakedisDays} Gün</span>
@@ -240,7 +236,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
                   </div>
 
                   {/* Hakediş breakdown components */}
-                  <div className="flex items-center space-x-6 text-[11px] font-medium text-slate-500 shrink-0">
+                  <div className="flex flex-wrap items-center gap-4 md:gap-6 text-[11px] font-medium text-slate-500 md:shrink-0">
                     <div>
                       <span>Maaş:</span> <span className="font-bold text-slate-800">₺{totalBaseHakedis.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</span>
                     </div>
@@ -262,7 +258,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
                   </div>
 
                   {/* Banking details */}
-                  <div className="flex items-center space-x-2 border-l pl-4 border-slate-100 shrink-0">
+                  <div className="flex items-center space-x-2 md:border-l md:pl-4 border-slate-100 md:shrink-0">
                     <div className="text-right">
                       <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Banka / IBAN</p>
                       <p className="text-[10px] font-semibold text-slate-700 font-mono truncate w-36">
@@ -286,24 +282,22 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
                   </div>
 
                   {/* NET PAYABLE AMOUNT & TOGGLE STATUS */}
-                  <div className="flex items-center gap-4 shrink-0 justify-between md:justify-start">
+                  <div className="flex items-center gap-3 md:gap-4 md:shrink-0 justify-between md:justify-start w-full md:w-auto">
                     <div className="text-right">
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block">Ödenecek Net Tutar</span>
                       <span className="text-xs font-bold text-emerald-600 font-mono">
                         ₺{netPayable.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
-
-                    <button
-                      onClick={() => togglePaidStatus(personel.id)}
-                      className={`px-3 py-1.5 rounded-xl font-bold text-[10px] uppercase cursor-pointer transition active:scale-95 shadow-sm border ${
-                        isPaid 
-                          ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border-emerald-200' 
-                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                      }`}
-                    >
-                      {isPaid ? "✖ Ödeme Kaldır" : "💵 Ödeme Tamam"}
-                    </button>
+                    {onOpenMaasOdeme && (
+                      <button
+                        type="button"
+                        onClick={onOpenMaasOdeme}
+                        className="px-3 py-1.5 rounded-xl font-bold text-[10px] uppercase cursor-pointer transition active:scale-95 shadow-sm border bg-blue-100 hover:bg-blue-200 text-blue-800 border-blue-200"
+                      >
+                        💳 Ödemeyi Maaş Ödeme'den Yap
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -362,8 +356,8 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
           <div className="bg-white rounded-2xl w-full max-w-7xl shadow-2xl flex flex-col overflow-hidden my-4">
             
             {/* Modal Actions Header */}
-            <div className="bg-slate-900 text-white p-4 flex justify-between items-center px-6 shrink-0 print:hidden">
-              <div className="flex items-center space-x-2">
+            <div className="bg-slate-900 text-white p-4 flex flex-wrap justify-between items-center gap-3 px-6 shrink-0 print:hidden">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xl">💰</span>
                 <h3 className="font-display font-bold text-sm">
                   KİBRİTÇİ İNŞAAT ŞANTİYESİ AYI MAAŞ RAPORU
@@ -418,7 +412,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar 
             </div>
 
             {/* Document Body */}
-            <div className="flex-1 overflow-auto bg-white p-12 text-slate-900 printable-document font-sans">
+            <div className="flex-1 overflow-auto bg-white p-4 sm:p-8 lg:p-12 text-slate-900 printable-document font-sans">
               
               {/* Report Header */}
               <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-center">

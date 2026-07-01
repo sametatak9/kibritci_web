@@ -88,6 +88,14 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
   });
 
   const handleOdemeYap = (personel: Personel) => {
+    if (!validateTC(personel.tcNo || '')) {
+      alert('Ödeme için geçerli TC kimlik numarası gerekli.');
+      return;
+    }
+    if (!validateIBAN(personel.ibanNo || '')) {
+      alert('Ödeme için geçerli IBAN gerekli.');
+      return;
+    }
     const hesap = hesaplaMaas(personel);
     const mevcutOdeme = maasOdemeleri.find(m => m.personelId === personel.id && m.ay === selectedAy && m.yil === selectedYil);
 
@@ -262,7 +270,7 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
   };
 
   return (
-    <div className="flex-grow p-6 space-y-6 overflow-y-auto h-full font-sans bg-slate-50">
+    <div className="flex-grow p-3 sm:p-4 lg:p-6 space-y-4 lg:space-y-6 overflow-y-auto h-full font-sans bg-slate-50">
       {/* Header */}
       <div className="bg-slate-900 text-white p-5 rounded-3xl shadow-md border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="space-y-1">
@@ -321,7 +329,7 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
             value={searchQuery} 
             onChange={e => setSearchQuery(e.target.value)} 
             placeholder="Personel ara (ad, soyad, TC, görev)..." 
-            className="pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:border-amber-500 w-72" 
+            className="pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:border-amber-500 w-full sm:w-72" 
           />
         </div>
         <div className="flex gap-2">
@@ -368,7 +376,7 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
                         {odeme?.odendi ? 'ÖDENDİ' : 'BEKLİYOR'}
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 text-[10px]">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 text-[10px]">
                       <div className="bg-slate-50 rounded-lg p-2">
                         <span className="text-slate-400 block">Brüt Maaş</span>
                         <span className="font-bold text-slate-800">{hesap.brut.toFixed(2)} TL</span>
@@ -472,7 +480,7 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
               <input type="number" value={kesintiTutar} onChange={e => setKesintiTutar(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-amber-500" />
             </div>
             <div className="flex gap-2">
-              <button onClick={handleKesintiEkle} className="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs py-2.5 rounded-xl transition">Ekle</button>
+              <button onClick={handleKesintiEkle} disabled={!kesintiTutar} className="flex-1 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed text-slate-950 font-black text-xs py-2.5 rounded-xl transition">Ekle</button>
               <button onClick={() => setKesintiModal(null)} className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs py-2.5 rounded-xl transition">İptal</button>
             </div>
           </div>

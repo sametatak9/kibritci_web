@@ -1300,10 +1300,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           </div>
 
           {aracSubTab === 'liste' && (
-            <div className="flex-1 flex gap-6 overflow-hidden">
+            <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
               
               {/* Creator form drawer */}
-              <div className="w-[380px] shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
+              <div className="w-full lg:w-[380px] lg:shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
                 <div className="bg-[#2563EB] text-slate-100 p-4 shrink-0">
                   <span className="text-[10px] font-bold tracking-widest text-blue-200 uppercase">Zimmet &amp; Envanter</span>
                   <h3 className="font-display font-semibold text-sm">🚛 Demirbaş / Araç Ekle</h3>
@@ -1583,10 +1583,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           {aracSubTab === 'km_takip' && (
             
             /* morning/evening km log tracker */
-            <div className="flex-1 flex gap-6 overflow-hidden">
+            <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
               
               {/* Mileage logger submission form */}
-              <div className="w-[380px] shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
+              <div className="w-full lg:w-[380px] lg:shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
                 <div className="bg-amber-500 text-slate-100 p-4 shrink-0">
                   <span className="text-[10px] font-bold tracking-widest text-amber-100 uppercase uppercase">Günlük Sefer Takibi</span>
                   <h3 className="font-display font-semibold text-sm">⏱️ Sabah - Akşam Odomat Kaydı</h3>
@@ -1876,10 +1876,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           🏕️ VIEW: KAMP YÖNETİMİ
           ───────────────────────────────────────────────────────────── */}
       {currentSubTab === 'kamp' && (
-        <div className="flex-1 flex gap-6 overflow-hidden">
+        <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
           
           {/* Left panel: Room Creation Form & Global stats */}
-          <div className="w-[360px] shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
+          <div className="w-full lg:w-[360px] lg:shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
             <div className="bg-[#2563EB] text-slate-100 p-4 shrink-0">
               <span className="text-[10px] font-bold tracking-widest text-blue-200 uppercase">Kamp &amp; Barınma</span>
               <h3 className="font-display font-semibold text-sm">🏕️ Oda Açma &amp; Kamp Yönetimi</h3>
@@ -2287,7 +2287,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           {/* 🏕️ RESIDENT ASSIGNMENT MODAL POPUP */}
           {selectedRoomToAssign && (
             <div className="fixed inset-0 bg-slate-950/60 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-2xl w-[440px] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+              <div className="bg-white rounded-2xl w-full max-w-[440px] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
                 <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
                   <h4 className="font-display font-semibold text-sm">Odaya Personel Atama</h4>
                   <button onClick={resetAssignModal} className="text-slate-400 hover:text-white font-bold cursor-pointer">✖</button>
@@ -2415,10 +2415,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           🏗️ VIEW: SAHA FAALİYETLERİ
           ───────────────────────────────────────────────────────────── */}
       {currentSubTab === 'saha' && (
-        <div className="flex-1 flex gap-6 overflow-hidden">
+        <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
           
           {/* Creator drawer */}
-          <div className="w-[380px] shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
+          <div className="w-full lg:w-[380px] lg:shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
             <div className="bg-[#2563EB] text-slate-100 p-4 shrink-0">
               <span className="text-[10px] font-bold tracking-widest text-blue-200 uppercase">Saha Görev Kaydı</span>
               <h3 className="font-display font-semibold text-sm">🏗️ Günlük İmalat Girişi</h3>
@@ -2696,10 +2696,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           📜 VIEW: HAZIR TUTANAKLAR
           ───────────────────────────────────────────────────────────── */}
       {currentSubTab === 'tutanak' && (
-        <div className="flex-1 flex gap-6 overflow-hidden">
+        <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
           
           {/* Creator drawer */}
-          <div className="w-[380px] shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
+          <div className="w-full lg:w-[380px] lg:shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
             <div className="bg-[#2563EB] text-slate-100 p-4 shrink-0">
               <span className="text-[10px] font-bold tracking-widest text-blue-200 uppercase">Hukuki Belgeler</span>
               <h3 className="font-display font-semibold text-sm">📜 Yeni Tutanak Oluştur</h3>
@@ -3048,11 +3048,11 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
             </button>
           </div>
 
-          <div className="flex-1 flex gap-6 overflow-hidden">
+          <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
             {csTab === 'cari' ? (
               <>
                 {/* Form left */}
-                <div className="w-[380px] shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
+                <div className="w-full lg:w-[380px] lg:shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
                   <div className="bg-[#f59e0b] text-[#0f172a] p-4 shrink-0">
                     <span className="text-[10px] font-bold tracking-widest uppercase">Finansal Rehber</span>
                     <h3 className="font-display font-semibold text-sm">🏢 Yeni Cari Firma Kaydet</h3>
@@ -3257,7 +3257,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
             ) : (
               <>
                 {/* Form left */}
-                <div className="w-[380px] shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
+                <div className="w-full lg:w-[380px] lg:shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
                   <div className="bg-[#2563eb] text-[#ffffff] p-4 shrink-0">
                     <span className="text-[10px] font-bold tracking-widest uppercase">Malzeme Envanteri</span>
                     <h3 className="font-display font-semibold text-sm">📦 Yeni Stok Kaydı Ekle</h3>
@@ -3396,10 +3396,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           📧 VIEW: E-POSTA MERKEZİ
           ───────────────────────────────────────────────────────────── */}
       {currentSubTab === 'eposta' && (
-        <div className="flex-1 flex gap-6 overflow-hidden">
+        <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
           
           {/* Creator drawer */}
-          <div className="w-[380px] shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
+          <div className="w-full lg:w-[380px] lg:shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
             <div className="bg-[#2563EB] text-slate-100 p-4 shrink-0">
               <span className="text-[10px] font-bold tracking-widest text-blue-200 uppercase">Haberleşme Havuzu</span>
               <h3 className="font-display font-semibold text-sm">📧 Rapor E-Postala</h3>
@@ -3929,7 +3929,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
         const vehicleLogs = aracKmLoglari.filter(log => log.plaka.toUpperCase() === selectedAracForPdf.plaka.toUpperCase());
         return (
           <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-3xl w-[750px] max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
+            <div className="bg-white rounded-3xl w-full max-w-[750px] max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
               
               {/* Header */}
               <div className="bg-slate-900 text-white p-5 flex justify-between items-center shrink-0">
@@ -4175,7 +4175,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       {/* 🏕️ KAMP BOŞ & DOLU KROKİ MODAL POPUP */}
       {showKampKrokiModal && (
         <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl w-[850px] max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-[850px] max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
             
             {/* Header */}
             <div className="bg-slate-900 text-white p-5 flex justify-between items-center shrink-0">

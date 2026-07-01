@@ -334,7 +334,7 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
   );
 
   return (
-    <div className="flex-grow p-6 min-h-[calc(100vh-52px)] overflow-y-auto font-sans bg-slate-50/50 space-y-5">
+    <div className="flex-grow p-3 sm:p-4 lg:p-6 min-h-[calc(100vh-52px)] overflow-y-auto font-sans bg-slate-50/50 space-y-4 lg:space-y-5">
       <div className="bg-slate-900 text-white rounded-3xl p-5 flex flex-wrap gap-4 justify-between items-start">
         <div>
           <span className="text-[10px] text-amber-400 font-bold uppercase tracking-widest">Taşeron Yönetimi</span>
@@ -383,7 +383,7 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
             key={key}
             type="button"
             onClick={() => setSubPage(key)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer ${subPage === key ? 'bg-amber-500 text-slate-950' : 'bg-white border text-slate-700 hover:bg-slate-50'}`}
+            className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold cursor-pointer ${subPage === key ? 'bg-amber-500 text-slate-950' : 'bg-white border text-slate-700 hover:bg-slate-50'}`}
           >
             <Icon size={14} /> {label}
           </button>

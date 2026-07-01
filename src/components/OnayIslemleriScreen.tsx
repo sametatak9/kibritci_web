@@ -1770,7 +1770,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                       </div>
 
                       {/* Control buttons */}
-                      <div className="flex items-center gap-2 flex-wrap md:flex-nowrap">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <button
                           onClick={() => handleGenerateSignedPdf('request', doc)}
                           className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1"
@@ -1851,7 +1851,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                       </div>
 
                       {/* Control buttons */}
-                      <div className="flex items-center gap-2 flex-wrap md:flex-nowrap">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <button
                           onClick={() => handleGenerateSignedPdf('waybill', doc)}
                           className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1"
@@ -1932,7 +1932,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                       </div>
 
                       {/* Control buttons */}
-                      <div className="flex items-center gap-2 flex-wrap md:flex-nowrap">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <button
                           onClick={() => handleGenerateSignedPdf('invoice', doc)}
                           className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1"
@@ -2966,7 +2966,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
       {/* Detail Modal */}
       {activeDocForDetail && (
         <div className="fixed inset-0 bg-slate-950/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-[600px] overflow-hidden shadow-2xl animate-in scale-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-[600px] overflow-hidden shadow-2xl animate-in scale-in duration-200">
             
             <div className="bg-slate-950 p-4 flex justify-between items-center border-b border-slate-800">
               <h4 className="font-display font-medium text-xs text-white uppercase tracking-wider">📋 Detaylı Belge İncelemesi</h4>
