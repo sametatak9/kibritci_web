@@ -276,9 +276,12 @@ export async function createManualUser(input: {
       soyad: input.soyad,
       tcNo: input.tcNo || '00000000000',
       kaynak: 'admin_manuel',
-      hataSebebi: 'quota',
+      hataSebebi: err instanceof Error ? err.message : 'quota',
     });
-    await queueSignupFallback(bekleyen);
+    const queueResult = await queueSignupFallback(bekleyen);
+    if (queueResult === 'local') {
+      console.warn('Bekleyen kayıt yalnızca tarayıcıda — sunucu/API erişimini kontrol edin.');
+    }
     return { user: kullaniciPayload, queued: true };
   }
 }

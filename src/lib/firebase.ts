@@ -48,7 +48,7 @@ export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
  * Recursively cleans an object by replacing undefined values with null
  * to prevent Firestore synchronization crashes.
  */
-function cleanUndefined(obj: any): any {
+export function cleanUndefined(obj: any): any {
   if (obj === undefined) return null;
   if (obj === null) return null;
 
@@ -105,7 +105,7 @@ export async function saveSignupDocuments(
  */
 export async function removeDocument(collectionName: string, id: string): Promise<void> {
   const docRef = doc(db, collectionName, id);
-  await deleteDoc(docRef);
+  await withTimeout(deleteDoc(docRef), 15000);
 }
 
 /**

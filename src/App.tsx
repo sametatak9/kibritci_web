@@ -70,7 +70,7 @@ import {
   findKullaniciByEmail,
   hasDuplicateKullaniciEmails,
   parseKullanicilarSnapshot,
-  removeDuplicateKullaniciDocs,
+  repairKullaniciDocIdsIfNeeded,
   saveKullanici,
 } from './lib/kullaniciUtils';
 import { collection, onSnapshot, doc, getDoc, query, orderBy, limit } from 'firebase/firestore';
@@ -402,7 +402,7 @@ export default function App() {
 
         setLoadingMsg('Üyelik yetkilendirme ve izin listesi yükleniyor...');
         const initialUsers: Kullanici[] = [
-          { id: 'uid_admin_kibritci', email: 'santiye@kibritci.com', yetki: 'YÖNETİCİ', durum: 'AKTİF', kayitTarihi: '2026-06-19' }
+          { id: 'santiye@kibritci.com', email: 'santiye@kibritci.com', yetki: 'YÖNETİCİ', durum: 'AKTİF', kayitTarihi: '2026-06-19' }
         ];
         const loadedUsers = await seedCollectionIfEmpty('kullanicilar', initialUsers);
         setKullanicilar(loadedUsers);
@@ -462,7 +462,7 @@ export default function App() {
         setStokKartlar(INITIAL_STOK);
         setEpostaGonderimleri(INITIAL_EPOSTA);
         setKullanicilar([
-          { id: 'uid_admin_kibritci', email: 'santiye@kibritci.com', yetki: 'YÖNETİCİ', durum: 'AKTİF', kayitTarihi: '2026-06-19' }
+          { id: 'santiye@kibritci.com', email: 'santiye@kibritci.com', yetki: 'YÖNETİCİ', durum: 'AKTİF', kayitTarihi: '2026-06-19' }
         ]);
         setAracKmLoglari([
           { id: 'log_1', tarih: '2026-06-15', plaka: '34 KBR 888', surucu: 'Ayhan Yılmaz', sabahKm: 41200, aksamKm: 41350, fark: 150 },
@@ -514,7 +514,7 @@ export default function App() {
     setStokKartlar(INITIAL_STOK);
     setEpostaGonderimleri(INITIAL_EPOSTA);
     setKullanicilar([
-      { id: 'uid_admin_kibritci', email: 'santiye@kibritci.com', yetki: 'YÖNETİCİ', durum: 'AKTİF', kayitTarihi: '2026-06-19' }
+      { id: 'santiye@kibritci.com', email: 'santiye@kibritci.com', yetki: 'YÖNETİCİ', durum: 'AKTİF', kayitTarihi: '2026-06-19' }
     ]);
     setAracKmLoglari([
       { id: 'log_1', tarih: '2026-06-15', plaka: '34 KBR 888', surucu: 'Ayhan Yılmaz', sabahKm: 41200, aksamKm: 41350, fark: 150 },
@@ -562,9 +562,15 @@ export default function App() {
     const unsubKullanicilar = onSnapshot(collection(db, 'kullanicilar'), (snapshot) => {
       const raw = parseKullanicilarSnapshot(snapshot.docs) as Kullanici[];
       setKullanicilar(dedupeKullanicilarByEmail(raw) as Kullanici[]);
-      if (hasDuplicateKullaniciEmails(raw)) {
-        removeDuplicateKullaniciDocs(raw).catch((err) => {
-          console.warn('Kullanıcı çift kayıtları temizlenemedi:', err);
+      const needsRepair =
+        hasDuplicateKullaniciEmails(raw) ||
+        raw.some((u) => {
+          const key = u.email?.trim().toLowerCase();
+          return key && (u._docId || u.id) !== key;
+        });
+      if (needsRepair) {
+        repairKullaniciDocIdsIfNeeded(raw).catch((err) => {
+          console.warn('Kullanıcı belgeleri onarılamadı:', err);
         });
       }
     });

@@ -15,6 +15,8 @@ import {
   XOctagon, UserCheck, AlertCircle, RefreshCw, Key,
   Eye, Check, Clipboard, CheckSquare, Save, Loader2, UserPlus, Clock
 } from 'lucide-react';
+import { AdminYetkiSablonTab } from './AdminYetkiSablonTab';
+import { isFirestoreWriteFailure } from '../lib/bekleyenUyelik';
 import { fetchCollection, removeDocument, saveDocument } from '../lib/firebase';
 
 export interface Kullanici {
@@ -50,6 +52,7 @@ export interface Kullanici {
   imzaCanvas?: string;
   matchedPersonelId?: string;
   kisitliSayfalar?: string[];
+  saltOkunurSayfalar?: string[];
 }
 
 export interface HataRaporu {
@@ -79,7 +82,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
   addNotification
 }) => {
   const visibleKullanicilar = dedupeKullanicilarByEmail(kullanicilar);
-  const [activeTab, setActiveTab] = useState<'users' | 'pending' | 'create' | 'errors'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'permissions' | 'pending' | 'create' | 'errors'>('users');
   const [hataRaporlari, setHataRaporlari] = useState<HataRaporu[]>([]);
   const [loadingErrors, setLoadingErrors] = useState(false);
   const [selectedError, setSelectedError] = useState<HataRaporu | null>(null);
@@ -212,7 +215,12 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
       }
     } catch (err) {
       console.error(err);
-      alert('Rol kaydedilemedi. Lütfen tekrar deneyin.');
+      const msg = err instanceof Error ? err.message : String(err);
+      alert(
+        isFirestoreWriteFailure(err) || msg.includes('FIRESTORE_TIMEOUT')
+          ? 'Firebase kotası veya bağlantı sorunu. Değişiklik kaydedilemedi — birkaç dakika sonra tekrar deneyin.'
+          : 'Rol kaydedilemedi. Lütfen tekrar deneyin.'
+      );
     } finally {
       setSavingRoleEmail(null);
     }
@@ -297,7 +305,16 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
       }
     } catch (err) {
       console.error(err);
-      alert('Kullanıcı oluşturulamadı.');
+      const msg = err instanceof Error ? err.message : String(err);
+      alert(
+        isFirestoreWriteFailure(err) || msg.includes('FIRESTORE_TIMEOUT')
+          ? 'Firebase kotası dolu veya bağlantı zaman aşımı. Kullanıcı "Bekleyen Kayıtlar" sekmesine alındı — oradan onaylayın.'
+          : `Kullanıcı oluşturulamadı: ${msg}`
+      );
+      if (isFirestoreWriteFailure(err)) {
+        setActiveTab('pending');
+        await loadApiPending();
+      }
     } finally {
       setCreatingUser(false);
     }
@@ -313,12 +330,18 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
       try {
         await deleteKullaniciByEmail(email);
         setKullanicilar(prev => prev.filter(u => u.email?.toLowerCase() !== email.toLowerCase()));
-        alert("Kullanıcı kaydı başarıyla silindi.");
+        alert("Kullanıcı kaydı Firebase'den kalıcı olarak silindi.");
         if (addNotification) {
           addNotification(`${email} kullanıcısı admin tarafından sistemden silindi.`);
         }
-      } catch {
-        alert('Kullanıcı silinemedi.');
+      } catch (err) {
+        console.error(err);
+        const msg = err instanceof Error ? err.message : String(err);
+        alert(
+          isFirestoreWriteFailure(err) || msg.includes('FIRESTORE_TIMEOUT')
+            ? 'Firebase kotası veya bağlantı sorunu — silme işlemi tamamlanamadı.'
+            : 'Kullanıcı silinemedi.'
+        );
       }
     }
   };
@@ -407,6 +430,17 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
             >
               <Users size={14} />
               <span>ÜYE YETKİLENDİRME ({visibleKullanicilar.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('permissions')}
+              className={`px-4 py-3 text-xs font-extrabold flex items-center gap-2 transition-all outline-none cursor-pointer border-b-2 ${
+                activeTab === 'permissions'
+                  ? 'border-amber-500 text-slate-900 font-black'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Key size={14} />
+              <span>ROL YETKİ ŞABLONLARI</span>
             </button>
             <button
               onClick={() => setActiveTab('pending')}
@@ -634,6 +668,15 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                 </div>
               )}
             </div>
+          )}
+
+          {/* TAB: ROL YETKİ ŞABLONLARI */}
+          {activeTab === 'permissions' && (
+            <AdminYetkiSablonTab
+              kullanicilar={kullanicilar}
+              setKullanicilar={setKullanicilar}
+              addNotification={addNotification}
+            />
           )}
 
           {/* TAB: BEKLEYEN KAYITLAR */}

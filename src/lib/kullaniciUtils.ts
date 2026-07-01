@@ -1,10 +1,27 @@
-import { doc, setDoc } from 'firebase/firestore';
-import { db, fetchCollection, removeDocument, saveDocument, saveSignupDocuments } from './firebase';
+import { doc, setDoc, writeBatch } from 'firebase/firestore';
+import {
+  db,
+  fetchCollection,
+  saveSignupDocuments,
+  cleanUndefined,
+} from './firebase';
 import {
   applyRoleDefaults,
   isMobileRole,
   normalizeYetki,
 } from './yetkiUtils';
+
+async function withTimeout<T>(promise: Promise<T>, ms = 20000): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('FIRESTORE_TIMEOUT')), ms);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    clearTimeout(timeoutId!);
+  }
+}
 
 export interface KullaniciLike {
   id: string;
@@ -20,6 +37,7 @@ export interface KullaniciLike {
   imzaCanvas?: string;
   matchedPersonelId?: string;
   kisitliSayfalar?: string[];
+  saltOkunurSayfalar?: string[];
   yetkiUpdatedAt?: string;
   /** Firestore belge kimliği (e-postadan farklı olabilir) */
   _docId?: string;
@@ -28,6 +46,11 @@ export interface KullaniciLike {
 /** Firestore belge kimliği = e-posta (tek kaynak, çift kayıt önlenir) */
 export function kullaniciDocId(email: string): string {
   return email.trim().toLowerCase();
+}
+
+function stripInternalFields(user: KullaniciLike): Record<string, unknown> {
+  const { _docId, ...rest } = user;
+  return cleanUndefined(rest);
 }
 
 function kullaniciPriorityScore(u: KullaniciLike): number {
@@ -96,21 +119,36 @@ export function hasDuplicateKullaniciEmails(users: KullaniciLike[]): boolean {
   return false;
 }
 
-async function deleteDuplicateDocs(emailKey: string, keepDocId = emailKey): Promise<void> {
-  const all = await fetchCollection<KullaniciLike & { id: string }>('kullanicilar');
-  const dupes = all.filter(
-    (u) => u.email?.trim().toLowerCase() === emailKey && u.id !== keepDocId
-  );
-  await Promise.all(dupes.map((u) => removeDocument('kullanicilar', u.id).catch(() => undefined)));
-}
-
-/** Tek kullanıcıyı e-posta anahtarlı belgeye yazar, çift kayıtları siler */
+/** E-posta anahtarlı belgeye yazar; eski UID belgelerini atomik siler */
 export async function saveKullanici(user: KullaniciLike): Promise<KullaniciLike> {
   const emailKey = kullaniciDocId(user.email);
-  const canonical: KullaniciLike = { ...user, id: emailKey, email: emailKey };
+  if (!emailKey) throw new Error('Geçersiz e-posta');
 
-  await deleteDuplicateDocs(emailKey, emailKey);
-  await saveDocument('kullanicilar', canonical as KullaniciLike & { id: string });
+  const canonical: KullaniciLike = {
+    ...user,
+    id: emailKey,
+    email: emailKey,
+    yetkiUpdatedAt: user.yetkiUpdatedAt || new Date().toISOString(),
+  };
+
+  const all = await fetchCollection<KullaniciLike & { id: string }>('kullanicilar');
+  const orphanIds = all
+    .filter((u) => {
+      const uEmail = u.email?.trim().toLowerCase();
+      return (uEmail === emailKey || u.id === emailKey) && u.id !== emailKey;
+    })
+    .map((u) => u.id);
+
+  const batch = writeBatch(db);
+  batch.set(
+    doc(db, 'kullanicilar', emailKey),
+    stripInternalFields(canonical),
+    { merge: false }
+  );
+  for (const orphanId of orphanIds) {
+    batch.delete(doc(db, 'kullanicilar', orphanId));
+  }
+  await withTimeout(batch.commit(), 25000);
 
   return canonical;
 }
@@ -124,12 +162,11 @@ export async function saveKullaniciForSignup(
   const canonical: KullaniciLike = { ...user, id: emailKey, email: emailKey };
 
   if (portalData) {
-    await saveSignupDocuments(emailKey, portalData, canonical as Record<string, unknown>);
+    await saveSignupDocuments(emailKey, portalData, stripInternalFields(canonical));
   } else {
-    await saveDocument('kullanicilar', canonical as KullaniciLike & { id: string });
+    await saveKullanici(canonical);
   }
 
-  void deleteDuplicateDocs(emailKey, emailKey).catch(() => undefined);
   return canonical;
 }
 
@@ -161,11 +198,11 @@ export async function persistKullaniciRole<T extends KullaniciLike>(
   try {
     await setDoc(
       doc(db, 'portalKullanicilar', emailKey),
-      {
+      cleanUndefined({
         role: normalizedYetki,
         yetki: normalizedYetki,
         yetkiUpdatedAt: updated.yetkiUpdatedAt,
-      },
+      }),
       { merge: true }
     );
   } catch (err) {
@@ -175,41 +212,19 @@ export async function persistKullaniciRole<T extends KullaniciLike>(
   return updated as T;
 }
 
-/** Yalnızca çift belgeleri siler; mevcut e-posta anahtarlı kaydı ezmez */
-export async function removeDuplicateKullaniciDocs<T extends KullaniciLike>(users: T[]): Promise<void> {
-  const emails = new Set(users.map((u) => u.email?.trim().toLowerCase()).filter(Boolean) as string[]);
-  for (const emailKey of emails) {
-    if (!hasDuplicateKullaniciEmails(users.filter((u) => u.email?.trim().toLowerCase() === emailKey))) {
-      const orphan = users.find(
-        (u) => u.email?.trim().toLowerCase() === emailKey && (u._docId || u.id) !== emailKey
-      );
-      if (orphan) {
-        await removeDocument('kullanicilar', orphan._docId || orphan.id).catch(() => undefined);
-      }
-      continue;
-    }
-    const winner = dedupeKullanicilarByEmail(
-      users.filter((u) => u.email?.trim().toLowerCase() === emailKey)
-    )[0];
-    if (!winner) continue;
+/** Çift belgeleri e-posta anahtarlı kayda taşır */
+export async function repairKullaniciDocIdsIfNeeded(users: KullaniciLike[]): Promise<void> {
+  const needsRepair =
+    hasDuplicateKullaniciEmails(users) ||
+    users.some((u) => {
+      const key = kullaniciDocId(u.email);
+      return key && (u._docId || u.id) !== key;
+    });
+  if (!needsRepair) return;
 
-    const canonical = users.find(
-      (u) => u.email?.trim().toLowerCase() === emailKey && u._docId === emailKey
-    );
-
-    const dupes = users.filter(
-      (u) =>
-        u.email?.trim().toLowerCase() === emailKey &&
-        (u._docId || u.id) !== emailKey
-    );
-
-    await Promise.all(
-      dupes.map((u) => removeDocument('kullanicilar', u._docId || u.id).catch(() => undefined))
-    );
-
-    if (!canonical) {
-      await saveKullanici({ ...winner, id: emailKey, email: emailKey });
-    }
+  const deduped = dedupeKullanicilarByEmail(users);
+  for (const winner of deduped) {
+    await saveKullanici(winner);
   }
 }
 
@@ -232,8 +247,15 @@ export function parseKullanicilarSnapshot(
 export async function deleteKullaniciByEmail(email: string): Promise<void> {
   const emailKey = kullaniciDocId(email);
   const all = await fetchCollection<KullaniciLike & { id: string }>('kullanicilar');
-  const targets = all.filter((u) => u.email?.trim().toLowerCase() === emailKey);
-  await Promise.all(
-    targets.map((u) => removeDocument('kullanicilar', u.id).catch(() => undefined))
+  const targets = all.filter(
+    (u) => u.email?.trim().toLowerCase() === emailKey || u.id === emailKey
   );
+
+  const batch = writeBatch(db);
+  for (const t of targets) {
+    batch.delete(doc(db, 'kullanicilar', t.id));
+  }
+  batch.delete(doc(db, 'portalKullanicilar', emailKey));
+  batch.delete(doc(db, 'bekleyenUyelikler', emailKey));
+  await withTimeout(batch.commit(), 25000);
 }

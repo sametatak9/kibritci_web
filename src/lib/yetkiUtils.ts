@@ -104,6 +104,41 @@ export function buildKisitliSayfalarForRole(yetki?: string | null): string[] | u
   return undefined;
 }
 
+/** Admin paneli rol combobox listesi */
+export const YETKI_ROLLER = [
+  'YÖNETİCİ',
+  'MUHASEBE',
+  'İDARİ_İŞLER',
+  'SATIN_ALMA',
+  'ŞANTİYE_ŞEFİ',
+  'PROJE_MÜDÜRÜ',
+  'ELEKTRİK_ŞEFİ',
+  'TESİSAT_ŞEFİ',
+  'MEKANİK_ŞEFİ',
+  'İNCE_İŞLER_ŞEFİ',
+  'KABA_İŞLER_ŞEFİ',
+  'DİZAYN_ŞEFİ',
+  'PARSEL_ŞEFİ',
+  'FORMEN',
+  'KAMPÇI',
+  'GÜVENLİK',
+  'LOJİSTİK',
+  'DEPOCU',
+  'MİSAFİR',
+] as const;
+
+export type YetkiRol = (typeof YETKI_ROLLER)[number];
+
+export interface YetkiSablonu {
+  id: string;
+  yetki: string;
+  /** Menüde gizlenecek sayfa anahtarları */
+  kisitliSayfalar: string[];
+  /** Salt okunur sayfalar (görür ama düzenleyemez) — listede olmayan görünür sayfalar düzenlenebilir */
+  saltOkunurSayfalar: string[];
+  guncellemeTarihi: string;
+}
+
 /** Rol değişince yetki + sayfa kısıtlarını tek seferde uygular */
 export function applyRoleDefaults<T extends { yetki?: string; kisitliSayfalar?: string[] }>(
   user: T,
