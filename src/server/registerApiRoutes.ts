@@ -1,7 +1,7 @@
 import { Express } from 'express';
 import { Type } from '@google/genai';
 import { getGeminiClient, formatGeminiKeyHint, testGeminiConnection } from './gemini';
-import { generateGeminiWithFallback } from './geminiGenerate';
+import { generateGeminiWithFallback, GEMINI_MODEL_FALLBACK } from './geminiGenerate';
 import {
   deletePendingSignup,
   listPendingSignups,
@@ -224,7 +224,7 @@ Be precise with Turkish names (İ, Ş, Ğ, Ü, Ö, Ç). Each excelId is a distin
       required: ["yil", "ay", "personelKayitlari"],
     };
 
-    const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+    const models = GEMINI_MODEL_FALLBACK;
     let response;
     let lastError;
 
@@ -385,7 +385,7 @@ app.post("/api/parse-irsaliye", async (req, res) => {
     const userPrompt = "Lütfen ekteki teslimat irsaliyesi (waybill / delivery note) belgesini analiz et. İrsaliye numarasını (irsaliyeNo), tarihini (tarih) (YYYY-MM-DD formatında), gönderen / satıcı firma adını (firma) ve teslim edilen tüm malzeme kalemlerini (kalemler listesi altında urunAdi, miktar ve birim olarak) çıkar.";
 
     // Try multiple models in order of resilience
-    const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+    const models = GEMINI_MODEL_FALLBACK;
     let response;
     let lastError;
 
@@ -468,7 +468,7 @@ app.post("/api/parse-fatura", async (req, res) => {
     const userPrompt = "Lütfen ekteki faturayı (invoice) analiz et. Fatura numarasını (faturaNo), faturanın kesildiği tarihi (tarih) (YYYY-MM-DD formatında), satıcı firma adını (firma), faturadaki tüm mal veya hizmet kalemlerini (kalemler listesi altında urunAdi, miktar, birim, birimFiyat, kdvOran yüzde olarak örn. 20, ve toplam tutarı) çıkar. Ayrıca toplam matrahı (toplamTutar), KDV tutarını (kdvTutar) ve ödenecek genel toplamı (genelToplam) çıkar.";
 
     // Try multiple models in order of resilience
-    const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+    const models = GEMINI_MODEL_FALLBACK;
     let response;
     let lastError;
 
@@ -579,7 +579,7 @@ Provide the response strictly conforming to the requested schema.
 `;
 
     // Try multiple models in order of resilience
-    const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+    const models = GEMINI_MODEL_FALLBACK;
     let response;
     let lastError;
 
@@ -614,6 +614,102 @@ Provide the response strictly conforming to the requested schema.
   }
 });
 
+// AI analysis for linked evrak groups (YZ Karşılaştır sekmesi)
+app.post("/api/analyze-linked-evrak", async (req, res) => {
+  try {
+    const { saTalebi, irsaliyeler, fatura, kalemBaglantilari, analizOdak, ozelTalimat } = req.body;
+
+    const ai = getGeminiClient();
+
+    const responseSchema = {
+      type: Type.OBJECT,
+      properties: {
+        status: { type: Type.STRING, description: "Must be either 'SORUNSUZ ONAY' or 'SORUNLU'" },
+        discrepancies: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description: "List of found differences or discrepancies, empty if none"
+        },
+        reportText: { type: Type.STRING, description: "Detailed Turkish markdown analysis report" }
+      },
+      required: ["status", "discrepancies", "reportText"]
+    };
+
+    const focusList = Array.isArray(analizOdak) && analizOdak.length
+      ? analizOdak.join(', ')
+      : 'miktar, firma, tarih, tutar, ürün adı, birim, fiyat';
+
+    const customBlock = ozelTalimat?.trim()
+      ? `\n\nKULLANICI TALİMATI (öncelikli): ${ozelTalimat.trim()}`
+      : '';
+
+    const kalemBlock = Array.isArray(kalemBaglantilari) && kalemBaglantilari.length
+      ? `\n\nKULLANICI ONAYLI KALEM BAĞLANTILARI (bu eşleştirmelere göre analiz yap):\n${JSON.stringify(kalemBaglantilari, null, 2)}`
+      : '';
+
+    const promptText = `
+You are an expert construction auditor and accountant for a Turkish construction site ERP.
+Analyze the following linked documents as a group. The user has explicitly linked line items between documents.
+
+1. Satın Alma Siparişi (Purchase Order):
+${JSON.stringify(saTalebi || "Bağlı PO yok", null, 2)}
+
+2. Bağlı İrsaliyeler (Delivery Waybills):
+${JSON.stringify(irsaliyeler || [], null, 2)}
+
+3. Fatura (Invoice):
+${JSON.stringify(fatura || "Bağlı fatura yok", null, 2)}
+${kalemBlock}
+
+KULLANICI ANALİZ ODAĞI: ${focusList}
+${customBlock}
+
+Rules:
+- Focus your analysis primarily on the user's selected focus areas (${focusList}).
+- Respect the kalem bağlantıları — compare linked line items across SA → İrsaliye → Fatura.
+- For bulk materials (Mıcır, Stabilize, Grovak, Taş Tozu): apply 1 TIR ≈ 25 TON conversion with ±5% tolerance when comparing TIR/KG/TON.
+- If quantities, amounts, dates, and firms align within tolerance, status = "SORUNSUZ ONAY".
+- Otherwise status = "SORUNLU" and list discrepancies.
+- Write a professional Turkish markdown report in reportText for a site manager. Include summary, detail per focus area, and recommendations.
+
+Provide the response strictly conforming to the requested schema.
+`;
+
+    const models = GEMINI_MODEL_FALLBACK;
+    let response;
+    let lastError;
+
+    for (const model of models) {
+      try {
+        console.log(`Analyzing linked evrak with model: ${model}...`);
+        response = await ai.models.generateContent({
+          model: model,
+          contents: promptText,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: responseSchema,
+            temperature: 0.1,
+          },
+        });
+        if (response?.text) break;
+      } catch (err) {
+        lastError = err;
+        console.warn(`Model ${model} failed for linked evrak analysis, trying next:`, err);
+      }
+    }
+
+    if (!response || !response.text) {
+      throw lastError || new Error("All models failed or returned empty response from Gemini API");
+    }
+
+    const parsedData = JSON.parse(response.text);
+    res.json({ success: true, data: parsedData });
+  } catch (error: any) {
+    console.error("Error in AI linked evrak analysis:", error);
+    res.status(500).json({ error: error.message || "Failed to analyze linked evrak" });
+  }
+});
+
 // Surprise AI Document Tutanak Creator
 app.post("/api/generate-tutanak", async (req, res) => {
   try {
@@ -632,12 +728,12 @@ Lütfen şantiye yönetimi için resmi ve hukuki açıdan geçerli Türkçe bir 
 Tutanak içeriğini resmi, ağırbaşlı ve şantiye mevzuatlarına uygun hukuk diliyle yaz. En altta "Hazırlayan / Şantiye Şefi" ve "Muhatap / Teslim Alan" imza bölümleri olsun. HTML veya Markdown formatında yazma, düz metin olsun.
 `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt
+    const { text } = await generateGeminiWithFallback({
+      contents: prompt,
+      label: 'Tutanak oluşturma',
     });
 
-    res.json({ success: true, text: response.text });
+    res.json({ success: true, text });
   } catch (error: any) {
     console.error("Error in generate-tutanak:", error);
     res.status(500).json({ error: error.message || "Failed to generate tutanak" });
@@ -859,7 +955,7 @@ Lütfen en uygun kategoriyi 'detectedType' alanına atayıp dökümandaki ilgili
       return res.status(400).json({ error: "Invalid docType specified" });
     }
 
-    const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+    const models = GEMINI_MODEL_FALLBACK;
     let response;
     let lastError;
 
@@ -900,12 +996,11 @@ app.post("/api/chat", async (req, res) => {
     if (!message) {
       return res.status(400).json({ error: "Message is required" });
     }
-    const ai = getGeminiClient();
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: `Sen Kibritçi İnşaat ERP sisteminin akıllı yapay zeka şantiye asistanısın. Kullanıcıya şantiye yönetimi, personel, stok ve genel inşaat ERP süreçleri hakkında yardımcı oluyorsun. Lütfen kısa, anlaşılır, kibar ve çözüm odaklı bir yanıt ver. Kullanıcı mesajı: ${message}`
+    const { text } = await generateGeminiWithFallback({
+      contents: `Sen Kibritçi İnşaat ERP sisteminin akıllı yapay zeka şantiye asistanısın. Kullanıcıya şantiye yönetimi, personel, stok ve genel inşaat ERP süreçleri hakkında yardımcı oluyorsun. Lütfen kısa, anlaşılır, kibar ve çözüm odaklı bir yanıt ver. Kullanıcı mesajı: ${message}`,
+      label: 'Asistan sohbeti',
     });
-    res.json({ text: response.text });
+    res.json({ text });
   } catch (error: any) {
     console.error("Error in chat assistant endpoint:", error);
     res.status(500).json({ error: error.message || "Failed to process message" });

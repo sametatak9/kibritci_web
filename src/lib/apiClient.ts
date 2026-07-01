@@ -70,11 +70,34 @@ export async function probeGeminiApi(): Promise<{ ok: boolean; message: string }
     if (data.success) {
       return { ok: true, message: data.message || 'Gemini API çalışıyor.' };
     }
-    return { ok: false, message: data.error || 'Gemini API yanıt vermedi.' };
+    const err = data.error || 'Gemini API yanıt vermedi.';
+    return { ok: false, message: formatGeminiAlert(err) };
   } catch (err) {
-    return {
-      ok: false,
-      message: err instanceof Error ? err.message : 'Gemini API kontrol edilemedi.',
-    };
+    const msg = err instanceof Error ? err.message : 'Gemini API kontrol edilemedi.';
+    return { ok: false, message: formatGeminiAlert(msg) };
   }
+}
+
+/** Banner'da ham JSON yerine okunabilir Türkçe mesaj */
+export function formatGeminiAlert(raw: string): string {
+  if (/429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota/i.test(raw)) {
+    return [
+      'Gemini ücretsiz günlük kota doldu (model başına ~20 istek).',
+      'Bir süre bekleyin veya Google AI Studio\'da faturalandırmayı açın.',
+      'Detay: https://ai.dev/rate-limit',
+    ].join(' ');
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    const inner = parsed?.error?.message;
+    if (typeof inner === 'string' && /429|quota/i.test(inner)) {
+      return formatGeminiAlert(inner);
+    }
+  } catch {
+    /* düz metin */
+  }
+  if (raw.length > 280) {
+    return raw.slice(0, 280) + '…';
+  }
+  return raw;
 }

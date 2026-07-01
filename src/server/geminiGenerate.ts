@@ -3,10 +3,12 @@ import { getGeminiClient, parseGeminiError } from './gemini';
 
 const IS_VERCEL = Boolean(process.env.VERCEL);
 
-/** Vercel Hobby ≈10s, Pro ≈60s — Vercel'de agresif hız sınırı */
-const MODELS = IS_VERCEL
-  ? ['gemini-2.5-flash', 'gemini-2.0-flash']
-  : ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+/** Ücretsiz kotada 2.5-flash en hızlı doluyor — önce alternatif modeller */
+export const GEMINI_MODEL_FALLBACK = IS_VERCEL
+  ? ['gemini-2.0-flash', 'gemini-1.5-flash']
+  : ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash'];
+
+const MODELS = GEMINI_MODEL_FALLBACK;
 
 const MAX_RETRIES_PER_MODEL = IS_VERCEL ? 1 : 2;
 const RETRY_DELAY_MS = IS_VERCEL ? 350 : 1200;

@@ -14,6 +14,7 @@ export const PORTAL_PAGES = [
   { key: "taseron_kesinti", label: "Taşeron Kesintileri", group: "FİNANS & ENVANTER" },
   { key: "cari_stok", label: "Cari ve Stok Kartları", group: "FİNANS & ENVANTER" },
   { key: "evrak_aktarimi", label: "AI Belge Aktarımı", group: "FİNANS & ENVANTER" },
+  { key: "yz_karsilastir", label: "YZ Karşılaştır ve Yorumla", group: "FİNANS & ENVANTER" },
   { key: "kibar_hakedis", label: "ZER YAPI Hakediş", group: "FİNANS & ENVANTER" },
   { key: "planli_organizasyon", label: "Planlı Organizasyon", group: "FİNANS & ENVANTER" },
   { key: "operator", label: "Operatör Faaliyetleri", group: "İŞ MAKİNESİ & OPERATÖR" },

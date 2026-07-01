@@ -3,28 +3,20 @@ import {
   Truck, ClipboardList, Plus, Trash2, Edit3, ArrowRight, 
   Upload, Printer, Download, Sparkles, FileText, CheckCircle2 
 } from 'lucide-react';
-import { Irsaliye, IrsaliyeItem, SatinAlmaTalebi, CariKart, StokKart } from '../types/erp';
+import { Irsaliye, IrsaliyeItem, SatinAlmaTalebi, CariKart, StokKart, Fatura, EvrakBaglantiGrubu } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
 import { fetchApiJson } from '../lib/apiClient';
 import { fileToAiPayload } from '../lib/aiFileUpload';
-import { irsaliyeMatchesRef } from '../lib/documentLinkUtils';
-import { CompareLaunchPayload, CompareFocus } from '../lib/documentCompareTypes';
-import { DocumentCompareWizard } from './DocumentCompareWizard';
-import { CompareDirectiveModal } from './CompareDirectiveModal';
-
-interface PendingPoolCompare {
-  saId?: string;
-  irIds: string[];
-  faturaId?: string;
-  title: string;
-  detail: string;
-}
+import { EvrakBaglamaWizard } from './EvrakBaglamaWizard';
+import { BagliEvraklarListesi } from './BagliEvraklarListesi';
 
 interface IrsaliyeGirisScreenProps {
   irsaliyeler: Irsaliye[];
   setIrsaliyeler: React.Dispatch<React.SetStateAction<Irsaliye[]>>;
-  faturalar?: any[];
-  setFaturalar?: any;
+  faturalar?: Fatura[];
+  setFaturalar?: React.Dispatch<React.SetStateAction<Fatura[]>>;
+  evrakBaglantiGruplari: EvrakBaglantiGrubu[];
+  setEvrakBaglantiGruplari: React.Dispatch<React.SetStateAction<EvrakBaglantiGrubu[]>>;
   satinAlmaTalepleri: SatinAlmaTalebi[];
   cariKartlar: CariKart[];
   setCariKartlar?: React.Dispatch<React.SetStateAction<CariKart[]>>;
@@ -39,6 +31,8 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
   setIrsaliyeler,
   faturalar = [],
   setFaturalar,
+  evrakBaglantiGruplari,
+  setEvrakBaglantiGruplari,
   satinAlmaTalepleri,
   cariKartlar,
   setCariKartlar,
@@ -47,15 +41,17 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
   currentUser,
   addNotification
 }) => {
-  const [activeTab, setActiveTab] = useState<'liste' | 'giris' | 'eslestir'>('liste');
-  const [compareLaunch, setCompareLaunch] = useState<CompareLaunchPayload | null>(null);
-  const [pendingPoolCompare, setPendingPoolCompare] = useState<PendingPoolCompare | null>(null);
-  
+  const [activeTab, setActiveTab] = useState<'giris' | 'baglama' | 'bagli'>('giris');
+  const [baglamaPrefill, setBaglamaPrefill] = useState<{
+    saId?: string;
+    irIds?: string[];
+    faturaId?: string;
+  } | null>(null);
+
   // Form states
   const [irNo, setIrNo] = useState("");
   const [irDate, setIrDate] = useState(new Date().toISOString().split('T')[0]);
   const [irSupplier, setIrSupplier] = useState("");
-  const [irSaLink, setIrSaLink] = useState(""); // linked PO
   const [irProducts, setIrProducts] = useState<IrsaliyeItem[]>([]);
   const [tempProduct, setTempProduct] = useState({ name: "", qty: 0, unit: "ADET" });
   const [irAttachmentUrl, setIrAttachmentUrl] = useState<string | null>(null);
@@ -76,10 +72,6 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
   const [suggestedStokName, setSuggestedStokName] = useState("");
   const [suggestedStokCat, setSuggestedStokCat] = useState("Kaba İnşaat İmalatı");
   const [suggestedStokUnit, setSuggestedStokUnit] = useState("ADET");
-
-  // Comparison Report Modal state
-  // Filter for matching
-  const [searchTerm, setSearchTerm] = useState("");
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -269,6 +261,7 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
     const calculatedStatus = 'ONAY BEKLİYOR';
 
     if (editingIrId) {
+      const existing = irsaliyeler.find((ir) => ir.id === editingIrId);
       setIrsaliyeler(prev => prev.map(ir => {
         if (ir.id === editingIrId) {
           return {
@@ -276,7 +269,7 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
             irsaliyeNo: irNo,
             tarih: irDate,
             firma: irSupplier,
-            saId: irSaLink || undefined,
+            saId: existing?.saId,
             onayDurumu: calculatedStatus,
             kalemler: irProducts,
             fisEvrakUrl: irAttachmentUrl || undefined,
@@ -293,7 +286,6 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
         irsaliyeNo: irNo,
         tarih: irDate,
         firma: irSupplier,
-        saId: irSaLink || undefined,
         onayDurumu: calculatedStatus,
         kalemler: irProducts,
         fisEvrakUrl: irAttachmentUrl || undefined,
@@ -304,51 +296,14 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
 
     checkAndSuggestCari(irSupplier);
 
-    // Reset form
     setIrNo("");
     setIrSupplier("");
-    setIrSaLink("");
     setIrProducts([]);
     setIrAttachmentUrl(null);
     setIrSignedAttachmentUrl(null);
-    setActiveTab('liste');
-    alert("İrsaliye başarıyla kaydedildi.");
+    setActiveTab('giris');
+    alert("İrsaliye kaydedildi. Bağlama için «Bağlama» sekmesini kullanın.");
   };
-
-  const filteredIrsaliyeler = irsaliyeler.filter(ir =>
-    ir.irsaliyeNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    ir.firma.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const openCompareForIrsaliye = (ir: Irsaliye) => {
-    if (!ir.saId) {
-      alert('Karşılaştırma için önce bu irsaliyeyi bir Satın Alma siparişine bağlayın.');
-      return;
-    }
-    const irIds = irsaliyeler.filter(i => i.saId === ir.saId).map(i => i.id);
-    setPendingPoolCompare({
-      saId: ir.saId,
-      irIds,
-      title: `PO ${ir.saId} · İrsaliye ${ir.irsaliyeNo}`,
-      detail: `${ir.firma} · ${ir.kalemler.length} kalem · aynı PO'ya bağlı ${irIds.length} irsaliye`,
-    });
-  };
-
-  const handlePoolCompareDirective = (focus: CompareFocus[], customInstructions: string) => {
-    if (!pendingPoolCompare) return;
-    setCompareLaunch({
-      saId: pendingPoolCompare.saId,
-      irIds: pendingPoolCompare.irIds,
-      compareFocus: focus,
-      customInstructions,
-      emphasizeFocus: true,
-    });
-    setPendingPoolCompare(null);
-    setActiveTab('eslestir');
-  };
-
-  const saLinkedIrs = filteredIrsaliyeler.filter(ir => ir.saId);
-  const standaloneIrs = filteredIrsaliyeler.filter(ir => !ir.saId);
 
   return (
     <div className="flex-grow p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col font-sans select-none bg-slate-50/50 space-y-6">
@@ -372,16 +327,16 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
             1 · İrsaliye Giriş (Manuel / AI)
           </button>
           <button
-            onClick={() => setActiveTab('liste')}
-            className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'liste' ? 'bg-[#10b981] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
+            onClick={() => setActiveTab('baglama')}
+            className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'baglama' ? 'bg-[#10b981] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
           >
-            2 · Havuz & Bağlama (Bağlı / Bağımsız)
+            2 · Bağlama (2 Aşama)
           </button>
           <button
-            onClick={() => setActiveTab('eslestir')}
-            className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'eslestir' ? 'bg-[#10b981] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
+            onClick={() => setActiveTab('bagli')}
+            className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'bagli' ? 'bg-[#10b981] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
           >
-            3 · Karşılaştırma & Rapor
+            3 · Bağlı Evraklar
           </button>
         </div>
       </div>
@@ -452,19 +407,9 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Bağlı Satın Alma Siparişi</label>
-                <select
-                  value={irSaLink}
-                  onChange={(e) => setIrSaLink(e.target.value)}
-                  className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
-                >
-                  <option value="">Satın Alma Talebiyle Eşleştirme (İsteğe Bağlı)</option>
-                  {satinAlmaTalepleri.map(sa => (
-                    <option key={sa.id} value={sa.saId}>{sa.saId} ({sa.cariFirma})</option>
-                  ))}
-                </select>
-              </div>
+              <p className="text-[10px] text-emerald-700 font-medium bg-emerald-50 border border-emerald-100 rounded-xl p-2.5">
+                PO ve fatura bağlama «Bağlama» sekmesinde 2 aşamalı yapılır. YZ analiz için «YZ Karşılaştır» menüsünü kullanın.
+              </p>
 
               {/* Add items */}
               <div className="bg-slate-550/5 p-3 rounded-2xl border border-slate-100 space-y-2">
@@ -559,10 +504,10 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                   setIrProducts([]);
                   setIrNo("");
                   setIrSupplier("");
-                  setIrSaLink("");
                   setIrAttachmentUrl(null);
                   setIrSignedAttachmentUrl(null);
-                  setActiveTab('liste');
+                  setEditingIrId(null);
+                  setActiveTab('giris');
                 }}
                 className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl text-center cursor-pointer transition text-xs"
               >
@@ -591,257 +536,48 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
         </div>
       )}
 
-      {activeTab === 'liste' && (
-        <div className="flex-grow flex flex-col lg:flex-row gap-6">
-          
-          {/* Linked waybills list */}
-          <div className="flex-1 bg-white border border-slate-200 rounded-3xl flex flex-col overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <span className="font-extrabold text-[10px] text-emerald-700 uppercase tracking-widest">SATIN ALMALI İRSALİYELER</span>
-              <input 
-                type="text"
-                placeholder="İrsaliye no veya firma ara..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="text-xs border p-2 rounded-xl bg-white w-48 sm:w-64"
-              />
-            </div>
-            
-            <div className="flex-grow overflow-y-auto p-4 space-y-4">
-              {saLinkedIrs.length === 0 ? (
-                <p className="text-xs text-slate-400 italic text-center py-6">Bağlantılı irsaliye bulunmuyor.</p>
-              ) : (
-                saLinkedIrs.map(ir => (
-                  <div key={ir.id} className="border border-slate-100 rounded-2xl p-4 bg-white hover:shadow transition flex justify-between items-center text-xs">
-                    <div className="space-y-1.5">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-mono bg-slate-100 border text-slate-700 px-2 py-0.5 rounded font-bold">No: {ir.irsaliyeNo}</span>
-                        <span className="font-mono bg-amber-50 border border-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold">PO: {ir.saId}</span>
-                      </div>
-                      <p className="font-bold text-slate-900">Firma: {ir.firma} · Tarih: {ir.tarih}</p>
-                      <p className="text-[10px] text-slate-400 font-semibold">
-                        Kalemler: {ir.kalemler.map(x => `${x.urunAdi} (${x.miktar} ${x.birim})`).join(', ')}
-                      </p>
-                      <div className="mt-1 flex items-center space-x-1">
-                        <span className="text-[9px] text-slate-400 font-bold uppercase">Fatura Eşleme:</span>
-                        <select
-                          value={ir.faturaNo || ""}
-                          onChange={(e) => {
-                            const selectedFaturaNo = e.target.value;
-                            setIrsaliyeler(prev => prev.map(item => {
-                              if (item.id === ir.id) {
-                                return { ...item, faturaNo: selectedFaturaNo || undefined };
-                              }
-                              return item;
-                            }));
-                            if (setFaturalar) {
-                              setFaturalar((prev: any[]) => prev.map(ft => {
-                                if (ft.faturaNo === selectedFaturaNo) {
-                                  const alreadyHas = ft.bagliIrsaliyeler.some((ref: string) => irsaliyeMatchesRef(ir, ref));
-                                  if (!alreadyHas) {
-                                    const saFromIr = ir.saId && !ft.saId ? { saId: ir.saId } : {};
-                                    return { ...ft, ...saFromIr, bagliIrsaliyeler: [...ft.bagliIrsaliyeler, ir.id] };
-                                  }
-                                } else {
-                                  return {
-                                    ...ft,
-                                    bagliIrsaliyeler: ft.bagliIrsaliyeler.filter((ref: string) => !irsaliyeMatchesRef(ir, ref))
-                                  };
-                                }
-                                return ft;
-                              }));
-                            }
-                            alert(`İrsaliye fatura eşlemesi güncellendi (${selectedFaturaNo || 'Bağlantı Kaldırıldı'}).`);
-                          }}
-                          className="text-[10px] font-semibold border rounded px-1 py-0.5 bg-slate-50/50"
-                        >
-                          <option value="">-- Fatura Seç --</option>
-                          {faturalar.map((ft: any) => (
-                            <option key={ft.id} value={ft.faturaNo}>Fatura: {ft.faturaNo} ({ft.cariUnvan})</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col items-end gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => openCompareForIrsaliye(ir)}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl font-black text-[10px] cursor-pointer"
-                      >
-                        Karşılaştır →
-                      </button>
-                      <div className="flex items-center space-x-3">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border ${
-                        ir.onayDurumu === '1. ONAY TAMAMLANDI'
-                          ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
-                          : 'bg-amber-50 text-amber-800 border-amber-100'
-                      }`}>
-                        {ir.onayDurumu === '1. ONAY TAMAMLANDI' ? 'SEVKİYAT TESLİM ALINDI' : 'ONAY BEKLİYOR'}
-                      </span>
-                      
-                      {/* Signed document file input */}
-                      {!ir.imzaliEvrakUrl && (
-                        <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg border text-[9px] font-bold text-slate-600">
-                          İmzalı Yükle
-                          <input type="file" onChange={(e) => handleSignedFileChange(e, ir.id)} className="hidden" accept="image/*,application/pdf" />
-                        </label>
-                      )}
-                    </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Standalone waybills list */}
-          <div className="w-full lg:w-[480px] bg-white border border-slate-200 rounded-3xl flex flex-col overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-slate-200 bg-slate-50/50">
-              <span className="font-extrabold text-[10px] text-slate-500 uppercase tracking-widest">SATIN ALMASIZ İRSALİYELER</span>
-            </div>
-
-            <div className="flex-grow overflow-y-auto p-4 space-y-4">
-              {standaloneIrs.length === 0 ? (
-                <p className="text-xs text-slate-400 italic text-center py-6">Bağlantısız irsaliye bulunmuyor.</p>
-              ) : (
-                standaloneIrs.map(ir => (
-                  <div key={ir.id} className="border border-slate-100 rounded-2xl p-4 bg-white hover:shadow transition flex flex-col space-y-3 text-xs">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <span className="font-mono bg-slate-100 border text-slate-700 px-2 py-0.5 rounded font-bold">No: {ir.irsaliyeNo}</span>
-                        <h5 className="font-bold text-slate-900 mt-2">Firma: {ir.firma} · Tarih: {ir.tarih}</h5>
-                      </div>
-                      <span className="bg-amber-50 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-100 uppercase">
-                        {ir.onayDurumu}
-                      </span>
-                    </div>
-
-                    <div className="text-[10px] text-slate-500 font-semibold">
-                      Kalemler: {ir.kalemler.map(x => `${x.urunAdi} (${x.miktar} ${x.birim})`).join(', ')}
-                    </div>
-
-                    <div className="mt-1 flex items-center space-x-1 text-xs flex-wrap gap-1">
-                      <span className="text-[9px] text-slate-450 font-bold uppercase">Satın Alma:</span>
-                      <select
-                        value={ir.saId || ""}
-                        onChange={(e) => {
-                          const saId = e.target.value || undefined;
-                          setIrsaliyeler(prev => prev.map(item => item.id === ir.id ? { ...item, saId } : item));
-                        }}
-                        className="text-[10px] font-semibold border rounded px-1 py-0.5 bg-amber-50/50"
-                      >
-                        <option value="">— PO Bağla —</option>
-                        {satinAlmaTalepleri.map(sa => (
-                          <option key={sa.id} value={sa.saId}>{sa.saId}</option>
-                        ))}
-                      </select>
-                      <span className="text-[9px] text-slate-450 font-bold uppercase">Fatura:</span>
-                      <select
-                        value={ir.faturaNo || ""}
-                        onChange={(e) => {
-                          const selectedFaturaNo = e.target.value;
-                          setIrsaliyeler(prev => prev.map(item => {
-                            if (item.id === ir.id) {
-                              return { ...item, faturaNo: selectedFaturaNo || undefined };
-                            }
-                            return item;
-                          }));
-                          if (setFaturalar) {
-                            setFaturalar((prev: any[]) => prev.map(ft => {
-                              if (ft.faturaNo === selectedFaturaNo) {
-                                const alreadyHas = ft.bagliIrsaliyeler.some((ref: string) => irsaliyeMatchesRef(ir, ref));
-                                if (!alreadyHas) {
-                                  const saFromIr = ir.saId && !ft.saId ? { saId: ir.saId } : {};
-                                  return { ...ft, ...saFromIr, bagliIrsaliyeler: [...ft.bagliIrsaliyeler, ir.id] };
-                                }
-                              } else {
-                                return {
-                                  ...ft,
-                                  bagliIrsaliyeler: ft.bagliIrsaliyeler.filter((ref: string) => !irsaliyeMatchesRef(ir, ref))
-                                };
-                              }
-                              return ft;
-                            }));
-                          }
-                          alert(`İrsaliye fatura eşlemesi güncellendi (${selectedFaturaNo || 'Bağlantı Kaldırıldı'}).`);
-                        }}
-                        className="text-[10px] font-semibold border rounded px-1 py-0.5 bg-slate-50/50"
-                      >
-                        <option value="">-- Fatura Seç --</option>
-                        {faturalar.map((ft: any) => (
-                          <option key={ft.id} value={ft.faturaNo}>Fatura: {ft.faturaNo} ({ft.cariUnvan})</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="flex gap-2 border-t pt-2.5 text-[10px]">
-                      {ir.saId && (
-                        <button
-                          type="button"
-                          onClick={() => openCompareForIrsaliye(ir)}
-                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 rounded-lg font-black transition cursor-pointer text-center"
-                        >
-                          Karşılaştır →
-                        </button>
-                      )}
-                      <button
-                        onClick={() => {
-                          setEditingIrId(ir.id);
-                          setIrNo(ir.irsaliyeNo);
-                          setIrDate(ir.tarih);
-                          setIrSupplier(ir.firma);
-                          setIrSaLink(ir.saId || "");
-                          setIrProducts(ir.kalemler);
-                          setIrAttachmentUrl(ir.fisEvrakUrl || null);
-                          setIrSignedAttachmentUrl(ir.imzaliEvrakUrl || null);
-                          setActiveTab('giris');
-                        }}
-                        className="flex-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-250 py-1.5 rounded-lg font-bold transition cursor-pointer text-center"
-                      >
-                        ✏️ Düzelt
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (window.confirm("Bu irsaliye kaydını silmek istediğinize emin misiniz?")) {
-                            setIrsaliyeler(prev => prev.filter(x => x.id !== ir.id));
-                            alert("İrsaliye kaydı silindi.");
-                          }
-                        }}
-                        className="flex-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 py-1.5 rounded-lg font-bold transition cursor-pointer text-center"
-                      >
-                        🗑️ Sil
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
+      {activeTab === 'baglama' && setFaturalar && (
+        <div className="space-y-4">
+          <EvrakBaglamaWizard
+            accent="emerald"
+            anchorHint="irsaliye"
+            satinAlmaTalepleri={satinAlmaTalepleri}
+            irsaliyeler={irsaliyeler}
+            faturalar={faturalar}
+            setIrsaliyeler={setIrsaliyeler}
+            setFaturalar={setFaturalar}
+            setEvrakBaglantiGruplari={setEvrakBaglantiGruplari}
+            currentUser={currentUser}
+            prefillSaId={baglamaPrefill?.saId}
+            prefillIrIds={baglamaPrefill?.irIds}
+            prefillFaturaId={baglamaPrefill?.faturaId}
+            onComplete={() => {
+              setBaglamaPrefill(null);
+              setActiveTab('bagli');
+            }}
+          />
         </div>
       )}
 
-      {activeTab === 'eslestir' && (
-        <DocumentCompareWizard
+      {activeTab === 'bagli' && (
+        <BagliEvraklarListesi
           mode="irsaliye"
           accent="emerald"
-          storageKey="kibritci_irsaliye_comparison_reports"
-          satinAlmaTalepleri={satinAlmaTalepleri}
+          faturalar={faturalar}
           irsaliyeler={irsaliyeler}
-          launchConfig={compareLaunch}
-          onLaunchConsumed={() => setCompareLaunch(null)}
+          satinAlmaTalepleri={satinAlmaTalepleri}
+          evrakBaglantiGruplari={evrakBaglantiGruplari}
+          onEditBinding={(g) => {
+            setBaglamaPrefill({
+              saId: g.saId,
+              irIds: g.irsaliyeIds,
+              faturaId: g.faturaId,
+            });
+            setActiveTab('baglama');
+          }}
         />
       )}
 
-      <CompareDirectiveModal
-        open={!!pendingPoolCompare}
-        accent="emerald"
-        evrakTitle={pendingPoolCompare?.title ?? ''}
-        evrakDetail={pendingPoolCompare?.detail}
-        onClose={() => setPendingPoolCompare(null)}
-        onConfirm={handlePoolCompareDirective}
-      />
 
       {/* ➕ CARİ SUGGEST MODAL */}
       {showCariSuggest && (

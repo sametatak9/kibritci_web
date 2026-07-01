@@ -61,7 +61,25 @@ function formatGeminiKeyHint(format) {
   }
 }
 function parseGeminiError(error) {
-  const msg = error instanceof Error ? error.message : String(error);
+  const raw = error instanceof Error ? error.message : String(error);
+  let msg = raw;
+  try {
+    const parsed = JSON.parse(raw);
+    const inner = parsed?.error?.message ?? parsed?.message;
+    if (typeof inner === "string") msg = inner;
+  } catch {
+  }
+  if (/429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota/i.test(msg)) {
+    const modelMatch = msg.match(/model:\s*([\w.-]+)/i);
+    const model = modelMatch?.[1] ?? "Gemini";
+    return [
+      `Gemini API g\xFCnl\xFCk \xFCcretsiz kota doldu (${model}).`,
+      "\xDCcretsiz planda model ba\u015F\u0131na g\xFCnde ~20 istek s\u0131n\u0131r\u0131 vard\u0131r.",
+      "\u2022 Birka\xE7 dakika veya ertesi g\xFCn tekrar deneyin",
+      "\u2022 Kal\u0131c\u0131 \xE7\xF6z\xFCm: Google AI Studio \u2192 Billing a\xE7\u0131n veya \xFCcretli plan",
+      "\u2022 Kullan\u0131m: https://ai.dev/rate-limit"
+    ].join("\n");
+  }
   if (/API key not valid|invalid.?api.?key|401|403|PERMISSION_DENIED/i.test(msg)) {
     return [
       "Gemini API anahtar\u0131 reddedildi.",
@@ -101,12 +119,27 @@ async function testGeminiConnection() {
   }
   try {
     const ai = getGeminiClient();
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: "Reply with exactly: OK",
-      config: { maxOutputTokens: 16, temperature: 0 }
-    });
-    return { ok: true, keyInfo, modelResponse: response.text?.trim() };
+    let lastError = null;
+    for (const model of ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"]) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents: "Reply with exactly: OK",
+          config: { maxOutputTokens: 16, temperature: 0 }
+        });
+        const text = response.text?.trim();
+        if (text) {
+          return { ok: true, keyInfo, modelResponse: `${text} (${model})` };
+        }
+      } catch (err) {
+        lastError = err;
+        const parsed = parseGeminiError(err);
+        if (!/429|RESOURCE_EXHAUSTED|quota/i.test(parsed)) {
+          return { ok: false, keyInfo, error: parsed };
+        }
+      }
+    }
+    return { ok: false, keyInfo, error: parseGeminiError(lastError) };
   } catch (err) {
     return { ok: false, keyInfo, error: parseGeminiError(err) };
   }
@@ -114,7 +147,8 @@ async function testGeminiConnection() {
 
 // src/server/geminiGenerate.ts
 var IS_VERCEL = Boolean(process.env.VERCEL);
-var MODELS = IS_VERCEL ? ["gemini-2.5-flash", "gemini-2.0-flash"] : ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+var GEMINI_MODEL_FALLBACK = IS_VERCEL ? ["gemini-2.0-flash", "gemini-1.5-flash"] : ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"];
+var MODELS = GEMINI_MODEL_FALLBACK;
 var MAX_RETRIES_PER_MODEL = IS_VERCEL ? 1 : 2;
 var RETRY_DELAY_MS = IS_VERCEL ? 350 : 1200;
 var ATTEMPT_TIMEOUT_MS = IS_VERCEL ? 9e3 : 45e3;
@@ -428,7 +462,7 @@ Be precise with Turkish names (\u0130, \u015E, \u011E, \xDC, \xD6, \xC7). Each e
         },
         required: ["yil", "ay", "personelKayitlari"]
       };
-      const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+      const models = GEMINI_MODEL_FALLBACK;
       let response;
       let lastError;
       for (const model of models) {
@@ -571,7 +605,7 @@ Provide the output strictly conforming to the response schema.
         required: ["irsaliyeNo", "tarih", "firma", "kalemler"]
       };
       const userPrompt = "L\xFCtfen ekteki teslimat irsaliyesi (waybill / delivery note) belgesini analiz et. \u0130rsaliye numaras\u0131n\u0131 (irsaliyeNo), tarihini (tarih) (YYYY-MM-DD format\u0131nda), g\xF6nderen / sat\u0131c\u0131 firma ad\u0131n\u0131 (firma) ve teslim edilen t\xFCm malzeme kalemlerini (kalemler listesi alt\u0131nda urunAdi, miktar ve birim olarak) \xE7\u0131kar.";
-      const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+      const models = GEMINI_MODEL_FALLBACK;
       let response;
       let lastError;
       for (const model of models) {
@@ -643,7 +677,7 @@ Provide the output strictly conforming to the response schema.
         required: ["faturaNo", "tarih", "firma", "kalemler", "toplamTutar", "kdvTutar", "genelToplam"]
       };
       const userPrompt = "L\xFCtfen ekteki faturay\u0131 (invoice) analiz et. Fatura numaras\u0131n\u0131 (faturaNo), faturan\u0131n kesildi\u011Fi tarihi (tarih) (YYYY-MM-DD format\u0131nda), sat\u0131c\u0131 firma ad\u0131n\u0131 (firma), faturadaki t\xFCm mal veya hizmet kalemlerini (kalemler listesi alt\u0131nda urunAdi, miktar, birim, birimFiyat, kdvOran y\xFCzde olarak \xF6rn. 20, ve toplam tutar\u0131) \xE7\u0131kar. Ayr\u0131ca toplam matrah\u0131 (toplamTutar), KDV tutar\u0131n\u0131 (kdvTutar) ve \xF6denecek genel toplam\u0131 (genelToplam) \xE7\u0131kar.";
-      const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+      const models = GEMINI_MODEL_FALLBACK;
       let response;
       let lastError;
       for (const model of models) {
@@ -740,7 +774,7 @@ Audit Rules:
 
 Provide the response strictly conforming to the requested schema.
 `;
-      const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+      const models = GEMINI_MODEL_FALLBACK;
       let response;
       let lastError;
       for (const model of models) {
@@ -771,6 +805,89 @@ Provide the response strictly conforming to the requested schema.
       res.status(500).json({ error: error.message || "Failed to perform 3-way comparison" });
     }
   });
+  app2.post("/api/analyze-linked-evrak", async (req, res) => {
+    try {
+      const { saTalebi, irsaliyeler, fatura, kalemBaglantilari, analizOdak, ozelTalimat } = req.body;
+      const ai = getGeminiClient();
+      const responseSchema = {
+        type: import_genai2.Type.OBJECT,
+        properties: {
+          status: { type: import_genai2.Type.STRING, description: "Must be either 'SORUNSUZ ONAY' or 'SORUNLU'" },
+          discrepancies: {
+            type: import_genai2.Type.ARRAY,
+            items: { type: import_genai2.Type.STRING },
+            description: "List of found differences or discrepancies, empty if none"
+          },
+          reportText: { type: import_genai2.Type.STRING, description: "Detailed Turkish markdown analysis report" }
+        },
+        required: ["status", "discrepancies", "reportText"]
+      };
+      const focusList = Array.isArray(analizOdak) && analizOdak.length ? analizOdak.join(", ") : "miktar, firma, tarih, tutar, \xFCr\xFCn ad\u0131, birim, fiyat";
+      const customBlock = ozelTalimat?.trim() ? `
+
+KULLANICI TAL\u0130MATI (\xF6ncelikli): ${ozelTalimat.trim()}` : "";
+      const kalemBlock = Array.isArray(kalemBaglantilari) && kalemBaglantilari.length ? `
+
+KULLANICI ONAYLI KALEM BA\u011ELANTILARI (bu e\u015Fle\u015Ftirmelere g\xF6re analiz yap):
+${JSON.stringify(kalemBaglantilari, null, 2)}` : "";
+      const promptText = `
+You are an expert construction auditor and accountant for a Turkish construction site ERP.
+Analyze the following linked documents as a group. The user has explicitly linked line items between documents.
+
+1. Sat\u0131n Alma Sipari\u015Fi (Purchase Order):
+${JSON.stringify(saTalebi || "Ba\u011Fl\u0131 PO yok", null, 2)}
+
+2. Ba\u011Fl\u0131 \u0130rsaliyeler (Delivery Waybills):
+${JSON.stringify(irsaliyeler || [], null, 2)}
+
+3. Fatura (Invoice):
+${JSON.stringify(fatura || "Ba\u011Fl\u0131 fatura yok", null, 2)}
+${kalemBlock}
+
+KULLANICI ANAL\u0130Z ODA\u011EI: ${focusList}
+${customBlock}
+
+Rules:
+- Focus your analysis primarily on the user's selected focus areas (${focusList}).
+- Respect the kalem ba\u011Flant\u0131lar\u0131 \u2014 compare linked line items across SA \u2192 \u0130rsaliye \u2192 Fatura.
+- For bulk materials (M\u0131c\u0131r, Stabilize, Grovak, Ta\u015F Tozu): apply 1 TIR \u2248 25 TON conversion with \xB15% tolerance when comparing TIR/KG/TON.
+- If quantities, amounts, dates, and firms align within tolerance, status = "SORUNSUZ ONAY".
+- Otherwise status = "SORUNLU" and list discrepancies.
+- Write a professional Turkish markdown report in reportText for a site manager. Include summary, detail per focus area, and recommendations.
+
+Provide the response strictly conforming to the requested schema.
+`;
+      const models = GEMINI_MODEL_FALLBACK;
+      let response;
+      let lastError;
+      for (const model of models) {
+        try {
+          console.log(`Analyzing linked evrak with model: ${model}...`);
+          response = await ai.models.generateContent({
+            model,
+            contents: promptText,
+            config: {
+              responseMimeType: "application/json",
+              responseSchema,
+              temperature: 0.1
+            }
+          });
+          if (response?.text) break;
+        } catch (err) {
+          lastError = err;
+          console.warn(`Model ${model} failed for linked evrak analysis, trying next:`, err);
+        }
+      }
+      if (!response || !response.text) {
+        throw lastError || new Error("All models failed or returned empty response from Gemini API");
+      }
+      const parsedData = JSON.parse(response.text);
+      res.json({ success: true, data: parsedData });
+    } catch (error) {
+      console.error("Error in AI linked evrak analysis:", error);
+      res.status(500).json({ error: error.message || "Failed to analyze linked evrak" });
+    }
+  });
   app2.post("/api/generate-tutanak", async (req, res) => {
     try {
       const { konu, detaylar, muhatap } = req.body;
@@ -786,11 +903,11 @@ L\xFCtfen \u015Fantiye y\xF6netimi i\xE7in resmi ve hukuki a\xE7\u0131dan ge\xE7
 
 Tutanak i\xE7eri\u011Fini resmi, a\u011F\u0131rba\u015Fl\u0131 ve \u015Fantiye mevzuatlar\u0131na uygun hukuk diliyle yaz. En altta "Haz\u0131rlayan / \u015Eantiye \u015Eefi" ve "Muhatap / Teslim Alan" imza b\xF6l\xFCmleri olsun. HTML veya Markdown format\u0131nda yazma, d\xFCz metin olsun.
 `;
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt
+      const { text } = await generateGeminiWithFallback({
+        contents: prompt,
+        label: "Tutanak olu\u015Fturma"
       });
-      res.json({ success: true, text: response.text });
+      res.json({ success: true, text });
     } catch (error) {
       console.error("Error in generate-tutanak:", error);
       res.status(500).json({ error: error.message || "Failed to generate tutanak" });
@@ -1002,7 +1119,7 @@ L\xFCtfen en uygun kategoriyi 'detectedType' alan\u0131na atay\u0131p d\xF6k\xFC
       } else {
         return res.status(400).json({ error: "Invalid docType specified" });
       }
-      const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+      const models = GEMINI_MODEL_FALLBACK;
       let response;
       let lastError;
       for (const model of models) {
@@ -1039,12 +1156,11 @@ L\xFCtfen en uygun kategoriyi 'detectedType' alan\u0131na atay\u0131p d\xF6k\xFC
       if (!message) {
         return res.status(400).json({ error: "Message is required" });
       }
-      const ai = getGeminiClient();
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: `Sen Kibrit\xE7i \u0130n\u015Faat ERP sisteminin ak\u0131ll\u0131 yapay zeka \u015Fantiye asistan\u0131s\u0131n. Kullan\u0131c\u0131ya \u015Fantiye y\xF6netimi, personel, stok ve genel in\u015Faat ERP s\xFCre\xE7leri hakk\u0131nda yard\u0131mc\u0131 oluyorsun. L\xFCtfen k\u0131sa, anla\u015F\u0131l\u0131r, kibar ve \xE7\xF6z\xFCm odakl\u0131 bir yan\u0131t ver. Kullan\u0131c\u0131 mesaj\u0131: ${message}`
+      const { text } = await generateGeminiWithFallback({
+        contents: `Sen Kibrit\xE7i \u0130n\u015Faat ERP sisteminin ak\u0131ll\u0131 yapay zeka \u015Fantiye asistan\u0131s\u0131n. Kullan\u0131c\u0131ya \u015Fantiye y\xF6netimi, personel, stok ve genel in\u015Faat ERP s\xFCre\xE7leri hakk\u0131nda yard\u0131mc\u0131 oluyorsun. L\xFCtfen k\u0131sa, anla\u015F\u0131l\u0131r, kibar ve \xE7\xF6z\xFCm odakl\u0131 bir yan\u0131t ver. Kullan\u0131c\u0131 mesaj\u0131: ${message}`,
+        label: "Asistan sohbeti"
       });
-      res.json({ text: response.text });
+      res.json({ text });
     } catch (error) {
       console.error("Error in chat assistant endpoint:", error);
       res.status(500).json({ error: error.message || "Failed to process message" });

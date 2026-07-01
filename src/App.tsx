@@ -36,7 +36,8 @@ import {
   Personel, AylikYoklamaMap, SatinAlmaTalebi, Irsaliye, Fatura, 
   KasaHareketi, AracBakim, Demisbas, KampOdasi, KampKaydi, KampYerleske, KampKat,
   HazirTutanak, CariKart, StokKart, EpostaGonderim, SahaFaaliyeti as SahaFaaliyetiType,
-  OperatorFaaliyet, TaseronKesintiRaporu, MaaşOdeme, PersonelIslemGecmisi, CariKartIslem, StokKartIslem
+  OperatorFaaliyet, TaseronKesintiRaporu, MaaşOdeme, PersonelIslemGecmisi, CariKartIslem, StokKartIslem,
+  EvrakBaglantiGrubu, OnayliAnalizRaporu
 } from './types/erp';
 
 // Initial Mock Data
@@ -90,6 +91,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { YetkiVermeScreen } from './components/YetkiVermeScreen';
 import { OperatorScreen } from './components/OperatorScreen';
 import { MaasOdeScreen } from './components/MaasOdeScreen';
+import { YapayZekaKarsilastirScreen } from './components/YapayZekaKarsilastirScreen';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>("ana_sayfa");
@@ -128,6 +130,8 @@ export default function App() {
   const [satinAlmaTalepleri, setSatinAlmaTalepleri] = useState<SatinAlmaTalebi[]>([]);
   const [irsaliyeler, setIrsaliyeler] = useState<Irsaliye[]>([]);
   const [faturalar, setFaturalar] = useState<Fatura[]>([]);
+  const [evrakBaglantiGruplari, setEvrakBaglantiGruplari] = useState<EvrakBaglantiGrubu[]>([]);
+  const [onayliAnalizRaporlari, setOnayliAnalizRaporlari] = useState<OnayliAnalizRaporu[]>([]);
   const [kasaHareketleri, setKasaHareketleri] = useState<KasaHareketi[]>([]);
   
   const [araclar, setAraclar] = useState<AracBakim[]>([]);
@@ -371,6 +375,13 @@ export default function App() {
         const invoicesData = await seedCollectionIfEmpty('faturalar', INITIAL_FATURA);
         setFaturalar(invoicesData);
 
+        setLoadingMsg('Evrak bağlama grupları yükleniyor...');
+        const baglantiData = await seedCollectionIfEmpty('evrakBaglantiGruplari', []);
+        setEvrakBaglantiGruplari(baglantiData);
+
+        const analizData = await seedCollectionIfEmpty('onayliAnalizRaporlari', []);
+        setOnayliAnalizRaporlari(analizData);
+
         setLoadingMsg('Kasa defteri hareket dökümleri indiriliyor...');
         const cashLogData = await seedCollectionIfEmpty('kasaHareketleri', INITIAL_KASA);
         setKasaHareketleri(cashLogData);
@@ -521,7 +532,28 @@ export default function App() {
       setGeminiApiAlert(null);
       return;
     }
+    const cacheKey = 'kibritci_gemini_health_v1';
+    try {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        const { ok, message, at } = JSON.parse(cached) as { ok: boolean; message: string; at: number };
+        if (Date.now() - at < 30 * 60 * 1000) {
+          setGeminiApiAlert(ok ? null : message);
+          return;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
     probeGeminiApi().then((r) => {
+      try {
+        sessionStorage.setItem(
+          cacheKey,
+          JSON.stringify({ ok: r.ok, message: r.message, at: Date.now() })
+        );
+      } catch {
+        /* ignore */
+      }
       setGeminiApiAlert(r.ok ? null : r.message);
     });
   }, [currentUser]);
@@ -556,6 +588,22 @@ export default function App() {
         list.push({ id: doc.id, ...doc.data() } as any);
       });
       setFaturalar(list);
+    });
+
+    const unsubEvrakBaglanti = onSnapshot(collection(db, 'evrakBaglantiGruplari'), (snapshot) => {
+      const list: EvrakBaglantiGrubu[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() } as any);
+      });
+      setEvrakBaglantiGruplari(list);
+    });
+
+    const unsubAnalizRapor = onSnapshot(collection(db, 'onayliAnalizRaporlari'), (snapshot) => {
+      const list: OnayliAnalizRaporu[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() } as any);
+      });
+      setOnayliAnalizRaporlari(list);
     });
 
     const unsubSatinAlma = onSnapshot(collection(db, 'satinAlmaTalepleri'), (snapshot) => {
@@ -716,6 +764,8 @@ export default function App() {
     return () => {
       unsubIrsaliyeler();
       unsubFaturalar();
+      unsubEvrakBaglanti();
+      unsubAnalizRapor();
       unsubSatinAlma();
       unsubPersonel();
       unsubYoklamalar();
@@ -841,6 +891,22 @@ export default function App() {
     setFaturalar(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
       setTimeout(() => syncArrayToFirestore('faturalar', prev, next), 0);
+      return next;
+    });
+  };
+
+  const setEvrakBaglantiGruplariWithSync = (updater: EvrakBaglantiGrubu[] | ((g: EvrakBaglantiGrubu[]) => EvrakBaglantiGrubu[])) => {
+    setEvrakBaglantiGruplari(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setTimeout(() => syncArrayToFirestore('evrakBaglantiGruplari', prev, next), 0);
+      return next;
+    });
+  };
+
+  const setOnayliAnalizRaporlariWithSync = (updater: OnayliAnalizRaporu[] | ((r: OnayliAnalizRaporu[]) => OnayliAnalizRaporu[])) => {
+    setOnayliAnalizRaporlari(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setTimeout(() => syncArrayToFirestore('onayliAnalizRaporlari', prev, next), 0);
       return next;
     });
   };
@@ -1611,6 +1677,8 @@ export default function App() {
                   setIrsaliyeler={setIrsaliyelerWithSync}
                   faturalar={faturalar}
                   setFaturalar={setFaturalarWithSync}
+                  evrakBaglantiGruplari={evrakBaglantiGruplari}
+                  setEvrakBaglantiGruplari={setEvrakBaglantiGruplariWithSync}
                   satinAlmaTalepleri={satinAlmaTalepleri}
                   cariKartlar={cariKartlar}
                   setCariKartlar={setCariKartlarWithSync}
@@ -1627,6 +1695,8 @@ export default function App() {
                   setFaturalar={setFaturalarWithSync}
                   irsaliyeler={irsaliyeler}
                   setIrsaliyeler={setIrsaliyelerWithSync}
+                  evrakBaglantiGruplari={evrakBaglantiGruplari}
+                  setEvrakBaglantiGruplari={setEvrakBaglantiGruplariWithSync}
                   satinAlmaTalepleri={satinAlmaTalepleri}
                   cariKartlar={cariKartlar}
                   setCariKartlar={setCariKartlarWithSync}
@@ -1634,6 +1704,18 @@ export default function App() {
                   setStokKartlar={setStokKartlarWithSync}
                   currentUser={currentUser}
                   addNotification={addNotification}
+                />
+              )}
+
+              {activeTab === "yz_karsilastir" && (
+                <YapayZekaKarsilastirScreen
+                  faturalar={faturalar}
+                  irsaliyeler={irsaliyeler}
+                  satinAlmaTalepleri={satinAlmaTalepleri}
+                  evrakBaglantiGruplari={evrakBaglantiGruplari}
+                  onayliAnalizRaporlari={onayliAnalizRaporlari}
+                  setOnayliAnalizRaporlari={setOnayliAnalizRaporlariWithSync}
+                  currentUser={currentUser}
                 />
               )}
 

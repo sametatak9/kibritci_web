@@ -484,3 +484,47 @@ export interface YapayZekaEslesme {
   imzaliEvrakUrl?: string;
   durum: 'ONAYLANDI' | 'FARK VAR' | 'BEKLEMEDE';
 }
+
+/** Evrak bağlama — kalem eşleştirmesi */
+export interface KalemBaglantisi {
+  id: string;
+  urunAdi: string;
+  saKalemId?: string;
+  irsaliyeKalemId?: string;
+  irsaliyeId?: string;
+  faturaKalemId?: string;
+  saMiktar?: number;
+  irsaliyeMiktar?: number;
+  faturaMiktar?: number;
+  birim?: string;
+  onaylandi: boolean;
+}
+
+/** 2 aşamalı bağlama sonucu — YZ havuzuna düşer */
+export interface EvrakBaglantiGrubu {
+  id: string;
+  olusturmaTarihi: string;
+  saId?: string;
+  irsaliyeIds: string[];
+  faturaId?: string;
+  kalemBaglantilari: KalemBaglantisi[];
+  durum: 'TASLAK' | 'ID_BAGLANDI' | 'KALEM_ONAYLANDI' | 'ANALIZ_BEKLIYOR';
+  olusturan?: string;
+  cariUnvan?: string;
+}
+
+/** Onaylanmış yapay zeka analiz raporu */
+export interface OnayliAnalizRaporu {
+  id: string;
+  grupId: string;
+  tarih: string;
+  analizOdak: string[];
+  ozelTalimat?: string;
+  raporMetni: string;
+  durum: 'TASLAK' | 'ONAYLANDI';
+  imzaliEvrakUrl?: string;
+  olusturan?: string;
+  saId?: string;
+  faturaNo?: string;
+  irsaliyeNos?: string[];
+}

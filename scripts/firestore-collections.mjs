@@ -8,6 +8,8 @@ export const FIRESTORE_COLLECTIONS = [
   'satinAlmaTalepleri',
   'irsaliyeler',
   'faturalar',
+  'evrakBaglantiGruplari',
+  'onayliAnalizRaporlari',
   'kasaHareketleri',
   'araclar',
   'demirbaslar',

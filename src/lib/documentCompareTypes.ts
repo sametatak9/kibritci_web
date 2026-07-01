@@ -4,7 +4,11 @@ export type CompareFocus =
   | 'urun_adi'
   | 'birim'
   | 'fiyat'
-  | 'kg_ton_donusum';
+  | 'kg_ton_donusum'
+  | 'tarih'
+  | 'tutar';
+
+export type AnalizFocus = CompareFocus;
 
 export interface CompareKalemRow {
   id: string;
@@ -49,6 +53,8 @@ export const COMPARE_FOCUS_LABELS: Record<CompareFocus, string> = {
   birim: 'Birimleri karşılaştır (ADET, KG, TON…)',
   fiyat: 'Fiyat ve tutarları karşılaştır',
   kg_ton_donusum: 'KG ↔ TON ↔ TIR dönüşümünü kontrol et',
+  tarih: 'Tarih uyumunu kontrol et',
+  tutar: 'Toplam tutar uyumunu kontrol et',
 };
 
 /** Havuzdan karşılaştırma sekmesine geçerken önceden doldurulan evrak + AI direktifi */

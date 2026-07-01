@@ -77,7 +77,10 @@ export const Topbar: React.FC<TopbarProps> = ({
       onay_islemleri: "Onay Havuzu & İmzalar",
       admin: "Üyelik & Admin Paneli",
       yetki_verme: "Sayfa Yetkilendirme",
-      taseron_kesinti: "Taşeron Hakediş Kesintileri"
+      taseron_kesinti: "Taşeron Hakediş Kesintileri",
+      yz_karsilastir: "YZ Karşılaştır ve Yorumla",
+      fatura_giris: "Fatura Girişi",
+      irsaliye_giris: "İrsaliye ve Fiş Girişi"
     };
     return labels[tab] || tab;
   };

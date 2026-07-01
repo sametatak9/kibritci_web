@@ -40,7 +40,30 @@ export function formatGeminiKeyHint(format: GeminiKeyFormat): string {
 }
 
 export function parseGeminiError(error: unknown): string {
-  const msg = error instanceof Error ? error.message : String(error);
+  const raw = error instanceof Error ? error.message : String(error);
+
+  // JSON gövdesi içinde kota hatası
+  let msg = raw;
+  try {
+    const parsed = JSON.parse(raw);
+    const inner = parsed?.error?.message ?? parsed?.message;
+    if (typeof inner === 'string') msg = inner;
+  } catch {
+    /* düz metin */
+  }
+
+  if (/429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota/i.test(msg)) {
+    const modelMatch = msg.match(/model:\s*([\w.-]+)/i);
+    const model = modelMatch?.[1] ?? 'Gemini';
+    return [
+      `Gemini API günlük ücretsiz kota doldu (${model}).`,
+      'Ücretsiz planda model başına günde ~20 istek sınırı vardır.',
+      '• Birkaç dakika veya ertesi gün tekrar deneyin',
+      '• Kalıcı çözüm: Google AI Studio → Billing açın veya ücretli plan',
+      '• Kullanım: https://ai.dev/rate-limit',
+    ].join('\n');
+  }
+
   if (/API key not valid|invalid.?api.?key|401|403|PERMISSION_DENIED/i.test(msg)) {
     return [
       'Gemini API anahtarı reddedildi.',
@@ -92,12 +115,30 @@ export async function testGeminiConnection(): Promise<{
 
   try {
     const ai = getGeminiClient();
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: 'Reply with exactly: OK',
-      config: { maxOutputTokens: 16, temperature: 0 },
-    });
-    return { ok: true, keyInfo, modelResponse: response.text?.trim() };
+    let lastError: unknown = null;
+
+    for (const model of ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash']) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents: 'Reply with exactly: OK',
+          config: { maxOutputTokens: 16, temperature: 0 },
+        });
+        const text = response.text?.trim();
+        if (text) {
+          return { ok: true, keyInfo, modelResponse: `${text} (${model})` };
+        }
+      } catch (err) {
+        lastError = err;
+        const parsed = parseGeminiError(err);
+        // Kota dışı hatalarda diğer modele geçme
+        if (!/429|RESOURCE_EXHAUSTED|quota/i.test(parsed)) {
+          return { ok: false, keyInfo, error: parsed };
+        }
+      }
+    }
+
+    return { ok: false, keyInfo, error: parseGeminiError(lastError) };
   } catch (err) {
     return { ok: false, keyInfo, error: parseGeminiError(err) };
   }
