@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Tent, Plus, Trash2, Camera, Check, RefreshCw, Eye, 
   Search, UserPlus, ClipboardList, Package, Layers, MapPin, Sparkles, CheckCircle, Clock, X, ArrowRight, ShieldCheck, DoorOpen, LogOut, Image as ImageIcon, MessageSquare, Calendar
@@ -57,11 +57,15 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   // ─────────────────────────────────────────────────────────────
   // STATUS / ALERTS STATE
   // ─────────────────────────────────────────────────────────────
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const statusHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showStatus = (type: 'success' | 'error', text: string) => {
+  const showStatus = (type: 'success' | 'error' | 'info', text: string, autoHideMs = 4000) => {
+    if (statusHideTimer.current) clearTimeout(statusHideTimer.current);
     setStatusMessage({ type, text });
-    setTimeout(() => setStatusMessage(null), 4000);
+    if (type !== 'info' && autoHideMs > 0) {
+      statusHideTimer.current = setTimeout(() => setStatusMessage(null), autoHideMs);
+    }
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -80,6 +84,16 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   const [clearingLegacy, setClearingLegacy] = useState(false);
   const [clearingAll, setClearingAll] = useState(false);
   const legacySeedRooms = hasLegacySeedRooms(kampOdalari);
+
+  useEffect(() => {
+    if (!clearingAll && !clearingLegacy) return;
+    const safety = setTimeout(() => {
+      setClearingAll(false);
+      setClearingLegacy(false);
+      showStatus('error', 'İşlem çok uzun sürdü. Sayfayı yenileyip tekrar deneyin.');
+    }, 95_000);
+    return () => clearTimeout(safety);
+  }, [clearingAll, clearingLegacy]);
 
   const yerleskeler = kampYerleskeleri;
   const katlar = kampKatlari;
@@ -368,18 +382,19 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       return;
     }
     setClearingLegacy(true);
+    showStatus('info', 'Örnek odalar siliniyor, lütfen bekleyin…', 0);
     try {
       const result = await purgeLegacyKampData(currentUser?.email);
       if (result.roomIds.length === 0 && legacySeedRooms) {
         showStatus('error', 'Örnek oda eşleşmedi. Tüm kampı sıfırlamayı deneyin.');
       } else {
-        showStatus(
-          'success',
-          `${result.roomIds.length} örnek oda silindi ve kaydedildi. Yenilemede geri gelmez.`
-        );
+        const msg = `✅ ${result.roomIds.length} örnek oda silindi. Sayfa yenilense bile geri gelmez.`;
+        showStatus('success', msg, 8000);
+        window.alert(msg);
       }
-    } catch {
-      showStatus('error', 'Örnek odalar silinemedi veya kaydedilemedi.');
+    } catch (err) {
+      console.error(err);
+      showStatus('error', err instanceof Error ? err.message : 'Örnek odalar silinemedi.');
     } finally {
       setClearingLegacy(false);
     }
@@ -394,14 +409,19 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       return;
     }
     setClearingAll(true);
+    showStatus('info', 'Kamp verisi sıfırlanıyor, lütfen bekleyin…', 0);
     try {
       const counts = await purgeAllKampData();
       setSelectedYerleskeId('');
       setSelectedKatId('');
-      showStatus(
-        'success',
-        `Sıfırlandı: ${counts.yerleskeler} yerleşke, ${counts.odalar} oda, ${counts.kayitlar} kayıt.`
-      );
+      setPlacementYerleskeId('');
+      setPlacementKatId('');
+      setSelectedRoomId('');
+      const msg =
+        `✅ Kamp başarıyla sıfırlandı!\n\n` +
+        `${counts.yerleskeler} yerleşke, ${counts.katlar} kat, ${counts.odalar} oda, ${counts.kayitlar} konaklama kaydı silindi.`;
+      showStatus('success', '✅ Kamp verisi başarıyla sıfırlandı.', 8000);
+      window.alert(msg);
     } catch (err) {
       console.error(err);
       showStatus('error', err instanceof Error ? err.message : 'Kamp verisi sıfırlanamadı.');
@@ -780,10 +800,18 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
 
       {/* 🔔 Real-time status toast inside screen */}
       {statusMessage && (
-        <div className={`p-4 rounded-xl border flex items-center space-x-3 shadow-lg max-w-xl animate-bounce ${
-          statusMessage.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+        <div className={`p-4 rounded-xl border flex items-center space-x-3 shadow-lg max-w-xl ${
+          statusMessage.type === 'success'
+            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600'
+            : statusMessage.type === 'info'
+              ? 'bg-blue-500/10 border-blue-500/30 text-blue-600'
+              : 'bg-rose-500/10 border-rose-500/30 text-rose-600'
         }`}>
-          <CheckCircle size={16} />
+          {statusMessage.type === 'info' ? (
+            <RefreshCw size={16} className="animate-spin shrink-0" />
+          ) : (
+            <CheckCircle size={16} className="shrink-0" />
+          )}
           <span className="text-xs font-bold">{statusMessage.text}</span>
         </div>
       )}
@@ -1264,10 +1292,11 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
             <button
               type="button"
               onClick={handlePurgeAllKamp}
-              disabled={clearingAll}
-              className="w-full bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-[10px] font-bold py-2 rounded-lg cursor-pointer disabled:opacity-60"
+              disabled={clearingAll || clearingLegacy}
+              className="w-full bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-[10px] font-bold py-2 rounded-lg cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
             >
-              {clearingAll ? 'Sıfırlanıyor...' : '⚠️ Tüm Kamp Verisini Sıfırla'}
+              {clearingAll && <RefreshCw size={12} className="animate-spin" />}
+              <span>⚠️ Tüm Kamp Verisini Sıfırla</span>
             </button>
 
             <div className="flex gap-1 text-[9px] font-bold">

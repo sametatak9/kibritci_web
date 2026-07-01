@@ -425,9 +425,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       }
       setSelectedYerleske('');
       setSelectedKat('');
-      alert(
-        `${result.roomIds.length} örnek oda, ${result.kayitIds.length} yerleşim kaydı silindi ve Firestore'a kaydedildi. Sayfa yenilense bile geri gelmez.`
-      );
+      const msg = `✅ ${result.roomIds.length} örnek oda, ${result.kayitIds.length} yerleşim kaydı silindi. Sayfa yenilense bile geri gelmez.`;
+      alert(msg);
     } catch (err) {
       console.error(err);
       alert(
@@ -452,7 +451,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       setSelectedYerleske('');
       setSelectedKat('');
       alert(
-        `Kamp verisi sıfırlandı: ${counts.yerleskeler} yerleşke, ${counts.katlar} kat, ${counts.odalar} oda, ${counts.kayitlar} kayıt silindi.`
+        `✅ Kamp verisi başarıyla sıfırlandı!\n\n${counts.yerleskeler} yerleşke, ${counts.katlar} kat, ${counts.odalar} oda, ${counts.kayitlar} kayıt silindi.`
       );
     } catch (err) {
       console.error(err);

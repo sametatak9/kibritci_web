@@ -2,6 +2,45 @@ import { KampKat, KampKaydi, KampOdasi, KampYerleske } from '../types/erp';
 import { db, fetchCollection, removeDocument, saveDocument, withTimeout } from './firebase';
 import { writeBatch, doc } from 'firebase/firestore';
 
+const KAMP_PURGE_TIMEOUT_MS = 90_000;
+let kampPurgeQueue: Promise<unknown> = Promise.resolve();
+
+function enqueueKampPurge<T>(task: () => Promise<T>): Promise<T> {
+  const run = kampPurgeQueue.then(() =>
+    Promise.race([
+      task(),
+      new Promise<never>((_, reject) => {
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                'Kamp silme işlemi zaman aşımına uğradı (90 sn). Sayfayı yenileyip tekrar deneyin.'
+              )
+            ),
+          KAMP_PURGE_TIMEOUT_MS
+        );
+      }),
+    ])
+  );
+  kampPurgeQueue = run.catch(() => {});
+  return run;
+}
+
+async function verifyCollectionEmptyWithRetry(
+  collectionName: string,
+  retries = 4,
+  delayMs = 600
+): Promise<number> {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    const count = await verifyCollectionEmpty(collectionName);
+    if (count === 0) return 0;
+    if (attempt < retries - 1) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  return verifyCollectionEmpty(collectionName);
+}
+
 export async function createKampYerleske(ad: string, olusturan?: string): Promise<KampYerleske> {
   const trimmed = ad.trim();
   if (!trimmed) throw new Error('Yerleşke adı boş olamaz');
@@ -286,6 +325,7 @@ export async function purgeLegacyKampData(purgedBy?: string): Promise<{
   yerleskeIds: string[];
   katIds: string[];
 }> {
+  return enqueueKampPurge(async () => {
   const [rooms, kayitlar, yerleskeler, katlar] = await Promise.all([
     fetchCollection<KampOdasi & { id: string }>('kampOdalari'),
     fetchCollection<KampKaydi & { id: string }>('kampKayitlari'),
@@ -314,6 +354,7 @@ export async function purgeLegacyKampData(purgedBy?: string): Promise<{
 
   await saveKampDemoPurgedState(legacyRooms.length, purgedBy);
 
+  await new Promise((resolve) => setTimeout(resolve, 600));
   const remainingLegacy = (await fetchCollection<KampOdasi>('kampOdalari')).filter(isLegacyKampRoom);
   if (remainingLegacy.length > 0) {
     throw new Error(`${remainingLegacy.length} örnek oda Firestore'dan silinemedi`);
@@ -325,6 +366,7 @@ export async function purgeLegacyKampData(purgedBy?: string): Promise<{
     yerleskeIds: legacyYerleskeler.map((y) => y.id),
     katIds: legacyKatlar.map((k) => k.id),
   };
+  });
 }
 
 /** Realtime dinleyiciler için yardımcı */
@@ -338,6 +380,7 @@ export async function purgeAllKampData(): Promise<{
   yerleskeler: number;
   katlar: number;
 }> {
+  return enqueueKampPurge(async () => {
   const counts = { odalar: 0, kayitlar: 0, yerleskeler: 0, katlar: 0 };
   const specs: Array<[string, keyof typeof counts]> = [
     ['kampOdalari', 'odalar'],
@@ -353,10 +396,10 @@ export async function purgeAllKampData(): Promise<{
   await saveKampDemoPurgedState(counts.odalar, 'purgeAll');
 
   const [remainOdalar, remainKayit, remainYerleske, remainKat] = await Promise.all([
-    verifyCollectionEmpty('kampOdalari'),
-    verifyCollectionEmpty('kampKayitlari'),
-    verifyCollectionEmpty('kampYerleskeleri'),
-    verifyCollectionEmpty('kampKatlari'),
+    verifyCollectionEmptyWithRetry('kampOdalari'),
+    verifyCollectionEmptyWithRetry('kampKayitlari'),
+    verifyCollectionEmptyWithRetry('kampYerleskeleri'),
+    verifyCollectionEmptyWithRetry('kampKatlari'),
   ]);
   if (remainOdalar + remainKayit + remainYerleske + remainKat > 0) {
     throw new Error(
@@ -365,6 +408,7 @@ export async function purgeAllKampData(): Promise<{
   }
 
   return counts;
+  });
 }
 
 /** Uygulama açılışında eski demo odaları otomatik temizler */
