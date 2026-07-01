@@ -11,13 +11,24 @@ import {
   query
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
+import { getFirestoreDatabaseId, resolveFirebaseConfig } from './firebaseConfig';
 import { shouldBlockMassDelete } from './productionDataGuard';
+
+const firebaseConfig = resolveFirebaseConfig();
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+const firestoreDbId = getFirestoreDatabaseId(firebaseConfig);
+export const db = firestoreDbId ? getFirestore(app, firestoreDbId) : getFirestore(app);
 export const auth = getAuth(app);
+
+/** Hangi Firebase projesine bağlı olduğumuzu konsolda görmek için */
+if (typeof window !== 'undefined') {
+  console.info(
+    `[Firebase] projectId=${firebaseConfig.projectId}` +
+      (firestoreDbId ? ` firestoreDb=${firestoreDbId}` : ' firestoreDb=(default)')
+  );
+}
 
 /**
  * Helper to wrap any promise with a timeout
