@@ -4,7 +4,7 @@ import {
   Truck, Tent, Clock, ClipboardList, Sparkles, ChevronRight, Activity 
 } from 'lucide-react';
 import { Personel, AylikYoklamaMap, AracBakim, KampKaydi, KampOdasi, HazirTutanak, KasaHareketi } from '../types/erp';
-import { getYoklamaDay } from '../lib/yoklamaUtils';
+import { getYoklamaDay, iterateMonthYoklama, isDayActiveForPersonel } from '../lib/yoklamaUtils';
 
 interface PersonelKartlariScreenProps {
   personeller: Personel[];
@@ -26,15 +26,21 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
   kasaHareketleri = []
 }) => {
   const [selectedPersId, setSelectedPersId] = useState<string>(personeller[0]?.id || "");
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const selectedPersonnel = personeller.find(p => p.id === selectedPersId);
 
   // Remaining receivables math
   const getReceivableDetails = (p: Personel) => {
-    // Basic calculation:
-    // Worked days in current month (June 2026) * Daily wage (Salary / 30) - any Cash Advance (Avans) from kasa.
     const pYoklama = yoklamalar[p.id] || {};
-    const workedDays = Object.values(pYoklama).filter(d => (d as { durum?: string })?.durum === 'Geldi').length;
-    const dailyWage = p.maas / 30;
+    let workedDays = 0;
+    iterateMonthYoklama(pYoklama, selectedYear, selectedMonth, (day, d) => {
+      if (d?.durum === 'Geldi' && isDayActiveForPersonel(p, selectedYear, selectedMonth, day, pYoklama)) {
+        workedDays += 1;
+      }
+    });
+    const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
+    const dailyWage = p.maas / Math.max(1, daysInMonth);
     const grossEarned = workedDays * dailyWage;
 
     // Check cash advances in kasa
@@ -111,6 +117,24 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
               <option key={p.id} value={p.id}>{p.ad} {p.soyad} ({p.gorev})</option>
             ))}
           </select>
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(Number(e.target.value))}
+            className="text-xs font-bold border border-[#e2e8f0] rounded-xl p-2.5 bg-slate-50 focus:border-blue-500 outline-none"
+          >
+            {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => (
+              <option key={m} value={m}>{m}. Ay</option>
+            ))}
+          </select>
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            className="text-xs font-bold border border-[#e2e8f0] rounded-xl p-2.5 bg-slate-50 focus:border-blue-500 outline-none"
+          >
+            {[2025, 2026, 2027].map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -161,7 +185,7 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
                 <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-sm space-y-4 border border-slate-800">
                   <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center justify-between">
                     <span>💵 HAKEDİŞ &amp; ALACAK HESABI</span>
-                    <span className="text-amber-500 font-mono">Haziran 2026</span>
+                    <span className="text-amber-500 font-mono">{selectedMonth}. Ay / {selectedYear}</span>
                   </h4>
 
                   <div className="space-y-2.5 text-xs text-slate-300 font-semibold">
@@ -230,7 +254,7 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
               <div className="flex items-center justify-between border-b pb-3">
                 <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                   <Activity size={14} className="text-emerald-500" />
-                  📅 Günlük Devam Takvimi (Haziran 2026)
+                  📅 Günlük Devam Takvimi ({selectedMonth}. Ay / {selectedYear})
                 </h4>
                 <div className="flex gap-2 text-[8px] font-bold">
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-emerald-500 block"></span>Geldi</span>
@@ -244,10 +268,9 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
                 {["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"].map(d => (
                   <div key={d} className="text-slate-400 uppercase tracking-wider">{d}</div>
                 ))}
-                {/* Simulated days for June 2026 (Starts on Monday June 1) */}
-                {Array.from({ length: 30 }).map((_, idx) => {
+                {Array.from({ length: new Date(selectedYear, selectedMonth, 0).getDate() }).map((_, idx) => {
                   const dayNo = idx + 1;
-                  const dayData = getYoklamaDay(yoklamalar[selectedPersonnel.id], 2026, 6, dayNo) || { durum: 'Girilmedi' as const };
+                  const dayData = getYoklamaDay(yoklamalar[selectedPersonnel.id], selectedYear, selectedMonth, dayNo) || { durum: 'Girilmedi' as const };
                   return (
                     <div 
                       key={idx} 

@@ -135,6 +135,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const [presentIds, setPresentIds] = useState<string[]>([]);
   const [absentIds, setAbsentIds] = useState<string[]>([]);
   const [mesaiSaatleri, setMesaiSaatleri] = useState<Record<string, number>>({});
+  const [hasLocalAttendanceDraft, setHasLocalAttendanceDraft] = useState(false);
   const [spotlightMesai, setSpotlightMesai] = useState<string>('0');
 
   // 2. SAHA FAALİYETİ STATE
@@ -361,6 +362,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
 
   // Load saved attendance for the selected date on load or date change
   useEffect(() => {
+    if (hasLocalAttendanceDraft) return;
     const present: string[] = [];
     const absent: string[] = [];
     const localMesai: Record<string, number> = {};
@@ -385,7 +387,11 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     
     // Automatically pre-fill active activities staff with currently marked present staff
     setFaaliyetPersonelIds(present);
-  }, [selectedDate, yoklamalar, personeller]);
+  }, [selectedDate, yoklamalar, personeller, hasLocalAttendanceDraft]);
+
+  useEffect(() => {
+    setHasLocalAttendanceDraft(false);
+  }, [selectedDate]);
 
   // Load and subscribe to Personnel entry requests from Firestore
   useEffect(() => {
@@ -480,18 +486,21 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
 
   // Actions
   const handleMarkPresent = (id: string, mesai: number = 0) => {
+    setHasLocalAttendanceDraft(true);
     setPresentIds(prev => [...prev.filter(x => x !== id), id]);
     setAbsentIds(prev => prev.filter(x => x !== id));
     setMesaiSaatleri(prev => ({ ...prev, [id]: mesai }));
   };
 
   const handleMarkAbsent = (id: string) => {
+    setHasLocalAttendanceDraft(true);
     setAbsentIds(prev => [...prev.filter(x => x !== id), id]);
     setPresentIds(prev => prev.filter(x => x !== id));
     setMesaiSaatleri(prev => ({ ...prev, [id]: 0 }));
   };
 
   const handleResetMark = (id: string) => {
+    setHasLocalAttendanceDraft(true);
     setPresentIds(prev => prev.filter(x => x !== id));
     setAbsentIds(prev => prev.filter(x => x !== id));
     setMesaiSaatleri(prev => {
@@ -502,6 +511,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   };
 
   const handleMarkAllPresent = () => {
+    setHasLocalAttendanceDraft(true);
     const unmarkedIds = remainingStaff.map(p => p.id);
     setPresentIds(prev => [...prev, ...unmarkedIds]);
     setAbsentIds(prev => prev.filter(id => !unmarkedIds.includes(id)));
@@ -519,19 +529,18 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
       const next = { ...prev };
       
       activeStaff.forEach(p => {
-        const dayData = getYoklamaDay(next[p.id], year, month, day) || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 };
+        const dayData = getYoklamaDay(next[p.id], year, month, day);
 
         if (presentIds.includes(p.id)) {
-          next[p.id] = setYoklamaDay(next[p.id], year, month, day, { ...dayData, durum: 'Geldi', mesaiSaati: mesaiSaatleri[p.id] || 0 });
+          next[p.id] = setYoklamaDay(next[p.id], year, month, day, { ...(dayData || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 }), durum: 'Geldi', mesaiSaati: mesaiSaatleri[p.id] || 0 });
         } else if (absentIds.includes(p.id)) {
-          next[p.id] = setYoklamaDay(next[p.id], year, month, day, { ...dayData, durum: 'Yok', mesaiSaati: 0 });
-        } else {
-          next[p.id] = setYoklamaDay(next[p.id], year, month, day, { ...dayData, durum: 'Girilmedi', mesaiSaati: 0 });
+          next[p.id] = setYoklamaDay(next[p.id], year, month, day, { ...(dayData || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 }), durum: 'Yok', mesaiSaati: 0 });
         }
       });
 
       return next;
     });
+    setHasLocalAttendanceDraft(false);
 
     showStatus('success', `📅 ${selectedDate} Tarihli Yoklama ve Mesai Saatleri, Formen imzasıyla başarıyla sisteme kaydedildi ve ana programa gönderildi!`);
   };

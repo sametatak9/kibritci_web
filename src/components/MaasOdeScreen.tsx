@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Banknote, Search, CircleCheck as CheckCircle, Circle as XCircle, ListFilter as Filter, Download, Printer, Calendar, User, CreditCard, TriangleAlert as AlertTriangle, Save, ChevronDown, ChevronUp } from 'lucide-react';
 import { Personel, AylikYoklamaMap, MaaşOdeme, MaasKesinti } from '../types/erp';
-import { iterateMonthYoklama } from '../lib/yoklamaUtils';
+import { iterateMonthYoklama, buildPersonelListForMonth, isDayActiveForPersonel } from '../lib/yoklamaUtils';
+import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 
 interface MaasOdeScreenProps {
   personeller: Personel[];
@@ -29,12 +30,17 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
   const [kesintiTutar, setKesintiTutar] = useState('');
 
   const daysInMonth = useMemo(() => new Date(selectedYil, selectedAy, 0).getDate(), [selectedAy, selectedYil]);
+  const monthPersoneller = useMemo(
+    () => buildPersonelListForMonth(personeller, yoklamalar, selectedYil, selectedAy, resolveStubPersonelFromLegacyId),
+    [personeller, yoklamalar, selectedYil, selectedAy]
+  );
 
   const hesaplaMaas = (personel: Personel): { brut: number; mesai: number; kesinti: number; net: number; hakedisGun: number; mesaiSaat: number } => {
     const pYoklama = yoklamalar[personel.id] || {};
     let hakedisGun = 0;
     let mesaiSaat = 0;
-    iterateMonthYoklama(pYoklama, selectedYil, selectedAy, (_day, day) => {
+    iterateMonthYoklama(pYoklama, selectedYil, selectedAy, (dayNo, day) => {
+      if (!isDayActiveForPersonel(personel, selectedYil, selectedAy, dayNo, pYoklama)) return;
       if (day?.durum === 'Geldi' || day?.durum === 'İzinli' || day?.durum === 'Pazar' || day?.durum === 'Tatil') {
         hakedisGun++;
       }
@@ -62,10 +68,7 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
   };
 
   const filteredPersoneller = useMemo(() => {
-    let list = personeller.filter(p => {
-      const d = new Date(p.iseGirisTarihi || '2020-01-01');
-      return d.getFullYear() < selectedYil || (d.getFullYear() === selectedYil && d.getMonth() + 1 <= selectedAy);
-    });
+    let list = monthPersoneller;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       list = list.filter(p => 
@@ -75,7 +78,7 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
       );
     }
     return list;
-  }, [personeller, selectedAy, selectedYil, searchQuery]);
+  }, [monthPersoneller, searchQuery]);
 
   const odenecekListesi = filteredPersoneller.filter(p => {
     const odeme = maasOdemeleri.find(m => m.personelId === p.id && m.ay === selectedAy && m.yil === selectedYil);

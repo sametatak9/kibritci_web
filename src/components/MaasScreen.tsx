@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { CreditCard, Copy, Check, DollarSign, Download, Building, Search, Clock } from 'lucide-react';
-import { Personel, AylikYoklamaMap } from '../types/erp';
+import { Personel, AylikYoklamaMap, MaaşOdeme } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
 import { buildPersonelListForMonth, getYoklamaDay, isDayActiveForPersonel, iterateMonthYoklama } from '../lib/yoklamaUtils';
 import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
@@ -8,13 +8,13 @@ import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 interface MaasScreenProps {
   personeller: Personel[];
   yoklamalar: AylikYoklamaMap;
+  maasOdemeleri: MaaşOdeme[];
   onOpenMaasOdeme?: () => void;
 }
 
-export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar, onOpenMaasOdeme }) => {
-  const [selectedMonth, setSelectedMonth] = useState(6);
-  const [selectedYear, setSelectedYear] = useState(2026);
-  const [avansCuts, setAvansCuts] = useState<{ [personelId: string]: number }>({});
+export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar, maasOdemeleri, onOpenMaasOdeme }) => {
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -24,14 +24,6 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar,
     () => buildPersonelListForMonth(personeller, yoklamalar, selectedYear, selectedMonth, resolveStubPersonelFromLegacyId),
     [personeller, yoklamalar, selectedYear, selectedMonth]
   );
-
-  const handleCutChange = (personelId: string, value: string) => {
-    const amount = parseFloat(value) || 0;
-    setAvansCuts(prev => ({
-      ...prev,
-      [personelId]: amount
-    }));
-  };
 
   const handleCopyIban = (personelId: string, iban: string) => {
     navigator.clipboard.writeText(iban);
@@ -93,7 +85,8 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar,
     const hourlyOvertimeRate = hourlyWage * 1.5;
     const totalOvertimeHakedis = totalOvertimeHours * hourlyOvertimeRate;
 
-    const cutAmount = avansCuts[p.id] || 0;
+    const periodPayment = maasOdemeleri.find((m) => m.personelId === p.id && m.ay === selectedMonth && m.yil === selectedYear);
+    const cutAmount = periodPayment?.kesintiToplami || 0;
     const netPayable = (totalBaseHakedis + totalOvertimeHakedis) - cutAmount;
 
     grandBaseHakedis += totalBaseHakedis;
@@ -183,6 +176,15 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar,
                 <option key={m} value={m}>{m}. Ay</option>
               ))}
             </select>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              className="text-xs font-semibold border border-slate-200 rounded-lg p-1 px-2 bg-white cursor-pointer"
+            >
+              {[2025, 2026, 2027].map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
             {onOpenMaasOdeme && (
               <button
                 type="button"
@@ -244,16 +246,11 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({ personeller, yoklamalar,
                       <span>Mesai:</span> <span className="font-bold text-slate-800">₺{totalOvertimeHakedis.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</span>
                     </div>
                     
-                    {/* Cuts input field */}
                     <div className="flex items-center space-x-1.5">
                       <span>Kesinti/Avans:</span>
-                      <input 
-                        type="number"
-                        value={cutAmount || ""}
-                        placeholder="0"
-                        onChange={(e) => handleCutChange(personel.id, e.target.value)}
-                        className="w-16 bg-slate-50 border border-slate-200 focus:outline-none focus:border-red-400 font-bold font-mono text-center rounded py-0.5 text-red-600 text-[10px]"
-                      />
+                      <span className="w-20 text-center bg-slate-50 border border-slate-200 font-bold font-mono rounded py-0.5 text-rose-600 text-[10px]">
+                        ₺{cutAmount.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
+                      </span>
                     </div>
                   </div>
 

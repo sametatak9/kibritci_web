@@ -1642,6 +1642,7 @@ export default function App() {
                 <MaasScreen 
                   personeller={personeller} 
                   yoklamalar={yoklamalar} 
+                  maasOdemeleri={maasOdemeleri}
                   onOpenMaasOdeme={() => setActiveTab('maas_odeme')}
                 />
               )}

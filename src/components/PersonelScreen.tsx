@@ -203,8 +203,19 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
       return;
     }
 
-    if (formData.tcNo.length !== 11 || !/^\d+$/.test(dataToSave().tcNo)) {
+    const normalizedTc = String(formData.tcNo || '').trim();
+    if (normalizedTc.length !== 11 || !/^\d+$/.test(normalizedTc)) {
       alert("TC Kimlik No tam 11 haneli ve sadece rakamlardan oluşmalıdır!");
+      return;
+    }
+
+    const duplicateTc = personeller.find((p) => {
+      const existingTc = String(p.tcNo || '').trim();
+      if ('id' in formData && p.id === formData.id) return false;
+      return existingTc.length > 0 && existingTc === normalizedTc;
+    });
+    if (duplicateTc) {
+      alert(`Bu TC kimlik numarası zaten kayıtlı: ${duplicateTc.ad} ${duplicateTc.soyad}`);
       return;
     }
 
@@ -213,14 +224,19 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
       return;
     }
 
+    const normalizedPayload = {
+      ...formData,
+      tcNo: normalizedTc
+    };
+
     if ('id' in formData) {
       // Edit mode
-      setPersoneller(prev => prev.map(p => p.id === formData.id ? (formData as Personel) : p));
+      setPersoneller(prev => prev.map(p => p.id === formData.id ? (normalizedPayload as Personel) : p));
       alert("Personel bilgileri başarıyla güncellendi.");
     } else {
       // Create mode
       const newPersonel: Personel = {
-        ...formData,
+        ...(normalizedPayload as Omit<Personel, 'id'>),
         id: `p_${Date.now()}`
       };
       setPersoneller(prev => [newPersonel, ...prev]);
