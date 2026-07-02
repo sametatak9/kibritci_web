@@ -6,7 +6,6 @@ import { buildPersonelListForMonth, findPersonelByName, getYoklamaDay, isDayActi
 import { importAllLegacyExcelMonths, importLegacyExcelMonth, aiMonthlyDataToLegacyMonth, resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 import { LEGACY_EXCEL_MONTHS } from '../data/legacyExcelYoklama';
 import { fetchApiJson } from '../lib/apiClient';
-import { downloadCsv } from '../lib/reportExport';
 
 const maskName = (name?: string): string => {
   return name || '';
@@ -393,7 +392,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     const term = searchTerm.toLowerCase();
     const base = monthPersoneller.filter((p) => {
       const fullName = `${p.ad} ${p.soyad}`.toLowerCase();
-      return fullName.includes(term) || p.tcNo.includes(term) || p.gorev.toLowerCase().includes(term);
+      return fullName.includes(term) || p.tcNo.includes(term) || (p.gorev || '').toLowerCase().includes(term);
     });
 
     // Aynı isim farklı ID ile gelirse (legacy/stub vb.) listede tek satır göster.
@@ -415,61 +414,192 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     return Array.from(byName.values());
   }, [monthPersoneller, searchTerm]);
 
-  const handleExportExcelTables = () => {
-    const periodLabel = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
-    const gunRows: string[][] = [
-      ['Personel', 'Görev', ...daysArray.map((d) => String(d)), 'Gelen Gün'],
-    ];
-    const mesaiMaasRows: string[][] = [
-      ['Personel', 'Görev', ...daysArray.map((d) => `${d}.gün Mesai`), 'Toplam Mesai (sa)', 'Günlük Maaş', 'Tahmini Maaş', 'Tahmini Mesai Ücreti', 'Tahmini Toplam'],
-    ];
-
-    filteredPersonel.forEach((p) => {
-      const map = draftYoklamalar[p.id] || {};
-      let geldiGun = 0;
-      let mesaiToplam = 0;
-      let hakedisGun = 0;
-
-      const gunStatuses = daysArray.map((day) => {
-        const active = isDayActiveForEmployee(p, day);
-        const d = getYoklamaDay(map, selectedYear, selectedMonth, day) || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 };
-        if (!active) return 'Ç';
-        if (d.durum === 'Geldi') geldiGun++;
-        if (d.durum === 'Geldi' || d.durum === 'İzinli' || d.durum === 'Pazar' || d.durum === 'Tatil') hakedisGun++;
-        mesaiToplam += Number(d.mesaiSaati || 0);
-        return d.durum;
-      });
-
-      const mesaiCells = daysArray.map((day) => {
-        const active = isDayActiveForEmployee(p, day);
-        if (!active) return '';
-        const d = getYoklamaDay(map, selectedYear, selectedMonth, day) || { mesaiSaati: 0 };
-        return String(Number(d.mesaiSaati || 0));
-      });
-
-      const days = new Date(selectedYear, selectedMonth, 0).getDate();
-      const dailyWage = (Number(p.maas || 0) / Math.max(days, 1));
-      const tahminiMaas = dailyWage * hakedisGun;
-      const hourly = dailyWage / 7.5;
-      const tahminiMesai = mesaiToplam * hourly * 1.5;
-      const tahminiToplam = tahminiMaas + tahminiMesai;
-
-      gunRows.push([`${p.ad} ${p.soyad}`, p.gorev || '-', ...gunStatuses, String(geldiGun)]);
-      mesaiMaasRows.push([
-        `${p.ad} ${p.soyad}`,
-        p.gorev || '-',
-        ...mesaiCells,
-        mesaiToplam.toFixed(2),
-        dailyWage.toFixed(2),
-        tahminiMaas.toFixed(2),
-        tahminiMesai.toFixed(2),
-        tahminiToplam.toFixed(2),
-      ]);
+  const handleExportExcelTables = async () => {
+    const { Workbook } = await import('exceljs');
+    const wb = new Workbook();
+    const ws = wb.addWorksheet('Puantaj', {
+      views: [{ state: 'frozen', ySplit: 2, xSplit: 6 }],
     });
 
-    downloadCsv(gunRows, `Yoklama_Gun_Cetveli_${periodLabel}.csv`);
-    downloadCsv(mesaiMaasRows, `Yoklama_Mesai_Maas_Cetveli_${periodLabel}.csv`);
-    alert('Excel uyumlu iki rapor indirildi: Gün Cetveli + Mesai/Maaş Cetveli');
+    const periodLabel = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+    const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
+    const dayIndexes = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    const monthLabel = new Date(selectedYear, selectedMonth - 1, 1).toLocaleDateString('tr-TR', {
+      month: 'long',
+      year: 'numeric',
+    });
+    const baseCols = 6; // sıra, ad soyad, tc, görev, maaş, satır tipi
+    const summaryStart = baseCols + daysInMonth + 1;
+    const summaryLabels = ['Top. Gün', 'Yok Gün', 'Top. Mesai', 'Aylık Maaş', 'Gün Hak.', 'Mesai Hak.', 'Toplam'];
+
+    ws.getCell(1, 1).value = `KIBRITCI INSAAT MODERN PUANTAJ RAPORU - ${monthLabel}`;
+    ws.mergeCells(1, 1, 1, summaryStart + summaryLabels.length - 1);
+    ws.getCell(1, 1).font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+    ws.getCell(1, 1).alignment = { vertical: 'middle', horizontal: 'center' };
+    ws.getCell(1, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+    ws.getRow(1).height = 24;
+
+    const headerTop = ['Sıra', 'Ad Soyad', 'TC Kimlik', 'Görevi', 'Aylık Maaş', 'Satır'];
+    headerTop.forEach((h, i) => {
+      ws.getCell(2, i + 1).value = h;
+      ws.getCell(2, i + 1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      ws.getCell(2, i + 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+      ws.getCell(2, i + 1).alignment = { horizontal: 'center', vertical: 'middle' };
+      ws.mergeCells(2, i + 1, 3, i + 1);
+    });
+
+    dayIndexes.forEach((d, idx) => {
+      const col = baseCols + idx + 1;
+      ws.getCell(2, col).value = d;
+      ws.getCell(3, col).value = dayOfWeekAbbreviation(d);
+      [2, 3].forEach((r) => {
+        ws.getCell(r, col).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        ws.getCell(r, col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D4ED8' } };
+        ws.getCell(r, col).alignment = { horizontal: 'center', vertical: 'middle' };
+      });
+    });
+
+    summaryLabels.forEach((label, i) => {
+      const col = summaryStart + i;
+      ws.getCell(2, col).value = label;
+      ws.mergeCells(2, col, 3, col);
+      ws.getCell(2, col).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      ws.getCell(2, col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF111827' } };
+      ws.getCell(2, col).alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+
+    const toStatusSymbol = (durum: YoklamaDurum): string => {
+      if (durum === 'Geldi') return 'X';
+      if (durum === 'Yok') return 'Y';
+      if (durum === 'İzinli') return 'İ';
+      if (durum === 'Raporlu') return 'R';
+      if (durum === 'Pazar') return 'P';
+      if (durum === 'Tatil') return 'T';
+      return '-';
+    };
+
+    let row = 4;
+    filteredPersonel.forEach((p, index) => {
+      const map = draftYoklamalar[p.id] || {};
+      let geldiGun = 0;
+      let yokGun = 0;
+      let mesaiToplam = 0;
+      let hakedisGun = 0;
+      const hireDay = p.iseGirisTarihi?.startsWith(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-`)
+        ? Number(p.iseGirisTarihi.split('-')[2])
+        : null;
+      const dailyWage = Number(p.maas || 0) / Math.max(daysInMonth, 1);
+
+      for (let c = 1; c <= 5; c++) {
+        ws.mergeCells(row, c, row + 2, c);
+      }
+      ws.getCell(row, 1).value = index + 1;
+      ws.getCell(row, 2).value = `${p.ad} ${p.soyad}`;
+      ws.getCell(row, 3).value = p.tcNo || '-';
+      ws.getCell(row, 4).value = p.gorev || '-';
+      ws.getCell(row, 5).value = Number(p.maas || 0);
+      ws.getCell(row, 5).numFmt = '#,##0.00';
+
+      ws.getCell(row, 6).value = 'ÇALIŞMA GÜNÜ';
+      ws.getCell(row + 1, 6).value = 'MESAİ (SAAT)';
+      ws.getCell(row + 2, 6).value = 'FORMÜL';
+
+      dayIndexes.forEach((day, idx) => {
+        const col = baseCols + idx + 1;
+        const active = isDayActiveForEmployee(p, day);
+        const d = getYoklamaDay(map, selectedYear, selectedMonth, day) || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 };
+        const mesai = Number(d.mesaiSaati || 0);
+        if (active) {
+          if (d.durum === 'Geldi') geldiGun++;
+          if (d.durum === 'Yok') yokGun++;
+          if (d.durum === 'Geldi' || d.durum === 'İzinli' || d.durum === 'Pazar' || d.durum === 'Tatil') hakedisGun++;
+          mesaiToplam += mesai;
+        }
+
+        const statusCell = ws.getCell(row, col);
+        const mesaiCell = ws.getCell(row + 1, col);
+        statusCell.value = active ? toStatusSymbol(d.durum) : '-';
+        mesaiCell.value = active && mesai > 0 ? mesai : '';
+        if (active && mesai > 0) mesaiCell.numFmt = '0.0';
+
+        if (!active) {
+          statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+          mesaiCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+        } else if (d.durum === 'Geldi') {
+          statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
+        } else if (d.durum === 'Yok') {
+          statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+        } else if (d.durum === 'Pazar' || d.durum === 'Tatil') {
+          statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };
+        }
+        if (hireDay === day) {
+          statusCell.border = {
+            top: { style: 'medium', color: { argb: 'FF22C55E' } },
+            left: { style: 'medium', color: { argb: 'FF22C55E' } },
+            right: { style: 'medium', color: { argb: 'FF22C55E' } },
+            bottom: { style: 'medium', color: { argb: 'FF22C55E' } },
+          };
+        }
+      });
+
+      const tahminiMaas = dailyWage * hakedisGun;
+      const tahminiMesai = mesaiToplam * (dailyWage / 7.5) * 1.5;
+      const tahminiToplam = tahminiMaas + tahminiMesai;
+      const summaryValues = [geldiGun, yokGun, Number(mesaiToplam.toFixed(1)), Number(p.maas || 0), tahminiMaas, tahminiMesai, tahminiToplam];
+      summaryValues.forEach((v, i) => {
+        const cell = ws.getCell(row, summaryStart + i);
+        cell.value = v;
+        if (i >= 2) cell.numFmt = '#,##0.00';
+      });
+      ws.mergeCells(row + 1, summaryStart, row + 1, summaryStart + summaryLabels.length - 1);
+      ws.getCell(row + 1, summaryStart).value = 'Mesai satırı: günlük fazla mesai saatleri';
+      ws.mergeCells(row + 2, baseCols + 1, row + 2, baseCols + daysInMonth);
+      ws.getCell(row + 2, baseCols + 1).value =
+        `Gün Hakediş=(Aylık Maaş/${daysInMonth})xToplam Gün | Mesai Hak.=Toplam Mesaix((Aylık Maaş/${daysInMonth})/7.5)x1.5 | Toplam=Gün Hak.+Mesai Hak.`;
+      ws.mergeCells(row + 2, summaryStart, row + 2, summaryStart + summaryLabels.length - 1);
+      ws.getCell(row + 2, summaryStart).value = 'İşe giriş günü yeşil çerçeve ile işaretlenir.';
+      row += 3;
+    });
+
+    ws.eachRow((r) => {
+      r.eachCell((cell) => {
+        if (!cell.alignment) cell.alignment = {};
+        cell.alignment = { ...cell.alignment, horizontal: 'center', vertical: 'middle', wrapText: true };
+        if (!cell.border) {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          };
+        }
+      });
+    });
+
+    ws.getColumn(1).width = 7;
+    ws.getColumn(2).width = 22;
+    ws.getColumn(3).width = 16;
+    ws.getColumn(4).width = 14;
+    ws.getColumn(5).width = 12;
+    ws.getColumn(6).width = 14;
+    dayIndexes.forEach((_, idx) => {
+      ws.getColumn(baseCols + idx + 1).width = 4.5;
+    });
+    summaryLabels.forEach((_, i) => {
+      ws.getColumn(summaryStart + i).width = 12;
+    });
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Yoklama_Modern_Rapor_${periodLabel}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+    alert('Modern tasarımlı XLSX rapor indirildi: X/Y, renkler, 3 satır düzen, mesai ve maaş özeti.');
   };
 
   const handleBulkOvertime = (hours: number) => {
@@ -666,10 +796,10 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
             <button
               onClick={handleExportExcelTables}
               className="text-[11px] bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
-              title="Gün cetveli ve mesai/maaş hesap tablosunu Excel uyumlu CSV olarak indirir."
+              title="Modern, renkli ve 3 satırlı puantaj raporunu Excel formatında indirir."
             >
               <FileText size={13} />
-              <span>Excel Gün+Mesai/Maaş Raporu</span>
+              <span>Modern Excel Puantaj Raporu</span>
             </button>
             <button
               onClick={() => {
