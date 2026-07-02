@@ -690,6 +690,9 @@ ${satirlar
       ustaSayisi: sahaUstaSayisi,
       isciSayisi: sahaIsciSayisi,
       kaydedenFormen: formenEmail,
+      kaydeden: currentUser?.displayName || currentUser?.email || 'FORMEN',
+      kaydedenUid: currentUser?.uid || '',
+      kaynakEkran: 'FORMEN_MOBIL',
     };
 
     setSahaFaaliyetleri(prev => [newFaaliyet, ...prev]);
@@ -2269,6 +2272,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                           <button
                             type="button"
                             onClick={() => {
+                              setCikisTarihi(selectedDate);
                               setShowCikisForm(true);
                               setShowGuncellemeForm(false);
                             }}
@@ -2308,6 +2312,22 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                                   onChange={(e) => setCikisTarihi(e.target.value)}
                                   className="w-full bg-white border rounded-lg p-1.5 text-[9px] font-bold"
                                 />
+                                <div className="mt-1 flex gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setCikisTarihi(selectedDate)}
+                                    className="text-[8px] font-bold px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700"
+                                  >
+                                    Seçili Gün
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setCikisTarihi(new Date().toISOString().slice(0, 10))}
+                                    className="text-[8px] font-bold px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700"
+                                  >
+                                    Bugün
+                                  </button>
+                                </div>
                               </div>
                               
                               <div>

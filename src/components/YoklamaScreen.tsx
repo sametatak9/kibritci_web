@@ -1264,9 +1264,9 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                       let tdClass = "px-0.5 py-1.5 text-center min-w-8 transition-colors";
                       if (isHoliday) {
                         if (isOfficial) {
-                          tdClass += " bg-purple-50 border-x border-purple-100";
+                          tdClass += " bg-purple-100/60 border-x border-purple-200";
                         } else {
-                          tdClass += " bg-orange-50 border-x border-orange-100";
+                          tdClass += " bg-orange-100/60 border-x border-orange-200";
                         }
                       }
 
@@ -1278,7 +1278,9 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                             onClick={() => isActiveDay && handleCellClick(p.id, day)}
                             className={`w-7 h-7 rounded-md border font-bold text-[9px] flex items-center justify-center transition shadow-sm ${
                               isActiveDay
-                                ? `hover:scale-105 active:scale-95 cursor-pointer ${getStatusColor(dayData.durum)}`
+                                ? `hover:scale-105 active:scale-95 cursor-pointer ${getStatusColor(dayData.durum)} ${
+                                    isHoliday ? (isOfficial ? 'ring-1 ring-purple-300' : 'ring-1 ring-orange-300') : ''
+                                  }`
                                 : 'bg-violet-100 border-violet-300 text-violet-700 opacity-95'
                             }`}
                           >
@@ -1306,7 +1308,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                               onChange={(e) => isActiveDay && handleMesaiChange(p.id, day, parseFloat(e.target.value) || 0)}
                               className={`w-7 text-[8px] font-bold font-mono text-center rounded border py-0.5 focus:outline-none ${
                                 isActiveDay
-                                  ? 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600 focus:border-blue-500'
+                                  ? `${isHoliday ? (isOfficial ? 'bg-purple-50 border-purple-200 text-purple-700' : 'bg-orange-50 border-orange-200 text-orange-700') : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600'} focus:border-blue-500`
                                   : 'bg-slate-900 border-slate-800 text-slate-500'
                               }`}
                             />

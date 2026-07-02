@@ -78,6 +78,38 @@ export function personHasGeldiInMonth(
   return found;
 }
 
+function parseFlexibleDateParts(
+  raw?: string
+): { year: number; month: number; day: number } | null {
+  if (!raw) return null;
+  const v = raw.trim();
+  if (!v) return null;
+
+  // yyyy-mm-dd / yyyy/mm/dd
+  const ymd = v.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (ymd) {
+    const year = Number(ymd[1]);
+    const month = Number(ymd[2]);
+    const day = Number(ymd[3]);
+    if (year >= 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return { year, month, day };
+    }
+  }
+
+  // dd-mm-yyyy / dd.mm.yyyy / dd/mm/yyyy
+  const dmy = v.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (dmy) {
+    const day = Number(dmy[1]);
+    const month = Number(dmy[2]);
+    const year = Number(dmy[3]);
+    if (year >= 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return { year, month, day };
+    }
+  }
+
+  return null;
+}
+
 /** Yoklama kaydı varsa işe giriş/çıkış filtresini uygulama */
 export function isPersonelVisibleInMonth(
   p: Personel,
@@ -86,12 +118,16 @@ export function isPersonelVisibleInMonth(
   personMap?: Record<string, YoklamaGunKaydi>
 ): boolean {
   const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
-  if (p.iseGirisTarihi) {
-    const [hireY, hireM] = p.iseGirisTarihi.split('-').map(Number);
+  const hire = parseFlexibleDateParts(p.iseGirisTarihi);
+  if (hire) {
+    const hireY = hire.year;
+    const hireM = hire.month;
     if (hireY > year || (hireY === year && hireM > month)) return false;
   }
-  if (p.istenCikisTarihi) {
-    const [exitY, exitM] = p.istenCikisTarihi.split('-').map(Number);
+  const exit = parseFlexibleDateParts(p.istenCikisTarihi);
+  if (exit) {
+    const exitY = exit.year;
+    const exitM = exit.month;
     if (exitY < year || (exitY === year && exitM < month)) return false;
   } else if (!isAktif && !p.istenCikisTarihi) {
     return false;
@@ -108,14 +144,20 @@ export function isDayActiveForPersonel(
   day: number,
   personMap?: Record<string, YoklamaGunKaydi>
 ): boolean {
-  if (p.iseGirisTarihi) {
-    const [hireY, hireM, hireD] = p.iseGirisTarihi.split('-').map(Number);
+  const hire = parseFlexibleDateParts(p.iseGirisTarihi);
+  if (hire) {
+    const hireY = hire.year;
+    const hireM = hire.month;
+    const hireD = hire.day;
     const currentDateVal = year * 10000 + month * 100 + day;
     const hireDateVal = hireY * 10000 + hireM * 100 + hireD;
     if (currentDateVal < hireDateVal) return false;
   }
-  if (p.istenCikisTarihi) {
-    const [exitY, exitM, exitD] = p.istenCikisTarihi.split('-').map(Number);
+  const exit = parseFlexibleDateParts(p.istenCikisTarihi);
+  if (exit) {
+    const exitY = exit.year;
+    const exitM = exit.month;
+    const exitD = exit.day;
     const currentDateVal = year * 10000 + month * 100 + day;
     const exitDateVal = exitY * 10000 + exitM * 100 + exitD;
     if (currentDateVal > exitDateVal) return false;
