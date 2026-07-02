@@ -502,7 +502,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
       ws.getCell(row, 6).value = 'ÇALIŞMA GÜNÜ';
       ws.getCell(row + 1, 6).value = 'MESAİ (SAAT)';
-      ws.getCell(row + 2, 6).value = 'FORMÜL';
+      ws.getCell(row + 2, 6).value = 'FORMÜL (ÖZET)';
 
       dayIndexes.forEach((day, idx) => {
         const col = baseCols + idx + 1;
@@ -552,19 +552,31 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
         if (i >= 2) cell.numFmt = '#,##0.00';
       });
       ws.mergeCells(row + 1, summaryStart, row + 1, summaryStart + summaryLabels.length - 1);
-      ws.getCell(row + 1, summaryStart).value = 'Mesai satırı: günlük fazla mesai saatleri';
+      ws.getCell(row + 1, summaryStart).value = '';
       ws.mergeCells(row + 2, baseCols + 1, row + 2, baseCols + daysInMonth);
       ws.getCell(row + 2, baseCols + 1).value =
-        `Gün Hakediş=(Aylık Maaş/${daysInMonth})xToplam Gün | Mesai Hak.=Toplam Mesaix((Aylık Maaş/${daysInMonth})/7.5)x1.5 | Toplam=Gün Hak.+Mesai Hak.`;
+        `Gün Hak: ${tahminiMaas.toFixed(2)} TL | Mesai Hak: ${tahminiMesai.toFixed(2)} TL | Toplam: ${tahminiToplam.toFixed(2)} TL`;
       ws.mergeCells(row + 2, summaryStart, row + 2, summaryStart + summaryLabels.length - 1);
-      ws.getCell(row + 2, summaryStart).value = 'İşe giriş günü yeşil çerçeve ile işaretlenir.';
+      ws.getCell(row + 2, summaryStart).value = 'İşe giriş günü: yeşil çerçeve';
+
+      ws.getRow(row).height = 24;
+      ws.getRow(row + 1).height = 20;
+      ws.getRow(row + 2).height = 20;
+      ws.getCell(row + 2, baseCols + 1).font = { size: 9, color: { argb: 'FF166534' } };
+      ws.getCell(row + 2, summaryStart).font = { size: 9, color: { argb: 'FF166534' } };
+      ws.getCell(row + 2, baseCols + 1).alignment = { horizontal: 'left', vertical: 'middle', wrapText: false };
+      ws.getCell(row + 2, summaryStart).alignment = { horizontal: 'center', vertical: 'middle', wrapText: false };
+      ws.getCell(row + 1, summaryStart).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+      ws.getCell(row + 2, baseCols + 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
+      ws.getCell(row + 2, summaryStart).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
       row += 3;
     });
 
     ws.eachRow((r) => {
       r.eachCell((cell) => {
         if (!cell.alignment) cell.alignment = {};
-        cell.alignment = { ...cell.alignment, horizontal: 'center', vertical: 'middle', wrapText: true };
+        const keepWrap = Boolean(cell.alignment.wrapText);
+        cell.alignment = { ...cell.alignment, horizontal: 'center', vertical: 'middle', wrapText: keepWrap };
         if (!cell.border) {
           cell.border = {
             top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
@@ -583,10 +595,71 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     ws.getColumn(5).width = 12;
     ws.getColumn(6).width = 14;
     dayIndexes.forEach((_, idx) => {
-      ws.getColumn(baseCols + idx + 1).width = 4.5;
+      ws.getColumn(baseCols + idx + 1).width = 6.2;
     });
     summaryLabels.forEach((_, i) => {
       ws.getColumn(summaryStart + i).width = 12;
+    });
+
+    const summaryWs = wb.addWorksheet('Özet');
+    summaryWs.addRow(['KIBRITCI INSAAT - AYLIK ÖZET', monthLabel]);
+    summaryWs.mergeCells(1, 1, 1, 8);
+    summaryWs.getCell(1, 1).font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+    summaryWs.getCell(1, 1).alignment = { horizontal: 'center', vertical: 'middle' };
+    summaryWs.getCell(1, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+    summaryWs.addRow(['Sıra', 'Ad Soyad', 'TC', 'Görev', 'Toplam Gün', 'Yok Gün', 'Toplam Mesai', 'Toplam Kazanç']);
+    summaryWs.getRow(2).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    summaryWs.getRow(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D4ED8' } };
+
+    let sRow = 3;
+    filteredPersonel.forEach((p, i) => {
+      const map = draftYoklamalar[p.id] || {};
+      let geldiGun = 0;
+      let yokGun = 0;
+      let mesaiToplam = 0;
+      let hakedisGun = 0;
+      dayIndexes.forEach((day) => {
+        if (!isDayActiveForEmployee(p, day)) return;
+        const d = getYoklamaDay(map, selectedYear, selectedMonth, day) || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 };
+        if (d.durum === 'Geldi') geldiGun++;
+        if (d.durum === 'Yok') yokGun++;
+        if (d.durum === 'Geldi' || d.durum === 'İzinli' || d.durum === 'Pazar' || d.durum === 'Tatil') hakedisGun++;
+        mesaiToplam += Number(d.mesaiSaati || 0);
+      });
+      const dailyWage = Number(p.maas || 0) / Math.max(daysInMonth, 1);
+      const toplam = dailyWage * hakedisGun + mesaiToplam * (dailyWage / 7.5) * 1.5;
+      summaryWs.addRow([
+        i + 1,
+        `${p.ad} ${p.soyad}`,
+        p.tcNo || '-',
+        p.gorev || '-',
+        geldiGun,
+        yokGun,
+        Number(mesaiToplam.toFixed(2)),
+        Number(toplam.toFixed(2)),
+      ]);
+      if (sRow % 2 === 0) {
+        summaryWs.getRow(sRow).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+      }
+      sRow++;
+    });
+
+    [8].forEach((col) => {
+      summaryWs.getColumn(col).numFmt = '#,##0.00';
+    });
+    [1, 2, 3, 4, 5, 6, 7, 8].forEach((c) => {
+      summaryWs.getColumn(c).width = [7, 24, 16, 14, 11, 10, 12, 14][c - 1];
+    });
+    summaryWs.eachRow((r) => {
+      r.eachCell((cell) => {
+        cell.alignment = { horizontal: cell.col === 2 || cell.col === 4 ? 'left' : 'center', vertical: 'middle' };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+        };
+      });
     });
 
     const buffer = await wb.xlsx.writeBuffer();
