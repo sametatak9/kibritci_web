@@ -619,6 +619,9 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       const hireDay = p.iseGirisTarihi?.startsWith(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-`)
         ? Number(p.iseGirisTarihi.split('-')[2])
         : null;
+      const exitDay = p.istenCikisTarihi?.startsWith(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-`)
+        ? Number(p.istenCikisTarihi.split('-')[2])
+        : null;
       const dailyWage = Number(p.maas || 0) / Math.max(daysInMonth, 1);
 
       for (let c = 1; c <= 5; c++) {
@@ -634,7 +637,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
       ws.getCell(row, 6).value = 'ÇALIŞMA GÜNÜ';
       ws.getCell(row + 1, 6).value = 'MESAİ (SAAT)';
-      ws.getCell(row + 2, 6).value = 'FORMÜL (ÖZET)';
+      ws.getCell(row + 2, 6).value = '';
 
       dayIndexes.forEach((day, idx) => {
         const col = baseCols + idx + 1;
@@ -653,6 +656,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
         statusCell.value = active ? toStatusSymbol(d.durum) : '-';
         mesaiCell.value = active && mesai > 0 ? mesai : '';
         if (active && mesai > 0) mesaiCell.numFmt = '0.0';
+        let hasSpecialDayStyle = false;
 
         if (!active) {
           statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
@@ -665,12 +669,41 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
           statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };
         }
         if (hireDay === day) {
+          hasSpecialDayStyle = true;
           statusCell.border = {
             top: { style: 'medium', color: { argb: 'FF22C55E' } },
             left: { style: 'medium', color: { argb: 'FF22C55E' } },
             right: { style: 'medium', color: { argb: 'FF22C55E' } },
             bottom: { style: 'medium', color: { argb: 'FF22C55E' } },
           };
+          mesaiCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
+          mesaiCell.border = {
+            top: { style: 'medium', color: { argb: 'FF22C55E' } },
+            left: { style: 'medium', color: { argb: 'FF22C55E' } },
+            right: { style: 'medium', color: { argb: 'FF22C55E' } },
+            bottom: { style: 'medium', color: { argb: 'FF22C55E' } },
+          };
+        }
+        if (exitDay === day) {
+          hasSpecialDayStyle = true;
+          statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+          statusCell.border = {
+            top: { style: 'medium', color: { argb: 'FFDC2626' } },
+            left: { style: 'medium', color: { argb: 'FFDC2626' } },
+            right: { style: 'medium', color: { argb: 'FFDC2626' } },
+            bottom: { style: 'medium', color: { argb: 'FFDC2626' } },
+          };
+          mesaiCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+          mesaiCell.border = {
+            top: { style: 'medium', color: { argb: 'FFDC2626' } },
+            left: { style: 'medium', color: { argb: 'FFDC2626' } },
+            right: { style: 'medium', color: { argb: 'FFDC2626' } },
+            bottom: { style: 'medium', color: { argb: 'FFDC2626' } },
+          };
+        }
+        if (hasSpecialDayStyle) {
+          statusCell.font = { ...(statusCell.font || {}), bold: true };
+          mesaiCell.font = { ...(mesaiCell.font || {}), bold: true };
         }
       });
 
@@ -689,7 +722,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       ws.getCell(row + 2, baseCols + 1).value =
         `Gün Hak: ${tahminiMaas.toFixed(2)} TL | Mesai Hak: ${tahminiMesai.toFixed(2)} TL | Toplam: ${tahminiToplam.toFixed(2)} TL`;
       ws.mergeCells(row + 2, summaryStart, row + 2, summaryStart + summaryLabels.length - 1);
-      ws.getCell(row + 2, summaryStart).value = 'İşe giriş günü: yeşil çerçeve';
+      ws.getCell(row + 2, summaryStart).value =
+        `İşe Giriş: ${p.iseGirisTarihi || '-'} | İşten Çıkış: ${p.istenCikisTarihi || '-'}`;
 
       ws.getRow(row).height = 24;
       ws.getRow(row + 1).height = 20;
