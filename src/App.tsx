@@ -1580,9 +1580,11 @@ export default function App() {
 
   const matchedU = findKullaniciByEmail(kullanicilar, currentUser?.email);
   const userYetki = normalizeYetki(matchedU?.yetki);
+  const emailLower = currentUser?.email?.toLowerCase();
+  const isFounderAccount = emailLower === 'sametatak9@gmail.com';
   const isYonetici = userYetki === 'YÖNETİCİ' || 
-                     currentUser?.email?.toLowerCase() === 'sametatak9@gmail.com' || 
-                     currentUser?.email?.toLowerCase() === 'santiye@kibritci.com';
+                     isFounderAccount || 
+                     emailLower === 'santiye@kibritci.com';
 
   const hideSidebarAndTopbar = isStandaloneMobileRole(userYetki) && isMobileMode;
 
@@ -1852,7 +1854,7 @@ export default function App() {
           />
         )}
 
-        {geminiApiAlert && !hideSidebarAndTopbar && (
+        {geminiApiAlert && !hideSidebarAndTopbar && isFounderAccount && (
           <div className="shrink-0 border-b border-amber-500/40 bg-amber-950/90 px-4 py-2 text-[11px] leading-relaxed text-amber-100">
             <span className="font-bold text-amber-300">Yapay zeka API uyarısı:</span>{' '}
             <span className="whitespace-pre-line">{geminiApiAlert}</span>
@@ -1925,13 +1927,15 @@ export default function App() {
               )}
 
               {activeTab === "admin" && (
-                <AdminPanelScreen 
-                  kullanicilar={kullanicilar}
-                  setKullanicilar={setKullanicilarWithSync}
-                  currentUser={currentUser}
-                  personeller={personeller}
-                  addNotification={addNotification}
-                />
+                isFounderAccount ? (
+                  <AdminPanelScreen 
+                    kullanicilar={kullanicilar}
+                    setKullanicilar={setKullanicilarWithSync}
+                    currentUser={currentUser}
+                    personeller={personeller}
+                    addNotification={addNotification}
+                  />
+                ) : renderAccessDenied()
               )}
 
               {activeTab === "personel" && (
@@ -2263,7 +2267,7 @@ export default function App() {
               )}
 
               {activeTab === "yetki_verme" && (
-                (currentUser?.email?.toLowerCase() === 'sametatak9@gmail.com' || currentUser?.email?.toLowerCase() === 'santiye@kibritci.com') ? (
+                isFounderAccount ? (
                   <YetkiVermeScreen 
                     kullanicilar={kullanicilar}
                     setKullanicilar={setKullanicilarWithSync}
@@ -2274,7 +2278,7 @@ export default function App() {
               )}
 
               {activeTab === "kibar_hakedis" && (
-                (currentUser?.email?.toLowerCase() === 'sametatak9@gmail.com' || currentUser?.email?.toLowerCase() === 'santiye@kibritci.com') ? (
+                isFounderAccount || emailLower === 'santiye@kibritci.com' ? (
                   <KibarHakedisScreen
                     personeller={personeller}
                     yoklamalar={yoklamalar}

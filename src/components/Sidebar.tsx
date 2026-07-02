@@ -1,5 +1,5 @@
-import React from 'react';
-import { Building2, Users, CalendarCheck2, CreditCard, ShoppingCart, Truck, KeySquare, FileText, Tent, Mail, ChartBar as BarChart3, BookOpen, Contact as Contact2, Package, LogOut, Wallet, Hop as Home, ShieldCheck, PenTool, MessageSquare, Smartphone, HardHat, Banknote, Images, Sparkles, Link2 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Building2, Users, CalendarCheck2, CreditCard, ShoppingCart, Truck, KeySquare, FileText, Tent, Mail, ChartBar as BarChart3, BookOpen, Contact as Contact2, Package, LogOut, Wallet, Hop as Home, ShieldCheck, PenTool, MessageSquare, Smartphone, HardHat, Banknote, Images, Sparkles, Link2, ChevronDown, ChevronRight } from 'lucide-react';
 import { getRoleAllowedTabs, normalizeYetki } from '../lib/yetkiUtils';
 
 interface SidebarProps {
@@ -29,6 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleMobileMode,
   kisitliSayfalar = []
 }) => {
+  const GROUP_STATE_KEY = 'kibritci_sidebar_group_state_v1';
   const normalizedYetki = normalizeYetki(userYetki);
   const roleAllowedTabs = getRoleAllowedTabs(normalizedYetki);
 
@@ -104,6 +105,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   ];
 
+  const emailLower = currentUser?.email?.toLowerCase();
+  const isFounderAdmin = emailLower === 'sametatak9@gmail.com';
+
   const filteredMenuItems = menuItems.map(group => {
     return {
       ...group,
@@ -121,9 +125,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           return emailLower === 'sametatak9@gmail.com' || emailLower === 'santiye@kibritci.com';
         }
 
-        if (item.key === 'yetki_verme') {
-          const emailLower = currentUser?.email?.toLowerCase();
-          return emailLower === 'sametatak9@gmail.com' || emailLower === 'santiye@kibritci.com';
+        if (item.key === 'admin' || item.key === 'yetki_verme') {
+          return isFounderAdmin;
         }
 
         if (item.key === 'formen_ekrani') {
@@ -167,12 +170,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
     };
   }).filter(group => {
     if (group.group === "ADMİNİSTRATOR") {
-      const emailLower = currentUser?.email?.toLowerCase();
-      const isSametOrAdmin = emailLower === "sametatak95@gmail.com" || emailLower === "sametatak9@gmail.com" || emailLower === "santiye@kibritci.com";
-      return isSametOrAdmin || isYonetici;
+      return isFounderAdmin;
     }
     return group.items.length > 0;
   });
+
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem(GROUP_STATE_KEY);
+      if (raw) return JSON.parse(raw) as Record<string, boolean>;
+    } catch {
+      /* ignore */
+    }
+    return Object.fromEntries(menuItems.map((g) => [g.group, true]));
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(GROUP_STATE_KEY, JSON.stringify(expandedGroups));
+    } catch {
+      /* ignore */
+    }
+  }, [expandedGroups]);
+
+  useEffect(() => {
+    const activeGroup = filteredMenuItems.find((g) => g.items.some((it) => it.key === activeTab));
+    if (!activeGroup) return;
+    setExpandedGroups((prev) => {
+      if (prev[activeGroup.group]) return prev;
+      return { ...prev, [activeGroup.group]: true };
+    });
+  }, [activeTab, filteredMenuItems]);
 
   return (
     <>
@@ -214,10 +242,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {filteredMenuItems.map((group, grpIdx) => (
             <div key={grpIdx} className="space-y-1.5">
-              <span className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">
-                {group.group}
-              </span>
-              {group.items.map((item) => {
+              <button
+                type="button"
+                onClick={() =>
+                  setExpandedGroups((prev) => ({ ...prev, [group.group]: !prev[group.group] }))
+                }
+                className="w-full px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center justify-between hover:text-slate-600 transition cursor-pointer"
+              >
+                <span>{group.group}</span>
+                {expandedGroups[group.group] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+              {expandedGroups[group.group] && group.items.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.key;
                 return (
