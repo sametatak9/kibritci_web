@@ -475,43 +475,115 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
   const handleExportExcelTables = async () => {
     const { Workbook } = await import('exceljs');
+
+    const buildKibritciLogoDataUrl = async (): Promise<string | null> => {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 120">
+        <rect x="5" y="5" width="110" height="110" rx="10" fill="white" stroke="#1E4E78" stroke-width="3" />
+        <path d="M15 115 V75 L35 50 V115" fill="#8B1E1E" />
+        <path d="M35 115 V52 L58 30 V115" fill="#B91C1C" />
+        <path d="M58 52 L95 90 H72 L45 61 Z" fill="#8B1E1E" />
+        <path d="M58 85 L95 115 H72 L58 100 Z" fill="#1E4E78" />
+        <line x1="15" y1="115" x2="115" y2="115" stroke="#1E4E78" stroke-width="4" />
+      </svg>`;
+      const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      try {
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const i = new Image();
+          i.onload = () => resolve(i);
+          i.onerror = () => reject(new Error('Logo yüklenemedi'));
+          i.src = url;
+        });
+        const canvas = document.createElement('canvas');
+        canvas.width = 220;
+        canvas.height = 190;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL('image/png');
+      } catch {
+        return null;
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    };
+
     const wb = new Workbook();
     const ws = wb.addWorksheet('Puantaj', {
-      views: [{ state: 'frozen', ySplit: 2, xSplit: 6 }],
+      views: [{ state: 'frozen', ySplit: 5, xSplit: 6 }],
     });
 
     const periodLabel = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+    const reportNo = `KBR-DSK-${selectedYear}${String(selectedMonth).padStart(2, '0')}-${Date.now().toString().slice(-4)}`;
+    const basimTarihi = new Date().toLocaleString('tr-TR');
     const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
     const dayIndexes = Array.from({ length: daysInMonth }, (_, i) => i + 1);
     const monthLabel = new Date(selectedYear, selectedMonth - 1, 1).toLocaleDateString('tr-TR', {
       month: 'long',
       year: 'numeric',
     });
+    const reportTitle = `KİBRİTÇİ İNŞAAT DURSUNKÖY PROJESİ ${monthLabel.toUpperCase()} RAPORUDUR`;
+    const titleRow = 1;
+    const metaRow = 2;
+    const periodRow = 3;
+    const headerTopRow = 4;
+    const headerSubRow = 5;
+    const dataStartRow = 6;
     const baseCols = 6; // sıra, ad soyad, tc, görev, maaş, satır tipi
     const summaryStart = baseCols + daysInMonth + 1;
     const summaryLabels = ['Top. Gün', 'Yok Gün', 'Top. Mesai', 'Aylık Maaş', 'Gün Hak.', 'Mesai Hak.', 'Toplam'];
+    const totalCols = summaryStart + summaryLabels.length - 1;
 
-    ws.getCell(1, 1).value = `KIBRITCI INSAAT MODERN PUANTAJ RAPORU - ${monthLabel}`;
-    ws.mergeCells(1, 1, 1, summaryStart + summaryLabels.length - 1);
-    ws.getCell(1, 1).font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
-    ws.getCell(1, 1).alignment = { vertical: 'middle', horizontal: 'center' };
-    ws.getCell(1, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
-    ws.getRow(1).height = 24;
+    ws.getCell(titleRow, 1).value = reportTitle;
+    ws.mergeCells(titleRow, 1, titleRow, totalCols);
+    ws.getCell(titleRow, 1).font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+    ws.getCell(titleRow, 1).alignment = { vertical: 'middle', horizontal: 'center' };
+    ws.getCell(titleRow, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+    ws.getRow(titleRow).height = 28;
 
-    const headerTop = ['Sıra', 'Ad Soyad', 'TC Kimlik', 'Görevi', 'Aylık Maaş', 'Satır'];
+    ws.getCell(metaRow, 1).value = `Rapor No: ${reportNo}  |  Basım Tarihi: ${basimTarihi}`;
+    ws.mergeCells(metaRow, 1, metaRow, totalCols);
+    ws.getCell(metaRow, 1).font = { bold: true, size: 10, color: { argb: 'FF0F172A' } };
+    ws.getCell(metaRow, 1).alignment = { vertical: 'middle', horizontal: 'center' };
+    ws.getCell(metaRow, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+
+    ws.getCell(periodRow, 1).value = `Dönem: ${monthLabel}`;
+    ws.mergeCells(periodRow, 1, periodRow, totalCols);
+    ws.getCell(periodRow, 1).font = { bold: true, size: 10, color: { argb: 'FF334155' } };
+    ws.getCell(periodRow, 1).alignment = { vertical: 'middle', horizontal: 'center' };
+    ws.getCell(periodRow, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+
+    const logoDataUrl = await buildKibritciLogoDataUrl();
+    if (logoDataUrl) {
+      const logoId = wb.addImage({ base64: logoDataUrl, extension: 'png' });
+      ws.addImage(logoId, { tl: { col: 0.1, row: 0.1 }, ext: { width: 56, height: 50 } });
+    }
+
+    const headerTop = ['Sıra', 'Ad Soyad', 'TC / IBAN', 'Görevi', 'Aylık Maaş', 'Satır'];
     headerTop.forEach((h, i) => {
-      ws.getCell(2, i + 1).value = h;
-      ws.getCell(2, i + 1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      ws.getCell(2, i + 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
-      ws.getCell(2, i + 1).alignment = { horizontal: 'center', vertical: 'middle' };
-      ws.mergeCells(2, i + 1, 3, i + 1);
+      const col = i + 1;
+      if (col === 3) {
+        ws.getCell(headerTopRow, col).value = 'TC Kimlik';
+        ws.getCell(headerSubRow, col).value = 'IBAN';
+        [headerTopRow, headerSubRow].forEach((r) => {
+          ws.getCell(r, col).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          ws.getCell(r, col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+          ws.getCell(r, col).alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+        return;
+      }
+      ws.getCell(headerTopRow, col).value = h;
+      ws.getCell(headerTopRow, col).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      ws.getCell(headerTopRow, col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+      ws.getCell(headerTopRow, col).alignment = { horizontal: 'center', vertical: 'middle' };
+      ws.mergeCells(headerTopRow, col, headerSubRow, col);
     });
 
     dayIndexes.forEach((d, idx) => {
       const col = baseCols + idx + 1;
-      ws.getCell(2, col).value = d;
-      ws.getCell(3, col).value = dayOfWeekAbbreviation(d);
-      [2, 3].forEach((r) => {
+      ws.getCell(headerTopRow, col).value = d;
+      ws.getCell(headerSubRow, col).value = dayOfWeekAbbreviation(d);
+      [headerTopRow, headerSubRow].forEach((r) => {
         ws.getCell(r, col).font = { bold: true, color: { argb: 'FFFFFFFF' } };
         ws.getCell(r, col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D4ED8' } };
         ws.getCell(r, col).alignment = { horizontal: 'center', vertical: 'middle' };
@@ -520,11 +592,11 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
     summaryLabels.forEach((label, i) => {
       const col = summaryStart + i;
-      ws.getCell(2, col).value = label;
-      ws.mergeCells(2, col, 3, col);
-      ws.getCell(2, col).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      ws.getCell(2, col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF111827' } };
-      ws.getCell(2, col).alignment = { horizontal: 'center', vertical: 'middle' };
+      ws.getCell(headerTopRow, col).value = label;
+      ws.mergeCells(headerTopRow, col, headerSubRow, col);
+      ws.getCell(headerTopRow, col).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      ws.getCell(headerTopRow, col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF111827' } };
+      ws.getCell(headerTopRow, col).alignment = { horizontal: 'center', vertical: 'middle' };
     });
 
     const toStatusSymbol = (durum: YoklamaDurum): string => {
@@ -537,7 +609,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       return '-';
     };
 
-    let row = 4;
+    let row = dataStartRow;
     filteredPersonel.forEach((p, index) => {
       const map = draftYoklamalar[p.id] || {};
       let geldiGun = 0;
@@ -554,7 +626,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       }
       ws.getCell(row, 1).value = index + 1;
       ws.getCell(row, 2).value = `${p.ad} ${p.soyad}`;
-      ws.getCell(row, 3).value = p.tcNo || '-';
+      ws.getCell(row, 3).value = `${p.tcNo || '-'}\n${p.ibanNo || '-'}`;
+      ws.getCell(row, 3).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
       ws.getCell(row, 4).value = p.gorev || '-';
       ws.getCell(row, 5).value = Number(p.maas || 0);
       ws.getCell(row, 5).numFmt = '#,##0.00';
@@ -631,6 +704,27 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       row += 3;
     });
 
+    const signTitleRow = row + 1;
+    ws.mergeCells(signTitleRow, 1, signTitleRow, totalCols);
+    ws.getCell(signTitleRow, 1).value = 'ONAY / İMZA ALANLARI';
+    ws.getCell(signTitleRow, 1).font = { bold: true, size: 10, color: { argb: 'FF0F172A' } };
+    ws.getCell(signTitleRow, 1).alignment = { horizontal: 'center', vertical: 'middle' };
+    ws.getCell(signTitleRow, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+
+    const signRoles = ['Muhasebe', 'İdari İşler', 'Şantiye Şefi', 'Proje Müdürü'];
+    const signStartRow = signTitleRow + 1;
+    signRoles.forEach((role, idx) => {
+      const startCol = 1 + Math.floor((idx * totalCols) / signRoles.length);
+      const endCol = Math.floor(((idx + 1) * totalCols) / signRoles.length);
+      ws.mergeCells(signStartRow, startCol, signStartRow + 2, endCol);
+      const cell = ws.getCell(signStartRow, startCol);
+      cell.value = `${role}\n\nİmza: __________________`;
+      cell.font = { bold: true, size: 10, color: { argb: 'FF334155' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+    });
+    row = signStartRow + 3;
+
     ws.eachRow((r) => {
       r.eachCell((cell) => {
         if (!cell.alignment) cell.alignment = {};
@@ -649,7 +743,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
     ws.getColumn(1).width = 7;
     ws.getColumn(2).width = 22;
-    ws.getColumn(3).width = 16;
+    ws.getColumn(3).width = 24;
     ws.getColumn(4).width = 14;
     ws.getColumn(5).width = 12;
     ws.getColumn(6).width = 14;
@@ -661,16 +755,25 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     });
 
     const summaryWs = wb.addWorksheet('Özet');
-    summaryWs.addRow(['KIBRITCI INSAAT - AYLIK ÖZET', monthLabel]);
+    summaryWs.addRow([reportTitle]);
     summaryWs.mergeCells(1, 1, 1, 8);
     summaryWs.getCell(1, 1).font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
     summaryWs.getCell(1, 1).alignment = { horizontal: 'center', vertical: 'middle' };
     summaryWs.getCell(1, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
-    summaryWs.addRow(['Sıra', 'Ad Soyad', 'TC', 'Görev', 'Toplam Gün', 'Yok Gün', 'Toplam Mesai', 'Toplam Kazanç']);
-    summaryWs.getRow(2).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    summaryWs.getRow(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D4ED8' } };
+    summaryWs.addRow([`Rapor No: ${reportNo}  |  Basım Tarihi: ${basimTarihi}`]);
+    summaryWs.mergeCells(2, 1, 2, 8);
+    summaryWs.getCell(2, 1).font = { bold: true, size: 10, color: { argb: 'FF0F172A' } };
+    summaryWs.getCell(2, 1).alignment = { horizontal: 'center', vertical: 'middle' };
+    summaryWs.getCell(2, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+    summaryWs.addRow(['Sıra', 'Ad Soyad', 'TC / IBAN', 'Görev', 'Toplam Gün', 'Yok Gün', 'Toplam Mesai', 'Toplam Kazanç']);
+    summaryWs.getRow(3).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    summaryWs.getRow(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D4ED8' } };
+    if (logoDataUrl) {
+      const summaryLogoId = wb.addImage({ base64: logoDataUrl, extension: 'png' });
+      summaryWs.addImage(summaryLogoId, { tl: { col: 0.1, row: 0.1 }, ext: { width: 56, height: 50 } });
+    }
 
-    let sRow = 3;
+    let sRow = 4;
     filteredPersonel.forEach((p, i) => {
       const map = draftYoklamalar[p.id] || {};
       let geldiGun = 0;
@@ -690,7 +793,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       summaryWs.addRow([
         i + 1,
         `${p.ad} ${p.soyad}`,
-        p.tcNo || '-',
+        `${p.tcNo || '-'}\n${p.ibanNo || '-'}`,
         p.gorev || '-',
         geldiGun,
         yokGun,
@@ -707,12 +810,16 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       summaryWs.getColumn(col).numFmt = '#,##0.00';
     });
     [1, 2, 3, 4, 5, 6, 7, 8].forEach((c) => {
-      summaryWs.getColumn(c).width = [7, 24, 16, 14, 11, 10, 12, 14][c - 1];
+      summaryWs.getColumn(c).width = [7, 24, 24, 14, 11, 10, 12, 14][c - 1];
     });
     summaryWs.eachRow((r) => {
       r.eachCell((cell) => {
         const colNumber = Number(cell.col);
-        cell.alignment = { horizontal: colNumber === 2 || colNumber === 4 ? 'left' : 'center', vertical: 'middle' };
+        cell.alignment = {
+          horizontal: colNumber === 2 || colNumber === 4 ? 'left' : 'center',
+          vertical: 'middle',
+          wrapText: colNumber === 3,
+        };
         cell.border = {
           top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
           left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
