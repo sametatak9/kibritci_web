@@ -258,6 +258,50 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     [campuses, katlar]
   );
 
+  const groupedKampYapisi = useMemo(() => {
+    const campusMap = new Map<string, { campus: string; floors: Array<{ floor: string; rooms: KampOdasi[] }> }>();
+
+    const ensureCampus = (name: string) => {
+      if (!campusMap.has(name)) {
+        campusMap.set(name, { campus: name, floors: [] });
+      }
+      return campusMap.get(name)!;
+    };
+
+    const floorSort = (a: string, b: string) =>
+      a.localeCompare(b, 'tr', { numeric: true, sensitivity: 'base' });
+    const roomSort = (a: KampOdasi, b: KampOdasi) =>
+      (a.odaNo || '').localeCompare(b.odaNo || '', 'tr', { numeric: true, sensitivity: 'base' });
+
+    for (const campus of campuses) {
+      ensureCampus(campus);
+    }
+    for (const room of kampOdalari) {
+      ensureCampus(room.yerleskeAdi || 'Bilinmeyen Yerleşke');
+    }
+
+    for (const [campusName, node] of campusMap.entries()) {
+      const floorNames = new Set<string>([
+        ...(campusFloors[campusName] || []),
+        ...kampOdalari
+          .filter((r) => r.yerleskeAdi === campusName)
+          .map((r) => r.kogusNo)
+          .filter(Boolean),
+      ]);
+
+      node.floors = Array.from(floorNames)
+        .sort(floorSort)
+        .map((floor) => ({
+          floor,
+          rooms: kampOdalari
+            .filter((r) => r.yerleskeAdi === campusName && r.kogusNo === floor)
+            .sort(roomSort),
+        }));
+    }
+
+    return Array.from(campusMap.values()).sort((a, b) => floorSort(a.campus, b.campus));
+  }, [campuses, campusFloors, kampOdalari]);
+
   const taseronCariler = useMemo(
     () => cariKartlar.filter((c) => c.kartTipi === 'TASERON' && c.durum === 'AKTIF'),
     [cariKartlar]
@@ -2235,104 +2279,116 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   <p className="text-xs">Sol panelden yerleşke → kat → oda oluşturun. Kampçı Mobil ile senkron çalışır.</p>
                 </div>
               ) : (
-              /* Grouping logic by Floors (KogusNo) */
-              Array.from(new Set(kampOdalari.map(r => r.kogusNo))).map(floorKey => {
-                const floorRooms = kampOdalari.filter(r => r.kogusNo === floorKey);
-                
-                return (
-                  <div key={floorKey} className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm space-y-3">
-                    {/* Floor Header */}
-                    <div className="flex justify-between items-center bg-slate-100 p-2 rounded-lg border-l-4 border-blue-600">
+                groupedKampYapisi.map((campusNode) => (
+                  <div key={campusNode.campus} className="border border-blue-200 rounded-xl p-4 bg-white shadow-sm space-y-3">
+                    <div className="flex justify-between items-center bg-blue-50 p-2 rounded-lg border-l-4 border-blue-600">
                       <span className="font-bold text-slate-800 text-xs tracking-tight uppercase flex items-center">
-                        🏢 {floorKey} Krokisi
+                        📍 {campusNode.campus}
                       </span>
                       <span className="text-[10px] text-slate-500 font-semibold">
-                        Kayıtlı {floorRooms.length} Oda Bulunuyor
+                        {campusNode.floors.reduce((acc, f) => acc + f.rooms.length, 0)} Oda
                       </span>
                     </div>
 
-                    {/* Rooms within this floor */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                      {floorRooms.map(room => {
-                        const occupants = kampKayitlari.filter(cr => (cr.roomId === room.id || cr.odaId === room.id) && cr.durum === 'AKTIF');
-                        const isFull = occupants.length >= room.kapasite;
+                    {campusNode.floors.map((floorNode) => (
+                      <div key={`${campusNode.campus}_${floorNode.floor}`} className="space-y-2">
+                        <div className="flex justify-between items-center bg-slate-100 p-2 rounded-lg border-l-4 border-amber-500">
+                          <span className="font-bold text-slate-800 text-xs tracking-tight uppercase flex items-center">
+                            🏢 {floorNode.floor}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-semibold">
+                            Kayıtlı {floorNode.rooms.length} Oda
+                          </span>
+                        </div>
 
-                        return (
-                          <div key={room.id} className="border border-slate-150 rounded-xl p-3 bg-slate-50/55 hover:bg-white hover:shadow transition duration-150 flex flex-col justify-between space-y-3">
-                            <div className="flex justify-between items-start text-xs border-b pb-1.5 border-slate-100">
-                              <div>
-                                <h5 className="font-bold text-slate-900">{room.yerleskeAdi}</h5>
-                                <p className="text-[9px] text-blue-600 font-semibold uppercase">{room.firmaTipi === 'ANA_FIRMA' ? 'Ana Kadro Lojmanı' : 'Taşeron Müfrezesi'}</p>
-                                <span className="text-[10px] font-bold text-slate-600 mt-1 block">Oda: {room.odaNo}</span>
-                              </div>
-                              
-                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                                isFull 
-                                  ? 'bg-rose-100 text-rose-700' 
-                                  : occupants.length > 0 
-                                    ? 'bg-amber-100 text-amber-800' 
-                                    : 'bg-emerald-100 text-emerald-700'
-                              }`}>
-                                {isFull ? 'DOLU' : occupants.length > 0 ? 'KISMEN DOLU' : 'BOŞ'}
-                              </span>
-                            </div>
+                        {floorNode.rooms.length === 0 ? (
+                          <div className="text-[10px] text-slate-400 italic px-2">Bu katta henüz oda yok.</div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                            {floorNode.rooms.map((room) => {
+                              const occupants = kampKayitlari.filter(
+                                (cr) => (cr.roomId === room.id || cr.odaId === room.id) && cr.durum === 'AKTIF'
+                              );
+                              const isFull = occupants.length >= room.kapasite;
 
-                            <div className="space-y-1.5 min-h-[50px]">
-                              <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider block">Yatak Doluluğu ({occupants.length} / {room.kapasite})</span>
-                              {occupants.length === 0 ? (
-                                <p className="text-[9px] text-slate-400 italic">Oda şu an tamamen boş.</p>
-                              ) : (
-                                <div className="space-y-1">
-                                  {occupants.map(oc => (
-                                    <div key={oc.id} className="flex justify-between items-center bg-white border border-slate-200 px-1.5 py-1 rounded text-[10px]">
-                                      <span className="font-bold text-slate-800">👤 {oc.personelIsim}</span>
-                                      <button 
-                                        onClick={() => handleEvictResident(oc)}
-                                        className="text-red-500 hover:text-red-700 font-bold transition text-[9px] cursor-pointer"
-                                      >
-                                        Tahliye Et
-                                      </button>
+                              return (
+                                <div key={room.id} className="border border-slate-150 rounded-xl p-3 bg-slate-50/55 hover:bg-white hover:shadow transition duration-150 flex flex-col justify-between space-y-3">
+                                  <div className="flex justify-between items-start text-xs border-b pb-1.5 border-slate-100">
+                                    <div>
+                                      <h5 className="font-bold text-slate-900">{room.yerleskeAdi}</h5>
+                                      <p className="text-[9px] text-blue-600 font-semibold uppercase">{room.firmaTipi === 'ANA_FIRMA' ? 'Ana Kadro Lojmanı' : 'Taşeron Müfrezesi'}</p>
+                                      <span className="text-[10px] font-bold text-slate-600 mt-1 block">Oda: {room.odaNo}</span>
                                     </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
 
-                            <div className="flex gap-1.5 mt-2">
-                              {!isFull ? (
-                                <button 
-                                  onClick={() => setSelectedRoomToAssign(room)}
-                                  className="flex-grow bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white text-[9px] font-bold py-1.5 rounded-lg border border-blue-200 transition duration-150 cursor-pointer text-center"
-                                >
-                                  + Sakin Yerleştir (Elle / DB)
-                                </button>
-                              ) : (
-                                <div className="flex-grow py-1.5 rounded-lg bg-slate-100 border text-center text-slate-400 text-[9px] font-bold">
-                                  🚫 Oda Maksimum Dolulukta
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                                      isFull
+                                        ? 'bg-rose-100 text-rose-700'
+                                        : occupants.length > 0
+                                          ? 'bg-amber-100 text-amber-800'
+                                          : 'bg-emerald-100 text-emerald-700'
+                                    }`}>
+                                      {isFull ? 'DOLU' : occupants.length > 0 ? 'KISMEN DOLU' : 'BOŞ'}
+                                    </span>
+                                  </div>
+
+                                  <div className="space-y-1.5 min-h-[50px]">
+                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider block">Yatak Doluluğu ({occupants.length} / {room.kapasite})</span>
+                                    {occupants.length === 0 ? (
+                                      <p className="text-[9px] text-slate-400 italic">Oda şu an tamamen boş.</p>
+                                    ) : (
+                                      <div className="space-y-1">
+                                        {occupants.map((oc) => (
+                                          <div key={oc.id} className="flex justify-between items-center bg-white border border-slate-200 px-1.5 py-1 rounded text-[10px]">
+                                            <span className="font-bold text-slate-800">👤 {oc.personelIsim}</span>
+                                            <button
+                                              onClick={() => handleEvictResident(oc)}
+                                              className="text-red-500 hover:text-red-700 font-bold transition text-[9px] cursor-pointer"
+                                            >
+                                              Tahliye Et
+                                            </button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="flex gap-1.5 mt-2">
+                                    {!isFull ? (
+                                      <button
+                                        onClick={() => setSelectedRoomToAssign(room)}
+                                        className="flex-grow bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white text-[9px] font-bold py-1.5 rounded-lg border border-blue-200 transition duration-150 cursor-pointer text-center"
+                                      >
+                                        + Sakin Yerleştir (Elle / DB)
+                                      </button>
+                                    ) : (
+                                      <div className="flex-grow py-1.5 rounded-lg bg-slate-100 border text-center text-slate-400 text-[9px] font-bold">
+                                        🚫 Oda Maksimum Dolulukta
+                                      </div>
+                                    )}
+                                    <button
+                                      onClick={() => handleEditRoom(room)}
+                                      className="px-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded-lg border border-indigo-200 transition duration-150 cursor-pointer flex items-center justify-center text-[10px]"
+                                      title="Oda Güncelle"
+                                    >
+                                      ✎
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteRoom(room.id)}
+                                      className="px-2 bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white rounded-lg border border-rose-200 transition duration-150 cursor-pointer flex items-center justify-center text-[10px]"
+                                      title="Odayı Sil"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
                                 </div>
-                              )}
-                              <button
-                                onClick={() => handleEditRoom(room)}
-                                className="px-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded-lg border border-indigo-200 transition duration-150 cursor-pointer flex items-center justify-center text-[10px]"
-                                title="Oda Güncelle"
-                              >
-                                ✎
-                              </button>
-                              <button
-                                onClick={() => handleDeleteRoom(room.id)}
-                                className="px-2 bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white rounded-lg border border-rose-200 transition duration-150 cursor-pointer flex items-center justify-center text-[10px]"
-                                title="Odayı Sil"
-                              >
-                                <Trash2 size={12} />
-                              </button>
-                            </div>
+                              );
+                            })}
                           </div>
-                        );
-                      })}
-                    </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                );
-              })
+                ))
               )}
             </div>
           </div>
@@ -4236,7 +4292,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 <span className="text-xl">🏕️</span>
                 <div>
                   <h3 className="font-display font-semibold text-sm">Şantiye Kamp/Barınma Boş &amp; Dolu Kroki Raporu</h3>
-                  <p className="text-[10px] text-slate-400">Şantiye Lojman Konteyner Kapasite Şeması ve Sakinleri</p>
+                  <p className="text-[10px] text-slate-400">Şantiye Lojman Kapasite Şeması ve Sakinleri</p>
                 </div>
               </div>
               <button 
@@ -4293,51 +4349,55 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
 
                 {/* Kat Planı ve Krokiler */}
                 <div className="space-y-6">
-                  {Array.from(new Set(kampOdalari.map(r => r.kogusNo))).map(floorKey => {
-                    const floorRooms = kampOdalari.filter(r => r.kogusNo === floorKey);
-                    return (
-                      <div key={floorKey} className="border border-slate-200 rounded-2xl p-4 bg-slate-50/30 space-y-3">
-                        <span className="font-bold text-[10px] text-slate-700 block bg-slate-100 p-1 px-3 rounded border-l-4 border-blue-600 uppercase">
-                          📍 {floorKey} Mimari Taslağı
-                        </span>
-                        
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                          {floorRooms.map(room => {
-                            const occupants = kampKayitlari.filter(cr => (cr.roomId === room.id || cr.odaId === room.id) && cr.durum === 'AKTIF');
-                            const isFull = occupants.length >= room.kapasite;
-                            return (
-                              <div key={room.id} className="bg-white border p-3 rounded-xl shadow-sm text-[10px] space-y-2 flex flex-col justify-between">
-                                <div>
-                                  <div className="flex justify-between items-center">
-                                    <strong className="text-slate-900 font-bold block">Oda: {room.odaNo}</strong>
-                                    <span className={`text-[8px] font-black px-1 rounded uppercase min-w-[32px] text-center ${
-                                      isFull ? 'bg-rose-100 text-rose-700' : occupants.length > 0 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'
-                                    }`}>
-                                      {isFull ? 'Dolu' : occupants.length > 0 ? 'Kısmen' : 'Boş'}
-                                    </span>
-                                  </div>
-                                  <span className="text-[8px] text-slate-400 block mt-0.5">{room.yerleskeAdi}</span>
-                                </div>
+                  {groupedKampYapisi.map((campusNode) => (
+                    <div key={`print_${campusNode.campus}`} className="border border-slate-200 rounded-2xl p-4 bg-slate-50/30 space-y-3">
+                      <span className="font-bold text-[10px] text-slate-700 block bg-blue-50 p-1 px-3 rounded border-l-4 border-blue-600 uppercase">
+                        📍 {campusNode.campus}
+                      </span>
 
-                                <div className="space-y-1">
-                                  <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">SAKİNLER ({occupants.length}/{room.kapasite})</span>
-                                  {occupants.length === 0 ? (
-                                    <span className="text-[9px] text-slate-400 italic block">Boş Yatak</span>
-                                  ) : (
-                                    <ul className="list-disc list-inside space-y-0.5 text-slate-700 font-medium">
-                                      {occupants.map(o => (
-                                        <li key={o.id} className="truncate">{o.personelIsim}</li>
-                                      ))}
-                                    </ul>
-                                  )}
+                      {campusNode.floors.map((floorNode) => (
+                        <div key={`print_${campusNode.campus}_${floorNode.floor}`} className="space-y-2">
+                          <span className="font-bold text-[10px] text-slate-700 block bg-slate-100 p-1 px-3 rounded border-l-4 border-amber-500 uppercase">
+                            🏢 {floorNode.floor} Mimari Taslağı
+                          </span>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            {floorNode.rooms.map((room) => {
+                              const occupants = kampKayitlari.filter((cr) => (cr.roomId === room.id || cr.odaId === room.id) && cr.durum === 'AKTIF');
+                              const isFull = occupants.length >= room.kapasite;
+                              return (
+                                <div key={room.id} className="bg-white border p-3 rounded-xl shadow-sm text-[10px] space-y-2 flex flex-col justify-between">
+                                  <div>
+                                    <div className="flex justify-between items-center">
+                                      <strong className="text-slate-900 font-bold block">Oda: {room.odaNo}</strong>
+                                      <span className={`text-[8px] font-black px-1 rounded uppercase min-w-[32px] text-center ${
+                                        isFull ? 'bg-rose-100 text-rose-700' : occupants.length > 0 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'
+                                      }`}>
+                                        {isFull ? 'Dolu' : occupants.length > 0 ? 'Kısmen' : 'Boş'}
+                                      </span>
+                                    </div>
+                                    <span className="text-[8px] text-slate-400 block mt-0.5">{room.yerleskeAdi}</span>
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">SAKİNLER ({occupants.length}/{room.kapasite})</span>
+                                    {occupants.length === 0 ? (
+                                      <span className="text-[9px] text-slate-400 italic block">Boş Yatak</span>
+                                    ) : (
+                                      <ul className="list-disc list-inside space-y-0.5 text-slate-700 font-medium">
+                                        {occupants.map((o) => (
+                                          <li key={o.id} className="truncate">{o.personelIsim}</li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      ))}
+                    </div>
+                  ))}
                 </div>
 
                 {/* Sorumlu ve İmzalar */}

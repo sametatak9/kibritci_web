@@ -484,12 +484,18 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   // Spotlight staff (the first unmarked employee in the pile)
   const spotlightStaff = filteredRemaining[0] || null;
 
+  const setMesaiWithDraft = (id: string, value: number) => {
+    setHasLocalAttendanceDraft(true);
+    const safe = Number.isFinite(value) ? Math.max(0, Math.min(24, value)) : 0;
+    setMesaiSaatleri(prev => ({ ...prev, [id]: safe }));
+  };
+
   // Actions
   const handleMarkPresent = (id: string, mesai: number = 0) => {
     setHasLocalAttendanceDraft(true);
     setPresentIds(prev => [...prev.filter(x => x !== id), id]);
     setAbsentIds(prev => prev.filter(x => x !== id));
-    setMesaiSaatleri(prev => ({ ...prev, [id]: mesai }));
+    setMesaiSaatleri(prev => ({ ...prev, [id]: Math.max(0, Math.min(24, mesai)) }));
   };
 
   const handleMarkAbsent = (id: string) => {
@@ -513,7 +519,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const handleMarkAllPresent = () => {
     setHasLocalAttendanceDraft(true);
     const unmarkedIds = remainingStaff.map(p => p.id);
-    setPresentIds(prev => [...prev, ...unmarkedIds]);
+    setPresentIds(prev => Array.from(new Set([...prev, ...unmarkedIds])));
     setAbsentIds(prev => prev.filter(id => !unmarkedIds.includes(id)));
     const copy = { ...mesaiSaatleri };
     unmarkedIds.forEach(id => {
@@ -1135,10 +1141,16 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
 
                     <button
                       onClick={handleSaveYoklama}
-                      className="w-full bg-slate-900 hover:bg-slate-950 text-white font-extrabold text-[10px] py-2.5 px-4 rounded-xl transition duration-150 shadow-md flex items-center justify-center space-x-1.5 cursor-pointer"
+                      className="w-full bg-slate-900 hover:bg-slate-950 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-extrabold text-[10px] py-2.5 px-4 rounded-xl transition duration-150 shadow-md flex items-center justify-center space-x-1.5 cursor-pointer"
+                      disabled={!hasLocalAttendanceDraft}
                     >
-                      <span>✍️ YOKLAMAYI İMZALA VE KAYDET</span>
+                      <span>{hasLocalAttendanceDraft ? '✍️ YOKLAMAYI İMZALA VE KAYDET' : '✅ YOKLAMA KAYITLI'}</span>
                     </button>
+                    {hasLocalAttendanceDraft && (
+                      <p className="text-[9px] text-amber-700 font-bold text-center bg-amber-50 border border-amber-200 rounded-lg py-1.5">
+                        Kaydedilmemiş yoklama/mesai değişikliği var.
+                      </p>
+                    )}
                   </div>
 
                   {/* 4. MARKED HISTORY & UNDO OVERVIEW */}
@@ -1148,6 +1160,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                         <span className="font-bold text-[10px] text-slate-400 uppercase tracking-wider block">Mevcut İşaretliler ({presentIds.length + absentIds.length})</span>
                         <button
                           onClick={() => {
+                            setHasLocalAttendanceDraft(true);
                             setPresentIds([]);
                             setAbsentIds([]);
                             setMesaiSaatleri({});
@@ -1173,14 +1186,14 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                               <div className="flex items-center space-x-1.5 shrink-0">
                                 <div className="flex items-center bg-slate-100 rounded-lg px-1 py-0.5">
                                   <button
-                                    onClick={() => setMesaiSaatleri(prev => ({ ...prev, [id]: Math.max(0, (prev[id] || 0) - 1) }))}
+                                    onClick={() => setMesaiWithDraft(id, Math.max(0, (mesaiSaatleri[id] || 0) - 1))}
                                     className="w-4 h-4 bg-white text-slate-800 rounded font-black text-[9px] hover:bg-slate-200"
                                   >
                                     -
                                   </button>
                                   <span className="text-[9px] font-black mx-1.5 min-w-[8px] text-center text-slate-700">{hrs}</span>
                                   <button
-                                    onClick={() => setMesaiSaatleri(prev => ({ ...prev, [id]: Math.min(12, (prev[id] || 0) + 1) }))}
+                                    onClick={() => setMesaiWithDraft(id, Math.min(12, (mesaiSaatleri[id] || 0) + 1))}
                                     className="w-4 h-4 bg-white text-slate-800 rounded font-black text-[9px] hover:bg-slate-200"
                                   >
                                     +

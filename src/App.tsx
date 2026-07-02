@@ -62,7 +62,7 @@ import {
   saveDocument,
   fetchCollection,
 } from './lib/firebase';
-import { purgeLegacyKampIfNeeded, loadKampStateSnapshot } from './lib/kampYapisi';
+import { loadKampStateSnapshot, ensureYapıFromOdalari } from './lib/kampYapisi';
 import { probeGeminiApi } from './lib/apiClient';
 import {
   hasSubstantialYoklamaData,
@@ -96,7 +96,14 @@ import { EvrakBaglamaScreen, EvrakBaglamaPrefill } from './components/EvrakBagla
 import { PublicGirisKayitScreen } from './components/PublicGirisKayitScreen';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<string>("ana_sayfa");
+  const LAST_TAB_STORAGE_KEY = 'kibritci_last_tab_v1';
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    try {
+      return localStorage.getItem(LAST_TAB_STORAGE_KEY) || 'ana_sayfa';
+    } catch {
+      return 'ana_sayfa';
+    }
+  });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [signatureStyle, setSignatureStyle] = useState(() => localStorage.getItem('kibritci_sig_style') || 'cursive');
@@ -124,6 +131,7 @@ export default function App() {
   // Realtime Cloud Connection Monitor Status
   const [dbStatus, setDbStatus] = useState<'loading' | 'synced' | 'error' | 'offline'>('loading');
   const [loadingMsg, setLoadingMsg] = useState('Google Cloud Veritabanı bağlantısı kuruluyor...');
+  const [startupError, setStartupError] = useState<{ message: string; step: string; technical?: string } | null>(null);
   const [geminiApiAlert, setGeminiApiAlert] = useState<string | null>(null);
 
   // Global State Engine
@@ -188,6 +196,8 @@ export default function App() {
   ]);
   const [assistantLoading, setAssistantLoading] = useState(false);
   const roleHomeRoutedRef = useRef(false);
+  const kampRepairInFlightRef = useRef(false);
+  const mainScrollRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     (window as any).showErrorModal = (err: any, contextInfo?: string) => {
@@ -320,6 +330,7 @@ export default function App() {
     async function setupCloudDatabase() {
       try {
         setDbStatus('loading');
+        setStartupError(null);
         setLoadingMsg('Güvenli veritabanı oturumu kontrol ediliyor...');
         
         setLoadingMsg('Şantiye personel kadrosu eşitleniyor...');
@@ -410,14 +421,6 @@ export default function App() {
 
         setLoadingMsg('Yatakhane ve kamp oda yerleşimleri düzenleniyor...');
         await seedCollectionIfEmpty('kampOdalari', []);
-        try {
-          const legacyPurge = await purgeLegacyKampIfNeeded('app-boot');
-          if (legacyPurge.purged) {
-            console.log(`Demo kamp odaları temizlendi: ${legacyPurge.roomIds.length} oda`);
-          }
-        } catch (purgeErr) {
-          console.error('Demo kamp odaları otomatik temizlenemedi:', purgeErr);
-        }
         const roomData = await fetchCollection<KampOdasi>('kampOdalari');
         setKampOdalari(roomData);
 
@@ -521,11 +524,18 @@ export default function App() {
         setDbStatus('synced');
       } catch (err) {
         console.error('Firebase synchronisation error: ', err);
+        const errText =
+          err instanceof Error
+            ? `${err.name}: ${err.message}`
+            : typeof err === 'string'
+              ? err
+              : 'Bilinmeyen bağlantı hatası';
+        setStartupError({
+          message: 'Veritabanı bağlantısı kurulamadı. Lütfen internet bağlantınızı kontrol edin.',
+          step: loadingMsg,
+          technical: errText,
+        });
         setDbStatus('error');
-        alert(
-          'Veritabanı bağlantısı kurulamadı. Lütfen internet bağlantınızı kontrol edip sayfayı yenileyin. ' +
-          'Girdiğiniz veriler korunur; demo verisi yüklenmedi.'
-        );
       }
     }
 
@@ -866,10 +876,21 @@ export default function App() {
     const matched = findKullaniciByEmail(kullanicilar, currentUser?.email);
     if (!matched) return;
 
-    const homeTab = getRoleHomeTab(matched.yetki);
-    if (homeTab && !roleHomeRoutedRef.current) {
+    if (!roleHomeRoutedRef.current) {
+      const homeTab = getRoleHomeTab(matched.yetki) || 'ana_sayfa';
+      let initialTab = homeTab;
+      try {
+        const savedTab = localStorage.getItem(LAST_TAB_STORAGE_KEY);
+        const yetki = normalizeYetki(matched.yetki);
+        const isRestricted = !savedTab || isTabRestrictedForUser(savedTab, yetki, matched.kisitliSayfalar);
+        if (!isRestricted) {
+          initialTab = savedTab;
+        }
+      } catch {
+        /* no-op */
+      }
       roleHomeRoutedRef.current = true;
-      setActiveTab(homeTab);
+      setActiveTab(initialTab);
     }
 
     if (matched.imzaText) {
@@ -881,6 +902,65 @@ export default function App() {
       localStorage.setItem('kibritci_sig_style', matched.imzaStyle);
     }
   }, [currentUser, kullanicilar]);
+
+  useEffect(() => {
+    if (!currentUser || !activeTab) return;
+    try {
+      localStorage.setItem(LAST_TAB_STORAGE_KEY, activeTab);
+    } catch {
+      /* no-op */
+    }
+  }, [currentUser, activeTab]);
+
+  // Sekme bazlı scroll konumunu koru: sayfalar arası gidip gelince kaldığın yere dön.
+  useEffect(() => {
+    if (!currentUser || !activeTab) return;
+    const main = mainScrollRef.current;
+    if (!main) return;
+    try {
+      const saved = sessionStorage.getItem(`kibritci_tab_scroll_${activeTab}`);
+      main.scrollTop = saved ? Number(saved) || 0 : 0;
+    } catch {
+      main.scrollTop = 0;
+    }
+  }, [currentUser, activeTab]);
+
+  useEffect(() => {
+    if (!currentUser || !activeTab) return;
+    const main = mainScrollRef.current;
+    if (!main) return;
+    const key = `kibritci_tab_scroll_${activeTab}`;
+    const handleScroll = () => {
+      try {
+        sessionStorage.setItem(key, String(main.scrollTop));
+      } catch {
+        /* no-op */
+      }
+    };
+    main.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      handleScroll();
+      main.removeEventListener('scroll', handleScroll);
+    };
+  }, [currentUser, activeTab]);
+
+  // Kamp odaları var ama yerleşke/kat koleksiyonları eksildiyse otomatik geri oluştur.
+  // Böylece Kamp Yönetimi ve Kampçı Mobil menülerinde "kayıtlar silindi" algısı oluşmaz.
+  useEffect(() => {
+    if (dbStatus !== 'synced' || !currentUser) return;
+    if (kampRepairInFlightRef.current) return;
+    if (kampOdalari.length === 0) return;
+    if (kampYerleskeleri.length > 0 && kampKatlari.length > 0) return;
+
+    kampRepairInFlightRef.current = true;
+    ensureYapıFromOdalari(kampOdalari, currentUser?.email)
+      .catch((err) => {
+        console.warn('Kamp yapı onarımı başarısız:', err);
+      })
+      .finally(() => {
+        kampRepairInFlightRef.current = false;
+      });
+  }, [dbStatus, currentUser, kampOdalari, kampYerleskeleri.length, kampKatlari.length]);
 
   const handleSignOut = async () => {
     try {
@@ -1180,41 +1260,8 @@ export default function App() {
     alert(`Maaş hesap taslakları ${payload.month}. ay / ${payload.year} dönemi için Maaş Ödeme ekranına aktarıldı.`);
   };
 
-  useEffect(() => {
-    if (!personeller.length) return;
-    setYoklamalarWithSync((prev) => {
-      let changed = false;
-      const next: AylikYoklamaMap = { ...prev };
-
-      for (const p of personeller) {
-        const exit = (p.istenCikisTarihi || '').trim();
-        if (!exit) continue;
-        const [exitY, exitM, exitD] = exit.split('-').map(Number);
-        if (!exitY || !exitM || !exitD) continue;
-        const exitVal = exitY * 10000 + exitM * 100 + exitD;
-        const personMap = next[p.id];
-        if (!personMap) continue;
-        const personNext: Record<string, any> = { ...personMap };
-
-        Object.keys(personNext).forEach((key) => {
-          const parts = key.split('-');
-          if (parts.length !== 3) return;
-          const y = Number(parts[0]);
-          const m = Number(parts[1]);
-          const d = Number(parts[2]);
-          if (!y || !m || !d) return;
-          const dayVal = y * 10000 + m * 100 + d;
-          if (dayVal > exitVal && personNext[key]) {
-            delete personNext[key];
-            changed = true;
-          }
-        });
-        next[p.id] = personNext as any;
-      }
-
-      return changed ? next : prev;
-    });
-  }, [personeller]);
+  // Veri güvenliği: Yoklama geçmişi arka planda otomatik silinmez.
+  // İşten çıkış sonrası günler UI'da pasif/kapalı gösterilir, ancak kayıtlar korunur.
 
   const setPersonelIslemGecmisiWithSync = (updater: PersonelIslemGecmisi[] | ((p: PersonelIslemGecmisi[]) => PersonelIslemGecmisi[])) => {
     setPersonelIslemGecmisi(prev => {
@@ -1328,8 +1375,18 @@ export default function App() {
         <AlertCircle className="text-rose-400 mb-4" size={48} />
         <h1 className="text-lg font-bold mb-2">Veritabanı Bağlantı Hatası</h1>
         <p className="text-sm text-slate-400 text-center max-w-md mb-6">
-          Kayıtlı verileriniz Firestore&apos;da güvendedir. Bağlantı kurulamadığı için demo verisi yüklenmedi.
+          {startupError?.message || 'Kayıtlı verileriniz Firestore&apos;da güvendedir. Bağlantı kurulamadı.'}
         </p>
+        <div className="w-full max-w-xl bg-slate-800/70 border border-slate-700 rounded-xl p-4 mb-5 space-y-2 text-xs">
+          <p className="text-slate-300">
+            <span className="font-bold text-amber-400">Sorun Adımı:</span> {startupError?.step || 'Bilinmiyor'}
+          </p>
+          {startupError?.technical && (
+            <p className="text-slate-400 break-all">
+              <span className="font-bold text-rose-300">Teknik Detay:</span> {startupError.technical}
+            </p>
+          )}
+        </div>
         <button
           type="button"
           onClick={() => window.location.reload()}
@@ -1666,7 +1723,7 @@ export default function App() {
         )}
 
         {/* Dynamic Inner Screens Router wrapper */}
-        <main className="flex-1 overflow-auto relative bg-slate-50">
+        <main ref={mainScrollRef} className="flex-1 overflow-auto relative bg-slate-50">
           
           {(() => {
             const matchedUser = findKullaniciByEmail(kullanicilar, currentUser?.email);

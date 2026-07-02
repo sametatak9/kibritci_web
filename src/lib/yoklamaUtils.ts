@@ -89,8 +89,6 @@ export function isPersonelVisibleInMonth(
   month: number,
   personMap?: Record<string, YoklamaGunKaydi>
 ): boolean {
-  if (personMap && personHasYoklamaInMonth(personMap, year, month)) return true;
-
   const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
   if (p.iseGirisTarihi) {
     const [hireY, hireM] = p.iseGirisTarihi.split('-').map(Number);
@@ -102,6 +100,7 @@ export function isPersonelVisibleInMonth(
   } else if (!isAktif && !p.istenCikisTarihi) {
     return false;
   }
+  if (personMap && personHasYoklamaInMonth(personMap, year, month)) return true;
   return true;
 }
 
@@ -257,10 +256,30 @@ export function buildPersonelListForMonth(
     if (personHasYoklamaInMonth(asYoklamaGunMap(map), year, month)) ids.add(id);
   });
 
-  return Array.from(ids)
+  const list = Array.from(ids)
     .map(id => byId.get(id) ?? resolveStub?.(id))
     .filter((p): p is Personel => !!p)
-    .sort((a, b) =>
-      `${a.ad} ${a.soyad}`.localeCompare(`${b.ad} ${b.soyad}`, 'tr')
-    );
+    .sort((a, b) => `${a.ad} ${a.soyad}`.localeCompare(`${b.ad} ${b.soyad}`, 'tr'));
+
+  // Aynı kişinin (özellikle legacy/stub ID kaynaklı) birden fazla satır görünmesini engelle.
+  const deduped = new Map<string, Personel>();
+  const score = (p: Personel): number => {
+    let s = 0;
+    if ((p.tcNo || '').trim()) s += 100;
+    if (!p.id.startsWith('PRS-LEGACY')) s += 50;
+    if (p.durum === true || String(p.durum).toLowerCase() === 'true') s += 10;
+    return s;
+  };
+
+  for (const p of list) {
+    const key = (p.tcNo || '').trim() || normalizeTurkishName(`${p.ad} ${p.soyad}`);
+    const existing = deduped.get(key);
+    if (!existing || score(p) > score(existing)) {
+      deduped.set(key, p);
+    }
+  }
+
+  return Array.from(deduped.values()).sort((a, b) =>
+    `${a.ad} ${a.soyad}`.localeCompare(`${b.ad} ${b.soyad}`, 'tr')
+  );
 }

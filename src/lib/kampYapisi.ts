@@ -350,24 +350,12 @@ export async function deleteKatCascade(
   return roomIds;
 }
 
-const LEGACY_SEED_YERLESKELER = new Set([
-  'A Yerleşkesi', 'B Yerleşkesi', 'C Yerleşkesi', 'D Yerleşkesi',
-  'A BLOK', 'B BLOK', 'C BLOK', 'D BLOK',
-]);
-
 export function isLegacyKampRoom(room: KampOdasi): boolean {
-  if (LEGACY_SEED_YERLESKELER.has(room.yerleskeAdi)) return true;
-  if (room.id.startsWith('ko_room_')) return true;
-  if (/^[A-D]\s*Yerleşkesi$/i.test((room.yerleskeAdi || '').trim())) return true;
-  if (/^[A-D]-\d{2,3}$/.test(room.odaNo || '')) {
-    const yerleske = (room.yerleskeAdi || '').trim();
-    if (/^[A-D]\s/.test(yerleske) || LEGACY_SEED_YERLESKELER.has(yerleske)) return true;
-  }
-  return false;
+  return room.id.startsWith('ko_room_') || room.id.startsWith('demo_room_');
 }
 
 export function isLegacyKampYerleske(ad: string): boolean {
-  return LEGACY_SEED_YERLESKELER.has(ad);
+  return ad.startsWith('ko_') || ad.startsWith('demo_');
 }
 
 /** Demo/seed ile gelen örnek odalar */
@@ -398,6 +386,8 @@ export async function purgeLegacyKampData(purgedBy?: string): Promise<{
 
   const legacyRooms = rooms.filter(isLegacyKampRoom);
   const legacyRoomIdSet = new Set(legacyRooms.map((r) => r.id));
+  const legacyYerleskeIdSet = new Set(legacyRooms.map((r) => r.yerleskeId).filter(Boolean));
+  const legacyKatIdSet = new Set(legacyRooms.map((r) => r.katId).filter(Boolean));
 
   const legacyKayitlar = kayitlar.filter(
     (k) =>
@@ -407,8 +397,8 @@ export async function purgeLegacyKampData(purgedBy?: string): Promise<{
       k.roomId?.startsWith('ko_room_')
   );
 
-  const legacyYerleskeler = yerleskeler.filter((y) => isLegacyKampYerleske(y.ad));
-  const legacyKatlar = katlar.filter((k) => isLegacyKampYerleske(k.yerleskeAdi));
+  const legacyYerleskeler = yerleskeler.filter((y) => legacyYerleskeIdSet.has(y.id));
+  const legacyKatlar = katlar.filter((k) => legacyKatIdSet.has(k.id));
 
   await batchDeleteDocuments('kampOdalari', legacyRooms.map((r) => r.id));
   await batchDeleteDocuments('kampKayitlari', legacyKayitlar.map((k) => k.id));

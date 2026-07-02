@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Calendar, Trash2, ShieldAlert, CheckCircle, FileText, ChevronRight, RefreshCw, Database } from 'lucide-react';
 import { Personel, AylikYoklamaMap, YoklamaDurum } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
@@ -44,6 +44,9 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   const [aiSuccess, setAiSuccess] = useState(false);
   const [aiUnmatched, setAiUnmatched] = useState<string[]>([]);
   const [legacyImporting, setLegacyImporting] = useState(false);
+  const [draftYoklamalar, setDraftYoklamalar] = useState<AylikYoklamaMap>(yoklamalar);
+  const [hasPendingChanges, setHasPendingChanges] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
 
   // Report formatting state
   const [reportType, setReportType] = useState<'NORMAL' | 'E-IMZALI'>('NORMAL');
@@ -53,6 +56,37 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   const [bireyselStaffId, setBireyselStaffId] = useState("");
   const [bireyselMonth, setBireyselMonth] = useState(selectedMonth);
   const [bireyselYear, setBireyselYear] = useState(selectedYear);
+
+  useEffect(() => {
+    if (!hasPendingChanges) {
+      setDraftYoklamalar(yoklamalar);
+    }
+  }, [yoklamalar, hasPendingChanges]);
+
+  const updateDraftYoklama = (
+    updater: AylikYoklamaMap | ((prev: AylikYoklamaMap) => AylikYoklamaMap)
+  ) => {
+    setDraftYoklamalar((prev) => (typeof updater === 'function' ? updater(prev) : updater));
+    setHasPendingChanges(true);
+  };
+
+  const handleSaveYoklamaToDb = () => {
+    if (!hasPendingChanges || savingDraft) return;
+    setSavingDraft(true);
+    setYoklamalar(draftYoklamalar);
+    setHasPendingChanges(false);
+    setTimeout(() => setSavingDraft(false), 300);
+    if (addNotification) {
+      addNotification(`${selectedMonth}. Ay ${selectedYear} yoklama/mesai değişiklikleri veritabanına kaydedildi.`);
+    }
+  };
+
+  const handleResetDraftFromDb = () => {
+    if (!hasPendingChanges) return;
+    if (!window.confirm('Kaydedilmemiş değişiklikler silinecek ve son veritabanı hali geri yüklenecek. Devam?')) return;
+    setDraftYoklamalar(yoklamalar);
+    setHasPendingChanges(false);
+  };
 
   const handleAiFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -112,7 +146,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     const unmatched: string[] = [];
     let matchedCount = 0;
 
-    setYoklamalar(prev => {
+    updateDraftYoklama(prev => {
       const updated = { ...prev };
       parsedRecords.forEach(rec => {
         const emp = findPersonelByName(personeller, rec.adSoyad || '');
@@ -135,7 +169,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     setAiUnmatched(unmatched);
     const msg = unmatched.length > 0
       ? `${matchedCount} kayıt işlendi. Eşleşmeyen isimler: ${unmatched.join(', ')}`
-      : `${parsedDate} tarihli ${matchedCount} yoklama kaydı puantaja işlendi!`;
+      : `${parsedDate} tarihli ${matchedCount} yoklama kaydı taslağa işlendi. "Günü Kaydet" ile DB'ye gönderin.`;
     alert(msg);
     if (unmatched.length === 0) {
       setShowAiUpload(false);
@@ -169,9 +203,9 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       if (!json.success || !json.data) throw new Error('Aylık Excel okunamadı');
 
       const monthData = aiMonthlyDataToLegacyMonth(json.data);
-      const result = importLegacyExcelMonth(monthData, personeller, yoklamalar);
+      const result = importLegacyExcelMonth(monthData, personeller, draftYoklamalar);
       setPersoneller(result.personeller);
-      setYoklamalar(result.yoklamalar);
+      updateDraftYoklama(result.yoklamalar);
       setSelectedMonth(monthData.month);
       setSelectedYear(monthData.year);
       alert(
@@ -198,9 +232,9 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     }
     setLegacyImporting(true);
     try {
-      const result = importAllLegacyExcelMonths(LEGACY_EXCEL_MONTHS, personeller, yoklamalar);
+      const result = importAllLegacyExcelMonths(LEGACY_EXCEL_MONTHS, personeller, draftYoklamalar);
       setPersoneller(result.personeller);
-      setYoklamalar(result.yoklamalar);
+      updateDraftYoklama(result.yoklamalar);
       const monthNames = LEGACY_EXCEL_MONTHS.map(m => `${m.month}/${m.year}`).join(', ');
       alert(
         `Excel aktarımı tamamlandı (${monthNames}).\n` +
@@ -272,27 +306,27 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   };
 
   const monthPersoneller = useMemo(
-    () => buildPersonelListForMonth(personeller, yoklamalar, selectedYear, selectedMonth, resolveStubPersonelFromLegacyId),
-    [personeller, yoklamalar, selectedYear, selectedMonth]
+    () => buildPersonelListForMonth(personeller, draftYoklamalar, selectedYear, selectedMonth, resolveStubPersonelFromLegacyId),
+    [personeller, draftYoklamalar, selectedYear, selectedMonth]
   );
 
   const isEmployeeVisibleInMonth = (p: Personel) =>
-    isPersonelVisibleInMonth(p, selectedYear, selectedMonth, yoklamalar[p.id]);
+    isPersonelVisibleInMonth(p, selectedYear, selectedMonth, draftYoklamalar[p.id]);
 
   const isDayActiveForEmployee = (p: Personel, day: number) =>
-    isDayActiveForPersonel(p, selectedYear, selectedMonth, day, yoklamalar[p.id]);
+    isDayActiveForPersonel(p, selectedYear, selectedMonth, day, draftYoklamalar[p.id]);
 
   const handleCellClick = (personelId: string, day: number) => {
     const p = personeller.find(emp => emp.id === personelId);
     if (p && !isDayActiveForEmployee(p, day)) return;
 
-    const dayData = getYoklamaDay(yoklamalar[personelId], selectedYear, selectedMonth, day) || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 };
+    const dayData = getYoklamaDay(draftYoklamalar[personelId], selectedYear, selectedMonth, day) || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 };
     
     const currentIndex = statusCycle.indexOf(dayData.durum);
     const nextIndex = (currentIndex + 1) % statusCycle.length;
     const nextStatus = statusCycle[nextIndex];
 
-    setYoklamalar(prev => ({
+    updateDraftYoklama(prev => ({
       ...prev,
       [personelId]: setYoklamaDay(prev[personelId], selectedYear, selectedMonth, day, {
         ...dayData,
@@ -309,9 +343,9 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     const p = personeller.find(emp => emp.id === personelId);
     if (p && !isDayActiveForEmployee(p, day)) return;
 
-    const dayData = getYoklamaDay(yoklamalar[personelId], selectedYear, selectedMonth, day) || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 };
+    const dayData = getYoklamaDay(draftYoklamalar[personelId], selectedYear, selectedMonth, day) || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 };
 
-    setYoklamalar(prev => ({
+    updateDraftYoklama(prev => ({
       ...prev,
       [personelId]: setYoklamaDay(prev[personelId], selectedYear, selectedMonth, day, {
         ...dayData,
@@ -325,7 +359,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   };
 
   const handleBulkSetStatus = (status: YoklamaDurum) => {
-    const newYoklamalar = { ...yoklamalar };
+    const newYoklamalar = { ...draftYoklamalar };
     
     monthPersoneller.forEach(p => {
       let personMap = { ...(newYoklamalar[p.id] || {}) };
@@ -341,8 +375,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       newYoklamalar[p.id] = personMap;
     });
     
-    setYoklamalar(newYoklamalar);
-    alert(`Seçili ayın tüm günleri aktif personeller için topluca "${status}" olarak güncellendi.`);
+    updateDraftYoklama(newYoklamalar);
+    alert(`Seçili ayın tüm günleri aktif personeller için topluca "${status}" olarak güncellendi. Kaydet ile veritabanına gönderin.`);
     if (addNotification) {
       addNotification(`${selectedMonth}. Ay / ${selectedYear} dönemi tüm yoklama durumları topluca "${status}" yapıldı.`);
     }
@@ -358,7 +392,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     });
 
   const handleBulkOvertime = (hours: number) => {
-    const newYoklamalar = { ...yoklamalar };
+    const newYoklamalar = { ...draftYoklamalar };
     
     monthPersoneller.forEach(p => {
       let personMap = { ...(newYoklamalar[p.id] || {}) };
@@ -374,8 +408,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       newYoklamalar[p.id] = personMap;
     });
 
-    setYoklamalar(newYoklamalar);
-    alert(`Seçili ayın tüm iş günlerine aktif personeller için topluca günlük ${hours} saat fazla mesai işlendi.`);
+    updateDraftYoklama(newYoklamalar);
+    alert(`Seçili ayın tüm iş günlerine aktif personeller için topluca günlük ${hours} saat fazla mesai işlendi. Kaydet ile veritabanına gönderin.`);
     if (addNotification) {
       addNotification(`${selectedMonth}. Ay / ${selectedYear} dönemi tüm iş günlerine topluca günlük ${hours} saat fazla mesai yazıldı.`);
     }
@@ -387,7 +421,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       return;
     }
 
-    setYoklamalar(prev => {
+    updateDraftYoklama(prev => {
       const updated = { ...prev };
 
       const applyToPerson = (pid: string) => {
@@ -413,7 +447,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       return updated;
     });
 
-    alert(`Seçilen ${overtimeDay}. güne fiili +${overtimeHours} Saat fazla mesai kaydı işlendi.`);
+    alert(`Seçilen ${overtimeDay}. güne fiili +${overtimeHours} saat mesai taslağı işlendi. Kaydet ile veritabanına gönderin.`);
     if (addNotification) {
       if (overtimeStaffId === 'ALL') {
         addNotification(`${selectedMonth}. Ay / ${selectedYear} dönemi ${overtimeDay}. günü için tüm şantiyeye +${overtimeHours} saat mesai yazıldı.`);
@@ -491,6 +525,24 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
           {/* PDF & Reports buttons */}
           <div className="flex flex-wrap items-center gap-2">
             <button
+              onClick={handleSaveYoklamaToDb}
+              disabled={!hasPendingChanges || savingDraft}
+              className="text-[11px] bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white border border-emerald-700 rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
+              title="Puantaj ve mesai düzenlemelerini veritabanına kalıcı kaydeder."
+            >
+              <CheckCircle size={13} className="text-white" />
+              <span>{savingDraft ? 'Kaydediliyor...' : hasPendingChanges ? 'Günü Kaydet (DB)' : 'Kaydedildi'}</span>
+            </button>
+            <button
+              onClick={handleResetDraftFromDb}
+              disabled={!hasPendingChanges}
+              className="text-[11px] bg-rose-50 hover:bg-rose-100 disabled:opacity-50 disabled:cursor-not-allowed text-rose-700 border border-rose-200 rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
+              title="Kaydedilmemiş değişiklikleri iptal edip veritabanındaki son hali yükler."
+            >
+              <RefreshCw size={13} className="text-rose-600" />
+              <span>Taslağı Geri Al</span>
+            </button>
+            <button
               onClick={() => setPrintModal('GUNLUK_BOS')}
               className="text-[11px] bg-slate-800 hover:bg-slate-900 text-white border border-slate-700 rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
               title="Şantiyede günlük elle doldurmak için boş tek günlük puantaj cetveli şablonu yazdırır."
@@ -557,6 +609,17 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               />
             </div>
           </div>
+        </div>
+        <div className="text-[11px] font-semibold">
+          {hasPendingChanges ? (
+            <span className="text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">
+              Kaydedilmemiş değişiklik var. "Günü Kaydet (DB)" ile kalıcılaştırın.
+            </span>
+          ) : (
+            <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1">
+              Son değişiklikler veritabanı ile senkron.
+            </span>
+          )}
         </div>
       </div>
 
@@ -885,7 +948,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                 {/* Table list rows */}
                 <tbody className="bg-white divide-y divide-slate-100 text-[11px] font-sans">
                   {filteredPersonel.map((p) => {
-                    const personYoklama = yoklamalar[p.id] || {};
+                    const personYoklama = draftYoklamalar[p.id] || {};
                     let totalGeldi = 0;
                     let totalMesai = 0;
 
@@ -919,7 +982,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                             className={`w-7 h-7 rounded-md border font-bold text-[9px] flex items-center justify-center transition shadow-sm ${
                               isActiveDay
                                 ? `hover:scale-105 active:scale-95 cursor-pointer ${getStatusColor(dayData.durum)}`
-                                : 'bg-slate-900 border-slate-800 text-white opacity-90'
+                                : 'bg-violet-100 border-violet-300 text-violet-700 opacity-95'
                             }`}
                           >
                             {isActiveDay ? getStatusAbbreviation(dayData.durum) : '■'}
@@ -1171,7 +1234,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                     <tbody>
                       {/* Render actual loaded/filtered staff list */}
                       {filteredPersonel.map((p, idx) => {
-                        const personYoklama = yoklamalar[p.id] || {};
+                        const personYoklama = draftYoklamalar[p.id] || {};
                         let totalGeldi = 0;
                         let totalYok = 0;
                         let totalMesai = 0;
@@ -1429,7 +1492,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                       const isActive = isDayActiveForEmployee(selectedEmp, day);
                       if (!isActive) return null;
 
-                      const currentMap = yoklamalar[bireyselStaffId] || {};
+                      const currentMap = draftYoklamalar[bireyselStaffId] || {};
                       const dayData = getYoklamaDay(currentMap, bireyselYear, bireyselMonth, day) || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 };
 
                       // Style maps
@@ -1461,7 +1524,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                               value={dayData.durum}
                               onChange={(e) => {
                                 const newStatus = e.target.value as YoklamaDurum;
-                                setYoklamalar(prev => ({
+                                updateDraftYoklama(prev => ({
                                   ...prev,
                                   [bireyselStaffId]: setYoklamaDay(prev[bireyselStaffId], bireyselYear, bireyselMonth, day, {
                                     ...dayData,
@@ -1487,7 +1550,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                                 value={dayData.mesaiSaati || 0}
                                 onChange={(e) => {
                                   const hours = parseFloat(e.target.value) || 0;
-                                  setYoklamalar(prev => ({
+                                  updateDraftYoklama(prev => ({
                                     ...prev,
                                     [bireyselStaffId]: setYoklamaDay(prev[bireyselStaffId], bireyselYear, bireyselMonth, day, {
                                       ...dayData,
