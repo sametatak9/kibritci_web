@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Calendar, Trash2, ShieldAlert, CheckCircle, FileText, ChevronRight, RefreshCw, Database } from 'lucide-react';
+import { Calendar, Trash2, ShieldAlert, CheckCircle, FileText, ChevronRight, RefreshCw, Database, Undo2, Redo2 } from 'lucide-react';
 import { Personel, AylikYoklamaMap, YoklamaDurum } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
 import { buildPersonelListForMonth, findPersonelByName, getYoklamaDay, isDayActiveForPersonel, isPersonelVisibleInMonth, normalizeTurkishName, setYoklamaDay } from '../lib/yoklamaUtils';
@@ -45,6 +45,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   const [aiUnmatched, setAiUnmatched] = useState<string[]>([]);
   const [legacyImporting, setLegacyImporting] = useState(false);
   const [draftYoklamalar, setDraftYoklamalar] = useState<AylikYoklamaMap>(yoklamalar);
+  const [undoStack, setUndoStack] = useState<AylikYoklamaMap[]>([]);
+  const [redoStack, setRedoStack] = useState<AylikYoklamaMap[]>([]);
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
@@ -61,14 +63,31 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   useEffect(() => {
     if (!hasPendingChanges) {
       setDraftYoklamalar(yoklamalar);
+      setUndoStack([]);
+      setRedoStack([]);
     }
   }, [yoklamalar, hasPendingChanges]);
+
+  const cloneYoklamaMap = (map: AylikYoklamaMap): AylikYoklamaMap =>
+    JSON.parse(JSON.stringify(map || {})) as AylikYoklamaMap;
+
+  const isSameYoklamaMap = (a: AylikYoklamaMap, b: AylikYoklamaMap): boolean =>
+    JSON.stringify(a || {}) === JSON.stringify(b || {});
 
   const updateDraftYoklama = (
     updater: AylikYoklamaMap | ((prev: AylikYoklamaMap) => AylikYoklamaMap)
   ) => {
-    setDraftYoklamalar((prev) => (typeof updater === 'function' ? updater(prev) : updater));
-    setHasPendingChanges(true);
+    setDraftYoklamalar((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      if (isSameYoklamaMap(prev, next)) return prev;
+      setUndoStack((stack) => {
+        const merged = [...stack, cloneYoklamaMap(prev)];
+        return merged.length > 80 ? merged.slice(merged.length - 80) : merged;
+      });
+      setRedoStack([]);
+      setHasPendingChanges(true);
+      return next;
+    });
   };
 
   const handleSaveYoklamaToDb = () => {
@@ -79,6 +98,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     const savedLabel = now.toLocaleString('tr-TR');
     setLastSavedAt(savedLabel);
     setHasPendingChanges(false);
+    setUndoStack([]);
+    setRedoStack([]);
     setTimeout(() => setSavingDraft(false), 300);
     if (addNotification) {
       addNotification(`${selectedMonth}. Ay ${selectedYear} yoklama/mesai değişiklikleri veritabanına kaydedildi.`);
@@ -90,6 +111,28 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     if (!window.confirm('Kaydedilmemiş değişiklikler silinecek ve son veritabanı hali geri yüklenecek. Devam?')) return;
     setDraftYoklamalar(yoklamalar);
     setHasPendingChanges(false);
+    setUndoStack([]);
+    setRedoStack([]);
+  };
+
+  const handleUndoDraftChange = () => {
+    if (undoStack.length === 0 || savingDraft) return;
+    const previous = undoStack[undoStack.length - 1];
+    const current = cloneYoklamaMap(draftYoklamalar);
+    setUndoStack((stack) => stack.slice(0, -1));
+    setRedoStack((stack) => [...stack, current]);
+    setDraftYoklamalar(previous);
+    setHasPendingChanges(!isSameYoklamaMap(previous, yoklamalar));
+  };
+
+  const handleRedoDraftChange = () => {
+    if (redoStack.length === 0 || savingDraft) return;
+    const next = redoStack[redoStack.length - 1];
+    const current = cloneYoklamaMap(draftYoklamalar);
+    setRedoStack((stack) => stack.slice(0, -1));
+    setUndoStack((stack) => [...stack, current]);
+    setDraftYoklamalar(next);
+    setHasPendingChanges(!isSameYoklamaMap(next, yoklamalar));
   };
 
   const handleAiFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -227,29 +270,28 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   };
 
   const handleLegacyExcelImport = () => {
-    if (!setPersoneller) {
-      alert('Personel senkronizasyonu aktif değil. Lütfen yöneticinize bildirin.');
-      return;
-    }
-    if (!window.confirm(`Şubat–Haziran arası tanımlı ${LEGACY_EXCEL_MONTHS.length} aylık Excel yoklaması sisteme aktarılacak. Mevcut kayıtlar korunur, aynı gün tekrar yazılmaz. Devam?`)) {
+    const restoreMonths = LEGACY_EXCEL_MONTHS.filter((m) => m.year === 2026 && [3, 4, 5].includes(m.month));
+    if (!window.confirm(`Sadece Mart-Nisan-Mayıs (${restoreMonths.length} ay) yoklamaları geri yüklenecek.\nHaziran AYNI KALACAK ve yeni personel oluşturulmayacak.\nDevam?`)) {
       return;
     }
     setLegacyImporting(true);
     try {
-      const result = importAllLegacyExcelMonths(LEGACY_EXCEL_MONTHS, personeller, draftYoklamalar);
-      setPersoneller(result.personeller);
+      const result = importAllLegacyExcelMonths(restoreMonths, personeller, draftYoklamalar, {
+        allowCreatePersonel: false,
+        replaceMonthData: true,
+      });
       updateDraftYoklama(result.yoklamalar);
-      const monthNames = LEGACY_EXCEL_MONTHS.map(m => `${m.month}/${m.year}`).join(', ');
+      const monthNames = restoreMonths.map(m => `${m.month}/${m.year}`).join(', ');
       alert(
-        `Excel aktarımı tamamlandı (${monthNames}).\n` +
+        `Yoklama geri yükleme tamamlandı (${monthNames}).\n` +
         `• ${result.importedDays} gün yoklama yazıldı\n` +
-        `• ${result.createdPersonel.length} yeni personel oluşturuldu\n` +
+        `• ${result.createdPersonel.length} yeni personel oluşturuldu (beklenen: 0)\n` +
         `• ${result.matchedPersonel.length} mevcut personelle eşleşti\n` +
         (result.skippedDuplicates > 0 ? `• ${result.skippedDuplicates} tekrar kayıt atlandı\n` : '') +
         (result.warnings.length > 0 ? `\nUyarılar:\n${result.warnings.join('\n')}` : '')
       );
       if (addNotification) {
-        addNotification(`Eski Excel yoklamaları aktarıldı: ${result.importedDays} gün, ${result.createdPersonel.length} yeni personel.`);
+        addNotification(`Mart-Nisan-Mayıs yoklamaları geri yüklendi (Haziran korundu): ${result.importedDays} gün, ${result.createdPersonel.length} yeni personel.`);
       }
     } finally {
       setLegacyImporting(false);
@@ -652,7 +694,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     });
     summaryWs.eachRow((r) => {
       r.eachCell((cell) => {
-        cell.alignment = { horizontal: cell.col === 2 || cell.col === 4 ? 'left' : 'center', vertical: 'middle' };
+        const colNumber = Number(cell.col);
+        cell.alignment = { horizontal: colNumber === 2 || colNumber === 4 ? 'left' : 'center', vertical: 'middle' };
         cell.border = {
           top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
           left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
@@ -809,6 +852,24 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
           {/* PDF & Reports buttons */}
           <div className="flex flex-wrap items-center gap-2">
             <button
+              onClick={handleUndoDraftChange}
+              disabled={undoStack.length === 0 || savingDraft}
+              className="text-[11px] bg-slate-50 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 border border-slate-200 rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
+              title="Taslakta bir adım geri alır."
+            >
+              <Undo2 size={13} />
+              <span>Geri Al</span>
+            </button>
+            <button
+              onClick={handleRedoDraftChange}
+              disabled={redoStack.length === 0 || savingDraft}
+              className="text-[11px] bg-slate-50 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 border border-slate-200 rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
+              title="Geri alınan adımı tekrar uygular."
+            >
+              <Redo2 size={13} />
+              <span>İleri Al</span>
+            </button>
+            <button
               onClick={handleSaveYoklamaToDb}
               disabled={!hasPendingChanges || savingDraft}
               className="text-[11px] bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white border border-emerald-700 rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
@@ -861,10 +922,10 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               onClick={handleLegacyExcelImport}
               disabled={legacyImporting}
               className="text-[11px] bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
-              title="Eski Excel puantaj defterindeki Şubat–Haziran kayıtlarını sisteme aktarır."
+              title="Sadece Mart-Nisan-Mayıs yoklamalarını geri yükler. Haziran'a dokunmaz."
             >
               <Database size={13} />
-              <span>{legacyImporting ? 'Aktarılıyor...' : 'Excel Yoklamalarını Aktar'}</span>
+              <span>{legacyImporting ? 'Yükleniyor...' : 'Mart-Nisan-Mayıs Yoklamayı Geri Yükle'}</span>
             </button>
             <button
               onClick={handleExportExcelTables}

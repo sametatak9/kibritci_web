@@ -19,6 +19,13 @@ export interface LegacyImportResult {
   warnings: string[];
 }
 
+export interface LegacyImportOptions {
+  /** false ise eşleşmeyen personel için yeni kayıt oluşturulmaz */
+  allowCreatePersonel?: boolean;
+  /** true ise ilgili ay kayıtları önce temizlenip baştan yazılır */
+  replaceMonthData?: boolean;
+}
+
 function splitAdSoyad(ad: string, soyad: string): { ad: string; soyad: string } {
   if (soyad.trim()) return { ad: ad.trim(), soyad: soyad.trim() };
   const parts = ad.trim().split(/\s+/);
@@ -76,8 +83,9 @@ function resolvePersonelForLegacyRecord(
   personeller: Personel[],
   excelIdToPersonelId: Map<number, string>,
   year: number,
-  month: number
-): { personel: Personel; created: boolean } {
+  month: number,
+  options?: LegacyImportOptions
+): { personel: Personel; created: boolean } | null {
   const inferredHire = inferLegacyIseGirisTarihi(record, year, month);
   const stableId = legacyStableId(record.excelId);
   const byStable = personeller.find(p => p.id === stableId);
@@ -101,6 +109,10 @@ function resolvePersonelForLegacyRecord(
     return { personel: applyEarlierHireDate(personeller, matched, inferredHire), created: false };
   }
 
+  if (options?.allowCreatePersonel === false) {
+    return null;
+  }
+
   const { ad, soyad } = splitAdSoyad(record.ad, record.soyad);
   const created = createMinimalPersonel(ad, soyad, {
     gorev: record.gorev,
@@ -120,7 +132,8 @@ function isSunday(year: number, month: number, day: number): boolean {
 export function importLegacyExcelMonth(
   monthData: LegacyExcelMonthData,
   existingPersoneller: Personel[],
-  existingYoklamalar: AylikYoklamaMap
+  existingYoklamalar: AylikYoklamaMap,
+  options?: LegacyImportOptions
 ): LegacyImportResult {
   const { year, month } = monthData;
   const personeller = [...existingPersoneller];
@@ -135,13 +148,19 @@ export function importLegacyExcelMonth(
   const daysInMonth = new Date(year, month, 0).getDate();
 
   monthData.personeller.forEach(record => {
-    const { personel, created } = resolvePersonelForLegacyRecord(
+    const resolved = resolvePersonelForLegacyRecord(
       record,
       personeller,
       excelIdToPersonelId,
       year,
-      month
+      month,
+      options
     );
+    if (!resolved) {
+      warnings.push(`Eşleşmeyen personel atlandı: ${record.ad} ${record.soyad} (ExcelID: ${record.excelId})`);
+      return;
+    }
+    const { personel, created } = resolved;
 
     if (created) {
       personeller.push(personel);
@@ -151,6 +170,12 @@ export function importLegacyExcelMonth(
     }
 
     let personMap = { ...(yoklamalar[personel.id] || {}) };
+    if (options?.replaceMonthData) {
+      const prefix = `${year}-${String(month).padStart(2, '0')}-`;
+      Object.keys(personMap).forEach((key) => {
+        if (key.startsWith(prefix)) delete personMap[key];
+      });
+    }
 
     for (let day = 1; day <= daysInMonth; day++) {
       const dateKey = yoklamaDateKey(year, month, day);
@@ -241,7 +266,8 @@ export function aiMonthlyDataToLegacyMonth(aiData: {
 export function importAllLegacyExcelMonths(
   months: LegacyExcelMonthData[],
   existingPersoneller: Personel[],
-  existingYoklamalar: AylikYoklamaMap
+  existingYoklamalar: AylikYoklamaMap,
+  options?: LegacyImportOptions
 ): LegacyImportResult {
   let personeller = [...existingPersoneller];
   let yoklamalar = { ...existingYoklamalar };
@@ -256,7 +282,7 @@ export function importAllLegacyExcelMonths(
   };
 
   months.forEach(monthData => {
-    const result = importLegacyExcelMonth(monthData, personeller, yoklamalar);
+    const result = importLegacyExcelMonth(monthData, personeller, yoklamalar, options);
     personeller = result.personeller;
     yoklamalar = result.yoklamalar;
     aggregate.createdPersonel.push(...result.createdPersonel.filter(n => !aggregate.createdPersonel.includes(n)));
