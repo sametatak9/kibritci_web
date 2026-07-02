@@ -9,10 +9,11 @@ import {
 import { Personel, AylikYoklamaMap, YoklamaDurum, SahaFaaliyeti as SahaFaaliyetiType } from '../types/erp';
 import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
-import { getYoklamaDay, setYoklamaDay } from '../lib/yoklamaUtils';
+import { buildPersonelListForMonth, getYoklamaDay, isDayActiveForPersonel, setYoklamaDay } from '../lib/yoklamaUtils';
 import { buildFormenGunlukOzet } from '../lib/gunlukAkisUtils';
 import { buildWhatsAppUrl, isLegacySahaRecord } from '../lib/mobilOnayUtils';
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { downloadCsv } from '../lib/reportExport';
 
 interface FormenScreenProps {
   personeller: Personel[];
@@ -55,7 +56,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   }, [isStandalone]);
 
   // Active Tab: 'yoklama' | 'saha_faaliyet' | 'faaliyet_gecmis' | 'personel_giris' | 'personel_listesi' | 'toplu_puantaj'
-  const [activeTab, setActiveTab] = useState<'yoklama' | 'saha_faaliyet' | 'faaliyet_gecmis' | 'personel_giris' | 'personel_listesi' | 'toplu_puantaj' | 'gunluk_akis'>('yoklama');
+  const [activeTab, setActiveTab] = useState<'yoklama' | 'saha_faaliyet' | 'faaliyet_gecmis' | 'personel_giris' | 'personel_listesi' | 'toplu_puantaj' | 'gunluk_akis' | 'aylik_puantaj'>('yoklama');
   const [sendingGunlukAkis, setSendingGunlukAkis] = useState(false);
 
   // Selected cell state for bulk weekly puantaj
@@ -190,7 +191,6 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const [guncellemeNedeni, setGuncellemeNedeni] = useState('');
   const [isCikisTalepleriList, setIsCikisTalepleriList] = useState<any[]>([]);
   const [isGuncellemeTalepleriList, setIsGuncellemeTalepleriList] = useState<any[]>([]);
-  const [isGunuTamamlandi, setIsGunuTamamlandi] = useState(false);
   const [savingAttendance, setSavingAttendance] = useState(false);
 
   // Quick select lists
@@ -216,23 +216,12 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
 
   const parsellerList = Object.keys(PARSEL_BLOK_MAP);
 
-  // Automatically filter personnel active on selectedDate
-  const getActivePersonnelForDate = () => {
-    return personeller.filter(p => {
-      const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
-      if (p.iseGirisTarihi) {
-        if (p.iseGirisTarihi > selectedDate) return false;
-      }
-      if (p.istenCikisTarihi) {
-        if (p.istenCikisTarihi < selectedDate) return false;
-      } else if (!isAktif) {
-        return false;
-      }
-      return true;
-    });
-  };
-
-  const activeStaff = getActivePersonnelForDate();
+  const monthPersonelList = buildPersonelListForMonth(personeller, yoklamalar, year, month);
+  const activeStaff = monthPersonelList.filter((p) => {
+    const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
+    if (!isAktif && !p.istenCikisTarihi) return false;
+    return isDayActiveForPersonel(p, year, month, day, yoklamalar[p.id] as any);
+  });
 
   // Get start of the week (Monday) based on selectedDate
   const getDaysOfWeek = () => {
@@ -250,34 +239,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     return days;
   };
 
-  // Handlers for Personel Listesi, Günü Tamamla & Onay Talepleri
-  const handleGunuTamamla = async () => {
-    if (isGunuTamamlandi) {
-      alert("Bugün zaten tamamlanmış olarak işaretlendi.");
-      return;
-    }
-
-    if (!window.confirm(`${selectedDate.split('-').reverse().join('.')} tarihli iş gününü tamamlamak ve tüm raporların, puantaj kontrollerinin yapıldığını ana programa bildirmek istediğinize emin misiniz?`)) {
-      return;
-    }
-
-    try {
-      const docId = `RAPOR-TAMAM-${selectedDate}-${currentUser?.email?.replace(/[@.]/g, '-')}`;
-      await setDoc(doc(db, 'formenGunlukRaporlar', docId), {
-        tarih: selectedDate,
-        formen: currentUser?.email || 'Bilinmeyen Formen',
-        tamamlamaTarihi: new Date().toISOString(),
-        durum: 'ONAY BEKLİYOR',
-        notlar: "Formen günü tamamladı, puantaj ve saha raporları onay için gönderildi.",
-        hazirlayan: currentUser?.displayName || currentUser?.email || 'Sahadaki Formen'
-      });
-      await logActionToPersonelHistory('Günü Tamamladı', `${selectedDate.split('-').reverse().join('.')} tarihli iş gününü başarıyla tamamladı ve onay için ana programa bildirdi.`);
-      alert("🎉 Şantiye iş günü başarıyla tamamlandı ve ana programa bildirildi!");
-    } catch (err) {
-      console.error(err);
-      alert("Günü tamamlama kaydı oluşturulurken bir hata oluştu.");
-    }
-  };
+  // Handlers for personel action requests
 
   const handleSaveCikisTalebi = async () => {
     if (!cikisNedeni.trim()) {
@@ -440,22 +402,6 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     return () => unsubscribe();
   }, []);
 
-  // Check if day is marked completed
-  useEffect(() => {
-    const coll = collection(db, 'formenGunlukRaporlar');
-    const unsubscribe = onSnapshot(coll, (snapshot) => {
-      let completed = false;
-      snapshot.forEach((doc) => {
-        const d = doc.data();
-        if (d.tarih === selectedDate && d.formen?.toLowerCase() === currentUser?.email?.toLowerCase() && (d.durum === 'TAMAMLANDI' || d.durum === 'ONAY BEKLİYOR' || d.durum === 'ONAYLANDI')) {
-          completed = true;
-        }
-      });
-      setIsGunuTamamlandi(completed);
-    });
-    return () => unsubscribe();
-  }, [selectedDate, currentUser]);
-
   // Load and subscribe to Daily Field Reports
   useEffect(() => {
     const coll = collection(db, 'gunlukSahaRaporlari');
@@ -573,6 +519,114 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     } finally {
       setSavingAttendance(false);
     }
+  };
+
+  const escapeHtml = (value: string): string =>
+    String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+  const buildGunlukCalisanListesi = () => {
+    const dateLabel = selectedDate.split('-').reverse().join('.');
+    const presentStaff = activeStaff.filter((p) => presentIds.includes(p.id));
+    const satirlar = presentStaff.map((p, index) => {
+      const personAssignments = daySahaFaaliyetleri
+        .filter((f) => Array.isArray((f as any).aktifPersonelListesi) && (f as any).aktifPersonelListesi.includes(p.id))
+        .map((f) => `${f.parsel} / ${f.blok || 'GENEL SAHA'}`);
+      const assignmentText = personAssignments.length > 0 ? personAssignments.join(', ') : 'GENEL SAHA / Planlama Bekleniyor';
+      return {
+        sira: index + 1,
+        adSoyad: `${p.ad} ${p.soyad}`,
+        gorev: p.gorev || '-',
+        mesai: Number(mesaiSaatleri[p.id] || 0),
+        yer: assignmentText,
+      };
+    });
+    return { dateLabel, satirlar };
+  };
+
+  const handleShareGunlukCalisanWhatsApp = () => {
+    const { dateLabel, satirlar } = buildGunlukCalisanListesi();
+    if (satirlar.length === 0) {
+      showStatus('error', 'Önce günlük yoklamada gelen personelleri kaydedin.');
+      return;
+    }
+    const metin = [
+      `KIBRITCI INSAAT - GUNLUK CALISAN LISTESI`,
+      `Tarih: ${dateLabel}`,
+      `Formen: ${currentUser?.displayName || currentUser?.email || '-'}`,
+      `Toplam Calisan: ${satirlar.length}`,
+      '----------------------------------------',
+      ...satirlar.map((s) => `${s.sira}. ${s.adSoyad} | ${s.gorev} | Gorev Yeri: ${s.yer} | Mesai: +${s.mesai} saat`),
+    ].join('\n');
+    window.open(buildWhatsAppUrl(metin), '_blank');
+  };
+
+  const handlePrintGunlukCalisanPdf = () => {
+    const { dateLabel, satirlar } = buildGunlukCalisanListesi();
+    if (satirlar.length === 0) {
+      showStatus('error', 'PDF için günlük çalışan listesi bulunamadı.');
+      return;
+    }
+    const html = `<!doctype html>
+<html><head><meta charset="utf-8" /><title>Gunluk Calisan Listesi</title>
+<style>
+body{font-family:Arial,sans-serif;padding:20px;color:#0f172a}
+h1{font-size:16px;margin:0 0 4px 0} .meta{font-size:12px;color:#475569;margin-bottom:12px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{border:1px solid #cbd5e1;padding:6px;text-align:left;vertical-align:top}
+th{background:#f1f5f9}
+</style></head><body>
+<h1>KIBRITCI INSAAT - GUNLUK CALISAN LISTESI</h1>
+<div class="meta">Tarih: ${escapeHtml(dateLabel)} | Formen: ${escapeHtml(currentUser?.displayName || currentUser?.email || '-')} | Toplam: ${satirlar.length}</div>
+<table>
+<thead><tr><th>#</th><th>Ad Soyad</th><th>Gorev</th><th>Gorev Yeri</th><th>Mesai (+saat)</th></tr></thead>
+<tbody>
+${satirlar
+  .map(
+    (s) =>
+      `<tr><td>${s.sira}</td><td>${escapeHtml(s.adSoyad)}</td><td>${escapeHtml(s.gorev)}</td><td>${escapeHtml(s.yer)}</td><td>${s.mesai}</td></tr>`
+  )
+  .join('')}
+</tbody></table>
+</body></html>`;
+    const printWin = window.open('', '_blank');
+    if (!printWin) return;
+    printWin.document.write(html);
+    printWin.document.close();
+    printWin.focus();
+    setTimeout(() => printWin.print(), 250);
+  };
+
+  const handleExportAylikPuantajCsv = () => {
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    const rows: string[][] = [
+      ['Personel', 'Gorev', ...days.map((d) => String(d)), 'Gelen Gun', 'Toplam Mesai (saat)'],
+    ];
+
+    monthPersonelList.forEach((p) => {
+      const map = yoklamalar[p.id] as any;
+      let geldi = 0;
+      let toplamMesai = 0;
+      const dayCells = days.map((d) => {
+        if (!isDayActiveForPersonel(p, year, month, d, map)) return 'C';
+        const dayData = getYoklamaDay(map, year, month, d);
+        const durum = dayData?.durum || 'Girilmedi';
+        const mesai = Number(dayData?.mesaiSaati || 0);
+        if (durum === 'Geldi') geldi += 1;
+        toplamMesai += mesai;
+        return mesai > 0 ? `${durum} (+${mesai})` : durum;
+      });
+      rows.push([`${p.ad} ${p.soyad}`, p.gorev || '-', ...dayCells, String(geldi), toplamMesai.toFixed(2)]);
+    });
+
+    const periodLabel = `${year}-${String(month).padStart(2, '0')}`;
+    downloadCsv(rows, `Formen_Aylik_Puantaj_${periodLabel}.csv`);
+    showStatus('success', 'Aylik puantaj CSV raporu indirildi.');
   };
 
   // Quick status helper
@@ -879,6 +933,15 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                   <span>Toplu Puantaj</span>
                 </button>
                 <button
+                  onClick={() => setActiveTab('aylik_puantaj')}
+                  className={`py-1.5 rounded-lg text-[8px] font-extrabold flex flex-col items-center justify-center transition duration-150 cursor-pointer ${
+                    activeTab === 'aylik_puantaj' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <FileText size={11} className="mb-0.5" />
+                  <span>Aylık Puantaj</span>
+                </button>
+                <button
                   onClick={() => setActiveTab('saha_faaliyet')}
                   className={`py-1.5 rounded-lg text-[8px] font-extrabold flex flex-col items-center justify-center transition duration-150 cursor-pointer ${
                     activeTab === 'saha_faaliyet' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
@@ -1180,6 +1243,39 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                         Son kayıt: {lastAttendanceSaveAt}
                       </p>
                     )}
+                  </div>
+
+                  <div className="bg-white rounded-3xl border p-4 shadow-xs space-y-3">
+                    <div className="flex items-center space-x-2 text-slate-900">
+                      <FileText size={14} className="text-amber-500" />
+                      <span className="font-bold text-[10px] uppercase tracking-wider">FORMEN RAPORLARI</span>
+                    </div>
+                    <p className="text-[9px] text-slate-500 leading-snug">
+                      Günlük çalışan listesi (görev yeri + mesai) raporunu WhatsApp metni veya PDF olarak paylaşın. Aylık puantajı da CSV olarak dışa aktarabilirsiniz.
+                    </p>
+                    <div className="grid grid-cols-1 gap-2">
+                      <button
+                        type="button"
+                        onClick={handleShareGunlukCalisanWhatsApp}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] py-2.5 rounded-xl transition"
+                      >
+                        WhatsApp: Günlük Çalışan Listesi
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handlePrintGunlukCalisanPdf}
+                        className="w-full bg-slate-900 hover:bg-slate-950 text-white font-black text-[10px] py-2.5 rounded-xl transition"
+                      >
+                        PDF: Günlük Çalışan Listesi
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('aylik_puantaj')}
+                        className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] py-2.5 rounded-xl transition"
+                      >
+                        Aylık Puantaj Tablosunu Aç
+                      </button>
+                    </div>
                   </div>
 
                   {/* 4. MARKED HISTORY & UNDO OVERVIEW */}
@@ -1994,34 +2090,21 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
               {activeTab === 'personel_listesi' && (
                 <div className="space-y-3.5 animate-in fade-in duration-150">
                   
-                  {/* 1. Günü Tamamla Control Card */}
+                  {/* 1. Direct sync info card */}
                   <div className="bg-white rounded-3xl border p-4 shadow-xs space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
-                        <CheckCircle size={14} className={isGunuTamamlandi ? "text-emerald-500" : "text-amber-500"} />
-                        <span className="font-bold text-[10px] uppercase tracking-wider">GÜNÜ TAMAMLA KONTROLÜ</span>
+                        <CheckCircle size={14} className="text-emerald-500" />
+                        <span className="font-bold text-[10px] uppercase tracking-wider">DOĞRUDAN YOKLAMA SENKRONU</span>
                       </div>
-                      <span className={`text-[8px] font-bold px-2 py-0.5 rounded ${isGunuTamamlandi ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
-                        {isGunuTamamlandi ? "GÜN TAMAMLANDI" : "İŞLEM BEKLİYOR"}
+                      <span className="text-[8px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                        ONAYSIZ GÜNCELLEME AKTİF
                       </span>
                     </div>
                     <p className="text-[9px] text-slate-500 leading-snug">
-                      Puantaj kontrolleri ve saha imalat raporlarını tamamladıktan sonra <strong>"Günü Tamamla"</strong> butonuna basarak iş gününü yöneticilerin onayına kapatın.
+                      Formen yoklama ekranındaki <strong>“Yoklamayı İmzala ve Kaydet”</strong> işlemi artık doğrudan ana
+                      <strong> Yoklama ve Puantaj</strong> verisini günceller. Ekstra “Günü Tamamla” adımı gerekmiyor.
                     </p>
-                    
-                    <button
-                      type="button"
-                      onClick={handleGunuTamamla}
-                      disabled={isGunuTamamlandi}
-                      className={`w-full text-white font-black text-[10px] py-3 px-4 rounded-xl transition duration-150 shadow-md flex items-center justify-center space-x-1.5 cursor-pointer border-b-4 ${
-                        isGunuTamamlandi 
-                          ? "bg-slate-400 border-slate-500 cursor-not-allowed" 
-                          : "bg-amber-600 hover:bg-amber-700 border-amber-800"
-                      }`}
-                    >
-                      <CheckCircle size={12} />
-                      <span>{isGunuTamamlandi ? "İŞ GÜNÜ BAŞARIYLA TAMAMLANDI" : "GÜNÜ TAMAMLA VE ANA PROGRAMA BİLDİR"}</span>
-                    </button>
                   </div>
 
                   {/* 2. Active Personnel Directory */}
@@ -2567,24 +2650,22 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                               const pId = selectedCell.personelId;
                               const status = selectedCell.currentDurum;
                               const mesai = selectedCell.currentMesai;
-
-                              setYoklamalar(prev => {
-                                const dVal = selectedCell.date;
-                                const pId = selectedCell.personelId;
-                                const status = selectedCell.currentDurum;
-                                const mesai = selectedCell.currentMesai;
-                                const dYear = dVal.getFullYear();
-                                const dMonth = dVal.getMonth() + 1;
-                                const dDay = dVal.getDate();
-
-                                return {
-                                  ...prev,
-                                  [pId]: setYoklamaDay(prev[pId], dYear, dMonth, dDay, {
-                                    durum: status,
-                                    mesaiSaati: mesai,
-                                  }),
-                                };
-                              });
+                              const dYear = dVal.getFullYear();
+                              const dMonth = dVal.getMonth() + 1;
+                              const dDay = dVal.getDate();
+                              const next: AylikYoklamaMap = {
+                                ...yoklamalar,
+                                [pId]: setYoklamaDay(yoklamalar[pId] as any, dYear, dMonth, dDay, {
+                                  durum: status,
+                                  mesaiSaati: mesai,
+                                  gonderen: currentUser?.email || 'formen',
+                                }),
+                              };
+                              if (saveYoklamalarNow) {
+                                await saveYoklamalarNow(next);
+                              } else {
+                                setYoklamalar(next);
+                              }
 
                               await logActionToPersonelHistory(
                                 'Puantaj Güncelledi',
@@ -2602,6 +2683,98 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {activeTab === 'aylik_puantaj' && (
+                <div className="space-y-3.5 animate-in fade-in duration-150">
+                  <div className="bg-white rounded-3xl border p-4 shadow-xs space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <FileText size={14} className="text-amber-500" />
+                        <span className="font-bold text-[10px] uppercase tracking-wider text-slate-900">AYLIK GÜNCEL PUANTAJ TABLOSU</span>
+                      </div>
+                      <span className="text-[9px] font-mono font-bold text-slate-500">
+                        {String(month).padStart(2, '0')}/{year}
+                      </span>
+                    </div>
+                    <p className="text-[9px] text-slate-500 leading-snug">
+                      Bu tablo, ana sistemdeki yoklama verisiyle aynı kaynaktan canlı okunur. Çıkışı gelen personelin çıkış sonrası günleri otomatik kapanır.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={handleExportAylikPuantajCsv}
+                        className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] py-2.5 rounded-xl transition"
+                      >
+                        CSV İndir
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('yoklama')}
+                        className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-[10px] py-2.5 rounded-xl transition"
+                      >
+                        Yoklama Sekmesine Dön
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-3xl border p-3 shadow-xs">
+                    <div className="overflow-x-auto border rounded-2xl bg-slate-50">
+                      <table className="w-full text-left border-collapse min-w-[900px]">
+                        <thead>
+                          <tr className="bg-slate-100 border-b border-slate-200">
+                            <th className="p-2 text-[9px] font-black uppercase text-slate-600 tracking-wider sticky left-0 bg-slate-100 z-10">Personel</th>
+                            {Array.from({ length: new Date(year, month, 0).getDate() }, (_, i) => i + 1).map((d) => (
+                              <th key={d} className="p-2 text-center text-[9px] font-black uppercase text-slate-600 tracking-wider">
+                                {d}
+                              </th>
+                            ))}
+                            <th className="p-2 text-center text-[9px] font-black uppercase text-slate-600 tracking-wider">Gelen</th>
+                            <th className="p-2 text-center text-[9px] font-black uppercase text-slate-600 tracking-wider">Mesai</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {monthPersonelList.map((p) => {
+                            const personMap = yoklamalar[p.id] as any;
+                            let geldiCount = 0;
+                            let mesaiToplam = 0;
+                            return (
+                              <tr key={p.id} className="border-b border-slate-150 hover:bg-slate-100/60">
+                                <td className="p-2 sticky left-0 bg-white z-10">
+                                  <div className="text-[10px] font-bold text-slate-900 leading-tight">{p.ad} {p.soyad}</div>
+                                  <div className="text-[8px] text-slate-500">{p.gorev || '-'}</div>
+                                </td>
+                                {Array.from({ length: new Date(year, month, 0).getDate() }, (_, i) => i + 1).map((d) => {
+                                  const active = isDayActiveForPersonel(p, year, month, d, personMap);
+                                  if (!active) {
+                                    return (
+                                      <td key={d} className="p-1 text-center bg-violet-50 text-violet-400 text-[9px] font-bold">
+                                        Ç
+                                      </td>
+                                    );
+                                  }
+                                  const data = getYoklamaDay(personMap, year, month, d);
+                                  const durum = data?.durum || 'Girilmedi';
+                                  const mesai = Number(data?.mesaiSaati || 0);
+                                  if (durum === 'Geldi') geldiCount += 1;
+                                  mesaiToplam += mesai;
+                                  return (
+                                    <td key={d} className="p-1 text-center">
+                                      <span className="text-[9px] font-bold text-slate-700">{durum === 'Geldi' ? 'G' : durum === 'Yok' ? 'Y' : durum === 'İzinli' ? 'İ' : durum === 'Raporlu' ? 'R' : durum === 'Pazar' ? 'P' : durum === 'Tatil' ? 'T' : '-'}</span>
+                                      {mesai > 0 && <span className="block text-[7px] font-mono text-amber-700">+{mesai}</span>}
+                                    </td>
+                                  );
+                                })}
+                                <td className="p-1 text-center text-[9px] font-black text-emerald-700">{geldiCount}</td>
+                                <td className="p-1 text-center text-[9px] font-black text-amber-700">{mesaiToplam.toFixed(1)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               )}
 
