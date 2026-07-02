@@ -26,6 +26,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   setYoklamalar,
   addNotification
 }) => {
+  const MAX_MESAI_SAATI = 14;
   const [selectedMonth, setSelectedMonth] = useState(5); // Mayıs 2026
   const [selectedYear, setSelectedYear] = useState(2026);
   const [searchTerm, setSearchTerm] = useState("");
@@ -385,22 +386,38 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     }
   };
 
+  const normalizeMesaiHours = (raw: number): number => {
+    const safe = Number.isFinite(raw) ? raw : 0;
+    const clamped = Math.max(0, Math.min(MAX_MESAI_SAATI, safe));
+    return Math.round(clamped * 2) / 2;
+  };
+
+  const parseMesaiInput = (raw: string): number => {
+    const normalized = raw.replace(',', '.').trim();
+    if (!normalized) return 0;
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed)) return 0;
+    return normalizeMesaiHours(parsed);
+  };
+
   const handleMesaiChange = (personelId: string, day: number, hours: number) => {
     const p = personeller.find(emp => emp.id === personelId);
     if (p && !isDayActiveForEmployee(p, day)) return;
 
     const dayData = getYoklamaDay(draftYoklamalar[personelId], selectedYear, selectedMonth, day) || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 };
+    const normalizedHours = normalizeMesaiHours(hours);
+    if (Number(dayData.mesaiSaati || 0) === normalizedHours) return;
 
     updateDraftYoklama(prev => ({
       ...prev,
       [personelId]: setYoklamaDay(prev[personelId], selectedYear, selectedMonth, day, {
         ...dayData,
-        mesaiSaati: hours
+        mesaiSaati: normalizedHours
       })
     }));
 
     if (addNotification && p) {
-      addNotification(`${maskName(`${p.ad} ${p.soyad}`)} için ${day}. gün mesai saati ${hours} olarak ayarlandı.`);
+      addNotification(`${maskName(`${p.ad} ${p.soyad}`)} için ${day}. gün mesai saati ${normalizedHours} olarak ayarlandı.`);
     }
   };
 
@@ -1138,10 +1155,11 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                               <input 
                                 type="number"
                                 min={0}
-                                max={24}
+                                max={MAX_MESAI_SAATI}
+                                step={0.5}
                                 value={rec.mesaiSaati || 0}
                                 onChange={(e) => {
-                                  const val = Number(e.target.value);
+                                  const val = normalizeMesaiHours(Number(e.target.value));
                                   setParsedRecords(prev => prev.map((item, i) => i === idx ? { ...item, mesaiSaati: val } : item));
                                 }}
                                 className="w-full text-xs p-0.5 border border-slate-300 rounded font-bold font-mono text-center"
@@ -1219,9 +1237,10 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               <input
                 type="number"
                 min={0}
-                max={16}
+                max={MAX_MESAI_SAATI}
+                step={0.5}
                 value={overtimeHours}
-                onChange={(e) => setOvertimeHours(Math.max(0, Math.min(16, parseFloat(e.target.value) || 0)))}
+                onChange={(e) => setOvertimeHours(normalizeMesaiHours(parseFloat(e.target.value) || 0))}
                 className="w-12 text-center text-[11px] font-bold bg-white border border-slate-200 rounded p-1"
               />
               <span className="text-slate-400 font-medium text-[10px]">Saat</span>
@@ -1360,13 +1379,15 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                           {/* Mini editable mesai box beneath */}
                           <div className="mt-1 flex items-center justify-center">
                             <input 
-                              type="number"
+                              type="text"
                               disabled={!isActiveDay}
-                              min={0}
-                              max={16}
+                              inputMode="decimal"
+                              pattern="^\\d+([.,]\\d{0,2})?$"
+                              title={`0 ile ${MAX_MESAI_SAATI} saat arası girin (0.5 adım).`}
+                              maxLength={5}
                               value={isActiveDay ? (dayData.mesaiSaati || "") : ""}
                               placeholder="-"
-                              onChange={(e) => isActiveDay && handleMesaiChange(p.id, day, parseFloat(e.target.value) || 0)}
+                              onChange={(e) => isActiveDay && handleMesaiChange(p.id, day, parseMesaiInput(e.target.value))}
                               className={`w-7 text-[8px] font-bold font-mono text-center rounded border py-0.5 focus:outline-none ${
                                 isActiveDay
                                   ? `${isHoliday ? (isOfficial ? 'bg-purple-50 border-purple-200 text-purple-700' : 'bg-orange-50 border-orange-200 text-orange-700') : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600'} focus:border-blue-500`
@@ -1905,11 +1926,11 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                               <input 
                                 type="number"
                                 min={0}
-                                max={24}
+                                max={MAX_MESAI_SAATI}
                                 step={0.5}
                                 value={dayData.mesaiSaati || 0}
                                 onChange={(e) => {
-                                  const hours = parseFloat(e.target.value) || 0;
+                                  const hours = normalizeMesaiHours(parseFloat(e.target.value) || 0);
                                   updateDraftYoklama(prev => ({
                                     ...prev,
                                     [bireyselStaffId]: setYoklamaDay(prev[bireyselStaffId], bireyselYear, bireyselMonth, day, {
