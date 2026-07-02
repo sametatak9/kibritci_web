@@ -7,7 +7,7 @@ import { db, parseYoklamaSnapshotData, saveDocument } from '../lib/firebase';
 import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { Personel, AylikYoklamaMap } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
-import { buildPersonelListForMonth, iterateMonthYoklama } from '../lib/yoklamaUtils';
+import { buildPersonelListForMonth } from '../lib/yoklamaUtils';
 import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 import { normalizeGorev } from '../lib/gorevUtils';
 import {
@@ -35,6 +35,20 @@ interface StaffHakedisRow {
 }
 
 const ZER_YAPI_GUNLUK = 200;
+
+function iterateMonthYoklamaStrict(
+  personMap: Record<string, any> | undefined,
+  year: number,
+  month: number,
+  callback: (data: { durum?: string; mesaiSaati?: number }) => void
+) {
+  if (!personMap) return;
+  const prefix = `${year}-${String(month).padStart(2, '0')}-`;
+  Object.entries(personMap).forEach(([key, value]) => {
+    if (!key.startsWith(prefix)) return;
+    callback((value || {}) as { durum?: string; mesaiSaati?: number });
+  });
+}
 
 /** Ekran önizleme + yazdırma — naif gri/beyaz rapor stili */
 const REPORT_CSS = `
@@ -249,7 +263,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
     monthPersoneller.forEach(p => {
       let geldiGun = 0;
       let mesaiSaat = 0;
-      iterateMonthYoklama(yoklamaSource[p.id], selectedYear, selectedMonth, (_day, data) => {
+      iterateMonthYoklamaStrict(yoklamaSource[p.id] as Record<string, any> | undefined, selectedYear, selectedMonth, (data) => {
         if (data?.durum === 'Geldi') geldiGun++;
         mesaiSaat += data?.mesaiSaati || 0;
       });
