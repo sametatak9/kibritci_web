@@ -36,20 +36,6 @@ interface StaffHakedisRow {
 
 const ZER_YAPI_GUNLUK = 200;
 
-function iterateMonthYoklamaStrict(
-  personMap: Record<string, any> | undefined,
-  year: number,
-  month: number,
-  callback: (data: { durum?: string; mesaiSaati?: number }) => void
-) {
-  if (!personMap) return;
-  const prefix = `${year}-${String(month).padStart(2, '0')}-`;
-  Object.entries(personMap).forEach(([key, value]) => {
-    if (!key.startsWith(prefix)) return;
-    callback((value || {}) as { durum?: string; mesaiSaati?: number });
-  });
-}
-
 /** Ekran önizleme + yazdırma — naif gri/beyaz rapor stili */
 const REPORT_CSS = `
   .rpt-header { border: 1px solid #d1d5db; border-radius: 4px; overflow: hidden; }
@@ -215,6 +201,26 @@ function filterByMonth(items: { tarih?: string }[], year: number, month: number)
   return items.filter(item => (item.tarih || '').startsWith(prefix));
 }
 
+function sumStrictMonthAttendance(
+  personMap: Record<string, { durum?: string; mesaiSaati?: number }> | undefined,
+  year: number,
+  month: number
+): { geldiGun: number; mesaiSaat: number } {
+  if (!personMap) return { geldiGun: 0, mesaiSaat: 0 };
+  const prefix = `${year}-${String(month).padStart(2, '0')}-`;
+  let geldiGun = 0;
+  let mesaiSaat = 0;
+
+  Object.entries(personMap).forEach(([key, data]) => {
+    // Sadece tarih formatlı ve seçili aya ait kayıtlar hesaba katılır.
+    if (!key.startsWith(prefix)) return;
+    if (data?.durum === 'Geldi') geldiGun++;
+    mesaiSaat += Number(data?.mesaiSaati || 0);
+  });
+
+  return { geldiGun, mesaiSaat };
+}
+
 export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
   personeller,
   yoklamalar,
@@ -261,12 +267,11 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
   const allStaffRows = useMemo((): StaffHakedisRow[] => {
     const rows: StaffHakedisRow[] = [];
     monthPersoneller.forEach(p => {
-      let geldiGun = 0;
-      let mesaiSaat = 0;
-      iterateMonthYoklamaStrict(yoklamaSource[p.id] as Record<string, any> | undefined, selectedYear, selectedMonth, (data) => {
-        if (data?.durum === 'Geldi') geldiGun++;
-        mesaiSaat += data?.mesaiSaati || 0;
-      });
+      const { geldiGun, mesaiSaat } = sumStrictMonthAttendance(
+        yoklamaSource[p.id] as Record<string, { durum?: string; mesaiSaati?: number }> | undefined,
+        selectedYear,
+        selectedMonth
+      );
       if (geldiGun > 0) {
         const gunKazanci = calcGunKazanci(p, geldiGun, selectedYear, selectedMonth);
         const mesaiKazanci = calcMesaiKazanci(p, mesaiSaat, selectedYear, selectedMonth);
