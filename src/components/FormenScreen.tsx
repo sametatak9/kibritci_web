@@ -425,10 +425,18 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   }, [selectedDate]);
 
   // Derived sets
+  const getInitials = (ad?: string, soyad?: string): string => {
+    const a = (ad || '?').trim();
+    const s = (soyad || '').trim();
+    return `${a.charAt(0) || '?'}${s.charAt(0) || ''}`;
+  };
+  const getDisplayName = (ad?: string, soyad?: string): string =>
+    `${ad || '-'} ${soyad || ''}`.trim();
+
   const remainingStaff = activeStaff.filter(p => !presentIds.includes(p.id) && !absentIds.includes(p.id));
   const filteredRemaining = remainingStaff.filter(p => 
     `${p.ad} ${p.soyad}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.gorev.toLowerCase().includes(searchQuery.toLowerCase())
+    (p.gorev || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Spotlight staff (the first unmarked employee in the pile)
@@ -1023,11 +1031,11 @@ ${satirlar
 
                       <div className="flex items-center space-x-3 pt-1">
                         <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center font-bold text-amber-400 text-lg uppercase shadow-inner shrink-0">
-                          {spotlightStaff.ad.substring(0, 1)}{spotlightStaff.soyad.substring(0, 1)}
+                          {getInitials(spotlightStaff.ad, spotlightStaff.soyad)}
                         </div>
                         <div className="min-w-0">
                           <h4 className="font-bold text-xs tracking-wide text-gray-100 truncate">
-                            {spotlightStaff.ad} {spotlightStaff.soyad}
+                            {getDisplayName(spotlightStaff.ad, spotlightStaff.soyad)}
                           </h4>
                           <p className="text-[9px] text-slate-400 font-mono font-medium tracking-tight mt-0.5">
                             💼 {spotlightStaff.departman} / {spotlightStaff.gorev}
@@ -1777,7 +1785,7 @@ ${satirlar
                                       if (!p) return null;
                                       return (
                                         <span key={pId} className="bg-slate-100 text-slate-600 text-[8px] font-medium px-1 rounded">
-                                          {p.ad} {p.soyad.substring(0, 1)}.
+                                          {(p.ad || '-')} {((p.soyad || '').charAt(0) || '')}.
                                         </span>
                                       );
                                     })}
@@ -2504,10 +2512,10 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                               <tr key={p.id} className="border-b border-slate-150 hover:bg-slate-100/50 transition duration-100">
                                 <td className="p-2 flex items-center space-x-2">
                                   <div className="w-6 h-6 rounded-full bg-slate-250 flex items-center justify-center font-bold text-[9px] text-slate-700 uppercase">
-                                    {p.ad[0]}{p.soyad[0]}
+                                    {getInitials(p.ad, p.soyad)}
                                   </div>
                                   <div>
-                                    <div className="text-[10px] font-bold text-slate-900 leading-tight">{p.ad} {p.soyad}</div>
+                                    <div className="text-[10px] font-bold text-slate-900 leading-tight">{getDisplayName(p.ad, p.soyad)}</div>
                                     <div className="text-[8px] text-slate-500 leading-none">{p.gorev}</div>
                                   </div>
                                 </td>
