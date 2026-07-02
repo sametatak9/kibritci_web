@@ -40,11 +40,7 @@ export function getYoklamaDay(
 ): YoklamaGunKaydi | undefined {
   if (!personMap) return undefined;
   const dateKey = yoklamaDateKey(year, month, day);
-  if (personMap[dateKey]) return personMap[dateKey];
-  if (isLegacyPersonelMap(personMap)) {
-    return personMap[String(day)] ?? personMap[day as unknown as string];
-  }
-  return undefined;
+  return personMap[dateKey];
 }
 
 export function setYoklamaDay(
@@ -138,22 +134,13 @@ export function iterateMonthYoklama(
 ): void {
   if (!personMap) return;
   const prefix = `${year}-${String(month).padStart(2, '0')}-`;
-  let foundDateKeys = false;
 
   Object.entries(personMap).forEach(([key, data]) => {
     if (key.startsWith(prefix)) {
-      foundDateKeys = true;
       const day = Number(key.slice(prefix.length));
       if (day >= 1 && day <= 31) callback(day, data);
     }
   });
-
-  if (!foundDateKeys && isLegacyPersonelMap(personMap)) {
-    Object.entries(personMap).forEach(([key, data]) => {
-      const day = Number(key);
-      if (day >= 1 && day <= 31) callback(day, data);
-    });
-  }
 }
 
 export function migrateLegacyYoklamaMap(
