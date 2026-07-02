@@ -18,6 +18,7 @@ interface FormenScreenProps {
   personeller: Personel[];
   yoklamalar: AylikYoklamaMap;
   setYoklamalar: React.Dispatch<React.SetStateAction<AylikYoklamaMap>>;
+  saveYoklamalarNow?: (next: AylikYoklamaMap) => Promise<void>;
   sahaFaaliyetleri: SahaFaaliyetiType[];
   setSahaFaaliyetleri: (updater: SahaFaaliyetiType[] | ((s: SahaFaaliyetiType[]) => SahaFaaliyetiType[])) => void;
   currentUser: any;
@@ -30,6 +31,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   personeller,
   yoklamalar,
   setYoklamalar,
+  saveYoklamalarNow,
   sahaFaaliyetleri,
   setSahaFaaliyetleri,
   currentUser,
@@ -137,6 +139,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const [mesaiSaatleri, setMesaiSaatleri] = useState<Record<string, number>>({});
   const [hasLocalAttendanceDraft, setHasLocalAttendanceDraft] = useState(false);
   const [spotlightMesai, setSpotlightMesai] = useState<string>('0');
+  const [lastAttendanceSaveAt, setLastAttendanceSaveAt] = useState<string | null>(null);
 
   // 2. SAHA FAALİYETİ STATE
   const [isNiteligi, setIsNiteligi] = useState('');
@@ -188,6 +191,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const [isCikisTalepleriList, setIsCikisTalepleriList] = useState<any[]>([]);
   const [isGuncellemeTalepleriList, setIsGuncellemeTalepleriList] = useState<any[]>([]);
   const [isGunuTamamlandi, setIsGunuTamamlandi] = useState(false);
+  const [savingAttendance, setSavingAttendance] = useState(false);
 
   // Quick select lists
   const isNitelikleriList = [
@@ -529,26 +533,46 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   };
 
   // Digital Signature Save
-  const handleSaveYoklama = () => {
-    // Save to the main yoklamalar map
-    setYoklamalar(prev => {
-      const next = { ...prev };
-      
+  const handleSaveYoklama = async () => {
+    if (savingAttendance) return;
+    setSavingAttendance(true);
+    try {
+      const next = { ...yoklamalar };
+
       activeStaff.forEach(p => {
         const dayData = getYoklamaDay(next[p.id], year, month, day);
 
         if (presentIds.includes(p.id)) {
-          next[p.id] = setYoklamaDay(next[p.id], year, month, day, { ...(dayData || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 }), durum: 'Geldi', mesaiSaati: mesaiSaatleri[p.id] || 0 });
+          next[p.id] = setYoklamaDay(next[p.id], year, month, day, {
+            ...(dayData || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 }),
+            durum: 'Geldi',
+            mesaiSaati: mesaiSaatleri[p.id] || 0,
+            gonderen: currentUser?.email || 'formen',
+          });
         } else if (absentIds.includes(p.id)) {
-          next[p.id] = setYoklamaDay(next[p.id], year, month, day, { ...(dayData || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 }), durum: 'Yok', mesaiSaati: 0 });
+          next[p.id] = setYoklamaDay(next[p.id], year, month, day, {
+            ...(dayData || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 }),
+            durum: 'Yok',
+            mesaiSaati: 0,
+            gonderen: currentUser?.email || 'formen',
+          });
         }
       });
 
-      return next;
-    });
-    setHasLocalAttendanceDraft(false);
+      if (saveYoklamalarNow) {
+        await saveYoklamalarNow(next);
+      } else {
+        setYoklamalar(next);
+      }
 
-    showStatus('success', `📅 ${selectedDate} Tarihli Yoklama ve Mesai Saatleri, Formen imzasıyla başarıyla sisteme kaydedildi ve ana programa gönderildi!`);
+      setHasLocalAttendanceDraft(false);
+      setLastAttendanceSaveAt(new Date().toLocaleString('tr-TR'));
+      showStatus('success', `📅 ${selectedDate} Tarihli Yoklama ve Mesai Saatleri, Formen imzasıyla başarıyla sisteme kaydedildi ve ana programa gönderildi!`);
+    } catch (err: any) {
+      showStatus('error', `Yoklama kaydedilemedi: ${err?.message || 'Bilinmeyen hata'}`);
+    } finally {
+      setSavingAttendance(false);
+    }
   };
 
   // Quick status helper
@@ -1142,13 +1166,18 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                     <button
                       onClick={handleSaveYoklama}
                       className="w-full bg-slate-900 hover:bg-slate-950 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-extrabold text-[10px] py-2.5 px-4 rounded-xl transition duration-150 shadow-md flex items-center justify-center space-x-1.5 cursor-pointer"
-                      disabled={!hasLocalAttendanceDraft}
+                      disabled={!hasLocalAttendanceDraft || savingAttendance}
                     >
-                      <span>{hasLocalAttendanceDraft ? '✍️ YOKLAMAYI İMZALA VE KAYDET' : '✅ YOKLAMA KAYITLI'}</span>
+                      <span>{savingAttendance ? '⏳ KAYDEDİLİYOR...' : hasLocalAttendanceDraft ? '✍️ YOKLAMAYI İMZALA VE KAYDET' : '✅ YOKLAMA KAYITLI'}</span>
                     </button>
                     {hasLocalAttendanceDraft && (
                       <p className="text-[9px] text-amber-700 font-bold text-center bg-amber-50 border border-amber-200 rounded-lg py-1.5">
                         Kaydedilmemiş yoklama/mesai değişikliği var.
+                      </p>
+                    )}
+                    {lastAttendanceSaveAt && (
+                      <p className="text-[9px] text-slate-600 font-bold text-center bg-slate-100 border border-slate-200 rounded-lg py-1.5">
+                        Son kayıt: {lastAttendanceSaveAt}
                       </p>
                     )}
                   </div>

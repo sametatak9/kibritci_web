@@ -253,7 +253,14 @@ export function buildPersonelListForMonth(
     if (isPersonelVisibleInMonth(p, year, month, asYoklamaGunMap(yoklamalar[p.id]))) ids.add(p.id);
   });
   Object.entries(yoklamalar).forEach(([id, map]) => {
-    if (personHasYoklamaInMonth(asYoklamaGunMap(map), year, month)) ids.add(id);
+    // Güvenlik: Personel yönetiminde olmayan (orphan / legacy-stub) ID'leri yoklama listesine taşımayız.
+    // Bu, "kayıtlı olmayan personel yoklamada görünüyor" ve mükerrer satır riskini azaltır.
+    const existing = byId.get(id);
+    if (!existing) return;
+    const personMap = asYoklamaGunMap(map);
+    if (!personHasYoklamaInMonth(personMap, year, month)) return;
+    if (!isPersonelVisibleInMonth(existing, year, month, personMap)) return;
+    ids.add(id);
   });
 
   const list = Array.from(ids)

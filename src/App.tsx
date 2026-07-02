@@ -1318,11 +1318,21 @@ export default function App() {
 
   const navigateToEvrakBaglama = (prefill?: EvrakBaglamaPrefill) => {
     if (prefill) setEvrakBaglamaPrefill(prefill);
-    setActiveTab('evrak_baglama');
+    handleTabNavigation('evrak_baglama');
   };
 
   const handleTabNavigation = (targetTab: string) => {
+    try {
+      localStorage.setItem(LAST_TAB_STORAGE_KEY, targetTab);
+    } catch {
+      /* no-op */
+    }
     setActiveTab(targetTab);
+  };
+
+  const saveYoklamalarNow = async (next: AylikYoklamaMap) => {
+    setYoklamalar(next);
+    await saveYoklamaDocument(next);
   };
 
   const closePublicGiris = () => {
@@ -1823,7 +1833,7 @@ export default function App() {
                   initialYear={payrollPeriod.year}
                   onPeriodChange={handlePayrollPeriodChange}
                   onSaveHesapTaslaklari={handleSaveMaasHesapTaslaklari}
-                  onOpenMaasOdeme={() => setActiveTab('maas_odeme')}
+                  onOpenMaasOdeme={() => handleTabNavigation('maas_odeme')}
                 />
               )}
 
@@ -1898,7 +1908,7 @@ export default function App() {
                   prefill={evrakBaglamaPrefill}
                   onClearPrefill={() => setEvrakBaglamaPrefill(null)}
                   onNavigateToBaglama={navigateToEvrakBaglama}
-                  onNavigateToYz={() => setActiveTab('yz_karsilastir')}
+                  onNavigateToYz={() => handleTabNavigation('yz_karsilastir')}
                   currentUser={currentUser}
                 />
               )}
@@ -2020,6 +2030,7 @@ export default function App() {
                     personeller={personeller}
                     yoklamalar={yoklamalar}
                     setYoklamalar={setYoklamalarWithSync}
+                    saveYoklamalarNow={saveYoklamalarNow}
                     sahaFaaliyetleri={sahaFaaliyetleri}
                     setSahaFaaliyetleri={setSahaFaaliyetleriWithSync}
                     currentUser={currentUser}

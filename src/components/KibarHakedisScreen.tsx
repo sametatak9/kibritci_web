@@ -3,8 +3,8 @@ import {
   CreditCard, Calendar, Printer, ShieldCheck, CheckCircle2,
   RefreshCw, UserX
 } from 'lucide-react';
-import { db, saveDocument } from '../lib/firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { db, parseYoklamaSnapshotData, saveDocument } from '../lib/firebase';
+import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { Personel, AylikYoklamaMap } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
 import { buildPersonelListForMonth, iterateMonthYoklama } from '../lib/yoklamaUtils';
@@ -214,6 +214,9 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
   const [reportType, setReportType] = useState<'NORMAL' | 'E-IMZALI'>('NORMAL');
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [yoklamaSource, setYoklamaSource] = useState<AylikYoklamaMap>(yoklamalar);
+  const [refreshingYoklama, setRefreshingYoklama] = useState(false);
+  const [lastYoklamaRefreshAt, setLastYoklamaRefreshAt] = useState<string | null>(null);
 
   const donemLabel = `${TURKISH_MONTHS[selectedMonth - 1]} ${selectedYear}`;
   const donemKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
@@ -222,6 +225,10 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
     setStatusMsg({ type, text });
     setTimeout(() => setStatusMsg(null), 4000);
   };
+
+  useEffect(() => {
+    setYoklamaSource(yoklamalar);
+  }, [yoklamalar]);
 
   useEffect(() => {
     const unsubKamp = onSnapshot(collection(db, 'kampGunlukFaaliyetleri'), (snap) => {
@@ -233,8 +240,8 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
   }, []);
 
   const monthPersoneller = useMemo(
-    () => buildPersonelListForMonth(personeller, yoklamalar, selectedYear, selectedMonth, resolveStubPersonelFromLegacyId),
-    [personeller, yoklamalar, selectedYear, selectedMonth]
+    () => buildPersonelListForMonth(personeller, yoklamaSource, selectedYear, selectedMonth, resolveStubPersonelFromLegacyId),
+    [personeller, yoklamaSource, selectedYear, selectedMonth]
   );
 
   const allStaffRows = useMemo((): StaffHakedisRow[] => {
@@ -242,7 +249,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
     monthPersoneller.forEach(p => {
       let geldiGun = 0;
       let mesaiSaat = 0;
-      iterateMonthYoklama(yoklamalar[p.id], selectedYear, selectedMonth, (_day, data) => {
+      iterateMonthYoklama(yoklamaSource[p.id], selectedYear, selectedMonth, (_day, data) => {
         if (data?.durum === 'Geldi') geldiGun++;
         mesaiSaat += data?.mesaiSaati || 0;
       });
@@ -263,7 +270,26 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
     return rows.sort((a, b) =>
       `${a.personel.ad} ${a.personel.soyad}`.localeCompare(`${b.personel.ad} ${b.personel.soyad}`, 'tr')
     );
-  }, [monthPersoneller, yoklamalar, selectedYear, selectedMonth]);
+  }, [monthPersoneller, yoklamaSource, selectedYear, selectedMonth]);
+
+  const handleRefreshYoklama = async () => {
+    setRefreshingYoklama(true);
+    try {
+      const snap = await getDoc(doc(db, 'yoklamalar', 'global_yoklama_map'));
+      if (!snap.exists()) {
+        showStatus('error', 'Yoklama verisi bulunamadı (global_yoklama_map).');
+        return;
+      }
+      const fresh = parseYoklamaSnapshotData(snap.data() as Record<string, unknown>) as AylikYoklamaMap;
+      setYoklamaSource(fresh);
+      setLastYoklamaRefreshAt(new Date().toLocaleString('tr-TR'));
+      showStatus('success', `${donemLabel} için güncel yoklama verisi çekildi.`);
+    } catch (err: any) {
+      showStatus('error', `Güncel yoklama çekilemedi: ${err?.message || 'Bilinmeyen hata'}`);
+    } finally {
+      setRefreshingYoklama(false);
+    }
+  };
 
   const activeStaffRows = allStaffRows.filter(r => !excludedStaffIds.includes(r.personel.id));
 
@@ -408,6 +434,15 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
             </select>
           </div>
           <button
+            onClick={handleRefreshYoklama}
+            disabled={refreshingYoklama}
+            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow cursor-pointer flex items-center space-x-1"
+            title="Seçili ayın güncel yoklamasını veritabanından tekrar çeker."
+          >
+            <RefreshCw size={12} className={refreshingYoklama ? 'animate-spin' : ''} />
+            <span>{refreshingYoklama ? 'Getiriliyor...' : 'Güncel Yoklamayı Getir'}</span>
+          </button>
+          <button
             onClick={handleSaveReport}
             disabled={loading}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow cursor-pointer flex items-center space-x-1"
@@ -423,6 +458,11 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
           statusMsg.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-rose-50 text-rose-800 border-rose-200'
         }`}>
           {statusMsg.type === 'success' ? '✓' : '⚠️'} {statusMsg.text}
+        </div>
+      )}
+      {lastYoklamaRefreshAt && (
+        <div className="text-[11px] font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl px-3 py-2">
+          Son güncel yoklama çekimi: {lastYoklamaRefreshAt}
         </div>
       )}
 

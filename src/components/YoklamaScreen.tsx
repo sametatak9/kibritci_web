@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Calendar, Trash2, ShieldAlert, CheckCircle, FileText, ChevronRight, RefreshCw, Database } from 'lucide-react';
 import { Personel, AylikYoklamaMap, YoklamaDurum } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
-import { buildPersonelListForMonth, findPersonelByName, getYoklamaDay, isDayActiveForPersonel, isPersonelVisibleInMonth, setYoklamaDay } from '../lib/yoklamaUtils';
+import { buildPersonelListForMonth, findPersonelByName, getYoklamaDay, isDayActiveForPersonel, isPersonelVisibleInMonth, normalizeTurkishName, setYoklamaDay } from '../lib/yoklamaUtils';
 import { importAllLegacyExcelMonths, importLegacyExcelMonth, aiMonthlyDataToLegacyMonth, resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 import { LEGACY_EXCEL_MONTHS } from '../data/legacyExcelYoklama';
 import { fetchApiJson } from '../lib/apiClient';
@@ -47,6 +47,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   const [draftYoklamalar, setDraftYoklamalar] = useState<AylikYoklamaMap>(yoklamalar);
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
   // Report formatting state
   const [reportType, setReportType] = useState<'NORMAL' | 'E-IMZALI'>('NORMAL');
@@ -74,6 +75,9 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     if (!hasPendingChanges || savingDraft) return;
     setSavingDraft(true);
     setYoklamalar(draftYoklamalar);
+    const now = new Date();
+    const savedLabel = now.toLocaleString('tr-TR');
+    setLastSavedAt(savedLabel);
     setHasPendingChanges(false);
     setTimeout(() => setSavingDraft(false), 300);
     if (addNotification) {
@@ -384,12 +388,31 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
   const [printModal, setPrintModal] = useState<'NONE' | 'BOS' | 'DOLU' | 'GUNLUK_BOS'>('NONE');
 
-  const filteredPersonel = monthPersoneller
-    .filter(p => {
-      const term = searchTerm.toLowerCase();
+  const filteredPersonel = useMemo(() => {
+    const term = searchTerm.toLowerCase();
+    const base = monthPersoneller.filter((p) => {
       const fullName = `${p.ad} ${p.soyad}`.toLowerCase();
       return fullName.includes(term) || p.tcNo.includes(term) || p.gorev.toLowerCase().includes(term);
     });
+
+    // Aynı isim farklı ID ile gelirse (legacy/stub vb.) listede tek satır göster.
+    const byName = new Map<string, Personel>();
+    const score = (p: Personel) => {
+      let s = 0;
+      if ((p.tcNo || '').trim()) s += 100;
+      if (!p.id.startsWith('PRS-LEGACY')) s += 50;
+      if (p.durum === true || String(p.durum).toLowerCase() === 'true') s += 10;
+      return s;
+    };
+    for (const p of base) {
+      const key = normalizeTurkishName(`${p.ad} ${p.soyad}`);
+      const prev = byName.get(key);
+      if (!prev || score(p) > score(prev)) {
+        byName.set(key, p);
+      }
+    }
+    return Array.from(byName.values());
+  }, [monthPersoneller, searchTerm]);
 
   const handleBulkOvertime = (hours: number) => {
     const newYoklamalar = { ...draftYoklamalar };
@@ -618,6 +641,11 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
           ) : (
             <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1">
               Son değişiklikler veritabanı ile senkron.
+            </span>
+          )}
+          {lastSavedAt && (
+            <span className="ml-2 text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-2.5 py-1">
+              Son kayıt: {lastSavedAt}
             </span>
           )}
         </div>
@@ -906,15 +934,15 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               <table className="min-w-full divide-y divide-slate-100">
                 
                 {/* Header columns */}
-                <thead className="bg-slate-50 font-display text-[10px] font-bold text-slate-600 tracking-wider">
+                <thead className="sticky top-0 z-30 bg-slate-50 font-display text-[10px] font-bold text-slate-600 tracking-wider">
                   <tr>
-                    <th scope="col" className="px-3 py-3 text-left w-56 sticky left-0 bg-slate-50 box-shadow z-20 shadow-[2px_0_5px_rgba(0,0,0,0.03)] border-r">
+                    <th scope="col" className="px-3 py-3 text-left w-56 sticky top-0 left-0 bg-slate-50 box-shadow z-40 shadow-[2px_0_5px_rgba(0,0,0,0.03)] border-r">
                       Personel Künyesi
                     </th>
                     {daysArray.map(day => {
                       const dayName = dayOfWeekAbbreviation(day);
                       const { isHoliday, name, isOfficial } = isSundayOrPublicHoliday(day);
-                      let thClass = "px-1 py-1.5 text-center w-8 min-w-8 transition-colors";
+                      let thClass = "px-1 py-1.5 text-center w-8 min-w-8 transition-colors sticky top-0 bg-slate-50 z-30";
                       if (isHoliday) {
                         if (isOfficial) {
                           thClass += " bg-purple-100/80 text-purple-900 font-extrabold border-x border-purple-200 z-10";
@@ -965,11 +993,11 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
                       const { isHoliday, name, isOfficial } = isSundayOrPublicHoliday(day);
                       let tdClass = "px-0.5 py-1.5 text-center min-w-8 transition-colors";
-                      if (isActiveDay && isHoliday) {
+                      if (isHoliday) {
                         if (isOfficial) {
-                          tdClass += " bg-purple-55/35 border-x border-purple-100/30";
+                          tdClass += " bg-purple-50 border-x border-purple-100";
                         } else {
-                          tdClass += " bg-orange-55/35 border-x border-orange-100/30";
+                          tdClass += " bg-orange-50 border-x border-orange-100";
                         }
                       }
 
