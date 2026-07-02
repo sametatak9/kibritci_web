@@ -435,6 +435,56 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
     if (win) win.print();
   };
 
+  const handleFaturaArchiveReport = () => {
+    const rows = [...faturalar]
+      .sort((a, b) => (b.tarih || '').localeCompare(a.tarih || ''))
+      .map((ft, idx) => `
+        <tr>
+          <td>${idx + 1}</td>
+          <td>${ft.tarih || '-'}</td>
+          <td>${ft.faturaNo || '-'}</td>
+          <td>${ft.cariUnvan || '-'}</td>
+          <td style="text-align:right">${Number(ft.genelToplam || 0).toLocaleString('tr-TR')} TL</td>
+          <td>${ft.evrakUrl ? 'Var' : 'Yok'}</td>
+          <td>${ft.imzaliEvrakUrl ? 'Var' : 'Yok'}</td>
+        </tr>
+      `)
+      .join('');
+
+    const html = `
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Fatura Evrak Arşiv Raporu</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; color: #1f2937; }
+            h1 { margin: 0 0 8px; font-size: 18px; }
+            p { margin: 0 0 16px; font-size: 12px; color: #6b7280; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th, td { border: 1px solid #d1d5db; padding: 6px 8px; }
+            th { background: #f3f4f6; text-align: left; }
+          </style>
+        </head>
+        <body>
+          <h1>KİBRİTÇİ İNŞAAT — FATURA EVRAK ARŞİV RAPORU</h1>
+          <p>Kayıt sayısı: ${faturalar.length} • Üretim: ${new Date().toLocaleString('tr-TR')}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th><th>Tarih</th><th>Fatura No</th><th>Firma</th><th>Genel Toplam</th><th>Evrak</th><th>İmzalı</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </body>
+      </html>
+    `;
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (win) win.print();
+  };
+
   const bagimsizFaturalar = faturalar.filter(ft => !faturaIsLinked(ft));
 
   return (
@@ -671,6 +721,53 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
               <p className="text-xs text-slate-500 leading-relaxed">
                 Bağlama işlemi «Evrak Bağlama Merkezi» sekmesinde yapılır. YZ analiz için «YZ Karşılaştır ve Yorumla» menüsünü kullanın.
               </p>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">📚 Fatura Evrak Arşivi</h4>
+                <button
+                  type="button"
+                  onClick={handleFaturaArchiveReport}
+                  className="text-[10px] bg-slate-900 hover:bg-slate-950 text-white px-3 py-1.5 rounded-lg font-bold cursor-pointer"
+                >
+                  PDF Rapor (Yazdır)
+                </button>
+              </div>
+              <div className="max-h-64 overflow-auto border border-slate-100 rounded-xl">
+                <table className="w-full text-[11px]">
+                  <thead className="sticky top-0 bg-slate-50">
+                    <tr className="text-left text-slate-600">
+                      <th className="px-2 py-2">Tarih</th>
+                      <th className="px-2 py-2">Fatura No</th>
+                      <th className="px-2 py-2">Firma</th>
+                      <th className="px-2 py-2 text-right">Toplam</th>
+                      <th className="px-2 py-2">Rapor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...faturalar]
+                      .sort((a, b) => (b.tarih || '').localeCompare(a.tarih || ''))
+                      .slice(0, 200)
+                      .map((ft) => (
+                        <tr key={ft.id} className="border-t border-slate-100">
+                          <td className="px-2 py-1.5">{ft.tarih || '-'}</td>
+                          <td className="px-2 py-1.5 font-semibold">{ft.faturaNo}</td>
+                          <td className="px-2 py-1.5">{ft.cariUnvan}</td>
+                          <td className="px-2 py-1.5 text-right font-mono">{Number(ft.genelToplam || 0).toLocaleString('tr-TR')} TL</td>
+                          <td className="px-2 py-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handlePreviewPdf(ft)}
+                              className="text-[10px] bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded px-2 py-1 font-bold cursor-pointer"
+                            >
+                              Aç
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 

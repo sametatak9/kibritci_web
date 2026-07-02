@@ -78,7 +78,7 @@ export function parseGeminiError(error: unknown): string {
     ].join('\n');
   }
 
-  if (/API key not valid|invalid.?api.?key|401|403|PERMISSION_DENIED/i.test(msg)) {
+  if (/Request had invalid authentication credentials|Expected OAuth 2 access token|invalid authentication credentials|API key not valid|invalid.?api.?key|401|403|PERMISSION_DENIED/i.test(msg)) {
     return [
       'Gemini API anahtarı reddedildi.',
       '• AI Studio\'dan yeni Auth key (AQ.…) oluşturun: https://aistudio.google.com/apikey',

@@ -97,12 +97,31 @@ import { PublicGirisKayitScreen } from './components/PublicGirisKayitScreen';
 
 export default function App() {
   const LAST_TAB_STORAGE_KEY = 'kibritci_last_tab_v1';
-  const [activeTab, setActiveTab] = useState<string>(() => {
+  const readLastTab = (): string => {
     try {
-      return localStorage.getItem(LAST_TAB_STORAGE_KEY) || 'ana_sayfa';
+      const direct = localStorage.getItem(LAST_TAB_STORAGE_KEY);
+      if (direct) return direct;
+      const rawSession = localStorage.getItem('kibritci_portal_session');
+      if (!rawSession) return 'ana_sayfa';
+      const parsed = JSON.parse(rawSession) as { lastTab?: string };
+      return parsed.lastTab || 'ana_sayfa';
     } catch {
       return 'ana_sayfa';
     }
+  };
+  const persistLastTab = (tab: string) => {
+    try {
+      localStorage.setItem(LAST_TAB_STORAGE_KEY, tab);
+      const rawSession = localStorage.getItem('kibritci_portal_session');
+      if (!rawSession) return;
+      const parsed = JSON.parse(rawSession) as Record<string, unknown>;
+      localStorage.setItem('kibritci_portal_session', JSON.stringify({ ...parsed, lastTab: tab }));
+    } catch {
+      /* no-op */
+    }
+  };
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    return readLastTab();
   });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showSignatureModal, setShowSignatureModal] = useState(false);
@@ -121,6 +140,7 @@ export default function App() {
 
   const [bildirimler, setBildirimler] = useState<any[]>([]);
 
+  const yoklamaPersonCount = Object.keys(yoklamalar || {}).length;
   useEffect(() => {
     if (currentUser) {
       setIsMobileMode(localStorage.getItem('kibritci_mobile_mode') === 'true');
@@ -649,6 +669,16 @@ export default function App() {
       snapshot.forEach((doc) => {
         list.push({ id: doc.id, ...doc.data() } as any);
       });
+      const tcCounts = new Map<string, number>();
+      list.forEach((p) => {
+        const tc = String(p.tcNo || '').trim();
+        if (!tc) return;
+        tcCounts.set(tc, (tcCounts.get(tc) || 0) + 1);
+      });
+      const duplicateTcGroups = Array.from(tcCounts.values()).filter((v) => v > 1).length;
+      // #region agent log
+      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-1',hypothesisId:'H2',location:'App.tsx:onSnapshot(personeller)',message:'personel snapshot received',data:{snapshotCount:list.length,duplicateTcGroups},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setPersoneller(list);
       if (list.length >= 20) markProductionLive();
     });
@@ -656,6 +686,20 @@ export default function App() {
     const unsubYoklamalar = onSnapshot(doc(db, 'yoklamalar', 'global_yoklama_map'), (snap) => {
       if (!snap.exists()) return;
       const data = parseYoklamaSnapshotData(snap.data() as Record<string, unknown>) as AylikYoklamaMap;
+      const personCount = Object.keys(data).length;
+      let totalDayKeys = 0;
+      let nonDateKeyCount = 0;
+      Object.values(data).forEach((personMap) => {
+        if (!personMap || typeof personMap !== 'object') return;
+        const keys = Object.keys(personMap as Record<string, unknown>);
+        totalDayKeys += keys.length;
+        keys.forEach((k) => {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(k)) nonDateKeyCount++;
+        });
+      });
+      // #region agent log
+      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-1',hypothesisId:'H4',location:'App.tsx:onSnapshot(yoklamalar)',message:'yoklama snapshot received',data:{personCount,totalDayKeys,nonDateKeyCount},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setYoklamalar(data);
       if (hasSubstantialYoklamaData(data)) markProductionLive();
     });
@@ -879,16 +923,21 @@ export default function App() {
     if (!roleHomeRoutedRef.current) {
       const homeTab = getRoleHomeTab(matched.yetki) || 'ana_sayfa';
       let initialTab = homeTab;
+      let savedTab = '';
+      let isRestricted = true;
       try {
-        const savedTab = localStorage.getItem(LAST_TAB_STORAGE_KEY);
+        savedTab = readLastTab() || '';
         const yetki = normalizeYetki(matched.yetki);
-        const isRestricted = !savedTab || isTabRestrictedForUser(savedTab, yetki, matched.kisitliSayfalar);
+        isRestricted = !savedTab || isTabRestrictedForUser(savedTab, yetki, matched.kisitliSayfalar);
         if (!isRestricted) {
           initialTab = savedTab;
         }
       } catch {
         /* no-op */
       }
+      // #region agent log
+      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'tab-layout-1',hypothesisId:'T1',location:'App.tsx:roleHomeRoute',message:'initial tab resolved after auth',data:{savedTab,homeTab,initialTab,isRestricted,yetki:String(matched.yetki || '')},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       roleHomeRoutedRef.current = true;
       setActiveTab(initialTab);
     }
@@ -906,11 +955,42 @@ export default function App() {
   useEffect(() => {
     if (!currentUser || !activeTab) return;
     try {
-      localStorage.setItem(LAST_TAB_STORAGE_KEY, activeTab);
+      persistLastTab(activeTab);
+      // #region agent log
+      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'tab-layout-1',hypothesisId:'T3',location:'App.tsx:activeTabPersist',message:'active tab persisted to localStorage',data:{activeTab,key:LAST_TAB_STORAGE_KEY},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
     } catch {
+      // #region agent log
+      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'tab-layout-1',hypothesisId:'T3',location:'App.tsx:activeTabPersist',message:'active tab persist failed',data:{activeTab,key:LAST_TAB_STORAGE_KEY},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       /* no-op */
     }
   }, [currentUser, activeTab]);
+
+  useEffect(() => {
+    if (!currentUser || !activeTab) return;
+    const main = mainScrollRef.current;
+    if (!main) return;
+    const sample = Array.from(main.querySelectorAll<HTMLElement>('*'))
+      .slice(0, 600)
+      .reduce<{ tag: string; className: string; scrollWidth: number; clientWidth: number } | null>((acc, el) => {
+        if (!el || !el.className) return acc;
+        const over = el.scrollWidth - el.clientWidth;
+        if (over <= 8) return acc;
+        if (!acc || over > (acc.scrollWidth - acc.clientWidth)) {
+          return {
+            tag: el.tagName.toLowerCase(),
+            className: String(el.className).slice(0, 120),
+            scrollWidth: el.scrollWidth,
+            clientWidth: el.clientWidth,
+          };
+        }
+        return acc;
+      }, null);
+    // #region agent log
+    fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'tab-layout-1',hypothesisId:'L1',location:'App.tsx:tabLayoutProbe',message:'tab layout overflow probe',data:{activeTab,mainClientWidth:main.clientWidth,mainScrollWidth:main.scrollWidth,overflowX:main.scrollWidth>main.clientWidth+4,worstOverflow:sample},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+  }, [currentUser, activeTab, personeller.length, yoklamaPersonCount]);
 
   // Sekme bazlı scroll konumunu koru: sayfalar arası gidip gelince kaldığın yere dön.
   useEffect(() => {
@@ -977,6 +1057,15 @@ export default function App() {
   const setPersonellerWithSync = (updater: Personel[] | ((p: Personel[]) => Personel[])) => {
     setPersoneller(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
+      const prevIds = new Set(prev.map((p) => p.id));
+      const nextIds = new Set(next.map((p) => p.id));
+      let added = 0;
+      let removed = 0;
+      nextIds.forEach((id) => { if (!prevIds.has(id)) added++; });
+      prevIds.forEach((id) => { if (!nextIds.has(id)) removed++; });
+      // #region agent log
+      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-1',hypothesisId:'H1',location:'App.tsx:setPersonellerWithSync',message:'personel local state change queued for sync',data:{prevCount:prev.length,nextCount:next.length,added,removed},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setTimeout(() => syncArrayToFirestore('personeller', prev, next), 0);
       return next;
     });
@@ -1323,10 +1412,13 @@ export default function App() {
 
   const handleTabNavigation = (targetTab: string) => {
     try {
-      localStorage.setItem(LAST_TAB_STORAGE_KEY, targetTab);
+      persistLastTab(targetTab);
     } catch {
       /* no-op */
     }
+    // #region agent log
+    fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'tab-layout-1',hypothesisId:'T2',location:'App.tsx:handleTabNavigation',message:'tab navigation requested',data:{fromTab:activeTab,toTab:targetTab},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     setActiveTab(targetTab);
   };
 

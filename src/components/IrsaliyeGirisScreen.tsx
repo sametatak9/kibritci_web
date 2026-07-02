@@ -301,6 +301,88 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
     alert("İrsaliye kaydedildi. Bağlama için «Bağlama» sekmesini kullanın.");
   };
 
+  const handlePreviewIrsaliyePdf = (ir: Irsaliye) => {
+    const html = `
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>İrsaliye Raporu - ${ir.irsaliyeNo}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; color: #1f2937; }
+            h1 { font-size: 18px; margin: 0 0 8px; }
+            p { margin: 0 0 8px; font-size: 12px; color: #6b7280; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
+            th, td { border: 1px solid #d1d5db; padding: 6px 8px; }
+            th { background: #f3f4f6; text-align: left; }
+          </style>
+        </head>
+        <body>
+          <h1>KİBRİTÇİ İNŞAAT — İRSALİYE RAPORU</h1>
+          <p>No: ${ir.irsaliyeNo || '-'} • Tarih: ${ir.tarih || '-'} • Firma: ${ir.firma || '-'}</p>
+          <table>
+            <thead><tr><th>Malzeme</th><th>Miktar</th><th>Birim</th></tr></thead>
+            <tbody>
+              ${(ir.kalemler || []).map((k) => `<tr><td>${k.urunAdi || '-'}</td><td>${k.miktar || 0}</td><td>${k.birim || '-'}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (win) win.print();
+  };
+
+  const handleIrsaliyeArchiveReport = () => {
+    const rows = [...irsaliyeler]
+      .sort((a, b) => (b.tarih || '').localeCompare(a.tarih || ''))
+      .map((ir, idx) => `
+        <tr>
+          <td>${idx + 1}</td>
+          <td>${ir.tarih || '-'}</td>
+          <td>${ir.irsaliyeNo || '-'}</td>
+          <td>${ir.firma || '-'}</td>
+          <td>${(ir.kalemler || []).length}</td>
+          <td>${ir.fisEvrakUrl ? 'Var' : 'Yok'}</td>
+          <td>${ir.imzaliEvrakUrl ? 'Var' : 'Yok'}</td>
+        </tr>
+      `)
+      .join('');
+    const html = `
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>İrsaliye Evrak Arşiv Raporu</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; color: #1f2937; }
+            h1 { margin: 0 0 8px; font-size: 18px; }
+            p { margin: 0 0 16px; font-size: 12px; color: #6b7280; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th, td { border: 1px solid #d1d5db; padding: 6px 8px; }
+            th { background: #f3f4f6; text-align: left; }
+          </style>
+        </head>
+        <body>
+          <h1>KİBRİTÇİ İNŞAAT — İRSALİYE EVRAK ARŞİV RAPORU</h1>
+          <p>Kayıt sayısı: ${irsaliyeler.length} • Üretim: ${new Date().toLocaleString('tr-TR')}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th><th>Tarih</th><th>İrsaliye No</th><th>Firma</th><th>Kalem</th><th>Evrak</th><th>İmzalı</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </body>
+      </html>
+    `;
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (win) win.print();
+  };
+
   return (
     <div className="flex-grow p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col font-sans select-none bg-slate-50/50 space-y-6">
       
@@ -533,12 +615,55 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
           </div>
 
           <div className="flex-1 space-y-6">
-            {/* Form list preview if needed, or help section */}
             <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
-              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">💡 Doğrulama Bilgisi</h4>
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">📚 İrsaliye Evrak Arşivi</h4>
+                <button
+                  type="button"
+                  onClick={handleIrsaliyeArchiveReport}
+                  className="text-[10px] bg-slate-900 hover:bg-slate-950 text-white px-3 py-1.5 rounded-lg font-bold cursor-pointer"
+                >
+                  PDF Rapor (Yazdır)
+                </button>
+              </div>
               <p className="text-xs text-slate-500 leading-relaxed">
-                İrsaliye belgelerinizi sisteme girerken yapay zeka desteğini kullanmak hata payını sıfıra indirir. Eğer girdiniz sırasında yeni bir Cari veya Stok ismi yazarsanız, sistem size otomatik olarak bu ismin veritabanında kayıtlı olmadığını belirtecek ve yeni kartı tek tıkla oluşturma fırsatı sunacaktır.
+                İrsaliye belgelerinizi burada arşivleyip tek ekrandan raporlayabilirsiniz.
               </p>
+              <div className="max-h-64 overflow-auto border border-slate-100 rounded-xl">
+                <table className="w-full text-[11px]">
+                  <thead className="sticky top-0 bg-slate-50">
+                    <tr className="text-left text-slate-600">
+                      <th className="px-2 py-2">Tarih</th>
+                      <th className="px-2 py-2">İrsaliye No</th>
+                      <th className="px-2 py-2">Firma</th>
+                      <th className="px-2 py-2">Kalem</th>
+                      <th className="px-2 py-2">Rapor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...irsaliyeler]
+                      .sort((a, b) => (b.tarih || '').localeCompare(a.tarih || ''))
+                      .slice(0, 200)
+                      .map((ir) => (
+                        <tr key={ir.id} className="border-t border-slate-100">
+                          <td className="px-2 py-1.5">{ir.tarih || '-'}</td>
+                          <td className="px-2 py-1.5 font-semibold">{ir.irsaliyeNo}</td>
+                          <td className="px-2 py-1.5">{ir.firma}</td>
+                          <td className="px-2 py-1.5">{(ir.kalemler || []).length}</td>
+                          <td className="px-2 py-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handlePreviewIrsaliyePdf(ir)}
+                              className="text-[10px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded px-2 py-1 font-bold cursor-pointer"
+                            >
+                              Aç
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>

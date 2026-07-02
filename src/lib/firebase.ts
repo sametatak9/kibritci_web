@@ -233,7 +233,11 @@ export async function syncArrayToFirestore<T extends { id: string }>(
   newArray: T[]
 ): Promise<void> {
   try {
-    if (shouldBlockMassDelete(collectionName, oldArray.length, newArray.length)) {
+    const massDeleteBlocked = shouldBlockMassDelete(collectionName, oldArray.length, newArray.length);
+    if (massDeleteBlocked) {
+      // #region agent log
+      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-1',hypothesisId:'H3',location:'firebase.ts:syncArrayToFirestore',message:'mass delete blocked by guard',data:{collectionName,oldCount:oldArray.length,newCount:newArray.length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       return;
     }
 
@@ -257,8 +261,14 @@ export async function syncArrayToFirestore<T extends { id: string }>(
       }
     }
 
+    // #region agent log
+    fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-1',hypothesisId:'H1',location:'firebase.ts:syncArrayToFirestore',message:'sync operation prepared',data:{collectionName,oldCount:oldArray.length,newCount:newArray.length,operations:promises.length},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     await Promise.all(promises);
   } catch (error) {
+    // #region agent log
+    fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-1',hypothesisId:'H1',location:'firebase.ts:syncArrayToFirestore',message:'sync operation failed',data:{collectionName,error:String(error)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     console.error(`Error syncing array for collection ${collectionName}:`, error);
   }
 }

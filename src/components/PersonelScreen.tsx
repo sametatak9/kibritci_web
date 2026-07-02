@@ -230,6 +230,9 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     };
 
     if ('id' in formData) {
+      // #region agent log
+      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-1',hypothesisId:'H1',location:'PersonelScreen.tsx:handleSave(edit)',message:'personel edit requested',data:{mode:'edit',hasExitDate:Boolean((normalizedPayload as Personel).istenCikisTarihi),durum:String((normalizedPayload as Personel).durum)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       // Edit mode
       setPersoneller(prev => prev.map(p => p.id === formData.id ? (normalizedPayload as Personel) : p));
       alert("Personel bilgileri başarıyla güncellendi.");
@@ -239,6 +242,9 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
         ...(normalizedPayload as Omit<Personel, 'id'>),
         id: `p_${Date.now()}`
       };
+      // #region agent log
+      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-1',hypothesisId:'H1',location:'PersonelScreen.tsx:handleSave(create)',message:'personel create requested',data:{mode:'create',hasExitDate:Boolean(newPersonel.istenCikisTarihi),durum:String(newPersonel.durum)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setPersoneller(prev => [newPersonel, ...prev]);
       alert("Yeni personel başarıyla kaydedildi.");
     }
@@ -247,6 +253,9 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
 
   const handleDelete = (id: string) => {
     if (confirm("Seçili personeli kalıcı olarak silmek istediğinize emin misiniz?")) {
+      // #region agent log
+      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-1',hypothesisId:'H3',location:'PersonelScreen.tsx:handleDelete',message:'personel delete requested',data:{targetId:id,currentListCount:personeller.length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setPersoneller(prev => prev.filter(p => p.id !== id));
       if (selectedPersonel?.id === id) {
         handleClearForm();

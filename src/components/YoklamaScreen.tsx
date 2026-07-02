@@ -6,6 +6,7 @@ import { buildPersonelListForMonth, findPersonelByName, getYoklamaDay, isDayActi
 import { importAllLegacyExcelMonths, importLegacyExcelMonth, aiMonthlyDataToLegacyMonth, resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 import { LEGACY_EXCEL_MONTHS } from '../data/legacyExcelYoklama';
 import { fetchApiJson } from '../lib/apiClient';
+import { downloadCsv } from '../lib/reportExport';
 
 const maskName = (name?: string): string => {
   return name || '';
@@ -414,6 +415,63 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     return Array.from(byName.values());
   }, [monthPersoneller, searchTerm]);
 
+  const handleExportExcelTables = () => {
+    const periodLabel = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+    const gunRows: string[][] = [
+      ['Personel', 'Görev', ...daysArray.map((d) => String(d)), 'Gelen Gün'],
+    ];
+    const mesaiMaasRows: string[][] = [
+      ['Personel', 'Görev', ...daysArray.map((d) => `${d}.gün Mesai`), 'Toplam Mesai (sa)', 'Günlük Maaş', 'Tahmini Maaş', 'Tahmini Mesai Ücreti', 'Tahmini Toplam'],
+    ];
+
+    filteredPersonel.forEach((p) => {
+      const map = draftYoklamalar[p.id] || {};
+      let geldiGun = 0;
+      let mesaiToplam = 0;
+      let hakedisGun = 0;
+
+      const gunStatuses = daysArray.map((day) => {
+        const active = isDayActiveForEmployee(p, day);
+        const d = getYoklamaDay(map, selectedYear, selectedMonth, day) || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 };
+        if (!active) return 'Ç';
+        if (d.durum === 'Geldi') geldiGun++;
+        if (d.durum === 'Geldi' || d.durum === 'İzinli' || d.durum === 'Pazar' || d.durum === 'Tatil') hakedisGun++;
+        mesaiToplam += Number(d.mesaiSaati || 0);
+        return d.durum;
+      });
+
+      const mesaiCells = daysArray.map((day) => {
+        const active = isDayActiveForEmployee(p, day);
+        if (!active) return '';
+        const d = getYoklamaDay(map, selectedYear, selectedMonth, day) || { mesaiSaati: 0 };
+        return String(Number(d.mesaiSaati || 0));
+      });
+
+      const days = new Date(selectedYear, selectedMonth, 0).getDate();
+      const dailyWage = (Number(p.maas || 0) / Math.max(days, 1));
+      const tahminiMaas = dailyWage * hakedisGun;
+      const hourly = dailyWage / 7.5;
+      const tahminiMesai = mesaiToplam * hourly * 1.5;
+      const tahminiToplam = tahminiMaas + tahminiMesai;
+
+      gunRows.push([`${p.ad} ${p.soyad}`, p.gorev || '-', ...gunStatuses, String(geldiGun)]);
+      mesaiMaasRows.push([
+        `${p.ad} ${p.soyad}`,
+        p.gorev || '-',
+        ...mesaiCells,
+        mesaiToplam.toFixed(2),
+        dailyWage.toFixed(2),
+        tahminiMaas.toFixed(2),
+        tahminiMesai.toFixed(2),
+        tahminiToplam.toFixed(2),
+      ]);
+    });
+
+    downloadCsv(gunRows, `Yoklama_Gun_Cetveli_${periodLabel}.csv`);
+    downloadCsv(mesaiMaasRows, `Yoklama_Mesai_Maas_Cetveli_${periodLabel}.csv`);
+    alert('Excel uyumlu iki rapor indirildi: Gün Cetveli + Mesai/Maaş Cetveli');
+  };
+
   const handleBulkOvertime = (hours: number) => {
     const newYoklamalar = { ...draftYoklamalar };
     
@@ -604,6 +662,14 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
             >
               <Database size={13} />
               <span>{legacyImporting ? 'Aktarılıyor...' : 'Excel Yoklamalarını Aktar'}</span>
+            </button>
+            <button
+              onClick={handleExportExcelTables}
+              className="text-[11px] bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
+              title="Gün cetveli ve mesai/maaş hesap tablosunu Excel uyumlu CSV olarak indirir."
+            >
+              <FileText size={13} />
+              <span>Excel Gün+Mesai/Maaş Raporu</span>
             </button>
             <button
               onClick={() => {

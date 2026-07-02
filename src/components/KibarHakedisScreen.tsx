@@ -7,7 +7,7 @@ import { db, parseYoklamaSnapshotData, saveDocument } from '../lib/firebase';
 import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { Personel, AylikYoklamaMap } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
-import { buildPersonelListForMonth } from '../lib/yoklamaUtils';
+import { buildPersonelListForMonth, isDayActiveForPersonel, normalizeTurkishName } from '../lib/yoklamaUtils';
 import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 import { normalizeGorev } from '../lib/gorevUtils';
 import {
@@ -202,6 +202,7 @@ function filterByMonth(items: { tarih?: string }[], year: number, month: number)
 }
 
 function sumStrictMonthAttendance(
+  personel: Personel,
   personMap: Record<string, { durum?: string; mesaiSaati?: number }> | undefined,
   year: number,
   month: number
@@ -214,11 +215,24 @@ function sumStrictMonthAttendance(
   Object.entries(personMap).forEach(([key, data]) => {
     // Sadece tarih formatlı ve seçili aya ait kayıtlar hesaba katılır.
     if (!key.startsWith(prefix)) return;
+    const day = Number(key.slice(prefix.length));
+    if (!Number.isFinite(day) || day < 1 || day > 31) return;
+    if (!isDayActiveForPersonel(personel, year, month, day, personMap as any)) return;
     if (data?.durum === 'Geldi') geldiGun++;
     mesaiSaat += Number(data?.mesaiSaati || 0);
   });
 
   return { geldiGun, mesaiSaat };
+}
+
+function getStrictMonthKeys(
+  personMap: Record<string, { durum?: string; mesaiSaati?: number }> | undefined,
+  year: number,
+  month: number
+): string[] {
+  if (!personMap) return [];
+  const prefix = `${year}-${String(month).padStart(2, '0')}-`;
+  return Object.keys(personMap).filter((k) => k.startsWith(prefix)).sort();
 }
 
 export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
@@ -266,12 +280,25 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
 
   const allStaffRows = useMemo((): StaffHakedisRow[] => {
     const rows: StaffHakedisRow[] = [];
+    const personelIds = monthPersoneller.map((p) => p.id);
+    const hasAdem = monthPersoneller.some((p) => normalizeTurkishName(`${p.ad} ${p.soyad}`) === 'ADEMCAGLAR');
+    // #region agent log
+    fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-2',hypothesisId:'H5',location:'KibarHakedisScreen.tsx:allStaffRows(start)',message:'month personel list snapshot',data:{selectedYear,selectedMonth,personCount:monthPersoneller.length,hasAdem,firstIds:personelIds.slice(0,10)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     monthPersoneller.forEach(p => {
+      const personMap = yoklamaSource[p.id] as Record<string, { durum?: string; mesaiSaati?: number }> | undefined;
       const { geldiGun, mesaiSaat } = sumStrictMonthAttendance(
-        yoklamaSource[p.id] as Record<string, { durum?: string; mesaiSaati?: number }> | undefined,
+        p,
+        personMap,
         selectedYear,
         selectedMonth
       );
+      if (normalizeTurkishName(`${p.ad} ${p.soyad}`) === 'ADEMCAGLAR') {
+        const monthKeys = getStrictMonthKeys(personMap, selectedYear, selectedMonth);
+        // #region agent log
+        fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-2',hypothesisId:'H4',location:'KibarHakedisScreen.tsx:allStaffRows(adem)',message:'target row strict month source',data:{selectedYear,selectedMonth,personId:p.id,tcPresent:Boolean((p.tcNo || '').trim()),girdiGun:geldiGun,mesaiSaat,monthKeyCount:monthKeys.length,monthKeys:monthKeys.slice(0,31)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      }
       if (geldiGun > 0) {
         const gunKazanci = calcGunKazanci(p, geldiGun, selectedYear, selectedMonth);
         const mesaiKazanci = calcMesaiKazanci(p, mesaiSaat, selectedYear, selectedMonth);

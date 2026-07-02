@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { CreditCard, Copy, Check, DollarSign, Download, Building, Search, Clock } from 'lucide-react';
 import { Personel, AylikYoklamaMap, MaaşOdeme } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
-import { buildPersonelListForMonth, getYoklamaDay, isDayActiveForPersonel, iterateMonthYoklama } from '../lib/yoklamaUtils';
+import { buildPersonelListForMonth, getYoklamaDay, isDayActiveForPersonel, iterateMonthYoklama, normalizeTurkishName } from '../lib/yoklamaUtils';
 import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 
 interface MaasScreenProps {
@@ -100,6 +100,14 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
         totalOvertimeHours += dayData.mesaiSaati;
       }
     });
+
+    if (normalizeTurkishName(`${p.ad} ${p.soyad}`) === 'ADEMCAGLAR') {
+      const monthPrefix = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-`;
+      const monthKeys = Object.keys(personYoklama).filter((k) => k.startsWith(monthPrefix)).sort();
+      // #region agent log
+      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-3',hypothesisId:'H4',location:'MaasScreen.tsx:calculatedSalaries(adem)',message:'target payroll row source',data:{selectedYear,selectedMonth,personId:p.id,monthKeyCount:monthKeys.length,monthKeys:monthKeys.slice(0,31),hakedisDays,geldiGun,totalOvertimeHours},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+    }
 
     const baseWage = p.maas;
     const katsayi = hakedisDays / daysInMonth;
