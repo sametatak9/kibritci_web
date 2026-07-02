@@ -140,7 +140,41 @@ export default function App() {
 
   const [bildirimler, setBildirimler] = useState<any[]>([]);
 
-  const yoklamaPersonCount = Object.keys(yoklamalar || {}).length;
+  // Guard debug-probe network calls on production/https hosts.
+  // Some browsers can throw security errors for http://127.0.0.1 requests from https pages,
+  // which may crash the app and leave a white screen.
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
+    const host = window.location.hostname;
+    const isLocalHost = host === 'localhost' || host === '127.0.0.1';
+    if (isLocalHost) return;
+
+    const originalFetch = window.fetch.bind(window);
+    const debugProbePrefix = 'http://127.0.0.1:7872/ingest/';
+
+    window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      try {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : (input as Request).url;
+
+        if (url.startsWith(debugProbePrefix)) {
+          return Promise.resolve(new Response(null, { status: 204, statusText: 'No Content' }));
+        }
+      } catch {
+        // keep normal fetch flow below
+      }
+      return originalFetch(input as RequestInfo | URL, init);
+    }) as typeof window.fetch;
+
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, []);
+
   useEffect(() => {
     if (currentUser) {
       setIsMobileMode(localStorage.getItem('kibritci_mobile_mode') === 'true');
@@ -157,6 +191,7 @@ export default function App() {
   // Global State Engine
   const [personeller, setPersoneller] = useState<Personel[]>([]);
   const [yoklamalar, setYoklamalar] = useState<AylikYoklamaMap>({});
+  const yoklamaPersonCount = Object.keys(yoklamalar || {}).length;
   const [payrollPeriod, setPayrollPeriod] = useState<{ month: number; year: number }>({
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
