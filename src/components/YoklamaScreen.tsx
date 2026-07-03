@@ -999,6 +999,15 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               </select>
             </div>
 
+            <button
+              onClick={handleExportExcelTables}
+              className="text-[11px] bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm border border-emerald-800"
+              title="Modern, renkli ve 3 satırlı puantaj raporunu Excel formatında indirir."
+            >
+              <FileText size={13} />
+              <span>📥 Modern Excel</span>
+            </button>
+
             {/* Quick bulk actions */}
             <div className="flex flex-wrap items-center gap-2 border-l pl-4 border-slate-200">
               <span className="text-[10px] font-bold text-slate-400 uppercase">Toplu Puantaj:</span>
