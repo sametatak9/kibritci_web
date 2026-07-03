@@ -1005,7 +1005,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               title="Modern, renkli ve 3 satırlı puantaj raporunu Excel formatında indirir."
             >
               <FileText size={13} />
-              <span>📥 Modern Excel</span>
+              <span>Modern Excel Puantaj Raporu</span>
             </button>
 
             {/* Quick bulk actions */}
@@ -1110,14 +1110,6 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
             >
               <Database size={13} />
               <span>{legacyImporting ? 'Yükleniyor...' : 'Mart-Nisan-Mayıs Yoklamayı Geri Yükle'}</span>
-            </button>
-            <button
-              onClick={handleExportExcelTables}
-              className="text-[11px] bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
-              title="Modern, renkli ve 3 satırlı puantaj raporunu Excel formatında indirir."
-            >
-              <FileText size={13} />
-              <span>Modern Excel Puantaj Raporu</span>
             </button>
             <button
               onClick={() => {
