@@ -4,6 +4,7 @@ import { Personel } from '../types/erp';
 import { fetchApiJson } from '../lib/apiClient';
 import { compressImage } from '../lib/imageCompress';
 import { exportPersonelRows } from '../lib/reportExport';
+import { saveDocument } from '../lib/firebase';
 
 interface PersonelScreenProps {
   personeller: Personel[];
@@ -196,6 +197,12 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     setFormData(emptyForm);
   };
 
+  const normalizeIban = (value: string | undefined | null) =>
+    String(value || '')
+      .replace(/\s+/g, '')
+      .toUpperCase()
+      .trim();
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.ad || !formData.soyad || !formData.tcNo) {
@@ -224,9 +231,13 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
       return;
     }
 
+    const existingPersonel = 'id' in formData ? personeller.find((p) => p.id === formData.id) : undefined;
+    const inputIban = normalizeIban((formData as any).ibanNo || (formData as any).iban || '');
+    const prevIban = normalizeIban(existingPersonel?.ibanNo || (existingPersonel as any)?.iban || '');
     const normalizedPayload = {
       ...formData,
-      tcNo: normalizedTc
+      tcNo: normalizedTc,
+      ibanNo: inputIban && inputIban !== 'TR' ? inputIban : prevIban
     };
 
     if ('id' in formData) {
@@ -235,6 +246,9 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
       // #endregion
       // Edit mode
       setPersoneller(prev => prev.map(p => p.id === formData.id ? (normalizedPayload as Personel) : p));
+      void saveDocument('personeller', normalizedPayload as Personel).catch((err) => {
+        console.error('Personel güncelleme Firestore kaydı başarısız:', err);
+      });
       alert("Personel bilgileri başarıyla güncellendi.");
     } else {
       // Create mode
@@ -246,6 +260,9 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
       fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-1',hypothesisId:'H1',location:'PersonelScreen.tsx:handleSave(create)',message:'personel create requested',data:{mode:'create',hasExitDate:Boolean(newPersonel.istenCikisTarihi),durum:String(newPersonel.durum)},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       setPersoneller(prev => [newPersonel, ...prev]);
+      void saveDocument('personeller', newPersonel).catch((err) => {
+        console.error('Yeni personel Firestore kaydı başarısız:', err);
+      });
       alert("Yeni personel başarıyla kaydedildi.");
     }
     handleClearForm();

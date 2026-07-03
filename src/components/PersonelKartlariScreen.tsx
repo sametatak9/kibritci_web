@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   Users, User, Phone, Mail, MapPin, Calendar, CreditCard, 
   Truck, Tent, Clock, ClipboardList, Sparkles, ChevronRight, Activity 
@@ -89,6 +89,15 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
         t => t.personelId === selectedPersonnel.id && t.tutanakTipi === 'TESLİM'
       )
     : [];
+
+  const sahaGorevKayitlari = useMemo(() => {
+    if (!selectedPersonnel) return [] as Array<{ id: string; tarih?: string; islem?: string; detay?: string }>;
+    const raw = ((selectedPersonnel as any).gecmis || []) as Array<{ id?: string; tarih?: string; islem?: string; detay?: string }>;
+    return raw
+      .filter((x) => String(x.islem || '').toLocaleLowerCase('tr-TR').includes('saha'))
+      .map((x) => ({ id: x.id || `${x.tarih || ''}_${x.detay || ''}`, tarih: x.tarih, islem: x.islem, detay: x.detay }))
+      .sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || ''), 'tr'));
+  }, [selectedPersonnel]);
 
   // Attendance calendar grid status helpers
   const getDayStatusColor = (durum: string) => {
@@ -341,6 +350,28 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
                         <p className="text-[9px] text-slate-450 font-mono">Kod: {t.belgeNo} · Tarih: {t.tarih}</p>
                       </div>
                       <ChevronRight size={15} className="text-slate-400" />
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white border border-[#e2e8f0] rounded-2xl p-5 shadow-sm space-y-4">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                <Activity size={14} className="text-blue-500" />
+                Saha Görevlendirme Kayıtları
+              </h4>
+              <div className="space-y-2.5">
+                {sahaGorevKayitlari.length === 0 ? (
+                  <div className="h-16 border border-dashed border-slate-100 rounded-xl flex items-center justify-center text-[10px] text-slate-400 font-medium italic">
+                    Bu personel için saha görevlendirme geçmişi yok.
+                  </div>
+                ) : (
+                  sahaGorevKayitlari.slice(0, 8).map((g) => (
+                    <div key={g.id} className="border border-slate-150 rounded-xl p-2.5 bg-slate-50/60 text-xs">
+                      <p className="text-[10px] text-slate-450 font-mono">{g.tarih ? new Date(g.tarih).toLocaleString('tr-TR') : '-'}</p>
+                      <p className="text-slate-900 font-semibold mt-0.5">{g.islem || 'Saha Görevlendirme'}</p>
+                      <p className="text-slate-600 text-[11px] mt-1">{g.detay || '-'}</p>
                     </div>
                   ))
                 )}

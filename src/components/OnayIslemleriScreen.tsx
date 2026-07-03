@@ -473,15 +473,26 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
         onayTarihi: new Date().toISOString()
       });
 
-      // 2. Update actual personnel details
-      await updateDoc(doc(db, 'personeller', item.personelId), {
+      // 2. Update actual personnel details (blank IBAN must not erase existing data)
+      const nextIban = String(item?.yeniBilgiler?.ibanNo || '')
+        .replace(/\s+/g, '')
+        .toUpperCase()
+        .trim();
+      const updatePayload: Record<string, unknown> = {
         ad: item.yeniBilgiler.ad,
         soyad: item.yeniBilgiler.soyad,
         gorev: item.yeniBilgiler.gorev,
-        telefon: item.yeniBilgiler.telefon,
-        ibanNo: item.yeniBilgiler.ibanNo,
-        bankaAdi: item.yeniBilgiler.bankaAdi
-      });
+      };
+      if (item?.yeniBilgiler?.telefon) {
+        updatePayload.telefonNo = item.yeniBilgiler.telefon;
+      }
+      if (nextIban && nextIban !== 'TR') {
+        updatePayload.ibanNo = nextIban;
+      }
+      if (item?.yeniBilgiler?.bankaAdi) {
+        updatePayload.bankaAdi = item.yeniBilgiler.bankaAdi;
+      }
+      await updateDoc(doc(db, 'personeller', item.personelId), updatePayload);
 
       alert(`🎉 Personel bilgileri başarıyla güncellendi!`);
     } catch (err) {

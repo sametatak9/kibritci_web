@@ -510,7 +510,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
     const wb = new Workbook();
     const ws = wb.addWorksheet('Puantaj', {
-      views: [{ state: 'frozen', ySplit: 5, xSplit: 6 }],
+      views: [{ state: 'frozen', ySplit: 5, xSplit: 7 }],
     });
 
     const periodLabel = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
@@ -529,7 +529,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     const headerTopRow = 4;
     const headerSubRow = 5;
     const dataStartRow = 6;
-    const baseCols = 6; // sıra, ad soyad, tc, görev, maaş, satır tipi
+    const baseCols = 7; // sıra, ad soyad, tc, iban, görev, maaş, satır tipi
     const summaryStart = baseCols + daysInMonth + 1;
     const summaryLabels = ['Top. Gün', 'Yok Gün', 'Top. Mesai', 'Aylık Maaş', 'Gün Hak.', 'Mesai Hak.', 'Toplam'];
     const totalCols = summaryStart + summaryLabels.length - 1;
@@ -559,19 +559,9 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       ws.addImage(logoId, { tl: { col: 0.1, row: 0.1 }, ext: { width: 56, height: 50 } });
     }
 
-    const headerTop = ['Sıra', 'Ad Soyad', 'TC / IBAN', 'Görevi', 'Aylık Maaş', 'Satır'];
+    const headerTop = ['Sıra', 'Ad Soyad', 'TC Kimlik', 'IBAN', 'Görevi', 'Aylık Maaş', 'Satır'];
     headerTop.forEach((h, i) => {
       const col = i + 1;
-      if (col === 3) {
-        ws.getCell(headerTopRow, col).value = 'TC Kimlik';
-        ws.getCell(headerSubRow, col).value = 'IBAN';
-        [headerTopRow, headerSubRow].forEach((r) => {
-          ws.getCell(r, col).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-          ws.getCell(r, col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
-          ws.getCell(r, col).alignment = { horizontal: 'center', vertical: 'middle' };
-        });
-        return;
-      }
       ws.getCell(headerTopRow, col).value = h;
       ws.getCell(headerTopRow, col).font = { bold: true, color: { argb: 'FFFFFFFF' } };
       ws.getCell(headerTopRow, col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
@@ -624,20 +614,21 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
         : null;
       const dailyWage = Number(p.maas || 0) / Math.max(daysInMonth, 1);
 
-      for (let c = 1; c <= 5; c++) {
+      for (let c = 1; c <= 6; c++) {
         ws.mergeCells(row, c, row + 2, c);
       }
       ws.getCell(row, 1).value = index + 1;
       ws.getCell(row, 2).value = `${p.ad} ${p.soyad}`;
-      ws.getCell(row, 3).value = `${p.tcNo || '-'}\n${p.ibanNo || '-'}`;
-      ws.getCell(row, 3).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      ws.getCell(row, 4).value = p.gorev || '-';
-      ws.getCell(row, 5).value = Number(p.maas || 0);
-      ws.getCell(row, 5).numFmt = '#,##0.00';
+      ws.getCell(row, 3).value = p.tcNo || '-';
+      ws.getCell(row, 4).value = p.ibanNo || '-';
+      ws.getCell(row, 4).alignment = { horizontal: 'left', vertical: 'middle', wrapText: false };
+      ws.getCell(row, 5).value = p.gorev || '-';
+      ws.getCell(row, 6).value = Number(p.maas || 0);
+      ws.getCell(row, 6).numFmt = '#,##0.00';
 
-      ws.getCell(row, 6).value = 'ÇALIŞMA GÜNÜ';
-      ws.getCell(row + 1, 6).value = 'MESAİ (SAAT)';
-      ws.getCell(row + 2, 6).value = '';
+      ws.getCell(row, 7).value = 'ÇALIŞMA GÜNÜ';
+      ws.getCell(row + 1, 7).value = 'MESAİ (SAAT)';
+      ws.getCell(row + 2, 7).value = '';
 
       dayIndexes.forEach((day, idx) => {
         const col = baseCols + idx + 1;
@@ -777,10 +768,11 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
     ws.getColumn(1).width = 7;
     ws.getColumn(2).width = 22;
-    ws.getColumn(3).width = 24;
-    ws.getColumn(4).width = 14;
-    ws.getColumn(5).width = 12;
-    ws.getColumn(6).width = 14;
+    ws.getColumn(3).width = 16;
+    ws.getColumn(4).width = 28;
+    ws.getColumn(5).width = 14;
+    ws.getColumn(6).width = 12;
+    ws.getColumn(7).width = 14;
     dayIndexes.forEach((_, idx) => {
       ws.getColumn(baseCols + idx + 1).width = 6.2;
     });
@@ -790,16 +782,16 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
     const summaryWs = wb.addWorksheet('Özet');
     summaryWs.addRow([reportTitle]);
-    summaryWs.mergeCells(1, 1, 1, 8);
+    summaryWs.mergeCells(1, 1, 1, 9);
     summaryWs.getCell(1, 1).font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
     summaryWs.getCell(1, 1).alignment = { horizontal: 'center', vertical: 'middle' };
     summaryWs.getCell(1, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
     summaryWs.addRow([`Rapor No: ${reportNo}  |  Basım Tarihi: ${basimTarihi}`]);
-    summaryWs.mergeCells(2, 1, 2, 8);
+    summaryWs.mergeCells(2, 1, 2, 9);
     summaryWs.getCell(2, 1).font = { bold: true, size: 10, color: { argb: 'FF0F172A' } };
     summaryWs.getCell(2, 1).alignment = { horizontal: 'center', vertical: 'middle' };
     summaryWs.getCell(2, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
-    summaryWs.addRow(['Sıra', 'Ad Soyad', 'TC / IBAN', 'Görev', 'Toplam Gün', 'Yok Gün', 'Toplam Mesai', 'Toplam Kazanç']);
+    summaryWs.addRow(['Sıra', 'Ad Soyad', 'TC Kimlik', 'IBAN', 'Görev', 'Toplam Gün', 'Yok Gün', 'Toplam Mesai', 'Toplam Kazanç']);
     summaryWs.getRow(3).font = { bold: true, color: { argb: 'FFFFFFFF' } };
     summaryWs.getRow(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D4ED8' } };
     if (logoDataUrl) {
@@ -827,7 +819,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       summaryWs.addRow([
         i + 1,
         `${p.ad} ${p.soyad}`,
-        `${p.tcNo || '-'}\n${p.ibanNo || '-'}`,
+        p.tcNo || '-',
+        p.ibanNo || '-',
         p.gorev || '-',
         geldiGun,
         yokGun,
@@ -840,19 +833,19 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       sRow++;
     });
 
-    [8].forEach((col) => {
+    [9].forEach((col) => {
       summaryWs.getColumn(col).numFmt = '#,##0.00';
     });
-    [1, 2, 3, 4, 5, 6, 7, 8].forEach((c) => {
-      summaryWs.getColumn(c).width = [7, 24, 24, 14, 11, 10, 12, 14][c - 1];
+    [1, 2, 3, 4, 5, 6, 7, 8, 9].forEach((c) => {
+      summaryWs.getColumn(c).width = [7, 24, 16, 28, 14, 11, 10, 12, 14][c - 1];
     });
     summaryWs.eachRow((r) => {
       r.eachCell((cell) => {
         const colNumber = Number(cell.col);
         cell.alignment = {
-          horizontal: colNumber === 2 || colNumber === 4 ? 'left' : 'center',
+          horizontal: colNumber === 2 || colNumber === 4 || colNumber === 5 ? 'left' : 'center',
           vertical: 'middle',
-          wrapText: colNumber === 3,
+          wrapText: false,
         };
         cell.border = {
           top: { style: 'thin', color: { argb: 'FFCBD5E1' } },

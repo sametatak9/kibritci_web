@@ -33,7 +33,7 @@ import { isProductionLive } from '../lib/productionDataGuard';
 import { compressImage } from '../lib/imageCompress';
 import { warnIfDuplicateCari, warnIfDuplicateStok } from '../lib/duplicateNameUtils';
 import { exportHistoryReport } from '../lib/reportExport';
-import { collection, onSnapshot, getDocs, doc, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, getDocs, doc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 
 interface IdariScreenProps {
   currentSubTab: string; // arac, kamp, saha, tutanak, cari_stok, eposta
@@ -652,6 +652,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   
   // Selected daily/monthly field worker selection
   const [selectedFieldStaff, setSelectedFieldStaff] = useState<string[]>([]);
+  const [sahaStaffSearch, setSahaStaffSearch] = useState('');
   
   const [sahaSearchKeyword, setSahaSearchKeyword] = useState("");
   const [editingSahaId, setEditingSahaId] = useState<string | null>(null);
@@ -663,6 +664,19 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [formenTarihFiltre, setFormenTarihFiltre] = useState(new Date().toISOString().split('T')[0]);
   const [gunRaporNotu, setGunRaporNotu] = useState('');
   const [sahaGunRaporArsivleri, setSahaGunRaporArsivleri] = useState<SahaGunRaporArsiv[]>([]);
+
+  const selectedFieldStaffList = useMemo(
+    () => personeller.filter((p) => selectedFieldStaff.includes(p.id)),
+    [personeller, selectedFieldStaff]
+  );
+  const filteredStaffPool = useMemo(() => {
+    const q = sahaStaffSearch.trim().toLocaleLowerCase('tr-TR');
+    if (!q) return personeller;
+    return personeller.filter((p) =>
+      `${p.ad} ${p.soyad}`.toLocaleLowerCase('tr-TR').includes(q) ||
+      String(p.gorev || '').toLocaleLowerCase('tr-TR').includes(q)
+    );
+  }, [personeller, sahaStaffSearch]);
 
   // Saha PDF Report parameters
   const [sahaReportModal, setSahaReportModal] = useState(false);
@@ -823,7 +837,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     }
   };
 
-  const handleSaveSahaFaaliyeti = () => {
+  const handleSaveSahaFaaliyeti = async () => {
     if (!sahaNitelik) {
       alert("Lütfen iş niteliğini girin.");
       return;
@@ -833,7 +847,17 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       return;
     }
 
+    const applyAutoCountsFromSelection = () => {
+      if (selectedFieldStaffList.length === 0) return { usta: sahaUstaSayisi, isci: sahaIsciSayisi };
+      const usta = selectedFieldStaffList.filter((p) => String(p.gorev || '').toLocaleUpperCase('tr-TR').includes('USTA')).length;
+      const isci = Math.max(0, selectedFieldStaffList.length - usta);
+      return { usta, isci };
+    };
+    const selectedCounts = applyAutoCountsFromSelection();
+
     if (editingSahaId) {
+      const faaliyetId = editingSahaId;
+      const faaliyetTarih = new Date().toISOString().split('T')[0];
       setSahaFaaliyetleri(prev => prev.map(sf => {
         if (sf.id === editingSahaId) {
           return {
@@ -843,13 +867,31 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
             blok: sahaBlok,
             aciklama: sahaAciklama,
             fotoUrl: sahaFotoBase64 !== undefined ? (sahaFotoBase64 || undefined) : sf.fotoUrl,
-            ustaSayisi: sahaUstaSayisi,
-            isciSayisi: sahaIsciSayisi,
+            ustaSayisi: selectedCounts.usta,
+            isciSayisi: selectedCounts.isci,
+            aktifPersonelListesi: selectedFieldStaff,
             kaynakEkran: sf.kaynakEkran || 'IDARI_SAHA'
           };
         }
         return sf;
       }));
+      if (selectedFieldStaff.length > 0) {
+        const assignmentText = `${faaliyetTarih} tarihinde ${sahaParsel} / ${sahaBlok} alanında "${sahaNitelik}" görevlendirmesi güncellendi.`;
+        const assignmentPromises = selectedFieldStaff.map(async (personelId) => {
+          const personel = personeller.find((p) => p.id === personelId);
+          if (!personel) return;
+          await updateDoc(doc(db, 'personeller', personelId), {
+            gecmis: arrayUnion({
+              id: `saha_${faaliyetId}_${personelId}_${Date.now()}`,
+              tarih: new Date().toISOString(),
+              islem: 'Saha Görevlendirme',
+              detay: assignmentText,
+              gorev: personel.gorev || 'Personel',
+            }),
+          });
+        });
+        await Promise.all(assignmentPromises);
+      }
       setEditingSahaId(null);
       setSahaAciklama("");
       setSahaNitelik("");
@@ -857,10 +899,13 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       setPhotoSelectedSim(false);
       setSahaUstaSayisi(0);
       setSahaIsciSayisi(0);
+      setSelectedFieldStaff([]);
+      setSahaStaffSearch('');
       alert("Saha faaliyeti başarıyla güncellendi.");
     } else {
+      const faaliyetId = `sf_${Date.now()}`;
       const newLog: SahaFaaliyeti = {
-        id: `sf_${Date.now()}`,
+        id: faaliyetId,
         personelId: "p1",
         tarih: new Date().toISOString().split('T')[0],
         isNiteligi: sahaNitelik,
@@ -868,18 +913,38 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
         blok: sahaBlok,
         aciklama: sahaAciklama,
         fotoUrl: sahaFotoBase64 || (photoSelectedSim ? "saha_foto_example.jpg" : undefined),
-        ustaSayisi: sahaUstaSayisi,
-        isciSayisi: sahaIsciSayisi,
+        ustaSayisi: selectedCounts.usta,
+        isciSayisi: selectedCounts.isci,
+        aktifPersonelListesi: selectedFieldStaff,
         kaynakEkran: 'IDARI_SAHA'
       };
 
       setSahaFaaliyetleri(prev => [newLog, ...prev]);
+      if (selectedFieldStaff.length > 0) {
+        const assignmentText = `${newLog.tarih} tarihinde ${newLog.parsel} / ${newLog.blok} alanında "${newLog.isNiteligi}" görevlendirmesi.`;
+        const assignmentPromises = selectedFieldStaff.map(async (personelId) => {
+          const personel = personeller.find((p) => p.id === personelId);
+          if (!personel) return;
+          await updateDoc(doc(db, 'personeller', personelId), {
+            gecmis: arrayUnion({
+              id: `saha_${faaliyetId}_${personelId}`,
+              tarih: new Date().toISOString(),
+              islem: 'Saha Görevlendirme',
+              detay: assignmentText,
+              gorev: personel.gorev || 'Personel',
+            }),
+          });
+        });
+        await Promise.all(assignmentPromises);
+      }
       setSahaAciklama("");
       setSahaNitelik("");
       setSahaFotoBase64(undefined);
       setPhotoSelectedSim(false);
       setSahaUstaSayisi(0);
       setSahaIsciSayisi(0);
+      setSelectedFieldStaff([]);
+      setSahaStaffSearch('');
       alert("Günlük saha imalat raporu başarıyla kaydedildi.");
     }
   };
@@ -892,6 +957,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     setSahaAciklama(sf.aciklama);
     setSahaUstaSayisi(sf.ustaSayisi || 0);
     setSahaIsciSayisi(sf.isciSayisi || 0);
+    setSelectedFieldStaff(Array.isArray(sf.aktifPersonelListesi) ? sf.aktifPersonelListesi : []);
   };
 
   const handleCancelEditSaha = () => {
@@ -902,6 +968,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     setPhotoSelectedSim(false);
     setSahaUstaSayisi(0);
     setSahaIsciSayisi(0);
+    setSelectedFieldStaff([]);
+    setSahaStaffSearch('');
   };
 
   const handleDeleteSahaFaaliyeti = (id: string) => {
@@ -1071,6 +1139,20 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   <strong className="text-slate-800">{sf.isciSayisi} Kişi</strong>
                 </div>
               )}
+            </div>
+          )}
+
+          {Array.isArray(sf.aktifPersonelListesi) && sf.aktifPersonelListesi.length > 0 && (
+            <div className="mt-2 bg-emerald-50/70 border border-emerald-200 rounded-xl p-2.5">
+              <span className="text-[8px] uppercase font-bold text-emerald-700 tracking-wider">DB Görevlendirilen Personel</span>
+              <p className="text-[11px] text-emerald-900 font-semibold mt-1">
+                {sf.aktifPersonelListesi
+                  .map((id) => {
+                    const personel = personeller.find((p) => p.id === id);
+                    return personel ? `${personel.ad} ${personel.soyad}` : 'Bilinmeyen Personel';
+                  })
+                  .join(', ')}
+              </p>
             </div>
           )}
 
@@ -2829,6 +2911,53 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     value={sahaIsciSayisi}
                     onChange={(e) => setSahaIsciSayisi(parseInt(e.target.value) || 0)}
                   />
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[10px] text-slate-500 block uppercase">DB Personel Görevlendirme (Yeni Metod)</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const usta = selectedFieldStaffList.filter((p) => String(p.gorev || '').toLocaleUpperCase('tr-TR').includes('USTA')).length;
+                      const isci = Math.max(0, selectedFieldStaffList.length - usta);
+                      setSahaUstaSayisi(usta);
+                      setSahaIsciSayisi(isci);
+                    }}
+                    className="text-[10px] bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded-lg font-bold cursor-pointer"
+                  >
+                    Seçimden Sayıyı Doldur
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={sahaStaffSearch}
+                  onChange={(e) => setSahaStaffSearch(e.target.value)}
+                  placeholder="Personel adı/görev ara..."
+                  className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg"
+                />
+                <div className="max-h-32 overflow-y-auto grid grid-cols-1 gap-1 pr-1">
+                  {filteredStaffPool.map((p) => {
+                    const isSelected = selectedFieldStaff.includes(p.id);
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() =>
+                          setSelectedFieldStaff((prev) =>
+                            prev.includes(p.id) ? prev.filter((id) => id !== p.id) : [...prev, p.id]
+                          )
+                        }
+                        className={`text-left text-[10px] border rounded-lg px-2 py-1.5 font-semibold cursor-pointer transition ${isSelected ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+                      >
+                        {isSelected ? '✓ ' : ''}{p.ad} {p.soyad} · {p.gorev || 'Görevsiz'}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="text-[10px] text-slate-600 font-semibold">
+                  Seçili Personel: {selectedFieldStaffList.length}
                 </div>
               </div>
 
