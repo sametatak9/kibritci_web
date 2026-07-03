@@ -108,12 +108,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const emailLower = currentUser?.email?.toLowerCase();
   const isFounderAdmin = emailLower === 'sametatak9@gmail.com';
+  const isSecondaryAdmin = emailLower === 'mudur@gmail.com';
+  const isPrivilegedAdmin = isFounderAdmin || isSecondaryAdmin;
 
   const filteredMenuItems = menuItems.map(group => {
     return {
       ...group,
       items: group.items.filter(item => {
-        if (roleAllowedTabs) {
+        if (!isPrivilegedAdmin && roleAllowedTabs) {
           return roleAllowedTabs.includes(item.key as typeof roleAllowedTabs[number]);
         }
 
@@ -127,7 +129,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }
 
         if (item.key === 'admin' || item.key === 'yetki_verme') {
-          return isFounderAdmin;
+          return isPrivilegedAdmin;
         }
 
         if (item.key === 'formen_ekrani') {
@@ -175,7 +177,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     };
   }).filter(group => {
     if (group.group === "ADMİNİSTRATOR") {
-      return isFounderAdmin;
+      return isPrivilegedAdmin;
     }
     return group.items.length > 0;
   });

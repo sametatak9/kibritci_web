@@ -6,9 +6,11 @@ export interface YoklamaGunKaydi {
   gonderen?: string;
 }
 
+type PersonelYoklamaMap = GunlukYoklama | Record<string, YoklamaGunKaydi>;
+
 /** GunlukYoklama → iterateMonthYoklama uyumlu kayıt haritası */
 export function asYoklamaGunMap(
-  personMap: GunlukYoklama | Record<string, YoklamaGunKaydi> | undefined
+  personMap: PersonelYoklamaMap | undefined
 ): Record<string, YoklamaGunKaydi> | undefined {
   if (!personMap) return undefined;
   return personMap as unknown as Record<string, YoklamaGunKaydi>;
@@ -33,29 +35,31 @@ function isLegacyPersonelMap(personMap: Record<string, YoklamaGunKaydi>): boolea
 }
 
 export function getYoklamaDay(
-  personMap: Record<string, YoklamaGunKaydi> | undefined,
+  personMap: PersonelYoklamaMap | undefined,
   year: number,
   month: number,
   day: number
 ): YoklamaGunKaydi | undefined {
-  if (!personMap) return undefined;
+  const map = asYoklamaGunMap(personMap);
+  if (!map) return undefined;
   const dateKey = yoklamaDateKey(year, month, day);
-  return personMap[dateKey];
+  return map[dateKey];
 }
 
 export function setYoklamaDay(
-  personMap: Record<string, YoklamaGunKaydi> | undefined,
+  personMap: PersonelYoklamaMap | undefined,
   year: number,
   month: number,
   day: number,
   data: YoklamaGunKaydi
 ): Record<string, YoklamaGunKaydi> {
+  const map = asYoklamaGunMap(personMap);
   const dateKey = yoklamaDateKey(year, month, day);
-  return { ...(personMap || {}), [dateKey]: data };
+  return { ...(map || {}), [dateKey]: data };
 }
 
 export function personHasYoklamaInMonth(
-  personMap: Record<string, YoklamaGunKaydi> | undefined,
+  personMap: PersonelYoklamaMap | undefined,
   year: number,
   month: number
 ): boolean {
@@ -67,7 +71,7 @@ export function personHasYoklamaInMonth(
 }
 
 export function personHasGeldiInMonth(
-  personMap: Record<string, YoklamaGunKaydi> | undefined,
+  personMap: PersonelYoklamaMap | undefined,
   year: number,
   month: number
 ): boolean {
@@ -115,7 +119,7 @@ export function isPersonelVisibleInMonth(
   p: Personel,
   year: number,
   month: number,
-  personMap?: Record<string, YoklamaGunKaydi>
+  personMap?: PersonelYoklamaMap
 ): boolean {
   const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
   const hire = parseFlexibleDateParts(p.iseGirisTarihi);
@@ -142,7 +146,7 @@ export function isDayActiveForPersonel(
   year: number,
   month: number,
   day: number,
-  personMap?: Record<string, YoklamaGunKaydi>
+  personMap?: PersonelYoklamaMap
 ): boolean {
   const hire = parseFlexibleDateParts(p.iseGirisTarihi);
   if (hire) {
@@ -169,15 +173,16 @@ export function isDayActiveForPersonel(
 }
 
 export function iterateMonthYoklama(
-  personMap: Record<string, YoklamaGunKaydi> | undefined,
+  personMap: PersonelYoklamaMap | undefined,
   year: number,
   month: number,
   callback: (day: number, data: YoklamaGunKaydi) => void
 ): void {
-  if (!personMap) return;
+  const map = asYoklamaGunMap(personMap);
+  if (!map) return;
   const prefix = `${year}-${String(month).padStart(2, '0')}-`;
 
-  Object.entries(personMap).forEach(([key, data]) => {
+  Object.entries(map).forEach(([key, data]) => {
     if (key.startsWith(prefix)) {
       const day = Number(key.slice(prefix.length));
       if (day >= 1 && day <= 31) callback(day, data);

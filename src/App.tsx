@@ -97,6 +97,7 @@ import { EvrakBaglamaScreen, EvrakBaglamaPrefill } from './components/EvrakBagla
 import { PublicGirisKayitScreen } from './components/PublicGirisKayitScreen';
 
 export default function App() {
+  const SECONDARY_ADMIN_EMAIL = 'mudur@gmail.com';
   const LAST_TAB_STORAGE_KEY = 'kibritci_last_tab_v1';
   const readLastTab = (): string => {
     try {
@@ -939,12 +940,13 @@ export default function App() {
     const exists = !!findKullaniciByEmail(kullanicilar, emailLower);
     if (!exists && (dbStatus === 'synced' || dbStatus === 'offline')) {
       const isSamet = emailLower === 'sametatak9@gmail.com';
+      const isSecondaryAdmin = emailLower === SECONDARY_ADMIN_EMAIL;
       const isDefaultAdmin = emailLower === 'santiye@kibritci.com';
       
       const newKullanici: Kullanici = {
         id: emailLower,
         email: currentUser.email,
-        yetki: isSamet || isDefaultAdmin ? 'YÖNETİCİ' : 'MİSAFİR',
+        yetki: isSamet || isSecondaryAdmin || isDefaultAdmin ? 'YÖNETİCİ' : 'MİSAFİR',
         durum: 'AKTİF',
         kayitTarihi: new Date().toISOString().split('T')[0]
       };
@@ -1607,8 +1609,10 @@ export default function App() {
   const userYetki = normalizeYetki(matchedU?.yetki);
   const emailLower = currentUser?.email?.toLowerCase();
   const isFounderAccount = emailLower === 'sametatak9@gmail.com';
+  const isSecondaryAdmin = emailLower === SECONDARY_ADMIN_EMAIL;
+  const isPrivilegedAdmin = isFounderAccount || isSecondaryAdmin;
   const isYonetici = userYetki === 'YÖNETİCİ' || 
-                     isFounderAccount || 
+                     isPrivilegedAdmin || 
                      emailLower === 'santiye@kibritci.com';
 
   const hideSidebarAndTopbar = isStandaloneMobileRole(userYetki) && isMobileMode;
@@ -1621,7 +1625,9 @@ export default function App() {
   const isAllowedKampci = userYetki === 'KAMPÇI' || isYonetici;
   const isAllowedLojistik = userYetki === 'LOJİSTİK' || isYonetici;
   const isAllowedDepocu = userYetki === 'DEPOCU' || isYonetici;
-  const isTabRestricted = isTabRestrictedForUser(activeTab, userYetki, matchedU?.kisitliSayfalar);
+  const isTabRestricted = isPrivilegedAdmin
+    ? false
+    : isTabRestrictedForUser(activeTab, userYetki, matchedU?.kisitliSayfalar);
 
   const renderAccessDenied = () => (
     <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center p-8 z-50 select-none text-white">
@@ -1892,8 +1898,11 @@ export default function App() {
           {(() => {
             const matchedUser = findKullaniciByEmail(kullanicilar, currentUser?.email);
             const matchedYetki = normalizeYetki(matchedUser?.yetki);
+            const currentEmail = currentUser?.email?.toLowerCase();
+            const privileged = currentEmail === 'sametatak9@gmail.com' || currentEmail === SECONDARY_ADMIN_EMAIL;
             const hasActiveMobileRole = isMobileRole(matchedYetki) && matchedUser?.durum === 'AKTİF';
             const isBlocked =
+              !privileged &&
               !hasActiveMobileRole &&
               (matchedUser?.durum === 'KISITLI' ||
                 matchedUser?.durum === 'ONAY BEKLİYOR' ||
@@ -1952,7 +1961,7 @@ export default function App() {
               )}
 
               {activeTab === "admin" && (
-                isFounderAccount ? (
+                isPrivilegedAdmin ? (
                   <AdminPanelScreen 
                     kullanicilar={kullanicilar}
                     setKullanicilar={setKullanicilarWithSync}
@@ -2302,7 +2311,7 @@ export default function App() {
               )}
 
               {activeTab === "yetki_verme" && (
-                isFounderAccount ? (
+                isPrivilegedAdmin ? (
                   <YetkiVermeScreen 
                     kullanicilar={kullanicilar}
                     setKullanicilar={setKullanicilarWithSync}
@@ -2313,7 +2322,7 @@ export default function App() {
               )}
 
               {activeTab === "kibar_hakedis" && (
-                isFounderAccount || emailLower === 'santiye@kibritci.com' ? (
+                isPrivilegedAdmin || emailLower === 'santiye@kibritci.com' ? (
                   <KibarHakedisScreen
                     personeller={personeller}
                     yoklamalar={yoklamalar}

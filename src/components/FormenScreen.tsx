@@ -510,6 +510,14 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
             mesaiSaati: 0,
             gonderen: currentUser?.email || 'formen',
           });
+        } else {
+          // Her kayıtta günün son halini netleştir: işaret kaldırıldıysa Girilmedi olarak yaz.
+          next[p.id] = setYoklamaDay(next[p.id], year, month, day, {
+            ...(dayData || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 }),
+            durum: 'Girilmedi',
+            mesaiSaati: 0,
+            gonderen: currentUser?.email || 'formen',
+          });
         }
       });
 
@@ -672,7 +680,7 @@ ${satirlar
   };
 
   // Submit Saha Faaliyeti
-  const handleSaveFaaliyet = (e: React.SyntheticEvent, notifyProgram = true) => {
+  const handleSaveFaaliyet = async (e: React.SyntheticEvent, notifyProgram = true) => {
     e.preventDefault();
     if (!isNiteligi) {
       showStatus('error', 'Lütfen iş niteliğini giriniz veya şablondan seçiniz!');
@@ -688,6 +696,7 @@ ${satirlar
       blok,
       aciklama,
       fotoUrl: fotoUrl || undefined,
+      aktifPersonelListesi: faaliyetPersonelIds,
       ustaSayisi: sahaUstaSayisi,
       isciSayisi: sahaIsciSayisi,
       kaydedenFormen: formenEmail,
@@ -699,7 +708,14 @@ ${satirlar
       iceriAktarimDurumu: 'BEKLIYOR',
     };
 
-    setSahaFaaliyetleri(prev => [newFaaliyet, ...prev]);
+    try {
+      await saveDocument('sahaFaaliyetleri', newFaaliyet);
+    } catch (err: any) {
+      showStatus('error', `Faaliyet gönderilemedi: ${err?.message || 'Bağlantı hatası'}`);
+      return;
+    }
+
+    setSahaFaaliyetleri(prev => (prev.some((f) => f.id === newFaaliyet.id) ? prev : [newFaaliyet, ...prev]));
     logActionToPersonelHistory('Saha Faaliyeti Ekledi', `"${isNiteligi}" iş niteliğiyle, ${parsel} / ${blok} bölgesinde yeni saha imalat faaliyeti kaydetti.`);
     showStatus(
       'success',

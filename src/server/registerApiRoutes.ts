@@ -1,7 +1,7 @@
 import { Express } from 'express';
 import { Type } from '@google/genai';
-import { getGeminiClient, formatGeminiKeyHint, testGeminiConnection } from './gemini';
-import { generateGeminiWithFallback, GEMINI_MODEL_FALLBACK } from './geminiGenerate';
+import { formatGeminiKeyHint, testGeminiConnection } from './gemini';
+import { generateGeminiWithFallback } from './geminiGenerate';
 import {
   deletePendingSignup,
   listPendingSignups,
@@ -173,7 +173,6 @@ app.post("/api/parse-monthly-excel-yoklama", async (req, res) => {
       return res.status(400).json({ error: "Missing fileBase64 or mimeType" });
     }
 
-    const ai = getGeminiClient();
     const imagePart = {
       inlineData: { mimeType, data: fileBase64 },
     };
@@ -224,37 +223,22 @@ Be precise with Turkish names (İ, Ş, Ğ, Ü, Ö, Ç). Each excelId is a distin
       required: ["yil", "ay", "personelKayitlari"],
     };
 
-    const models = GEMINI_MODEL_FALLBACK;
-    let response;
-    let lastError;
+    const { text } = await generateGeminiWithFallback({
+      contents: [promptText, imagePart],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema,
+        temperature: 0.1,
+      },
+      label: 'Aylık Excel yoklama analizi',
+    });
 
-    for (const model of models) {
-      try {
-        console.log(`Parsing monthly excel yoklama with model: ${model}...`);
-        response = await ai.models.generateContent({
-          model,
-          contents: [promptText, imagePart],
-          config: {
-            responseMimeType: "application/json",
-            responseSchema,
-            temperature: 0.1,
-          },
-        });
-        if (response?.text) break;
-      } catch (err) {
-        lastError = err;
-        console.warn(`Model ${model} failed for monthly excel yoklama:`, err);
-      }
-    }
-
-    if (!response?.text) {
-      throw lastError || new Error("All models failed to parse monthly excel yoklama");
-    }
-
-    res.json({ success: true, data: JSON.parse(response.text) });
+    res.json({ success: true, data: JSON.parse(text) });
   } catch (error: any) {
     console.error("Error in parse-monthly-excel-yoklama:", error);
-    res.status(500).json({ error: error.message || "Failed to parse monthly excel yoklama" });
+    const msg = error.message || "Failed to parse monthly excel yoklama";
+    const status = /zaman aşımı|timeout|504/i.test(msg) ? 504 : 500;
+    res.status(status).json({ error: msg });
   }
 });
 
@@ -426,8 +410,6 @@ app.post("/api/parse-irsaliye", async (req, res) => {
       return res.status(400).json({ error: "Missing fileBase64 or mimeType in request body" });
     }
 
-    const ai = getGeminiClient();
-
     const imagePart = {
       inlineData: {
         mimeType: mimeType,
@@ -459,39 +441,22 @@ app.post("/api/parse-irsaliye", async (req, res) => {
 
     const userPrompt = "Lütfen ekteki teslimat irsaliyesi (waybill / delivery note) belgesini analiz et. İrsaliye numarasını (irsaliyeNo), tarihini (tarih) (YYYY-MM-DD formatında), gönderen / satıcı firma adını (firma) ve teslim edilen tüm malzeme kalemlerini (kalemler listesi altında urunAdi, miktar ve birim olarak) çıkar.";
 
-    // Try multiple models in order of resilience
-    const models = GEMINI_MODEL_FALLBACK;
-    let response;
-    let lastError;
-
-    for (const model of models) {
-      try {
-        console.log(`Parsing irsaliye with model: ${model}...`);
-        response = await ai.models.generateContent({
-          model: model,
-          contents: [userPrompt, imagePart],
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: responseSchema,
-            temperature: 0.1,
-          },
-        });
-        if (response?.text) break;
-      } catch (err) {
-        lastError = err;
-        console.warn(`Model ${model} failed for irsaliye, trying next:`, err);
-      }
-    }
-
-    if (!response || !response.text) {
-      throw lastError || new Error("All models failed or returned empty response from Gemini API");
-    }
-
-    const parsedData = JSON.parse(response.text);
+    const { text } = await generateGeminiWithFallback({
+      contents: [userPrompt, imagePart],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: responseSchema,
+        temperature: 0.1,
+      },
+      label: 'İrsaliye analizi',
+    });
+    const parsedData = JSON.parse(text);
     res.json({ success: true, data: parsedData });
   } catch (error: any) {
     console.error("Error parsing İrsaliye PDF/Image via Gemini:", error);
-    res.status(500).json({ error: error.message || "Failed to parse waybill document" });
+    const msg = error.message || "Failed to parse waybill document";
+    const status = /zaman aşımı|timeout|504/i.test(msg) ? 504 : 500;
+    res.status(status).json({ error: msg });
   }
 });
 
@@ -502,8 +467,6 @@ app.post("/api/parse-fatura", async (req, res) => {
     if (!fileBase64 || !mimeType) {
       return res.status(400).json({ error: "Missing fileBase64 or mimeType in request body" });
     }
-
-    const ai = getGeminiClient();
 
     const imagePart = {
       inlineData: {
@@ -542,39 +505,22 @@ app.post("/api/parse-fatura", async (req, res) => {
 
     const userPrompt = "Lütfen ekteki faturayı (invoice) analiz et. Fatura numarasını (faturaNo), faturanın kesildiği tarihi (tarih) (YYYY-MM-DD formatında), satıcı firma adını (firma), faturadaki tüm mal veya hizmet kalemlerini (kalemler listesi altında urunAdi, miktar, birim, birimFiyat, kdvOran yüzde olarak örn. 20, ve toplam tutarı) çıkar. Ayrıca toplam matrahı (toplamTutar), KDV tutarını (kdvTutar) ve ödenecek genel toplamı (genelToplam) çıkar.";
 
-    // Try multiple models in order of resilience
-    const models = GEMINI_MODEL_FALLBACK;
-    let response;
-    let lastError;
-
-    for (const model of models) {
-      try {
-        console.log(`Parsing fatura with model: ${model}...`);
-        response = await ai.models.generateContent({
-          model: model,
-          contents: [userPrompt, imagePart],
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: responseSchema,
-            temperature: 0.1,
-          },
-        });
-        if (response?.text) break;
-      } catch (err) {
-        lastError = err;
-        console.warn(`Model ${model} failed for fatura, trying next:`, err);
-      }
-    }
-
-    if (!response || !response.text) {
-      throw lastError || new Error("All models failed or returned empty response from Gemini API");
-    }
-
-    const parsedData = JSON.parse(response.text);
+    const { text } = await generateGeminiWithFallback({
+      contents: [userPrompt, imagePart],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: responseSchema,
+        temperature: 0.1,
+      },
+      label: 'Fatura analizi',
+    });
+    const parsedData = JSON.parse(text);
     res.json({ success: true, data: parsedData });
   } catch (error: any) {
     console.error("Error parsing Fatura PDF/Image via Gemini:", error);
-    res.status(500).json({ error: error.message || "Failed to parse invoice document" });
+    const msg = error.message || "Failed to parse invoice document";
+    const status = /zaman aşımı|timeout|504/i.test(msg) ? 504 : 500;
+    res.status(status).json({ error: msg });
   }
 });
 
@@ -585,8 +531,6 @@ app.post("/api/compare-3way", async (req, res) => {
     if (!fatura) {
       return res.status(400).json({ error: "Missing fatura data in request body" });
     }
-
-    const ai = getGeminiClient();
 
     const responseSchema = {
       type: Type.OBJECT,
@@ -653,39 +597,22 @@ Audit Rules:
 Provide the response strictly conforming to the requested schema.
 `;
 
-    // Try multiple models in order of resilience
-    const models = GEMINI_MODEL_FALLBACK;
-    let response;
-    let lastError;
-
-    for (const model of models) {
-      try {
-        console.log(`Comparing 3-way with model: ${model}...`);
-        response = await ai.models.generateContent({
-          model: model,
-          contents: promptText,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: responseSchema,
-            temperature: 0.1,
-          },
-        });
-        if (response?.text) break;
-      } catch (err) {
-        lastError = err;
-        console.warn(`Model ${model} failed for 3-way comparison, trying next:`, err);
-      }
-    }
-
-    if (!response || !response.text) {
-      throw lastError || new Error("All models failed or returned empty response from Gemini API for 3-way match");
-    }
-
-    const parsedData = JSON.parse(response.text);
+    const { text } = await generateGeminiWithFallback({
+      contents: promptText,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: responseSchema,
+        temperature: 0.1,
+      },
+      label: '3-way karşılaştırma',
+    });
+    const parsedData = JSON.parse(text);
     res.json({ success: true, data: parsedData });
   } catch (error: any) {
     console.error("Error in AI 3-Way Match:", error);
-    res.status(500).json({ error: error.message || "Failed to perform 3-way comparison" });
+    const msg = error.message || "Failed to perform 3-way comparison";
+    const status = /zaman aşımı|timeout|504/i.test(msg) ? 504 : 500;
+    res.status(status).json({ error: msg });
   }
 });
 
@@ -693,8 +620,6 @@ Provide the response strictly conforming to the requested schema.
 app.post("/api/analyze-linked-evrak", async (req, res) => {
   try {
     const { saTalebi, irsaliyeler, fatura, kalemBaglantilari, analizOdak, ozelTalimat } = req.body;
-
-    const ai = getGeminiClient();
 
     const responseSchema = {
       type: Type.OBJECT,
@@ -750,38 +675,22 @@ Rules:
 Provide the response strictly conforming to the requested schema.
 `;
 
-    const models = GEMINI_MODEL_FALLBACK;
-    let response;
-    let lastError;
-
-    for (const model of models) {
-      try {
-        console.log(`Analyzing linked evrak with model: ${model}...`);
-        response = await ai.models.generateContent({
-          model: model,
-          contents: promptText,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: responseSchema,
-            temperature: 0.1,
-          },
-        });
-        if (response?.text) break;
-      } catch (err) {
-        lastError = err;
-        console.warn(`Model ${model} failed for linked evrak analysis, trying next:`, err);
-      }
-    }
-
-    if (!response || !response.text) {
-      throw lastError || new Error("All models failed or returned empty response from Gemini API");
-    }
-
-    const parsedData = JSON.parse(response.text);
+    const { text } = await generateGeminiWithFallback({
+      contents: promptText,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: responseSchema,
+        temperature: 0.1,
+      },
+      label: 'Bağlı evrak analizi',
+    });
+    const parsedData = JSON.parse(text);
     res.json({ success: true, data: parsedData });
   } catch (error: any) {
     console.error("Error in AI linked evrak analysis:", error);
-    res.status(500).json({ error: error.message || "Failed to analyze linked evrak" });
+    const msg = error.message || "Failed to analyze linked evrak";
+    const status = /zaman aşımı|timeout|504/i.test(msg) ? 504 : 500;
+    res.status(status).json({ error: msg });
   }
 });
 
@@ -793,7 +702,6 @@ app.post("/api/generate-tutanak", async (req, res) => {
       return res.status(400).json({ error: "Missing konu or detaylar in request body" });
     }
 
-    const ai = getGeminiClient();
     const prompt = `
 Lütfen şantiye yönetimi için resmi ve hukuki açıdan geçerli Türkçe bir tutanak taslağı hazırla.
 - Tutanak Konusu: ${konu}
@@ -822,8 +730,6 @@ app.post("/api/parse-legacy-document", async (req, res) => {
     if (!fileBase64 || !mimeType || !docType) {
       return res.status(400).json({ error: "Missing fileBase64, mimeType or docType in request body" });
     }
-
-    const ai = getGeminiClient();
 
     const imagePart = {
       inlineData: {
@@ -1030,38 +936,22 @@ Lütfen en uygun kategoriyi 'detectedType' alanına atayıp dökümandaki ilgili
       return res.status(400).json({ error: "Invalid docType specified" });
     }
 
-    const models = GEMINI_MODEL_FALLBACK;
-    let response;
-    let lastError;
-
-    for (const model of models) {
-      try {
-        console.log(`Parsing legacy document type ${docType} with ${model}...`);
-        response = await ai.models.generateContent({
-          model: model,
-          contents: [userPrompt, imagePart],
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: responseSchema,
-            temperature: 0.1,
-          },
-        });
-        if (response?.text) break;
-      } catch (err) {
-        lastError = err;
-        console.warn(`Model ${model} failed, trying next:`, err);
-      }
-    }
-
-    if (!response || !response.text) {
-      throw lastError || new Error("All models failed to parse document");
-    }
-
-    const parsedData = JSON.parse(response.text);
+    const { text } = await generateGeminiWithFallback({
+      contents: [userPrompt, imagePart],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: responseSchema,
+        temperature: 0.1,
+      },
+      label: `Legacy döküman analizi (${docType})`,
+    });
+    const parsedData = JSON.parse(text);
     res.json({ success: true, data: parsedData });
   } catch (error: any) {
     console.error("Error in parse-legacy-document endpoint:", error);
-    res.status(500).json({ error: error.message || "Failed to parse legacy document" });
+    const msg = error.message || "Failed to parse legacy document";
+    const status = /zaman aşımı|timeout|504/i.test(msg) ? 504 : 500;
+    res.status(status).json({ error: msg });
   }
 });
 
