@@ -8,7 +8,7 @@ import { KibritciLogo } from './KibritciLogo';
 import { 
   AracBakim, Demisbas, Tahsis, KampOdasi, KampKaydi, KampSarf, KampFaaliyet,
   SahaFaaliyeti, HazirTutanak, CariKart, StokKart, EpostaGonderim, Personel,
-  KampYerleske, KampKat
+  KampYerleske, KampKat, SahaGunRaporArsiv
 } from '../types/erp';
 import { db } from '../lib/firebase';
 import {
@@ -656,6 +656,13 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [sahaSearchKeyword, setSahaSearchKeyword] = useState("");
   const [editingSahaId, setEditingSahaId] = useState<string | null>(null);
   const [deleteConfirmSahaId, setDeleteConfirmSahaId] = useState<string | null>(null);
+  const [sahaSubTab, setSahaSubTab] = useState<'tum' | 'formen' | 'takvim' | 'gun_arsiv'>('tum');
+  const [sahaTakvimAy, setSahaTakvimAy] = useState(new Date().toISOString().slice(0, 7));
+  const [showSahaGunModal, setShowSahaGunModal] = useState(false);
+  const [selectedSahaGun, setSelectedSahaGun] = useState(new Date().toISOString().split('T')[0]);
+  const [formenTarihFiltre, setFormenTarihFiltre] = useState(new Date().toISOString().split('T')[0]);
+  const [gunRaporNotu, setGunRaporNotu] = useState('');
+  const [sahaGunRaporArsivleri, setSahaGunRaporArsivleri] = useState<SahaGunRaporArsiv[]>([]);
 
   // Saha PDF Report parameters
   const [sahaReportModal, setSahaReportModal] = useState(false);
@@ -688,6 +695,16 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       }
     }
     loadOnaylar();
+  }, []);
+
+  React.useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'sahaGunRaporArsiv'), (snapshot) => {
+      const list: SahaGunRaporArsiv[] = [];
+      snapshot.forEach((d) => list.push({ id: d.id, ...d.data() } as SahaGunRaporArsiv));
+      list.sort((a, b) => String(b.tarih).localeCompare(String(a.tarih), 'tr'));
+      setSahaGunRaporArsivleri(list);
+    });
+    return () => unsub();
   }, []);
 
   // Sync temp variables when selected daily report date changes
@@ -827,7 +844,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
             aciklama: sahaAciklama,
             fotoUrl: sahaFotoBase64 !== undefined ? (sahaFotoBase64 || undefined) : sf.fotoUrl,
             ustaSayisi: sahaUstaSayisi,
-            isciSayisi: sahaIsciSayisi
+            isciSayisi: sahaIsciSayisi,
+            kaynakEkran: sf.kaynakEkran || 'IDARI_SAHA'
           };
         }
         return sf;
@@ -851,7 +869,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
         aciklama: sahaAciklama,
         fotoUrl: sahaFotoBase64 || (photoSelectedSim ? "saha_foto_example.jpg" : undefined),
         ustaSayisi: sahaUstaSayisi,
-        isciSayisi: sahaIsciSayisi
+        isciSayisi: sahaIsciSayisi,
+        kaynakEkran: 'IDARI_SAHA'
       };
 
       setSahaFaaliyetleri(prev => [newLog, ...prev]);
@@ -899,6 +918,203 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       }, 4000);
     }
   };
+
+  const buildYoklamaSummaryForDate = (dateStr: string) => {
+    const dayNum = Number(dateStr.split('-')[2] || '0');
+    const summary = { gelen: 0, yok: 0, izinli: 0, raporlu: 0 };
+
+    personeller.forEach((personel) => {
+      const personMap = yoklamalar?.[personel.id];
+      if (!personMap || typeof personMap !== 'object') return;
+      const record = (personMap[dateStr] ??
+        personMap[String(dayNum)] ??
+        personMap[dayNum]) as { durum?: string } | undefined;
+      const durum = (record?.durum || '').toLocaleLowerCase('tr-TR');
+      if (!durum) return;
+      if (durum.includes('geldi')) summary.gelen += 1;
+      else if (durum.includes('yok')) summary.yok += 1;
+      else if (durum.includes('izin')) summary.izinli += 1;
+      else if (durum.includes('rapor')) summary.raporlu += 1;
+    });
+    return summary;
+  };
+
+  const daySahaFaaliyetleri = useMemo(
+    () => sahaFaaliyetleri.filter((sf) => sf.tarih === selectedSahaGun),
+    [sahaFaaliyetleri, selectedSahaGun]
+  );
+  const filteredFormenFaaliyetleri = useMemo(
+    () =>
+      sahaFaaliyetleri
+        .filter((sf) => sf.kaynakEkran === 'FORMEN_MOBIL')
+        .filter((sf) => (formenTarihFiltre ? sf.tarih === formenTarihFiltre : true))
+        .sort((a, b) => String(b.tarih).localeCompare(String(a.tarih), 'tr')),
+    [sahaFaaliyetleri, formenTarihFiltre]
+  );
+
+  const sahaTakvimGunleri = useMemo(() => {
+    const [year, month] = sahaTakvimAy.split('-').map(Number);
+    if (!year || !month) return [] as Array<{ date: string; day: number }>;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    return Array.from({ length: daysInMonth }, (_, i) => {
+      const day = i + 1;
+      const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      return { date, day };
+    });
+  }, [sahaTakvimAy]);
+
+  const openSahaGunDetay = (date: string) => {
+    setSelectedSahaGun(date);
+    setShowSahaGunModal(true);
+  };
+
+  const handlePrintSahaGun = (date: string) => {
+    const gunlukFaaliyetler = sahaFaaliyetleri.filter((sf) => sf.tarih === date);
+    const yoklama = buildYoklamaSummaryForDate(date);
+    const rows = gunlukFaaliyetler
+      .map(
+        (sf, idx) =>
+          `<tr><td>${idx + 1}</td><td>${sf.isNiteligi}</td><td>${sf.parsel} / ${sf.blok}</td><td>${sf.aciklama}</td><td>${sf.kaynakEkran || '-'}</td></tr>`
+      )
+      .join('');
+    const html = `
+      <html><head><title>Saha Gunu ${date}</title>
+      <style>body{font-family:Arial;padding:24px}table{width:100%;border-collapse:collapse;margin-top:12px}
+      th,td{border:1px solid #ccc;padding:6px;font-size:12px;text-align:left}
+      h2{margin:0 0 8px 0} .meta{font-size:12px;color:#444}</style></head><body>
+      <h2>${date} Saha Faaliyet ve Yoklama Ozeti</h2>
+      <div class="meta">Yoklama - Geldi: ${yoklama.gelen} | Yok: ${yoklama.yok} | Izinli: ${yoklama.izinli} | Raporlu: ${yoklama.raporlu}</div>
+      <table><thead><tr><th>#</th><th>Is Niteliği</th><th>Lokasyon</th><th>Aciklama</th><th>Kaynak</th></tr></thead><tbody>${rows || '<tr><td colspan="5">Kayit yok</td></tr>'}</tbody></table>
+      <script>window.onload=()=>window.print()</script></body></html>
+    `;
+    const popup = window.open('', '_blank', 'width=1000,height=700');
+    if (!popup) {
+      alert('Yazdırma penceresi açılamadı.');
+      return;
+    }
+    popup.document.open();
+    popup.document.write(html);
+    popup.document.close();
+  };
+
+  const handleIceriAlVeGunRaporla = async () => {
+    if (!formenTarihFiltre) {
+      alert('Lütfen tarih seçin.');
+      return;
+    }
+    const dayRecords = sahaFaaliyetleri.filter((sf) => sf.tarih === formenTarihFiltre);
+    const formenRecords = dayRecords.filter((sf) => sf.kaynakEkran === 'FORMEN_MOBIL');
+    if (formenRecords.length === 0) {
+      alert('Seçili tarihte Formen kaydı bulunmuyor.');
+      return;
+    }
+
+    const yoklama = buildYoklamaSummaryForDate(formenTarihFiltre);
+    const rapor: SahaGunRaporArsiv = {
+      id: `saha_gun_rapor_${formenTarihFiltre}_${Date.now()}`,
+      tarih: formenTarihFiltre,
+      olusturmaTarihi: new Date().toISOString(),
+      olusturan: 'IDARI_SAHA',
+      faaliyetIds: dayRecords.map((f) => f.id),
+      faaliyetAdet: dayRecords.length,
+      formenFaaliyetAdet: formenRecords.length,
+      yoklamaOzet: yoklama,
+      aciklama: gunRaporNotu.trim(),
+    };
+
+    await setDoc(doc(db, 'sahaGunRaporArsiv', rapor.id), rapor);
+    setSahaFaaliyetleri((prev) =>
+      prev.map((sf) =>
+        sf.tarih === formenTarihFiltre && sf.kaynakEkran === 'FORMEN_MOBIL'
+          ? { ...sf, iceriAktarimDurumu: 'AKTARILDI', programaGonderildi: true }
+          : sf
+      )
+    );
+    alert(`${formenTarihFiltre} günü raporlandı ve arşive kaydedildi.`);
+    setGunRaporNotu('');
+  };
+
+  const renderSahaFaaliyetList = (list: SahaFaaliyeti[]) => (
+    <div className="flex-grow overflow-y-auto p-4 space-y-4 bg-slate-50/20">
+      {list.length === 0 && (
+        <div className="border border-dashed border-slate-250 rounded-xl p-4 text-xs text-slate-500">
+          Kayıt bulunamadı.
+        </div>
+      )}
+      {list.map((sf) => (
+        <div key={sf.id} className="border border-slate-200 rounded-xl p-4 bg-white flex flex-col justify-between hover:shadow transition duration-150 shadow-sm">
+          <div className="flex justify-between items-start text-xs border-b pb-2 mb-2">
+            <div>
+              <span className="font-bold text-slate-800">{sf.isNiteligi}</span>
+              <p className="text-[9px] text-[#2563EB] font-bold mt-1">Saha Lokasyon: {sf.parsel} · {sf.blok} · {sf.tarih}</p>
+            </div>
+            {sf.kaynakEkran === 'FORMEN_MOBIL' && (
+              <span className="text-[9px] bg-amber-100 text-amber-800 border border-amber-200 rounded-full px-2 py-0.5 font-bold">
+                FORMEN
+              </span>
+            )}
+          </div>
+
+          <p className="text-xs text-slate-600 font-sans tracking-tight leading-relaxed">{sf.aciklama}</p>
+
+          {(sf.ustaSayisi !== undefined || sf.isciSayisi !== undefined) && (
+            <div className="mt-3 bg-slate-50 p-2.5 rounded-xl border border-slate-150 flex gap-4">
+              {sf.ustaSayisi !== undefined && (
+                <div className="text-[10px]">
+                  <span className="text-slate-400 font-bold block text-[8px] uppercase">Çalışan Usta</span>
+                  <strong className="text-blue-800">{sf.ustaSayisi} Kişi</strong>
+                </div>
+              )}
+              {sf.isciSayisi !== undefined && (
+                <div className="text-[10px]">
+                  <span className="text-slate-400 font-bold block text-[8px] uppercase">Çalışan Düz İşçi</span>
+                  <strong className="text-slate-800">{sf.isciSayisi} Kişi</strong>
+                </div>
+              )}
+            </div>
+          )}
+
+          {sf.fotoUrl && (
+            <div className="mt-3 space-y-1">
+              <span className="text-[9px] font-bold text-slate-400 block uppercase">📷 İMALAT SAHA FOTOĞRAFI:</span>
+              <div className="relative border rounded-xl overflow-hidden max-w-sm max-h-48 bg-slate-50">
+                <img
+                  src={sf.fotoUrl}
+                  alt="Saha İmalat Görseli"
+                  referrerPolicy="no-referrer"
+                  className="max-h-48 max-w-full object-contain"
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2 border-t mt-3 text-[10px]">
+            <button
+              onClick={() => handleStartEditSaha(sf)}
+              className="bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 font-bold py-1 px-2.5 rounded-lg transition cursor-pointer"
+            >
+              ✏️ Düzenle
+            </button>
+            {deleteConfirmSahaId === sf.id ? (
+              <button
+                onClick={() => handleDeleteSahaFaaliyeti(sf.id)}
+                className="bg-red-600 hover:bg-red-700 text-white font-extrabold py-1 px-2.5 rounded-lg transition animate-pulse cursor-pointer"
+              >
+                Emin misiniz? Sil
+              </button>
+            ) : (
+              <button
+                onClick={() => handleDeleteSahaFaaliyeti(sf.id)}
+                className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-semibold py-1 px-2.5 rounded-lg transition cursor-pointer"
+              >
+                🗑️ Sil
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   // ─────────────────────────────────────────────────────────────
   // 📜 4. HAZIR TUTANAKLAR STATES & EVENTS
@@ -2671,13 +2887,12 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
             </div>
           </div>
 
-          {/* List waybills screen column */}
           <div className="flex-1 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
             <div className="p-4 border-b border-[#e2e8f0] bg-slate-50/50 flex flex-col space-y-2.5 shrink-0">
               <div className="flex justify-between items-center">
                 <div className="flex items-center space-x-2">
                   <Building2 size={16} className="text-[#2563EB]" />
-                  <h4 className="font-display font-bold text-sm text-slate-800 uppercase tracking-widest">Saha Günlük Çalışma Listesi</h4>
+                  <h4 className="font-display font-bold text-sm text-slate-800 uppercase tracking-widest">Saha Faaliyet İzleme Merkezi</h4>
                 </div>
                 <button
                   onClick={() => setSahaReportModal(true)}
@@ -2686,20 +2901,28 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   <span>🖨️ Saha Aktif Raporu (Günlük / Aylık)</span>
                 </button>
               </div>
-              <div className="relative">
-                <input 
-                  type="text"
-                  placeholder="İş niteliği, açıklama veya parsel ara..."
-                  value={sahaSearchKeyword}
-                  onChange={(e) => setSahaSearchKeyword(e.target.value)}
-                  className="w-full bg-white text-xs text-slate-800 border border-slate-250 rounded-lg py-1.5 pl-3 pr-8 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition font-medium"
-                />
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => setSahaSubTab('tum')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'tum' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}>Tüm Kayıtlar</button>
+                <button type="button" onClick={() => setSahaSubTab('formen')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'formen' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}>Formen Gönderimleri</button>
+                <button type="button" onClick={() => setSahaSubTab('takvim')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'takvim' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}>Tarih Cetveli</button>
+                <button type="button" onClick={() => setSahaSubTab('gun_arsiv')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'gun_arsiv' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}>Gün Rapor Arşivi</button>
               </div>
+              {sahaSubTab === 'tum' && (
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="İş niteliği, açıklama veya parsel ara..."
+                    value={sahaSearchKeyword}
+                    onChange={(e) => setSahaSearchKeyword(e.target.value)}
+                    className="w-full bg-white text-xs text-slate-800 border border-slate-250 rounded-lg py-1.5 pl-3 pr-8 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition font-medium"
+                  />
+                </div>
+              )}
             </div>
 
-            <div className="flex-grow overflow-y-auto p-4 space-y-4 bg-slate-50/20">
-              {sahaFaaliyetleri
-                .filter(sf => {
+            {sahaSubTab === 'tum' &&
+              renderSahaFaaliyetList(
+                sahaFaaliyetleri.filter((sf) => {
                   const keyword = sahaSearchKeyword.toLowerCase().trim();
                   if (!keyword) return true;
                   return (
@@ -2709,95 +2932,120 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     (sf.blok && sf.blok.toLowerCase().includes(keyword))
                   );
                 })
-                .map(sf => (
-                <div key={sf.id} className="border border-slate-200 rounded-xl p-4 bg-white flex flex-col justify-between hover:shadow transition duration-150 shadow-sm">
-                  <div className="flex justify-between items-start text-xs border-b pb-2 mb-2">
-                    <div>
-                      <span className="font-bold text-slate-800">{sf.isNiteligi}</span>
-                      <p className="text-[9px] text-[#2563EB] font-bold mt-1">Saha Lokasyon: {sf.parsel} · {sf.blok} · {sf.tarih}</p>
-                    </div>
+              )}
+
+            {sahaSubTab === 'formen' && (
+              <div className="flex-grow overflow-y-auto p-4 space-y-3 bg-slate-50/20">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  <input type="date" value={formenTarihFiltre} onChange={(e) => setFormenTarihFiltre(e.target.value)} className="text-xs border border-slate-250 rounded-lg px-2 py-1.5" />
+                  <input type="text" value={gunRaporNotu} onChange={(e) => setGunRaporNotu(e.target.value)} placeholder="Gün raporu notu (opsiyonel)" className="text-xs border border-slate-250 rounded-lg px-2 py-1.5 md:col-span-2" />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={handleIceriAlVeGunRaporla} className="text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg font-bold cursor-pointer">
+                    İçeri Al ve Günü Raporla
+                  </button>
+                  <button onClick={() => openSahaGunDetay(formenTarihFiltre)} className="text-[11px] bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg font-bold cursor-pointer">
+                    Gün Detayı Aç
+                  </button>
+                </div>
+                {renderSahaFaaliyetList(filteredFormenFaaliyetleri)}
+              </div>
+            )}
+
+            {sahaSubTab === 'takvim' && (
+              <div className="flex-grow overflow-y-auto p-4 bg-slate-50/20">
+                <div className="flex items-center gap-2 mb-3">
+                  <input type="month" value={sahaTakvimAy} onChange={(e) => setSahaTakvimAy(e.target.value)} className="text-xs border border-slate-250 rounded-lg px-2 py-1.5" />
+                  <span className="text-[11px] text-slate-500">Tarihe çift tıklayarak gün pop-up ekranını açabilirsiniz.</span>
+                </div>
+                <div className="grid grid-cols-7 gap-2">
+                  {['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map((d) => (
+                    <div key={d} className="text-[10px] font-bold text-slate-500 text-center">{d}</div>
+                  ))}
+                  {sahaTakvimGunleri.map((d) => {
+                    const dayCount = sahaFaaliyetleri.filter((sf) => sf.tarih === d.date).length;
+                    const dayFormen = sahaFaaliyetleri.filter((sf) => sf.tarih === d.date && sf.kaynakEkran === 'FORMEN_MOBIL').length;
+                    return (
+                      <button
+                        key={d.date}
+                        type="button"
+                        onDoubleClick={() => openSahaGunDetay(d.date)}
+                        onClick={() => setSelectedSahaGun(d.date)}
+                        className={`min-h-[64px] rounded-xl border p-2 text-left cursor-pointer transition ${selectedSahaGun === d.date ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
+                      >
+                        <div className="text-[11px] font-bold text-slate-800">{d.day}</div>
+                        <div className="text-[9px] text-slate-500 mt-1">Faaliyet: {dayCount}</div>
+                        <div className="text-[9px] text-amber-700">Formen: {dayFormen}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {sahaSubTab === 'gun_arsiv' && (
+              <div className="flex-grow overflow-y-auto p-4 space-y-3 bg-slate-50/20">
+                {sahaGunRaporArsivleri.length === 0 && (
+                  <div className="border border-dashed border-slate-250 rounded-xl p-4 text-xs text-slate-500">
+                    Henüz arşivlenmiş gün raporu yok.
                   </div>
-
-                  <p className="text-xs text-slate-600 font-sans tracking-tight leading-relaxed">
-                    {sf.aciklama}
-                  </p>
-
-                  {/* Render worker count badges */}
-                  {(sf.ustaSayisi !== undefined || sf.isciSayisi !== undefined) && (
-                    <div className="mt-3 bg-slate-50 p-2.5 rounded-xl border border-slate-150 flex gap-4">
-                      {sf.ustaSayisi !== undefined && (
-                        <div className="text-[10px]">
-                          <span className="text-slate-400 font-bold block text-[8px] uppercase">Çalışan Usta</span>
-                          <strong className="text-blue-800">{sf.ustaSayisi} Kişi</strong>
-                        </div>
-                      )}
-                      {sf.isciSayisi !== undefined && (
-                        <div className="text-[10px]">
-                          <span className="text-slate-400 font-bold block text-[8px] uppercase">Çalışan Düz İşçi</span>
-                          <strong className="text-slate-800">{sf.isciSayisi} Kişi</strong>
-                        </div>
-                      )}
+                )}
+                {sahaGunRaporArsivleri.map((r) => (
+                  <div key={r.id} className="bg-white border border-slate-200 rounded-xl p-3 text-xs">
+                    <div className="flex justify-between items-center">
+                      <div className="font-bold text-slate-800">{r.tarih} Gün Raporu</div>
+                      <button onClick={() => handlePrintSahaGun(r.tarih)} className="text-[10px] bg-slate-700 hover:bg-slate-800 text-white px-2 py-1 rounded-lg cursor-pointer">Yazdır</button>
                     </div>
-                  )}
+                    <p className="text-slate-500 mt-1">Toplam faaliyet: {r.faaliyetAdet} · Formen: {r.formenFaaliyetAdet}</p>
+                    <p className="text-slate-500">Yoklama: Geldi {r.yoklamaOzet.gelen} / Yok {r.yoklamaOzet.yok} / İzinli {r.yoklamaOzet.izinli} / Raporlu {r.yoklamaOzet.raporlu}</p>
+                    {r.aciklama && <p className="text-slate-600 mt-1">{r.aciklama}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-                  {/* Render checked field labor staff tags */}
-                  {(!sf.ustaSayisi && !sf.isciSayisi && sf.aktifPersonelListesi && sf.aktifPersonelListesi.length > 0) && (
-                    <div className="mt-3 bg-slate-50 p-2.5 rounded-xl border border-slate-150">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">👷 Aktif Sahadaki Kadro:</span>
-                      <div className="flex flex-wrap gap-1">
-                        {sf.aktifPersonelListesi.map((name, i) => (
-                          <span key={i} className="text-[9px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-150 px-1.5 py-0.5 rounded">
-                            👤 {name}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {sf.fotoUrl && (
-                    <div className="mt-3 space-y-1">
-                      <span className="text-[9px] font-bold text-slate-400 block uppercase">📷 İMALAT SAHA FOTOĞRAFI:</span>
-                      <div className="relative border rounded-xl overflow-hidden max-w-sm max-h-48 bg-slate-50">
-                        <img 
-                          src={sf.fotoUrl} 
-                          alt="Saha İmalat Görseli" 
-                          referrerPolicy="no-referrer"
-                          className="max-h-48 max-w-full object-contain"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Card Actions: Edit and Safe Delete */}
-                  <div className="flex justify-end gap-2 pt-2 border-t mt-3 text-[10px]">
-                    <button 
-                      onClick={() => handleStartEditSaha(sf)}
-                      className="bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 font-bold py-1 px-2.5 rounded-lg transition cursor-pointer"
-                    >
-                      ✏️ Düzenle
-                    </button>
-                    
-                    {deleteConfirmSahaId === sf.id ? (
-                      <button 
-                        onClick={() => handleDeleteSahaFaaliyeti(sf.id)}
-                        className="bg-red-600 hover:bg-red-700 text-white font-extrabold py-1 px-2.5 rounded-lg transition animate-pulse cursor-pointer"
-                        title="Tıklayarak kalıcı olarak silin"
-                      >
-                        Emin misiniz? Sil
-                      </button>
-                    ) : (
-                      <button 
-                        onClick={() => handleDeleteSahaFaaliyeti(sf.id)}
-                        className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-semibold py-1 px-2.5 rounded-lg transition cursor-pointer"
-                      >
-                        🗑️ Sil
-                      </button>
-                    )}
+          {showSahaGunModal && (
+            <div className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-3">
+              <div className="w-full max-w-3xl bg-white rounded-2xl shadow-xl border border-slate-200 max-h-[88vh] overflow-y-auto">
+                <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900">{selectedSahaGun} Günlük Saha + Yoklama Detayı</h3>
+                    <p className="text-[11px] text-slate-500">Takvimden çift tıklayarak açılan günlük izleme penceresi</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => handlePrintSahaGun(selectedSahaGun)} className="text-[11px] bg-slate-700 hover:bg-slate-800 text-white px-2.5 py-1.5 rounded-lg font-bold cursor-pointer">Yazdır</button>
+                    <button onClick={() => setShowSahaGunModal(false)} className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1.5 rounded-lg font-bold cursor-pointer">Kapat</button>
                   </div>
                 </div>
-              ))}
+
+                <div className="p-4 space-y-3">
+                  {(() => {
+                    const yoklama = buildYoklamaSummaryForDate(selectedSahaGun);
+                    return (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2">Geldi: <strong>{yoklama.gelen}</strong></div>
+                        <div className="bg-rose-50 border border-rose-200 rounded-lg p-2">Yok: <strong>{yoklama.yok}</strong></div>
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-2">İzinli: <strong>{yoklama.izinli}</strong></div>
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">Raporlu: <strong>{yoklama.raporlu}</strong></div>
+                      </div>
+                    );
+                  })()}
+                  <div className="text-xs font-bold text-slate-700">Günlük Saha Faaliyetleri ({daySahaFaaliyetleri.length})</div>
+                  {daySahaFaaliyetleri.length === 0 && (
+                    <div className="text-xs text-slate-500 border border-dashed border-slate-250 rounded-lg p-3">Bu gün için saha faaliyet kaydı bulunmadı.</div>
+                  )}
+                  {daySahaFaaliyetleri.map((sf) => (
+                    <div key={sf.id} className="border border-slate-200 rounded-lg p-3 text-xs space-y-1">
+                      <div className="font-bold text-slate-800">{sf.isNiteligi}</div>
+                      <div className="text-slate-500">{sf.parsel} / {sf.blok} · Kaynak: {sf.kaynakEkran || 'IDARI_SAHA'}</div>
+                      <div className="text-slate-700">{sf.aciklama}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 

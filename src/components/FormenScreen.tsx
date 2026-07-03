@@ -654,24 +654,25 @@ ${satirlar
     setSelectedDate(localD.toISOString().split('T')[0]);
   };
 
-  // Image capture simulation
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (!file) return;
+    try {
       const reader = new FileReader();
-      reader.onload = async (event) => {
-        if (event.target?.result) {
-          const rawBase64 = event.target.result as string;
-          const compressed = await compressImage(rawBase64);
-          setFotoUrl(compressed);
-        }
-      };
-      reader.readAsDataURL(file);
+      const rawBase64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = (event) => resolve(String(event.target?.result || ''));
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const compressed = await compressImage(rawBase64);
+      setFotoUrl(compressed);
+    } catch {
+      showStatus('error', 'Fotoğraf yüklenemedi, tekrar deneyin.');
     }
   };
 
   // Submit Saha Faaliyeti
-  const handleSaveFaaliyet = (e: React.FormEvent) => {
+  const handleSaveFaaliyet = (e: React.SyntheticEvent, notifyProgram = true) => {
     e.preventDefault();
     if (!isNiteligi) {
       showStatus('error', 'Lütfen iş niteliğini giriniz veya şablondan seçiniz!');
@@ -693,11 +694,19 @@ ${satirlar
       kaydeden: currentUser?.displayName || currentUser?.email || 'FORMEN',
       kaydedenUid: currentUser?.uid || '',
       kaynakEkran: 'FORMEN_MOBIL',
+      programaGonderildi: notifyProgram,
+      programaGonderimTarihi: notifyProgram ? new Date().toISOString() : '',
+      iceriAktarimDurumu: 'BEKLIYOR',
     };
 
     setSahaFaaliyetleri(prev => [newFaaliyet, ...prev]);
     logActionToPersonelHistory('Saha Faaliyeti Ekledi', `"${isNiteligi}" iş niteliğiyle, ${parsel} / ${blok} bölgesinde yeni saha imalat faaliyeti kaydetti.`);
-    showStatus('success', '🧱 Saha faaliyeti başarıyla kaydedildi ve şantiye günlük raporuna eklendi!');
+    showStatus(
+      'success',
+      notifyProgram
+        ? '🧱 Faaliyet kaydedildi ve ana programa gönderildi.'
+        : '🧱 Faaliyet taslak olarak kaydedildi.'
+    );
     
     // Reset form fields
     setIsNiteligi('');
@@ -1451,6 +1460,16 @@ ${satirlar
                       </div>
                     </div>
 
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">Faaliyet Tarihi</label>
+                      <input
+                        type="date"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 py-2 px-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-[10px] font-semibold text-slate-800"
+                      />
+                    </div>
+
                     {/* Açıklama */}
                     <div className="space-y-1">
                       <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">Faaliyet Detay / Açıklama</label>
@@ -1467,14 +1486,25 @@ ${satirlar
                     <div className="space-y-1.5">
                       <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">Saha Fotoğrafı (Anlık Çekim / Yükleme)</label>
                       
-                      <div className="flex items-center space-x-3">
-                        <label className="bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition w-24 h-20 shrink-0 text-slate-500 hover:text-slate-800">
+                      <div className="flex items-center space-x-2">
+                        <label className="bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 rounded-2xl p-3 flex flex-col items-center justify-center cursor-pointer transition w-24 h-20 shrink-0 text-slate-500 hover:text-slate-800">
                           <Camera size={20} />
-                          <span className="text-[8px] font-bold mt-1 text-center leading-none">Fotoğraf Ekle</span>
+                          <span className="text-[8px] font-bold mt-1 text-center leading-none">Kameradan</span>
                           <input 
                             type="file"
                             accept="image/*"
                             capture="environment"
+                            onChange={handleImageChange}
+                            className="hidden"
+                          />
+                        </label>
+
+                        <label className="bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 rounded-2xl p-3 flex flex-col items-center justify-center cursor-pointer transition w-24 h-20 shrink-0 text-slate-500 hover:text-slate-800">
+                          <ImageIcon size={20} />
+                          <span className="text-[8px] font-bold mt-1 text-center leading-none">Galeriden</span>
+                          <input 
+                            type="file"
+                            accept="image/*"
                             onChange={handleImageChange}
                             className="hidden"
                           />
@@ -1528,13 +1558,23 @@ ${satirlar
                     </div>
 
                     {/* Submit activity report */}
-                    <button
-                      type="submit"
-                      className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] py-2.5 px-4 rounded-xl transition duration-150 shadow-md flex items-center justify-center space-x-1.5 cursor-pointer border-b-4 border-amber-700"
-                    >
-                      <Send size={12} />
-                      <span>KAYDET &amp; ŞANTİYEYE BİLDİR</span>
-                    </button>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => handleSaveFaaliyet(e, false)}
+                        className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-[10px] py-2.5 px-4 rounded-xl transition duration-150 shadow-sm flex items-center justify-center space-x-1.5 cursor-pointer border border-slate-300"
+                      >
+                        <Send size={12} />
+                        <span>TASLAK KAYDET</span>
+                      </button>
+                      <button
+                        type="submit"
+                        className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] py-2.5 px-4 rounded-xl transition duration-150 shadow-md flex items-center justify-center space-x-1.5 cursor-pointer border-b-4 border-amber-700"
+                      >
+                        <Send size={12} />
+                        <span>FAALİYETİ KAYDET VE PROGRAMA GÖNDER</span>
+                      </button>
+                    </div>
 
                   </div>
 

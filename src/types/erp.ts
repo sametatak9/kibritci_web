@@ -260,6 +260,30 @@ export interface SahaFaaliyeti {
   aktifPersonelListesi?: string[];
   ustaSayisi?: number;
   isciSayisi?: number;
+  kaynakEkran?: 'FORMEN_MOBIL' | 'IDARI_SAHA' | string;
+  kaydeden?: string;
+  kaydedenUid?: string;
+  kaydedenFormen?: string;
+  programaGonderildi?: boolean;
+  programaGonderimTarihi?: string;
+  iceriAktarimDurumu?: 'BEKLIYOR' | 'AKTARILDI';
+}
+
+export interface SahaGunRaporArsiv {
+  id: string;
+  tarih: string;
+  olusturmaTarihi: string;
+  olusturan?: string;
+  faaliyetIds: string[];
+  faaliyetAdet: number;
+  formenFaaliyetAdet: number;
+  yoklamaOzet: {
+    gelen: number;
+    yok: number;
+    izinli: number;
+    raporlu: number;
+  };
+  aciklama?: string;
 }
 
 export type ProgramliFaaliyetAsamaAnahtari = 'BASLANGIC' | 'ILERLEME' | 'TAMAMLANMA';
