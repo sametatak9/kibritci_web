@@ -62,13 +62,13 @@ function formatGeminiKeyHint(format) {
 }
 function isGeminiQuotaError(error) {
   const raw = error instanceof Error ? error.message : String(error);
-  if (/429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota/i.test(raw)) {
+  if (/429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota|prepayment credits are depleted|billing#prepay/i.test(raw)) {
     return true;
   }
   try {
     const parsed = JSON.parse(raw);
     const inner = parsed?.error?.message ?? parsed?.message ?? "";
-    return /429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota/i.test(String(inner));
+    return /429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota|prepayment credits are depleted|billing#prepay/i.test(String(inner));
   } catch {
     return false;
   }
@@ -82,22 +82,22 @@ function parseGeminiError(error) {
     if (typeof inner === "string") msg = inner;
   } catch {
   }
-  if (/429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota/i.test(msg)) {
+  if (/429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota|prepayment credits are depleted|billing#prepay/i.test(msg)) {
     const modelMatch = msg.match(/model:\s*([\w.-]+)/i);
     const model = modelMatch?.[1] ?? "Gemini";
     return [
-      `Gemini API g\xFCnl\xFCk \xFCcretsiz kota doldu (${model}).`,
-      "\xDCcretsiz planda model ba\u015F\u0131na g\xFCnde ~20 istek s\u0131n\u0131r\u0131 vard\u0131r.",
-      "\u2022 Birka\xE7 dakika veya ertesi g\xFCn tekrar deneyin",
-      "\u2022 Kal\u0131c\u0131 \xE7\xF6z\xFCm: Google AI Studio \u2192 Billing a\xE7\u0131n veya \xFCcretli plan",
-      "\u2022 Kullan\u0131m: https://ai.dev/rate-limit"
+      `Gemini API kredisi/kotas\u0131 t\xFCkendi (${model}).`,
+      "prepayment credits depleted hatas\u0131, proje bakiyesinin bitti\u011Fini g\xF6sterir.",
+      "\u2022 Google AI Studio \u2192 Projects \u2192 Billing b\xF6l\xFCm\xFCnden bakiye/faturaland\u0131rma a\xE7\u0131n",
+      "\u2022 Sonra Render/Vercel \xFCzerinde redeploy yap\u0131n",
+      "\u2022 Detay: https://ai.google.dev/gemini-api/docs/billing#prepay"
     ].join("\n");
   }
   if (/Request had invalid authentication credentials|Expected OAuth 2 access token|invalid authentication credentials|API key not valid|invalid.?api.?key|401|403|PERMISSION_DENIED/i.test(msg)) {
     return [
       "Gemini API anahtar\u0131 reddedildi.",
       "\u2022 AI Studio'dan yeni Auth key (AQ.\u2026) olu\u015Fturun: https://aistudio.google.com/apikey",
-      "\u2022 Vercel: Settings \u2192 Environment Variables \u2192 GEMINI_API_KEY (t\u0131rnaks\u0131z, bo\u015Fluksuz)",
+      "\u2022 Render/Vercel: Environment Variables \u2192 GEMINI_API_KEY (t\u0131rnaks\u0131z, bo\u015Fluksuz)",
       "\u2022 De\u011Fi\u015Fiklikten sonra redeploy yap\u0131n",
       "\u2022 Eski AIza anahtar\u0131 k\u0131s\u0131tlamas\u0131zsa art\u0131k \xE7al\u0131\u015Fmaz \u2014 Auth key kullan\u0131n"
     ].join("\n");

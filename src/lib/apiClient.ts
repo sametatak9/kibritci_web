@@ -80,17 +80,18 @@ export async function probeGeminiApi(): Promise<{ ok: boolean; message: string }
 
 /** Banner'da ham JSON yerine okunabilir Türkçe mesaj */
 export function formatGeminiAlert(raw: string): string {
-  if (/429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota/i.test(raw)) {
+  if (/429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota|prepayment credits are depleted|billing#prepay/i.test(raw)) {
     return [
-      'Gemini ücretsiz günlük kota doldu (model başına ~20 istek).',
-      'Bir süre bekleyin veya Google AI Studio\'da faturalandırmayı açın.',
-      'Detay: https://ai.dev/rate-limit',
+      'Gemini kredisi/kotası tükendi (prepayment credits depleted).',
+      'Google AI Studio > Projects > Billing bölümünden bakiye/faturalandırma açın.',
+      'Sonra Render deploy yenileyin.',
+      'Detay: https://ai.google.dev/gemini-api/docs/billing#prepay',
     ].join(' ');
   }
   try {
     const parsed = JSON.parse(raw);
     const inner = parsed?.error?.message;
-    if (typeof inner === 'string' && /429|quota/i.test(inner)) {
+    if (typeof inner === 'string' && /429|quota|prepayment credits are depleted|billing#prepay/i.test(inner)) {
       return formatGeminiAlert(inner);
     }
   } catch {

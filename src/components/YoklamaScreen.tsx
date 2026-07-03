@@ -477,13 +477,14 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     const { Workbook } = await import('exceljs');
 
     const buildKibritciLogoDataUrl = async (): Promise<string | null> => {
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 120">
-        <rect x="5" y="5" width="110" height="110" rx="10" fill="white" stroke="#1E4E78" stroke-width="3" />
-        <path d="M15 115 V75 L35 50 V115" fill="#8B1E1E" />
-        <path d="M35 115 V52 L58 30 V115" fill="#B91C1C" />
-        <path d="M58 52 L95 90 H72 L45 61 Z" fill="#8B1E1E" />
-        <path d="M58 85 L95 115 H72 L58 100 Z" fill="#1E4E78" />
-        <line x1="15" y1="115" x2="115" y2="115" stroke="#1E4E78" stroke-width="4" />
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 180">
+        <rect x="5" y="6" width="250" height="165" rx="8" fill="#F8FAFC" stroke="#1E4E78" stroke-width="8" />
+        <path d="M30 165 V65 L95 25 V165" fill="#8B1E1E" />
+        <path d="M92 165 V82 L152 52 V165" fill="#8B1E1E" />
+        <path d="M152 80 L260 80 L190 145 Z" fill="#8B1E1E" />
+        <path d="M154 130 L262 165 L202 165 L150 150 Z" fill="#8B1E1E" />
+        <text x="290" y="92" font-size="66" font-weight="900" fill="#1E4E78" font-family="Arial, Helvetica, sans-serif">KİBRİTÇİ</text>
+        <text x="290" y="158" font-size="66" font-weight="900" fill="#1E4E78" font-family="Arial, Helvetica, sans-serif">İNŞAAT</text>
       </svg>`;
       const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
       const url = URL.createObjectURL(blob);
@@ -495,8 +496,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
           i.src = url;
         });
         const canvas = document.createElement('canvas');
-        canvas.width = 220;
-        canvas.height = 190;
+        canvas.width = 760;
+        canvas.height = 180;
         const ctx = canvas.getContext('2d');
         if (!ctx) return null;
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
@@ -556,7 +557,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     const logoDataUrl = await buildKibritciLogoDataUrl();
     if (logoDataUrl) {
       const logoId = wb.addImage({ base64: logoDataUrl, extension: 'png' });
-      ws.addImage(logoId, { tl: { col: 0.1, row: 0.1 }, ext: { width: 56, height: 50 } });
+      ws.addImage(logoId, { tl: { col: 0.1, row: 0.08 }, ext: { width: 220, height: 52 } });
     }
 
     const headerTop = ['Sıra', 'Ad Soyad', 'TC Kimlik', 'IBAN', 'Görevi', 'Aylık Maaş', 'Satır'];
@@ -601,6 +602,29 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
     let row = dataStartRow;
     filteredPersonel.forEach((p, index) => {
+      const cetvelRow = row;
+      ws.mergeCells(cetvelRow, 1, cetvelRow, baseCols);
+      ws.getCell(cetvelRow, 1).value = `TARİH CETVELİ · ${p.ad} ${p.soyad}`;
+      ws.getCell(cetvelRow, 1).font = { bold: true, size: 9, color: { argb: 'FF1E3A8A' } };
+      ws.getCell(cetvelRow, 1).alignment = { horizontal: 'left', vertical: 'middle' };
+      ws.getCell(cetvelRow, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+      dayIndexes.forEach((day, idx) => {
+        const col = baseCols + idx + 1;
+        const cetvelCell = ws.getCell(cetvelRow, col);
+        cetvelCell.value = `${String(day).padStart(2, '0')} ${dayOfWeekAbbreviation(day)}`;
+        cetvelCell.font = { bold: true, size: 8, color: { argb: 'FF1E3A8A' } };
+        cetvelCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cetvelCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E7FF' } };
+      });
+      summaryLabels.forEach((_, i) => {
+        const col = summaryStart + i;
+        const cell = ws.getCell(cetvelRow, col);
+        cell.value = '';
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+      });
+      ws.getRow(cetvelRow).height = 18;
+      row += 1;
+
       const map = draftYoklamalar[p.id] || {};
       let geldiGun = 0;
       let yokGun = 0;
@@ -796,7 +820,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     summaryWs.getRow(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D4ED8' } };
     if (logoDataUrl) {
       const summaryLogoId = wb.addImage({ base64: logoDataUrl, extension: 'png' });
-      summaryWs.addImage(summaryLogoId, { tl: { col: 0.1, row: 0.1 }, ext: { width: 56, height: 50 } });
+      summaryWs.addImage(summaryLogoId, { tl: { col: 0.1, row: 0.08 }, ext: { width: 220, height: 52 } });
     }
 
     let sRow = 4;

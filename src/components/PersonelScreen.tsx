@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Users, UserPlus, Trash2, CreditCard as Edit3, Camera, Search, ShieldCheck, Mail, Phone, MapPin, DollarSign, UserX, FileText, CloudUpload as UploadCloud, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, Loader as Loader2, Building2, History, Download } from 'lucide-react';
 import { Personel } from '../types/erp';
 import { fetchApiJson } from '../lib/apiClient';
@@ -26,6 +26,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportSelectedIds, setExportSelectedIds] = useState<Set<string>>(new Set());
   const [exportFormat, setExportFormat] = useState<'html' | 'csv'>('csv');
+  const [showOnlyActive, setShowOnlyActive] = useState(false);
 
   // SGK PDF parsing states
   const [regMethod, setRegMethod] = useState<'manual' | 'sgk_pdf'>('manual');
@@ -111,7 +112,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
           adres: parsed.adres || prev.adres,
           il: parsed.il || prev.il,
           ilce: parsed.ilce || prev.ilce,
-          gorev: parsed.gorev || prev.gorev || 'İŞÇİ',
+          gorev: normalizePersonelGorev(parsed.gorev || prev.gorev || 'DÜZ İŞÇİ'),
           ibanNo: parsed.ibanNo || prev.ibanNo || 'TR',
           bankaAdi: parsed.bankaAdi || prev.bankaAdi || '',
         }));
@@ -129,8 +130,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
           userFriendlyMsg = 'Sunucu zaman aşımına uğradı (504). Çözüm: (1) Belgenin fotoğrafını (PDF yerine JPG) yükleyin, (2) https://kibritci-erp.onrender.com adresini kullanın, (3) Render\'da GEMINI_API_KEY tanımlı olduğundan emin olun.';
         } else if (userFriendlyMsg.includes('kibritci-web-1') || userFriendlyMsg.includes('boş yanıt') || userFriendlyMsg.includes('404')) {
           userFriendlyMsg = 'Yapay zeka sunucusuna ulaşılamadı. Lütfen siteyi https://kibritci-erp.onrender.com adresinden açın (eski kibritci-web-1 adresi artık çalışmıyor).';
-        } else if (/429|RESOURCE_EXHAUSTED|quota exceeded|kota doldu/i.test(userFriendlyMsg)) {
-          userFriendlyMsg = 'Gemini günlük ücretsiz kota doldu (model başına ~20 istek). Yarın tekrar deneyin veya Google AI Studio\'da faturalandırmayı açın: https://ai.dev/rate-limit';
+        } else if (/429|RESOURCE_EXHAUSTED|quota exceeded|kota doldu|prepayment credits are depleted|billing#prepay/i.test(userFriendlyMsg)) {
+          userFriendlyMsg = 'Gemini kredisi/kotası tükendi (prepayment credits depleted). Google AI Studio > Projects > Billing bölümünde bakiye/faturalandırma açıp redeploy yapın: https://ai.google.dev/gemini-api/docs/billing#prepay';
         } else if (userFriendlyMsg.includes("503") || userFriendlyMsg.includes("UNAVAILABLE") || userFriendlyMsg.includes("high demand") || userFriendlyMsg.includes("experiencing high demand")) {
           userFriendlyMsg = "Yapay zeka servisi şu anda çok yoğun (Geçici 503 Hatası). Sunucu otomatik olarak yeniden denedi ancak yoğunluk devam ediyor. Lütfen birkaç saniye bekleyip tekrar dosya yüklemeyi deneyin veya Manuel Kayıt yöntemini kullanın.";
         }
@@ -155,7 +156,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     il: "",
     ilce: "",
     departman: "Şantiye",
-    gorev: "İŞÇİ",
+    gorev: "DÜZ İŞÇİ",
     iseGirisTarihi: new Date().toISOString().split('T')[0],
     cinsiyet: "Erkek",
     maas: 30000,
@@ -203,6 +204,37 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
       .toUpperCase()
       .trim();
 
+  const normalizeRoleKey = (value: string | undefined | null) =>
+    String(value || '')
+      .trim()
+      .toLocaleUpperCase('tr-TR')
+      .replace(/İ/g, 'I')
+      .replace(/Ş/g, 'S')
+      .replace(/Ç/g, 'C')
+      .replace(/Ğ/g, 'G')
+      .replace(/Ü/g, 'U')
+      .replace(/Ö/g, 'O')
+      .replace(/[^A-Z0-9]/g, '');
+
+  const normalizePersonelGorev = (value: string | undefined | null) => {
+    const raw = String(value || '').trim();
+    const key = normalizeRoleKey(raw);
+    if (key === 'ISCI' || key === 'DUZISCI') return 'DÜZ İŞÇİ';
+    return raw || 'DÜZ İŞÇİ';
+  };
+
+  useEffect(() => {
+    const needsNormalize = personeller.some((p) => normalizePersonelGorev(p.gorev) !== String(p.gorev || '').trim());
+    if (!needsNormalize) return;
+
+    setPersoneller((prev) => prev.map((p) => ({ ...p, gorev: normalizePersonelGorev(p.gorev) })));
+    void Promise.all(
+      personeller.map((p) =>
+        saveDocument('personeller', { ...p, gorev: normalizePersonelGorev(p.gorev) } as Personel).catch(() => undefined)
+      )
+    );
+  }, [personeller, setPersoneller]);
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.ad || !formData.soyad || !formData.tcNo) {
@@ -237,7 +269,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     const normalizedPayload = {
       ...formData,
       tcNo: normalizedTc,
-      ibanNo: inputIban && inputIban !== 'TR' ? inputIban : prevIban
+      ibanNo: inputIban && inputIban !== 'TR' ? inputIban : prevIban,
+      gorev: normalizePersonelGorev((formData as any).gorev)
     };
 
     if ('id' in formData) {
@@ -283,9 +316,10 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   const dataToSave = () => formData;
 
   const filteredPersonel = personeller.filter(p => {
+    if (showOnlyActive && !is_aktif_status(p.durum)) return false;
     const term = searchTerm.toLowerCase();
     const fullName = `${p.ad} ${p.soyad}`.toLowerCase();
-    return fullName.includes(term) || p.tcNo.includes(term) || p.gorev.toLowerCase().includes(term);
+    return fullName.includes(term) || p.tcNo.includes(term) || normalizePersonelGorev(p.gorev).toLowerCase().includes(term);
   });
 
   const handleShowHistory = (p: Personel) => {
@@ -743,7 +777,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                   onChange={handleInputChange}
                   className="w-full text-xs border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50"
                 >
-                  <option value="İŞÇİ">İŞÇİ</option>
+                  <option value="DÜZ İŞÇİ">DÜZ İŞÇİ</option>
                   <option value="FORMEN">FORMEN</option>
                   <option value="USTA">USTA</option>
                   <option value="MİRAR">MİMAR</option>
@@ -928,6 +962,13 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowOnlyActive((prev) => !prev)}
+              className={`text-[10px] font-bold px-3 py-2 rounded-xl border cursor-pointer ${showOnlyActive ? 'bg-emerald-600 text-white border-emerald-700' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+            >
+              {showOnlyActive ? 'Sadece Aktifler: AÇIK' : 'Sadece Aktifleri Göster'}
+            </button>
             <button
               type="button"
               onClick={() => {

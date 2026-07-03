@@ -41,13 +41,13 @@ export function formatGeminiKeyHint(format: GeminiKeyFormat): string {
 
 function isGeminiQuotaError(error: unknown): boolean {
   const raw = error instanceof Error ? error.message : String(error);
-  if (/429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota/i.test(raw)) {
+  if (/429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota|prepayment credits are depleted|billing#prepay/i.test(raw)) {
     return true;
   }
   try {
     const parsed = JSON.parse(raw);
     const inner = parsed?.error?.message ?? parsed?.message ?? '';
-    return /429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota/i.test(String(inner));
+    return /429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota|prepayment credits are depleted|billing#prepay/i.test(String(inner));
   } catch {
     return false;
   }
@@ -66,15 +66,15 @@ export function parseGeminiError(error: unknown): string {
     /* düz metin */
   }
 
-  if (/429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota/i.test(msg)) {
+  if (/429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota|prepayment credits are depleted|billing#prepay/i.test(msg)) {
     const modelMatch = msg.match(/model:\s*([\w.-]+)/i);
     const model = modelMatch?.[1] ?? 'Gemini';
     return [
-      `Gemini API günlük ücretsiz kota doldu (${model}).`,
-      'Ücretsiz planda model başına günde ~20 istek sınırı vardır.',
-      '• Birkaç dakika veya ertesi gün tekrar deneyin',
-      '• Kalıcı çözüm: Google AI Studio → Billing açın veya ücretli plan',
-      '• Kullanım: https://ai.dev/rate-limit',
+      `Gemini API kredisi/kotası tükendi (${model}).`,
+      'prepayment credits depleted hatası, proje bakiyesinin bittiğini gösterir.',
+      '• Google AI Studio → Projects → Billing bölümünden bakiye/faturalandırma açın',
+      '• Sonra Render/Vercel üzerinde redeploy yapın',
+      '• Detay: https://ai.google.dev/gemini-api/docs/billing#prepay',
     ].join('\n');
   }
 
@@ -82,7 +82,7 @@ export function parseGeminiError(error: unknown): string {
     return [
       'Gemini API anahtarı reddedildi.',
       '• AI Studio\'dan yeni Auth key (AQ.…) oluşturun: https://aistudio.google.com/apikey',
-      '• Vercel: Settings → Environment Variables → GEMINI_API_KEY (tırnaksız, boşluksuz)',
+      '• Render/Vercel: Environment Variables → GEMINI_API_KEY (tırnaksız, boşluksuz)',
       '• Değişiklikten sonra redeploy yapın',
       '• Eski AIza anahtarı kısıtlamasızsa artık çalışmaz — Auth key kullanın',
     ].join('\n');
