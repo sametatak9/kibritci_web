@@ -22,6 +22,7 @@ export const PORTAL_PAGES = [
   { key: "arac", label: "Araç ve Demirbaş", group: "İDARİ İŞLER & SAHA" },
   { key: "kamp", label: "Kamp Yönetimi", group: "İDARİ İŞLER & SAHA" },
   { key: "saha", label: "Daily Saha Faaliyetleri", group: "İDARİ İŞLER & SAHA" },
+  { key: "programli_faaliyet", label: "Programlı Faaliyet", group: "İDARİ İŞLER & SAHA" },
   { key: "saha_kolaj", label: "Saha Faaliyet Kolajı", group: "İDARİ İŞLER & SAHA" },
   { key: "tutanak", label: "Hazır Tutanaklar", group: "İDARİ İŞLER & SAHA" },
   { key: "formen_ekrani", label: "Formen Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
@@ -40,7 +41,7 @@ export type PortalPageKey = (typeof PORTAL_PAGES)[number]["key"];
 
 /** Mobil saha rolleri → erişilebilir panel sekmeleri */
 export const MOBILE_ROLE_ALLOWED_TABS: Record<string, PortalPageKey[]> = {
-  FORMEN: ['formen_ekrani', 'personel'],
+  FORMEN: ['formen_ekrani', 'programli_faaliyet', 'personel'],
   GÜVENLİK: ['guvenlik_ekrani'],
   KAMPÇI: ['kampci_ekrani'],
   LOJİSTİK: ['lojistik_ekrani'],

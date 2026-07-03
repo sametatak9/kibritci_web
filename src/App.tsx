@@ -30,6 +30,7 @@ import { EvrakAktarimiScreen } from './components/EvrakAktarimiScreen';
 import { MobileManagerScreen } from './components/MobileManagerScreen';
 import { KibarHakedisScreen } from './components/KibarHakedisScreen';
 import { SahaKolajScreen } from './components/SahaKolajScreen';
+import { ProgramliFaaliyetScreen } from './components/ProgramliFaaliyetScreen';
 
 // Type definitions
 import { 
@@ -37,7 +38,7 @@ import {
   KasaHareketi, AracBakim, Demisbas, KampOdasi, KampKaydi, KampYerleske, KampKat,
   HazirTutanak, CariKart, StokKart, EpostaGonderim, SahaFaaliyeti as SahaFaaliyetiType,
   OperatorFaaliyet, TaseronKesintiRaporu, TaseronEnerjiKaydi, TaseronYemekKaydi, MaaşOdeme, PersonelIslemGecmisi, CariKartIslem, StokKartIslem,
-  EvrakBaglantiGrubu, OnayliAnalizRaporu
+  EvrakBaglantiGrubu, OnayliAnalizRaporu, ProgramliFaaliyet
 } from './types/erp';
 
 // Initial Mock Data
@@ -210,6 +211,7 @@ export default function App() {
   const [kampYerleskeleri, setKampYerleskeleri] = useState<KampYerleske[]>([]);
   const [kampKatlari, setKampKatlari] = useState<KampKat[]>([]);
   const [sahaFaaliyetleri, setSahaFaaliyetleri] = useState<SahaFaaliyetiType[]>([]);
+  const [programliFaaliyetler, setProgramliFaaliyetler] = useState<ProgramliFaaliyet[]>([]);
   const [hazirTutanaklar, setHazirTutanaklar] = useState<HazirTutanak[]>([]);
   
   const [cariKartlar, setCariKartlar] = useState<CariKart[]>([]);
@@ -514,6 +516,10 @@ export default function App() {
         }
         setSahaFaaliyetleri(reportData);
 
+        setLoadingMsg('Programlı faaliyet arşivi hazırlanıyor...');
+        const loadedProgramliFaaliyetler = await seedCollectionIfEmpty('programliFaaliyetler', []);
+        setProgramliFaaliyetler(loadedProgramliFaaliyetler);
+
         setLoadingMsg('Hukuki ve resmi şantiye hazır tutanaklar yükleniyor...');
         const protocolData = await seedCollectionIfEmpty('hazirTutanaklar', INITIAL_TUTANAK);
         setHazirTutanaklar(protocolData);
@@ -763,6 +769,14 @@ export default function App() {
       setSahaFaaliyetleri(list);
     });
 
+    const unsubProgramliFaaliyetler = onSnapshot(collection(db, 'programliFaaliyetler'), (snapshot) => {
+      const list: ProgramliFaaliyet[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() } as ProgramliFaaliyet);
+      });
+      setProgramliFaaliyetler(list);
+    });
+
     const unsubKasaHareketleri = onSnapshot(collection(db, 'kasaHareketleri'), (snapshot) => {
       const list: KasaHareketi[] = [];
       snapshot.forEach((doc) => {
@@ -897,6 +911,7 @@ export default function App() {
       unsubYoklamalar();
       unsubKullanicilar();
       unsubSahaFaaliyetleri();
+      unsubProgramliFaaliyetler();
       unsubKasaHareketleri();
       unsubKampOdalari();
       unsubKampKayitlari();
@@ -1200,6 +1215,16 @@ export default function App() {
     setSahaFaaliyetleri(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
       setTimeout(() => syncArrayToFirestore('sahaFaaliyetleri', prev, next), 0);
+      return next;
+    });
+  };
+
+  const setProgramliFaaliyetlerWithSync = (
+    updater: ProgramliFaaliyet[] | ((s: ProgramliFaaliyet[]) => ProgramliFaaliyet[])
+  ) => {
+    setProgramliFaaliyetler((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setTimeout(() => syncArrayToFirestore('programliFaaliyetler', prev, next), 0);
       return next;
     });
   };
@@ -2168,6 +2193,16 @@ export default function App() {
                     onSignOut={handleSignOut}
                     isStandalone={hideSidebarAndTopbar}
                     kullanicilar={kullanicilar}
+                  />
+                ) : renderAccessDenied()
+              )}
+
+              {activeTab === "programli_faaliyet" && (
+                isAllowedFormen ? (
+                  <ProgramliFaaliyetScreen
+                    programliFaaliyetler={programliFaaliyetler}
+                    setProgramliFaaliyetler={setProgramliFaaliyetlerWithSync}
+                    currentUser={currentUser}
                   />
                 ) : renderAccessDenied()
               )}

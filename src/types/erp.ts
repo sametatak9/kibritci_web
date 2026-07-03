@@ -262,6 +262,29 @@ export interface SahaFaaliyeti {
   isciSayisi?: number;
 }
 
+export type ProgramliFaaliyetAsamaAnahtari = 'BASLANGIC' | 'ILERLEME' | 'TAMAMLANMA';
+
+export interface ProgramliFaaliyetAsama {
+  adim: ProgramliFaaliyetAsamaAnahtari;
+  tamamlandi: boolean;
+  tamamlanmaTarihi?: string;
+  aciklama?: string;
+  fotoUrl?: string;
+}
+
+export interface ProgramliFaaliyet {
+  id: string;
+  tarih: string;
+  hedefTanimi: string;
+  parsel: string;
+  bloklar: string;
+  isinAdi: string;
+  olusturan?: string;
+  olusturanUid?: string;
+  durum: 'PLANLANDI' | 'DEVAM_EDIYOR' | 'TAMAMLANDI';
+  asamalar: ProgramliFaaliyetAsama[];
+}
+
 /** Ay bazlı saha faaliyet foto kolajı / dergi albümü */
 export interface SahaKolajFoto {
   id: string;
