@@ -619,7 +619,8 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
       onayDurumu: isSigned ? 'ONAYLANDI' : 'BİLİNMİYOR',
       kalemler,
       eImzalar: [],
-      arsivde: false,
+      // Legacy belge importları doğrudan arşiv sekmesinde başlar.
+      arsivde: true,
     };
   };
 
