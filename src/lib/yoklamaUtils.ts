@@ -58,6 +58,23 @@ export function setYoklamaDay(
   return { ...(map || {}), [dateKey]: data };
 }
 
+/** Formen sıfırlama: o günün Geldi/Yok kaydını kaldırır */
+export function clearYoklamaDay(
+  personMap: PersonelYoklamaMap | undefined,
+  year: number,
+  month: number,
+  day: number
+): Record<string, YoklamaGunKaydi> | undefined {
+  const map = asYoklamaGunMap(personMap);
+  if (!map) return undefined;
+  const dateKey = yoklamaDateKey(year, month, day);
+  const legacyKey = String(day);
+  const next = { ...map };
+  delete next[dateKey];
+  if (legacyKey !== dateKey) delete next[legacyKey];
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
 export function personHasYoklamaInMonth(
   personMap: PersonelYoklamaMap | undefined,
   year: number,

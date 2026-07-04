@@ -524,8 +524,8 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
             mesaiSaati: 0,
             gonderen: currentUser?.email || 'formen',
           });
-        } else if (!dayData) {
-          // O gün için hiç kayıt yoksa varsayılan satırı oluştur.
+        } else {
+          // Sıfırlanan / işaretsiz personel — Geldi/Yok kaydını temizle
           next[p.id] = setYoklamaDay(next[p.id], year, month, day, {
             durum: 'Girilmedi',
             mesaiSaati: 0,
