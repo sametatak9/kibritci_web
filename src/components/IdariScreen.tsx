@@ -8,7 +8,7 @@ import { KibritciLogo } from './KibritciLogo';
 import { 
   AracBakim, Demisbas, Tahsis, KampOdasi, KampKaydi, KampSarf, KampFaaliyet,
   SahaFaaliyeti, HazirTutanak, CariKart, StokKart, EpostaGonderim, Personel,
-  KampYerleske, KampKat, SahaGunRaporArsiv
+  KampYerleske, KampKat, SahaGunRaporArsiv, SahaFaaliyetKategori, AylikYoklamaMap
 } from '../types/erp';
 import { db } from '../lib/firebase';
 import {
@@ -37,6 +37,7 @@ import { collection, onSnapshot, getDocs, doc, setDoc, updateDoc, arrayUnion } f
 import { PARSEL_BLOK_MAP, defaultBlokForParsel } from '../data/parselBlokMap';
 import { normalizeDateKey, todayDateKey } from '../lib/dateKeyUtils';
 import { getYoklamaDay, isTaseronPersonel } from '../lib/yoklamaUtils';
+import { applySahaMesaiToYoklama, clampMesaiSaati, formatFaaliyetKategoriLabel } from '../lib/sahaFaaliyetUtils';
 import { ParselBlokAnalizPanel } from './ParselBlokAnalizPanel';
 
 interface IdariScreenProps {
@@ -65,7 +66,9 @@ interface IdariScreenProps {
   personeller: Personel[];
   aracKmLoglari: any[];
   setAracKmLoglari: (updater: any) => void;
-  yoklamalar?: any;
+  yoklamalar?: AylikYoklamaMap;
+  setYoklamalar?: React.Dispatch<React.SetStateAction<AylikYoklamaMap>>;
+  saveYoklamalarNow?: (next: AylikYoklamaMap) => Promise<void>;
 }
 
 interface FormenGunlukRaporKaydi {
@@ -98,8 +101,11 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   personeller,
   aracKmLoglari,
   setAracKmLoglari,
-  yoklamalar = {}
+  yoklamalar = {},
+  setYoklamalar,
+  saveYoklamalarNow,
 }) => {
+  const MAX_MESAI_SAATI = 14;
 
   // ─────────────────────────────────────────────────────────────
   // 🚛 1. ARAÇ & DEMİRBAŞ STATES & EVENTS
@@ -680,7 +686,13 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   // Selected daily/monthly field worker selection
   const [selectedFieldStaff, setSelectedFieldStaff] = useState<string[]>([]);
   const [sahaStaffSearch, setSahaStaffSearch] = useState('');
+  const [sahaFaaliyetKategori, setSahaFaaliyetKategori] = useState<SahaFaaliyetKategori>('IMALAT');
+  const [sahaMesaiSaatleri, setSahaMesaiSaatleri] = useState<Record<string, number>>({});
   
+  const sahaKayitTarihiKey = useMemo(
+    () => normalizeDateKey(sahaKayitTarihi) || sahaKayitTarihi,
+    [sahaKayitTarihi]
+  );
   const [sahaSearchKeyword, setSahaSearchKeyword] = useState("");
   const [editingSahaId, setEditingSahaId] = useState<string | null>(null);
   const [deleteConfirmSahaId, setDeleteConfirmSahaId] = useState<string | null>(null);
@@ -703,12 +715,12 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const assignedPersonelOnKayitTarihi = useMemo(() => {
     const ids = new Set<string>();
     sahaFaaliyetleri.forEach((sf) => {
-      if (normalizeDateKey(sf.tarih) !== sahaKayitTarihi) return;
+      if (normalizeDateKey(sf.tarih) !== sahaKayitTarihiKey) return;
       if (editingSahaId && sf.id === editingSahaId) return;
       (sf.aktifPersonelListesi || []).forEach((id) => ids.add(id));
     });
     return ids;
-  }, [sahaFaaliyetleri, sahaKayitTarihi, editingSahaId]);
+  }, [sahaFaaliyetleri, sahaKayitTarihiKey, editingSahaId]);
 
   const geldiPersonelOnKayitTarihi = useMemo(() => {
     const { y, m, d } = sahaKayitDateParts;
@@ -913,47 +925,114 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     }
   };
 
+  const resetSahaForm = () => {
+    setEditingSahaId(null);
+    setSahaAciklama('');
+    setSahaNitelik('');
+    setSahaFotoBase64(undefined);
+    setPhotoSelectedSim(false);
+    setSahaUstaSayisi(0);
+    setSahaIsciSayisi(0);
+    setSelectedFieldStaff([]);
+    setSahaStaffSearch('');
+    setSahaFaaliyetKategori('IMALAT');
+    setSahaMesaiSaatleri({});
+  };
+
+  const syncIdariMesaiToYoklama = async (
+    tarih: string,
+    personelIds: string[],
+    mesaiMap: Record<string, number> | undefined
+  ) => {
+    if (!setYoklamalar) return;
+    const next = applySahaMesaiToYoklama(
+      yoklamalar,
+      tarih,
+      mesaiMap,
+      personelIds,
+      'idari_saha',
+      MAX_MESAI_SAATI
+    );
+    if (saveYoklamalarNow) {
+      await saveYoklamalarNow(next);
+    } else {
+      setYoklamalar(next);
+    }
+  };
+
   const handleSaveSahaFaaliyeti = async () => {
     if (!sahaNitelik) {
-      alert("Lütfen iş niteliğini girin.");
+      alert('Lütfen iş niteliğini girin.');
       return;
     }
     if (!sahaAciklama) {
-      alert("Lütfen günlük çalışma açıklamasını girin.");
+      alert('Lütfen günlük çalışma açıklamasını girin.');
       return;
+    }
+
+    const isMesaiFaaliyet = sahaFaaliyetKategori === 'MESAI_SAHA';
+    if (isMesaiFaaliyet && selectedFieldStaff.length === 0) {
+      alert('Mesai saha faaliyeti için en az bir personel seçin.');
+      return;
+    }
+    if (isMesaiFaaliyet) {
+      const hasMesai = selectedFieldStaff.some(
+        (pid) => clampMesaiSaati(sahaMesaiSaatleri[pid] || 0, MAX_MESAI_SAATI) > 0
+      );
+      if (!hasMesai) {
+        alert('Mesai saha faaliyeti için personellere mesai saati girin.');
+        return;
+      }
     }
 
     const applyAutoCountsFromSelection = () => {
       if (selectedFieldStaffList.length === 0) return { usta: sahaUstaSayisi, isci: sahaIsciSayisi };
-      const usta = selectedFieldStaffList.filter((p) => String(p.gorev || '').toLocaleUpperCase('tr-TR').includes('USTA')).length;
+      const usta = selectedFieldStaffList.filter((p) =>
+        String(p.gorev || '').toLocaleUpperCase('tr-TR').includes('USTA')
+      ).length;
       const isci = Math.max(0, selectedFieldStaffList.length - usta);
       return { usta, isci };
     };
     const selectedCounts = applyAutoCountsFromSelection();
+    const faaliyetTarih = sahaKayitTarihiKey;
+    const mesaiPayload = isMesaiFaaliyet
+      ? Object.fromEntries(
+          selectedFieldStaff.map((pid) => [
+            pid,
+            clampMesaiSaati(sahaMesaiSaatleri[pid] || 0, MAX_MESAI_SAATI),
+          ])
+        )
+      : undefined;
 
     if (editingSahaId) {
       const faaliyetId = editingSahaId;
-      const faaliyetTarih = sahaKayitTarihi;
-      setSahaFaaliyetleri(prev => prev.map(sf => {
-        if (sf.id === editingSahaId) {
-          return {
-            ...sf,
-            tarih: faaliyetTarih,
-            isNiteligi: sahaNitelik,
-            parsel: sahaParsel,
-            blok: sahaBlok,
-            aciklama: sahaAciklama,
-            fotoUrl: sahaFotoBase64 !== undefined ? (sahaFotoBase64 || undefined) : sf.fotoUrl,
-            ustaSayisi: selectedCounts.usta,
-            isciSayisi: selectedCounts.isci,
-            aktifPersonelListesi: selectedFieldStaff,
-            kaynakEkran: sf.kaynakEkran || 'IDARI_SAHA'
-          };
-        }
-        return sf;
-      }));
+      setSahaFaaliyetleri((prev) =>
+        prev.map((sf) => {
+          if (sf.id === editingSahaId) {
+            return {
+              ...sf,
+              tarih: faaliyetTarih,
+              isNiteligi: sahaNitelik,
+              parsel: sahaParsel,
+              blok: sahaBlok,
+              aciklama: sahaAciklama,
+              fotoUrl: sahaFotoBase64 !== undefined ? sahaFotoBase64 || undefined : sf.fotoUrl,
+              ustaSayisi: selectedCounts.usta,
+              isciSayisi: selectedCounts.isci,
+              aktifPersonelListesi: selectedFieldStaff,
+              faaliyetKategori: sahaFaaliyetKategori,
+              mesaiSaatleri: isMesaiFaaliyet ? mesaiPayload : undefined,
+              kaynakEkran: sf.kaynakEkran || 'IDARI_SAHA',
+            };
+          }
+          return sf;
+        })
+      );
+      if (isMesaiFaaliyet && mesaiPayload) {
+        await syncIdariMesaiToYoklama(faaliyetTarih, selectedFieldStaff, mesaiPayload);
+      }
       if (selectedFieldStaff.length > 0) {
-        const assignmentText = `${faaliyetTarih} tarihinde ${sahaParsel} / ${sahaBlok} alanında "${sahaNitelik}" görevlendirmesi güncellendi.`;
+        const assignmentText = `${faaliyetTarih} tarihinde ${sahaParsel} / ${sahaBlok} alanında "${sahaNitelik}" görevlendirmesi güncellendi (${formatFaaliyetKategoriLabel(sahaFaaliyetKategori)}).`;
         const assignmentPromises = selectedFieldStaff.map(async (personelId) => {
           const personel = personeller.find((p) => p.id === personelId);
           if (!personel) return;
@@ -969,36 +1048,33 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
         });
         await Promise.all(assignmentPromises);
       }
-      setEditingSahaId(null);
-      setSahaAciklama("");
-      setSahaNitelik("");
-      setSahaFotoBase64(undefined);
-      setPhotoSelectedSim(false);
-      setSahaUstaSayisi(0);
-      setSahaIsciSayisi(0);
-      setSelectedFieldStaff([]);
-      setSahaStaffSearch('');
-      alert("Saha faaliyeti başarıyla güncellendi.");
+      resetSahaForm();
+      alert('Saha faaliyeti başarıyla güncellendi.' + (isMesaiFaaliyet ? ' Mesai puantaja işlendi.' : ''));
     } else {
       const faaliyetId = `sf_${Date.now()}`;
       const newLog: SahaFaaliyeti = {
         id: faaliyetId,
-        personelId: "p1",
-        tarih: sahaKayitTarihi,
+        personelId: 'p1',
+        tarih: faaliyetTarih,
         isNiteligi: sahaNitelik,
         parsel: sahaParsel,
         blok: sahaBlok,
         aciklama: sahaAciklama,
-        fotoUrl: sahaFotoBase64 || (photoSelectedSim ? "saha_foto_example.jpg" : undefined),
+        fotoUrl: sahaFotoBase64 || (photoSelectedSim ? 'saha_foto_example.jpg' : undefined),
         ustaSayisi: selectedCounts.usta,
         isciSayisi: selectedCounts.isci,
         aktifPersonelListesi: selectedFieldStaff,
-        kaynakEkran: 'IDARI_SAHA'
+        faaliyetKategori: sahaFaaliyetKategori,
+        mesaiSaatleri: isMesaiFaaliyet ? mesaiPayload : undefined,
+        kaynakEkran: 'IDARI_SAHA',
       };
 
-      setSahaFaaliyetleri(prev => [newLog, ...prev]);
+      setSahaFaaliyetleri((prev) => [newLog, ...prev]);
+      if (isMesaiFaaliyet && mesaiPayload) {
+        await syncIdariMesaiToYoklama(faaliyetTarih, selectedFieldStaff, mesaiPayload);
+      }
       if (selectedFieldStaff.length > 0) {
-        const assignmentText = `${newLog.tarih} tarihinde ${newLog.parsel} / ${newLog.blok} alanında "${newLog.isNiteligi}" görevlendirmesi.`;
+        const assignmentText = `${newLog.tarih} tarihinde ${newLog.parsel} / ${newLog.blok} alanında "${newLog.isNiteligi}" görevlendirmesi (${formatFaaliyetKategoriLabel(sahaFaaliyetKategori)}).`;
         const assignmentPromises = selectedFieldStaff.map(async (personelId) => {
           const personel = personeller.find((p) => p.id === personelId);
           if (!personel) return;
@@ -1014,15 +1090,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
         });
         await Promise.all(assignmentPromises);
       }
-      setSahaAciklama("");
-      setSahaNitelik("");
-      setSahaFotoBase64(undefined);
-      setPhotoSelectedSim(false);
-      setSahaUstaSayisi(0);
-      setSahaIsciSayisi(0);
-      setSelectedFieldStaff([]);
-      setSahaStaffSearch('');
-      alert("Günlük saha imalat raporu başarıyla kaydedildi.");
+      resetSahaForm();
+      alert('Günlük saha imalat raporu başarıyla kaydedildi.' + (isMesaiFaaliyet ? ' Mesai puantaja işlendi.' : ''));
     }
   };
 
@@ -1035,19 +1104,13 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     setSahaAciklama(sf.aciklama);
     setSahaUstaSayisi(sf.ustaSayisi || 0);
     setSahaIsciSayisi(sf.isciSayisi || 0);
-    setSelectedFieldStaff(Array.isArray(sf.aktifPersonelListesi) ? sf.aktifPersonelListesi : []);
+    setSelectedFieldStaff(Array.isArray(sf.aktifPersonelListesi) ? [...sf.aktifPersonelListesi] : []);
+    setSahaFaaliyetKategori(sf.faaliyetKategori === 'MESAI_SAHA' ? 'MESAI_SAHA' : 'IMALAT');
+    setSahaMesaiSaatleri({ ...(sf.mesaiSaatleri || {}) });
   };
 
   const handleCancelEditSaha = () => {
-    setEditingSahaId(null);
-    setSahaAciklama("");
-    setSahaNitelik("");
-    setSahaFotoBase64(undefined);
-    setPhotoSelectedSim(false);
-    setSahaUstaSayisi(0);
-    setSahaIsciSayisi(0);
-    setSelectedFieldStaff([]);
-    setSahaStaffSearch('');
+    resetSahaForm();
   };
 
   const handleDeleteSahaFaaliyeti = (id: string) => {
@@ -3020,6 +3083,36 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 <p className="text-[9px] text-slate-400 mt-1">Personel listesi seçilen tarihte yoklamada &quot;Geldi&quot; olan ve başka faaliyete atanmamış kişilerden oluşur.</p>
               </div>
 
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSahaFaaliyetKategori('IMALAT')}
+                  className={`py-2 px-2 rounded-lg text-[10px] font-bold border ${
+                    sahaFaaliyetKategori === 'IMALAT'
+                      ? 'bg-amber-50 border-amber-300 text-amber-900'
+                      : 'bg-slate-50 border-slate-200 text-slate-600'
+                  }`}
+                >
+                  İmalat Faaliyeti
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSahaFaaliyetKategori('MESAI_SAHA')}
+                  className={`py-2 px-2 rounded-lg text-[10px] font-bold border ${
+                    sahaFaaliyetKategori === 'MESAI_SAHA'
+                      ? 'bg-purple-50 border-purple-300 text-purple-900'
+                      : 'bg-slate-50 border-slate-200 text-slate-600'
+                  }`}
+                >
+                  Mesai Saha Faaliyeti
+                </button>
+              </div>
+              {sahaFaaliyetKategori === 'MESAI_SAHA' && (
+                <p className="text-[9px] text-purple-700 bg-purple-50 border border-purple-100 rounded-lg px-2 py-1">
+                  Girilen mesai saatleri Yoklama ve Puantaj tablosuna yazılır.
+                </p>
+              )}
+
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">İş Niteliği / Yapılan İmalat *</label>
                 <input 
@@ -3151,6 +3244,38 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 <div className="text-[10px] text-slate-600 font-semibold">
                   Seçili Personel: {selectedFieldStaffList.length}
                 </div>
+                {sahaFaaliyetKategori === 'MESAI_SAHA' && selectedFieldStaff.length > 0 && (
+                  <div className="border-t border-slate-200 pt-2 space-y-1.5">
+                    <span className="font-bold text-purple-700 uppercase text-[9px] block">Personel Mesai Saatleri</span>
+                    {selectedFieldStaff.map((pid) => {
+                      const p = personeller.find((x) => x.id === pid);
+                      return (
+                        <div key={pid} className="flex items-center justify-between gap-2 bg-white border border-purple-100 rounded-lg px-2 py-1">
+                          <span className="text-[10px] font-semibold text-slate-800 truncate">
+                            {p ? `${p.ad} ${p.soyad}` : pid}
+                          </span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <input
+                              type="number"
+                              min={0}
+                              max={MAX_MESAI_SAATI}
+                              step={0.5}
+                              value={sahaMesaiSaatleri[pid] ?? ''}
+                              onChange={(e) =>
+                                setSahaMesaiSaatleri((prev) => ({
+                                  ...prev,
+                                  [pid]: clampMesaiSaati(parseFloat(e.target.value) || 0, MAX_MESAI_SAATI),
+                                }))
+                              }
+                              className="w-16 text-center text-[10px] font-mono font-bold border border-purple-200 rounded py-0.5"
+                            />
+                            <span className="text-[9px] text-slate-500">sa</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Photo uploader with true file selection */}

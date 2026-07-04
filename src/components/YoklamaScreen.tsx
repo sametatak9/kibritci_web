@@ -2319,11 +2319,18 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                       <div className="flex-1 p-4 min-w-0">
                         <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
                           <span className="text-[11px] font-bold text-slate-700">{tarihLabel}</span>
-                          {f.kaynakEkran && (
-                            <span className="text-[9px] font-bold uppercase tracking-wide text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                              {f.kaynakEkran.replace(/_/g, ' ')}
-                            </span>
-                          )}
+                          <div className="flex gap-1 flex-wrap">
+                            {f.faaliyetKategori === 'MESAI_SAHA' && (
+                              <span className="text-[9px] font-bold uppercase tracking-wide text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full">
+                                Mesai Saha
+                              </span>
+                            )}
+                            {f.kaynakEkran && (
+                              <span className="text-[9px] font-bold uppercase tracking-wide text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                                {f.kaynakEkran.replace(/_/g, ' ')}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div className="text-xs font-bold text-slate-900 mb-1">{f.isNiteligi || 'İş niteliği belirtilmemiş'}</div>
                         {(f.parsel || f.blok) && (
@@ -2333,6 +2340,20 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                         )}
                         {f.aciklama && (
                           <p className="text-[11px] text-slate-600 leading-relaxed">{f.aciklama}</p>
+                        )}
+                        {f.faaliyetKategori === 'MESAI_SAHA' && f.mesaiSaatleri && (
+                          <div className="mt-2 text-[10px] text-purple-700 font-semibold">
+                            Faaliyet mesaisi:{' '}
+                            {(f.aktifPersonelListesi || [])
+                              .map((pid) => {
+                                const saat = f.mesaiSaatleri?.[pid];
+                                if (!saat) return null;
+                                const p = personeller.find((x) => x.id === pid);
+                                return `${p ? `${p.ad} ${p.soyad}` : pid}: ${saat} sa`;
+                              })
+                              .filter(Boolean)
+                              .join(' · ') || '-'}
+                          </div>
                         )}
                         {!foto && (
                           <div className="mt-2 text-[10px] text-slate-400 italic flex items-center gap-1">

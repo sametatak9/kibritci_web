@@ -249,6 +249,8 @@ export interface KampFaaliyet {
   yerleskeAdi: string;
 }
 
+export type SahaFaaliyetKategori = 'IMALAT' | 'MESAI_SAHA';
+
 export interface SahaFaaliyeti {
   id: string;
   personelId: string;
@@ -259,6 +261,9 @@ export interface SahaFaaliyeti {
   aciklama: string;
   fotoUrl?: string;
   aktifPersonelListesi?: string[];
+  /** Mesai Saha Faaliyetleri: personelId → mesai saati */
+  mesaiSaatleri?: Record<string, number>;
+  faaliyetKategori?: SahaFaaliyetKategori;
   ustaSayisi?: number;
   isciSayisi?: number;
   kaynakEkran?: 'FORMEN_MOBIL' | 'IDARI_SAHA' | string;

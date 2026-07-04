@@ -2167,6 +2167,8 @@ export default function App() {
                   aracKmLoglari={aracKmLoglari}
                   setAracKmLoglari={setAracKmLoglariWithSync}
                   yoklamalar={yoklamalar}
+                  setYoklamalar={setYoklamalarWithSync}
+                  saveYoklamalarNow={saveYoklamalarNow}
                 />
               )}
 
