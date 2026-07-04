@@ -33,6 +33,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   const [selectedMonth, setSelectedMonth] = useState(5); // Mayıs 2026
   const [selectedYear, setSelectedYear] = useState(2026);
   const [searchTerm, setSearchTerm] = useState("");
+  const [personelListTab, setPersonelListTab] = useState<'TUM' | 'FAALIYET'>('TUM');
   
   // Custom Overtime state variables
   const [overtimeStaffId, setOvertimeStaffId] = useState<string>("ALL");
@@ -88,8 +89,16 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       .sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || ''), 'tr'));
   }, [sahaPreviewPerson, sahaFaaliyetleri, selectedYear, selectedMonth]);
 
-  const handlePersonContextMenu = (e: React.MouseEvent, p: Personel) => {
-    e.preventDefault();
+  const personHasFaaliyetInPeriod = (p: Personel): boolean =>
+    sahaFaaliyetleri.some((f) => {
+      if (!personMatchesFaaliyet(p, f)) return false;
+      const dk = normalizeDateKey(f.tarih);
+      if (!dk) return false;
+      const [y, m] = dk.split('-').map(Number);
+      return y === selectedYear && m === selectedMonth;
+    });
+
+  const handlePersonDoubleClick = (p: Personel) => {
     setSahaPreviewPerson(p);
   };
 
@@ -398,6 +407,11 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     [personeller, draftYoklamalar, selectedYear, selectedMonth]
   );
 
+  const faaliyetPersonelCount = useMemo(
+    () => monthPersoneller.filter(personHasFaaliyetInPeriod).length,
+    [monthPersoneller, sahaFaaliyetleri, selectedYear, selectedMonth]
+  );
+
   const isEmployeeVisibleInMonth = (p: Personel) =>
     isPersonelVisibleInMonth(p, selectedYear, selectedMonth, draftYoklamalar[p.id]);
 
@@ -494,6 +508,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   const filteredPersonel = useMemo(() => {
     const term = searchTerm.toLowerCase();
     const base = monthPersoneller.filter((p) => {
+      if (personelListTab === 'FAALIYET' && !personHasFaaliyetInPeriod(p)) return false;
       const fullName = `${p.ad} ${p.soyad}`.toLowerCase();
       return fullName.includes(term) || p.tcNo.includes(term) || (p.gorev || '').toLowerCase().includes(term);
     });
@@ -515,7 +530,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       }
     }
     return Array.from(byName.values());
-  }, [monthPersoneller, searchTerm]);
+  }, [monthPersoneller, searchTerm, personelListTab, sahaFaaliyetleri, selectedYear, selectedMonth]);
 
   const handleExportExcelTables = async () => {
     const { Workbook } = await import('exceljs');
@@ -1452,6 +1467,40 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
       {/* Main Grid Card View */}
       <div className="flex-1 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
+
+        {/* Personel list tabs */}
+        <div className="px-4 pt-3 pb-0 border-b border-slate-100 bg-white flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPersonelListTab('TUM')}
+            className={`text-[11px] font-bold px-3.5 py-1.5 rounded-t-lg border-b-2 transition cursor-pointer ${
+              personelListTab === 'TUM'
+                ? 'border-slate-900 text-slate-900 bg-slate-50'
+                : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            Tüm Personel
+            <span className="ml-1.5 text-[9px] font-extrabold opacity-70">({monthPersoneller.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setPersonelListTab('FAALIYET')}
+            className={`text-[11px] font-bold px-3.5 py-1.5 rounded-t-lg border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+              personelListTab === 'FAALIYET'
+                ? 'border-amber-500 text-amber-800 bg-amber-50'
+                : 'border-transparent text-slate-500 hover:text-amber-700 hover:bg-amber-50/50'
+            }`}
+          >
+            <Camera className="w-3 h-3" />
+            Faaliyeti Olan Personeller
+            <span className="text-[9px] font-extrabold opacity-70">({faaliyetPersonelCount})</span>
+          </button>
+          {personelListTab === 'FAALIYET' && (
+            <span className="text-[10px] text-amber-700 font-medium ml-1">
+              {new Date(selectedYear, selectedMonth - 1, 1).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' })} dönemi saha kaydı olan personel
+            </span>
+          )}
+        </div>
         
         {/* Info Legend */}
         <div className="p-3 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-3 text-[10px] text-slate-400 font-sans tracking-tight">
@@ -1481,7 +1530,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                   <tr>
                     <th scope="col" className="px-3 py-3 text-left w-56 sticky top-0 left-0 bg-slate-50 box-shadow z-40 shadow-[2px_0_5px_rgba(0,0,0,0.03)] border-r">
                       <div>Personel Künyesi</div>
-                      <div className="text-[8px] font-normal text-slate-400 normal-case tracking-normal mt-0.5">Sağ tık: saha faaliyetleri</div>
+                      <div className="text-[8px] font-normal text-slate-400 normal-case tracking-normal mt-0.5">Çift tık: saha faaliyetleri</div>
                     </th>
                     {daysArray.map(day => {
                       const dayName = dayOfWeekAbbreviation(day);
@@ -1519,7 +1568,15 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
  
                 {/* Table list rows */}
                 <tbody className="bg-white divide-y divide-slate-100 text-[11px] font-sans">
-                  {filteredPersonel.map((p) => {
+                  {filteredPersonel.length === 0 ? (
+                    <tr>
+                      <td colSpan={daysInMonth + 3} className="px-6 py-10 text-center text-slate-500">
+                        {personelListTab === 'FAALIYET'
+                          ? 'Bu dönemde saha faaliyet kaydı olan personel bulunamadı.'
+                          : 'Arama kriterine uygun personel bulunamadı.'}
+                      </td>
+                    </tr>
+                  ) : filteredPersonel.map((p) => {
                     const personYoklama = draftYoklamalar[p.id] || {};
                     let totalGeldi = 0;
                     let totalMesai = 0;
@@ -1599,9 +1656,9 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                         
                         {/* Static Personel Name column */}
                         <td
-                          className="px-3 py-3 whitespace-nowrap font-medium text-slate-900 sticky left-0 bg-white shadow-[2px_0_5px_rgba(0,0,0,0.02)] z-10 border-r cursor-context-menu hover:bg-blue-50/40 transition-colors"
-                          title="Sağ tık: saha faaliyetleri ve fotoğraflar"
-                          onContextMenu={(e) => handlePersonContextMenu(e, p)}
+                          className="px-3 py-3 whitespace-nowrap font-medium text-slate-900 sticky left-0 bg-white shadow-[2px_0_5px_rgba(0,0,0,0.02)] z-10 border-r cursor-pointer hover:bg-blue-50/40 transition-colors select-none"
+                          title="Çift tık: saha faaliyetleri ve fotoğraflar"
+                          onDoubleClick={() => handlePersonDoubleClick(p)}
                         >
                           <div className="flex flex-col">
                             <span className="font-semibold text-slate-800">{p.ad} {p.soyad}</span>
