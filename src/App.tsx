@@ -1991,6 +1991,7 @@ export default function App() {
                   yoklamalar={yoklamalar}
                   setYoklamalar={setYoklamalarWithSync}
                   addNotification={addNotification}
+                  sahaFaaliyetleri={sahaFaaliyetleri}
                 />
               )}
 

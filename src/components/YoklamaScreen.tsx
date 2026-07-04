@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Calendar, Trash2, ShieldAlert, CheckCircle, FileText, ChevronRight, RefreshCw, Database, Undo2, Redo2 } from 'lucide-react';
-import { Personel, AylikYoklamaMap, YoklamaDurum } from '../types/erp';
+import { Calendar, Trash2, ShieldAlert, CheckCircle, FileText, ChevronRight, RefreshCw, Database, Undo2, Redo2, Camera } from 'lucide-react';
+import { Personel, AylikYoklamaMap, YoklamaDurum, SahaFaaliyeti } from '../types/erp';
+import { normalizeDateKey } from '../lib/dateKeyUtils';
 import { KibritciLogo } from './KibritciLogo';
 import { buildPersonelListForMonth, findPersonelByName, getYoklamaDay, isDayActiveForPersonel, isPersonelVisibleInMonth, normalizeTurkishName, setYoklamaDay } from '../lib/yoklamaUtils';
 import { importAllLegacyExcelMonths, importLegacyExcelMonth, aiMonthlyDataToLegacyMonth, resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
@@ -17,6 +18,7 @@ interface YoklamaScreenProps {
   yoklamalar: AylikYoklamaMap;
   setYoklamalar: React.Dispatch<React.SetStateAction<AylikYoklamaMap>>;
   addNotification?: (mesaj: string) => void;
+  sahaFaaliyetleri?: SahaFaaliyeti[];
 }
 
 export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({ 
@@ -24,7 +26,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   setPersoneller,
   yoklamalar, 
   setYoklamalar,
-  addNotification
+  addNotification,
+  sahaFaaliyetleri = []
 }) => {
   const MAX_MESAI_SAATI = 14;
   const [selectedMonth, setSelectedMonth] = useState(5); // Mayıs 2026
@@ -60,6 +63,44 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   const [bireyselStaffId, setBireyselStaffId] = useState("");
   const [bireyselMonth, setBireyselMonth] = useState(selectedMonth);
   const [bireyselYear, setBireyselYear] = useState(selectedYear);
+
+  const [sahaPreviewPerson, setSahaPreviewPerson] = useState<Personel | null>(null);
+
+  const getFaaliyetFoto = (sf: SahaFaaliyeti): string =>
+    String(sf.fotoUrl || (sf as { sahaFotoBase64?: string; fotoBase64?: string }).sahaFotoBase64 || (sf as { fotoBase64?: string }).fotoBase64 || '').trim();
+
+  const personMatchesFaaliyet = (p: Personel, f: SahaFaaliyeti): boolean => {
+    if (f.personelId === p.id) return true;
+    const fullName = `${p.ad} ${p.soyad}`.trim().toLowerCase();
+    return (f.aktifPersonelListesi || []).some((n) => String(n).trim().toLowerCase() === fullName);
+  };
+
+  const sahaPreviewFaaliyetleri = useMemo(() => {
+    if (!sahaPreviewPerson) return [] as SahaFaaliyeti[];
+    return sahaFaaliyetleri
+      .filter((f) => {
+        if (!personMatchesFaaliyet(sahaPreviewPerson, f)) return false;
+        const dk = normalizeDateKey(f.tarih);
+        if (!dk) return false;
+        const [y, m] = dk.split('-').map(Number);
+        return y === selectedYear && m === selectedMonth;
+      })
+      .sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || ''), 'tr'));
+  }, [sahaPreviewPerson, sahaFaaliyetleri, selectedYear, selectedMonth]);
+
+  const handlePersonContextMenu = (e: React.MouseEvent, p: Personel) => {
+    e.preventDefault();
+    setSahaPreviewPerson(p);
+  };
+
+  useEffect(() => {
+    if (!sahaPreviewPerson) return;
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') setSahaPreviewPerson(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [sahaPreviewPerson]);
 
   useEffect(() => {
     if (!hasPendingChanges) {
@@ -1439,7 +1480,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                 <thead className="sticky top-0 z-30 bg-slate-50 font-display text-[10px] font-bold text-slate-600 tracking-wider">
                   <tr>
                     <th scope="col" className="px-3 py-3 text-left w-56 sticky top-0 left-0 bg-slate-50 box-shadow z-40 shadow-[2px_0_5px_rgba(0,0,0,0.03)] border-r">
-                      Personel Künyesi
+                      <div>Personel Künyesi</div>
+                      <div className="text-[8px] font-normal text-slate-400 normal-case tracking-normal mt-0.5">Sağ tık: saha faaliyetleri</div>
                     </th>
                     {daysArray.map(day => {
                       const dayName = dayOfWeekAbbreviation(day);
@@ -1556,7 +1598,11 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                       <tr key={p.id} className="hover:bg-slate-50/50 transition">
                         
                         {/* Static Personel Name column */}
-                        <td className="px-3 py-3 whitespace-nowrap font-medium text-slate-900 sticky left-0 bg-white shadow-[2px_0_5px_rgba(0,0,0,0.02)] z-10 border-r">
+                        <td
+                          className="px-3 py-3 whitespace-nowrap font-medium text-slate-900 sticky left-0 bg-white shadow-[2px_0_5px_rgba(0,0,0,0.02)] z-10 border-r cursor-context-menu hover:bg-blue-50/40 transition-colors"
+                          title="Sağ tık: saha faaliyetleri ve fotoğraflar"
+                          onContextMenu={(e) => handlePersonContextMenu(e, p)}
+                        >
                           <div className="flex flex-col">
                             <span className="font-semibold text-slate-800">{p.ad} {p.soyad}</span>
                             <span className="text-[9px] text-[#2563EB] font-bold">{p.gorev} · {p.departman}</span>
@@ -2115,6 +2161,114 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* 🏗️ SAHA FAALİYET ÖNİZLEME (SAĞ TIK) */}
+      {sahaPreviewPerson && (
+        <div
+          className="fixed inset-0 bg-slate-950/75 flex items-center justify-center z-[60] p-4 animate-in fade-in duration-150 font-sans"
+          onClick={() => setSahaPreviewPerson(null)}
+        >
+          <div
+            className="bg-white rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-slate-900 border-b p-5 text-white flex justify-between items-center shrink-0">
+              <div className="flex items-center space-x-2.5">
+                <Camera className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h3 className="font-display font-semibold text-sm">
+                    {sahaPreviewPerson.ad} {sahaPreviewPerson.soyad} — Saha Faaliyetleri
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    {new Date(selectedYear, selectedMonth - 1, 1).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' })} dönemi
+                    {' · '}{sahaPreviewFaaliyetleri.length} kayıt
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSahaPreviewPerson(null)}
+                className="text-slate-400 hover:text-white font-bold cursor-pointer text-sm"
+              >
+                ✖
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
+              {sahaPreviewFaaliyetleri.length === 0 ? (
+                <div className="text-center py-12 text-slate-500">
+                  <Camera className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                  <p className="font-semibold text-sm">Bu dönemde saha faaliyet kaydı bulunamadı.</p>
+                  <p className="text-[11px] mt-1 text-slate-400">Formen mobil veya idari saha ekranından girilen kayıtlar burada görünür.</p>
+                </div>
+              ) : (
+                sahaPreviewFaaliyetleri.map((f) => {
+                  const foto = getFaaliyetFoto(f);
+                  const tarihLabel = (() => {
+                    const dk = normalizeDateKey(f.tarih);
+                    if (!dk) return f.tarih;
+                    const [y, m, d] = dk.split('-').map(Number);
+                    return new Date(y, m - 1, d).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'short' });
+                  })();
+                  return (
+                    <div key={f.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col sm:flex-row">
+                      <div className={`shrink-0 bg-slate-100 flex items-center justify-center ${foto ? 'sm:w-44 h-36 sm:h-auto' : 'hidden'}`}>
+                        {foto ? (
+                          <img
+                            src={foto}
+                            alt="Saha fotoğrafı"
+                            className="w-full h-full object-cover min-h-[9rem]"
+                            loading="lazy"
+                          />
+                        ) : null}
+                      </div>
+                      <div className="flex-1 p-4 min-w-0">
+                        <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+                          <span className="text-[11px] font-bold text-slate-700">{tarihLabel}</span>
+                          {f.kaynakEkran && (
+                            <span className="text-[9px] font-bold uppercase tracking-wide text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                              {f.kaynakEkran.replace(/_/g, ' ')}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs font-bold text-slate-900 mb-1">{f.isNiteligi || 'İş niteliği belirtilmemiş'}</div>
+                        {(f.parsel || f.blok) && (
+                          <div className="text-[10px] text-slate-500 font-semibold mb-1.5">
+                            {[f.parsel && `Parsel: ${f.parsel}`, f.blok && `Blok: ${f.blok}`].filter(Boolean).join(' · ')}
+                          </div>
+                        )}
+                        {f.aciklama && (
+                          <p className="text-[11px] text-slate-600 leading-relaxed">{f.aciklama}</p>
+                        )}
+                        {!foto && (
+                          <div className="mt-2 text-[10px] text-slate-400 italic flex items-center gap-1">
+                            <Camera className="w-3 h-3" /> Fotoğraf eklenmemiş
+                          </div>
+                        )}
+                        {(f.ustaSayisi != null || f.isciSayisi != null) && (
+                          <div className="mt-2 text-[9px] text-slate-400">
+                            {[f.ustaSayisi != null && `Usta: ${f.ustaSayisi}`, f.isciSayisi != null && `İşçi: ${f.isciSayisi}`].filter(Boolean).join(' · ')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setSahaPreviewPerson(null)}
+                className="bg-slate-900 hover:bg-slate-950 text-white font-bold text-xs py-2.5 px-6 rounded-xl transition duration-150 cursor-pointer shadow-md"
+              >
+                Kapat
+              </button>
+            </div>
           </div>
         </div>
       )}
