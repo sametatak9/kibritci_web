@@ -71,32 +71,19 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     String(sf.fotoUrl || (sf as { sahaFotoBase64?: string; fotoBase64?: string }).sahaFotoBase64 || (sf as { fotoBase64?: string }).fotoBase64 || '').trim();
 
   const personMatchesFaaliyet = (p: Personel, f: SahaFaaliyeti): boolean => {
-    if (f.personelId === p.id) return true;
-    const fullName = `${p.ad} ${p.soyad}`.trim().toLowerCase();
-    return (f.aktifPersonelListesi || []).some((n) => String(n).trim().toLowerCase() === fullName);
+    const list = f.aktifPersonelListesi || [];
+    if (list.some((entry) => String(entry).trim() === p.id)) return true;
+    const fullName = normalizeTurkishName(`${p.ad} ${p.soyad}`);
+    if (list.some((entry) => normalizeTurkishName(String(entry).trim()) === fullName)) return true;
+    return f.personelId === p.id;
   };
 
-  const sahaPreviewFaaliyetleri = useMemo(() => {
-    if (!sahaPreviewPerson) return [] as SahaFaaliyeti[];
-    return sahaFaaliyetleri
-      .filter((f) => {
-        if (!personMatchesFaaliyet(sahaPreviewPerson, f)) return false;
-        const dk = normalizeDateKey(f.tarih);
-        if (!dk) return false;
-        const [y, m] = dk.split('-').map(Number);
-        return y === selectedYear && m === selectedMonth;
-      })
-      .sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || ''), 'tr'));
-  }, [sahaPreviewPerson, sahaFaaliyetleri, selectedYear, selectedMonth]);
-
-  const personHasFaaliyetInPeriod = (p: Personel): boolean =>
-    sahaFaaliyetleri.some((f) => {
-      if (!personMatchesFaaliyet(p, f)) return false;
-      const dk = normalizeDateKey(f.tarih);
-      if (!dk) return false;
-      const [y, m] = dk.split('-').map(Number);
-      return y === selectedYear && m === selectedMonth;
-    });
+  const isFaaliyetInSelectedPeriod = (f: SahaFaaliyeti): boolean => {
+    const dk = normalizeDateKey(f.tarih);
+    if (!dk) return false;
+    const [y, m] = dk.split('-').map(Number);
+    return y === selectedYear && m === selectedMonth;
+  };
 
   const handlePersonDoubleClick = (p: Personel) => {
     setSahaPreviewPerson(p);
@@ -407,10 +394,57 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     [personeller, draftYoklamalar, selectedYear, selectedMonth]
   );
 
-  const faaliyetPersonelCount = useMemo(
-    () => monthPersoneller.filter(personHasFaaliyetInPeriod).length,
-    [monthPersoneller, sahaFaaliyetleri, selectedYear, selectedMonth]
+  const selectedPeriodFaaliyetleri = useMemo(
+    () => sahaFaaliyetleri.filter(isFaaliyetInSelectedPeriod),
+    [sahaFaaliyetleri, selectedYear, selectedMonth]
   );
+
+  const faaliyetPersoneller = useMemo(() => {
+    const matched = new Map<string, Personel>();
+    const addPerson = (p: Personel | undefined | null) => {
+      if (p?.id) matched.set(p.id, p);
+    };
+
+    for (const f of selectedPeriodFaaliyetleri) {
+      for (const entry of f.aktifPersonelListesi || []) {
+        const raw = String(entry).trim();
+        if (!raw) continue;
+        const byId = personeller.find((p) => p.id === raw);
+        if (byId) {
+          addPerson(byId);
+          continue;
+        }
+        addPerson(findPersonelByName(personeller, raw));
+      }
+      addPerson(personeller.find((p) => p.id === f.personelId));
+    }
+
+    const byName = new Map<string, Personel>();
+    const score = (p: Personel) => {
+      let s = 0;
+      if ((p.tcNo || '').trim()) s += 100;
+      if (!p.id.startsWith('PRS-LEGACY')) s += 50;
+      if (p.durum === true || String(p.durum).toLowerCase() === 'true') s += 10;
+      return s;
+    };
+    for (const p of matched.values()) {
+      const key = normalizeTurkishName(`${p.ad} ${p.soyad}`);
+      const prev = byName.get(key);
+      if (!prev || score(p) > score(prev)) byName.set(key, p);
+    }
+    return Array.from(byName.values()).sort((a, b) =>
+      `${a.ad} ${a.soyad}`.localeCompare(`${b.ad} ${b.soyad}`, 'tr')
+    );
+  }, [selectedPeriodFaaliyetleri, personeller]);
+
+  const faaliyetPersonelCount = faaliyetPersoneller.length;
+
+  const sahaPreviewFaaliyetleri = useMemo(() => {
+    if (!sahaPreviewPerson) return [] as SahaFaaliyeti[];
+    return selectedPeriodFaaliyetleri
+      .filter((f) => personMatchesFaaliyet(sahaPreviewPerson, f))
+      .sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || ''), 'tr'));
+  }, [sahaPreviewPerson, selectedPeriodFaaliyetleri]);
 
   const isEmployeeVisibleInMonth = (p: Personel) =>
     isPersonelVisibleInMonth(p, selectedYear, selectedMonth, draftYoklamalar[p.id]);
@@ -507,8 +541,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
   const filteredPersonel = useMemo(() => {
     const term = searchTerm.toLowerCase();
-    const base = monthPersoneller.filter((p) => {
-      if (personelListTab === 'FAALIYET' && !personHasFaaliyetInPeriod(p)) return false;
+    const sourceList = personelListTab === 'FAALIYET' ? faaliyetPersoneller : monthPersoneller;
+    const base = sourceList.filter((p) => {
       const fullName = `${p.ad} ${p.soyad}`.toLowerCase();
       return fullName.includes(term) || p.tcNo.includes(term) || (p.gorev || '').toLowerCase().includes(term);
     });
@@ -530,7 +564,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       }
     }
     return Array.from(byName.values());
-  }, [monthPersoneller, searchTerm, personelListTab, sahaFaaliyetleri, selectedYear, selectedMonth]);
+  }, [monthPersoneller, faaliyetPersoneller, searchTerm, personelListTab]);
 
   const handleExportExcelTables = async () => {
     const { Workbook } = await import('exceljs');
