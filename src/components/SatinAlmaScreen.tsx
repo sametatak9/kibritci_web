@@ -39,7 +39,6 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
   currentUser,
   addNotification
 }) => {
-  const [saRequestor, setSaRequestor] = useState(currentUser?.email ? currentUser.email.split('@')[0].toUpperCase() : "ŞANTİYE");
   const [saSupplier, setSaSupplier] = useState("");
   const [saDate, setSaDate] = useState(new Date().toISOString().split('T')[0]);
   const [saNotes, setSaNotes] = useState("");
@@ -291,7 +290,6 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
             ...sa,
             tarih: cleanDate,
             saId: purchaseSaId,
-            talepEden: saRequestor,
             cariFirma: saSupplier,
             aciklama: saNotes,
             kalemler: normalizedCartItems,
@@ -306,7 +304,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
         id: `sa_${Date.now()}`,
         saId: purchaseSaId,
         tarih: cleanDate,
-        talepEden: saRequestor,
+        talepEden: '',
         cariFirma: saSupplier,
         onayDurumu: 'ONAY BEKLİYOR',
         aciklama: saNotes,
@@ -780,7 +778,6 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
             <div class="info-card">
               <h4>📋 SİPARİŞ BİLGİLERİ</h4>
               <p><strong>Belge Tarihi:</strong> ${sa.tarih}</p>
-              <p><strong>Talep Eden:</strong> ${sa.talepEden}</p>
               <p><strong>Onay Durumu:</strong> ${sa.onayDurumu}</p>
             </div>
             <div class="info-card">
@@ -815,7 +812,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
           <div class="signatures-grid">
             <div class="sig-col">
               <span class="sig-title">Talep Eden</span>
-              <span style="font-weight:bold; color:#0f172a;">${sa.talepEden}</span>
+              <span style="color:#94a3b8; font-style:italic;">İmza Bekleniyor</span>
             </div>
             <div class="sig-col">
               <span class="sig-title">Muhasebe</span>
@@ -909,16 +906,6 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
                 <option key={c.id} value={c.unvan} />
               ))}
             </datalist>
-          </div>
-
-          <div>
-            <label className="text-[10px] font-bold text-slate-500 uppercase">Talep Eden Kişi / Sorumlu</label>
-            <input 
-              type="text"
-              value={saRequestor}
-              onChange={(e) => setSaRequestor(e.target.value)}
-              className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
-            />
           </div>
 
           <div className="bg-slate-50 border p-3 rounded-2xl space-y-2">
@@ -1050,22 +1037,6 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
-              onClick={() => legacyDocInputRef.current?.click()}
-              disabled={legacyImportLoading}
-              className="text-[10px] font-bold px-2.5 py-2 rounded-lg border bg-violet-600 text-white border-violet-700 hover:bg-violet-700 disabled:opacity-60"
-              title="PDF/Görsel satın alma evrakını AI ile okuyup programa içe aktarır."
-            >
-              {legacyImportLoading ? 'Belge Yükleniyor...' : 'PDF/Görselden Satın Alma Aktar (AI)'}
-            </button>
-            <input
-              ref={legacyDocInputRef}
-              type="file"
-              accept=".pdf,image/*"
-              className="hidden"
-              onChange={handleImportLegacyPurchaseDocument}
-            />
-            <button
-              type="button"
               onClick={handleExportSatinAlmaExcel}
               className="text-[10px] font-bold px-2.5 py-2 rounded-lg border bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700"
             >
@@ -1139,7 +1110,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
                   </label>
 
                   <p className="text-[10px] text-slate-500 font-medium">
-                    Talep Eden: {sa.talepEden} · Açıklama: {sa.aciklama || "Yok"}
+                    Açıklama: {sa.aciklama || "Yok"}
                   </p>
                   
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-150/50 space-y-1 text-[10px] font-semibold text-slate-650">

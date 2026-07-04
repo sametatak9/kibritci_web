@@ -2122,6 +2122,7 @@ export default function App() {
                   kampOdalari={kampOdalari}
                   hazirTutanaklar={hazirTutanaklar}
                   kasaHareketleri={kasaHareketleri}
+                  sahaFaaliyetleri={sahaFaaliyetleri}
                 />
               )}
 

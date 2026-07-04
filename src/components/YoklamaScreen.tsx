@@ -1106,15 +1106,6 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               <span>🤖 AI ile Günlük Yoklama Yükle</span>
             </button>
             <button
-              onClick={handleLegacyExcelImport}
-              disabled={legacyImporting}
-              className="text-[11px] bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
-              title="Sadece Mart-Nisan-Mayıs yoklamalarını geri yükler. Haziran'a dokunmaz."
-            >
-              <Database size={13} />
-              <span>{legacyImporting ? 'Yükleniyor...' : 'Mart-Nisan-Mayıs Yoklamayı Geri Yükle'}</span>
-            </button>
-            <button
               onClick={() => {
                 setShowBireyselModal(true);
                 if (personeller.length > 0 && !bireyselStaffId) {

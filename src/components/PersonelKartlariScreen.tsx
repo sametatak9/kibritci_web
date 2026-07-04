@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { 
   Users, User, Phone, Mail, MapPin, Calendar, CreditCard, 
-  Truck, Tent, Clock, ClipboardList, Sparkles, ChevronRight, Activity 
+  Truck, Tent, Clock, ClipboardList, Sparkles, ChevronRight, Activity, FileSpreadsheet
 } from 'lucide-react';
-import { Personel, AylikYoklamaMap, AracBakim, KampKaydi, KampOdasi, HazirTutanak, KasaHareketi } from '../types/erp';
-import { getYoklamaDay, iterateMonthYoklama, isDayActiveForPersonel } from '../lib/yoklamaUtils';
+import { Personel, AylikYoklamaMap, AracBakim, KampKaydi, KampOdasi, HazirTutanak, KasaHareketi, SahaFaaliyeti } from '../types/erp';
+import { getYoklamaDay, iterateMonthYoklama, isDayActiveForPersonel, asYoklamaGunMap, parseYoklamaDateKey } from '../lib/yoklamaUtils';
 
 interface PersonelKartlariScreenProps {
   personeller: Personel[];
@@ -14,6 +14,7 @@ interface PersonelKartlariScreenProps {
   kampOdalari: KampOdasi[];
   hazirTutanaklar?: HazirTutanak[];
   kasaHareketleri?: KasaHareketi[];
+  sahaFaaliyetleri?: SahaFaaliyeti[];
 }
 
 export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
@@ -23,7 +24,8 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
   kampKayitlari,
   kampOdalari,
   hazirTutanaklar = [],
-  kasaHareketleri = []
+  kasaHareketleri = [],
+  sahaFaaliyetleri = []
 }) => {
   const [selectedPersId, setSelectedPersId] = useState<string>(personeller[0]?.id || "");
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
@@ -99,6 +101,149 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
       .sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || ''), 'tr'));
   }, [selectedPersonnel]);
 
+  const personelSahaFaaliyetleri = useMemo(() => {
+    if (!selectedPersonnel) return [] as SahaFaaliyeti[];
+    return sahaFaaliyetleri
+      .filter((f) => {
+        if (f.personelId === selectedPersonnel.id) return true;
+        const fullName = `${selectedPersonnel.ad} ${selectedPersonnel.soyad}`.trim().toLowerCase();
+        return (f.aktifPersonelListesi || []).some(
+          (n) => String(n).trim().toLowerCase() === fullName
+        );
+      })
+      .sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || ''), 'tr'));
+  }, [selectedPersonnel, sahaFaaliyetleri]);
+
+  const hasActiveCamp = !!(activeRoom || (activeStay && (activeStay.yerleskeAdi || activeStay.odaNo)));
+  const showTahsisSection = !!(assignedVehicle || hasActiveCamp || personelStayHistory.length > 0);
+
+  const exportPersonelDetayExcel = async () => {
+    if (!selectedPersonnel) return;
+    const p = selectedPersonnel;
+    const { Workbook } = await import('exceljs');
+    const wb = new Workbook();
+    const ws = wb.addWorksheet('Personel Detay');
+    const addSection = (title: string) => {
+      ws.addRow([]);
+      const row = ws.addRow([title]);
+      row.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
+    };
+    const addHeader = (...cols: string[]) => {
+      const row = ws.addRow(cols);
+      row.font = { bold: true };
+    };
+
+    ws.addRow(['Personel Detay Raporu', `${p.ad} ${p.soyad}`]);
+    ws.addRow(['Oluşturma', new Date().toLocaleString('tr-TR')]);
+
+    addSection('KİMLİK BİLGİLERİ');
+    addHeader('Alan', 'Değer');
+    [
+      ['Ad Soyad', `${p.ad} ${p.soyad}`],
+      ['Görev', p.gorev || ''],
+      ['Telefon', p.telefonNo || ''],
+      ['E-posta', p.eposta || ''],
+      ['TC Kimlik', p.tcNo || ''],
+      ['Adres', p.adres || ''],
+      ['İşe Giriş', p.iseGirisTarihi || ''],
+      ['İşten Çıkış', p.istenCikisTarihi || ''],
+      ['Maaş (TL)', String(p.maas ?? '')],
+      ['Durum', p.durum ? 'Aktif' : 'Pasif'],
+    ].forEach(([a, b]) => ws.addRow([a, b]));
+
+    addSection('YOKLAMA KAYITLARI');
+    addHeader('Tarih', 'Durum', 'Mesai Saati', 'Gönderen');
+    const personMap = asYoklamaGunMap(yoklamalar[p.id]);
+    if (personMap) {
+      Object.entries(personMap)
+        .map(([key, data]) => {
+          const parsed = parseYoklamaDateKey(key);
+          const tarih = parsed
+            ? `${parsed.year}-${String(parsed.month).padStart(2, '0')}-${String(parsed.day).padStart(2, '0')}`
+            : key;
+          return { tarih, data };
+        })
+        .sort((a, b) => a.tarih.localeCompare(b.tarih, 'tr'))
+        .forEach(({ tarih, data }) => {
+          if (!data?.durum || data.durum === 'Girilmedi') return;
+          ws.addRow([tarih, data.durum, String(data.mesaiSaati ?? ''), data.gonderen || '']);
+        });
+    }
+
+    addSection('KAMP / LOJMAN KAYITLARI');
+    addHeader('Yerleşke', 'Oda', 'Giriş', 'Çıkış', 'Durum');
+    personelStayHistory.forEach((k) => {
+      const room = kampOdalari.find((r) => r.id === k.odaId || r.id === k.roomId);
+      ws.addRow([
+        room?.yerleskeAdi || k.yerleskeAdi || '',
+        room ? `${room.kogusNo} / Oda ${room.odaNo}` : (k.odaNo || ''),
+        k.girisTarihi || '',
+        k.cikisTarihi || '',
+        k.durum || '',
+      ]);
+    });
+
+    addSection('ARAÇ TAHSİSİ');
+    addHeader('Plaka', 'Marka/Model', 'Durum', 'Muayene Tarihi');
+    if (assignedVehicle) {
+      ws.addRow([
+        assignedVehicle.plaka,
+        assignedVehicle.markaModel || '',
+        assignedVehicle.durum || '',
+        assignedVehicle.muayeneTarihi || '',
+      ]);
+    }
+
+    addSection('SAHA FAALİYETLERİ');
+    addHeader('Tarih', 'İş Niteliği', 'Parsel', 'Blok', 'Açıklama', 'Kaynak');
+    personelSahaFaaliyetleri.forEach((f) => {
+      ws.addRow([
+        f.tarih,
+        f.isNiteligi || '',
+        f.parsel || '',
+        f.blok || '',
+        f.aciklama || '',
+        f.kaynakEkran || '',
+      ]);
+    });
+    sahaGorevKayitlari.forEach((g) => {
+      ws.addRow([g.tarih || '', g.islem || 'Saha Görev', '', '', g.detay || '', 'Personel Geçmişi']);
+    });
+
+    addSection('TUTANAK / EVRAK');
+    addHeader('Belge No', 'Tarih', 'Konu', 'Tip');
+    hazirTutanaklar
+      .filter((t) => t.personelId === p.id)
+      .forEach((t) => ws.addRow([t.belgeNo || '', t.tarih || '', t.konu || '', t.tutanakTipi || '']));
+
+    addSection('KASA / AVANS HAREKETLERİ');
+    addHeader('Tarih', 'Tutar', 'Açıklama', 'Referans');
+    kasaHareketleri
+      .filter(
+        (k) =>
+          k.hareketTipi === 'ÇIKIŞ' &&
+          k.referansTipi === 'MAAS' &&
+          k.aciklama.toLowerCase().includes(p.ad.toLowerCase()) &&
+          k.aciklama.toLowerCase().includes(p.soyad.toLowerCase())
+      )
+      .forEach((k) => ws.addRow([k.tarih || '', String(k.tutar), k.aciklama || '', k.referansTipi || '']));
+
+    ws.columns = [{ width: 18 }, { width: 22 }, { width: 16 }, { width: 16 }, { width: 34 }, { width: 18 }];
+
+    const safeName = `${p.ad}_${p.soyad}`.replace(/[^a-zA-Z0-9-_ğüşıöçĞÜŞİÖÇ]/g, '_');
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Personel_Detay_${safeName}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Attendance calendar grid status helpers
   const getDayStatusColor = (durum: string) => {
     switch (durum) {
@@ -153,6 +298,15 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
+          <button
+            type="button"
+            onClick={exportPersonelDetayExcel}
+            disabled={!selectedPersonnel}
+            className="text-xs font-bold px-3 py-2.5 rounded-xl border bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer transition"
+          >
+            <FileSpreadsheet size={14} />
+            Personel Detay Raporla
+          </button>
         </div>
       </div>
 
@@ -252,22 +406,24 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
             })()}
 
             {/* Assigned Logistics & Lodgings info */}
+            {showTahsisSection && (
             <div className="bg-white border border-[#e2e8f0] rounded-2xl p-5 shadow-sm space-y-4">
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">📋 ŞANTİYE ALAN TAHSİSLERİ</h4>
               
               <div className="space-y-3.5 text-xs font-semibold text-slate-700">
-                {/* Vehicle */}
+                {assignedVehicle && (
                 <div className="flex items-start space-x-3 bg-slate-50/50 p-2.5 rounded-xl border border-slate-150/50">
                   <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
                     <Truck size={15} />
                   </div>
                   <div className="space-y-0.5">
                     <p className="text-[9px] text-slate-400 uppercase font-bold">Tahsisli Araç</p>
-                    <p className="text-slate-900 mt-0.5">{assignedVehicle ? `${assignedVehicle.plaka} - ${assignedVehicle.markaModel}` : "Araç Tahsisi Yok"}</p>
+                    <p className="text-slate-900 mt-0.5">{assignedVehicle.plaka} - {assignedVehicle.markaModel}</p>
                   </div>
                 </div>
+                )}
 
-                {/* Camp Room */}
+                {hasActiveCamp && (
                 <div className="flex items-start space-x-3 bg-slate-50/50 p-2.5 rounded-xl border border-slate-150/50">
                   <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
                     <Tent size={15} />
@@ -277,18 +433,15 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
                     <p className="text-slate-900 mt-0.5">
                       {activeRoom
                         ? `${activeRoom.yerleskeAdi} / ${activeRoom.kogusNo} / Oda ${activeRoom.odaNo}`
-                        : activeStay?.yerleskeAdi
-                          ? `${activeStay.yerleskeAdi} / ${activeStay.katAdi || '-'} / Oda ${activeStay.odaNo || '-'}`
-                          : "Lojman Kaydı Yok"}
+                        : `${activeStay?.yerleskeAdi} / ${activeStay?.katAdi || '-'} / Oda ${activeStay?.odaNo || '-'}`}
                     </p>
                   </div>
                 </div>
+                )}
 
+                {personelStayHistory.length > 0 && (
                 <div className="bg-slate-50/50 p-2.5 rounded-xl border border-slate-150/50">
                   <p className="text-[9px] text-slate-400 uppercase font-bold mb-1">Kamp Konaklama Geçmişi</p>
-                  {personelStayHistory.length === 0 ? (
-                    <p className="text-[10px] text-slate-500 italic">Kamp geçmiş kaydı yok.</p>
-                  ) : (
                     <div className="space-y-1">
                       {personelStayHistory.slice(0, 4).map((k) => {
                         const room = kampOdalari.find((r) => r.id === k.odaId || r.id === k.roomId);
@@ -303,10 +456,11 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
                         );
                       })}
                     </div>
-                  )}
                 </div>
+                )}
               </div>
             </div>
+            )}
 
           </div>
 
