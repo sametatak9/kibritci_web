@@ -214,12 +214,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     if (!isAktif && !p.istenCikisTarihi) return false;
     return isDayActiveForPersonel(p, year, month, day, yoklamalar[p.id] as any);
   });
-  const faaliyetPersonelPoolBase =
-    activeStaff.length > 0
-      ? activeStaff
-      : personeller.filter(
-          (p) => (p.durum === true || String(p.durum).toLowerCase() === 'true') && !isTaseronPersonel(p)
-        );
+  const faaliyetPersonelPoolBase = activeStaff.filter((p) => presentIds.includes(p.id));
   const filteredFaaliyetPersonelPool = faaliyetPersonelPoolBase.filter((p) => {
     const q = faaliyetPersonelSearch.trim().toLocaleLowerCase('tr-TR');
     if (!q) return true;
@@ -1624,7 +1619,7 @@ ${satirlar
                       <div className="max-h-36 overflow-y-auto space-y-1 pr-0.5">
                         {filteredFaaliyetPersonelPool.length === 0 && (
                           <div className="text-[10px] text-slate-400 border border-dashed border-slate-200 rounded-xl py-2 px-2">
-                            Aramaya uygun aktif personel bulunamadı.
+                            Seçili tarihte yoklamada "Geldi" işaretli personel bulunamadı.
                           </div>
                         )}
                         {filteredFaaliyetPersonelPool.map((p) => {
