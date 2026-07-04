@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Truck, Tent, Building2, FileText, Users, Mail, Package,
   Plus, Trash2, ShieldAlert, Award, FileUp, CheckCircle, Check, HelpCircle, ClipboardList,
-  Printer, Download, Upload, Send
+  Printer, Download, Upload, Send, Search
 } from 'lucide-react';
 import { KibritciLogo } from './KibritciLogo';
 import { 
@@ -239,11 +239,26 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   // ─────────────────────────────────────────────────────────────
   const [selectedRoomToAssign, setSelectedRoomToAssign] = useState<KampOdasi | null>(null);
   const [residentInputName, setResidentInputName] = useState("");
+  const [residentSearchQuery, setResidentSearchQuery] = useState("");
   const [residentInputFirma, setResidentInputFirma] = useState("");
   const [residentPersonelId, setResidentPersonelId] = useState("");
   const [residentFirmaTipi, setResidentFirmaTipi] = useState<'ANA_FIRMA' | 'TASERON'>('ANA_FIRMA');
   const [residentFirmaKaynak, setResidentFirmaKaynak] = useState<'DB' | 'MANUAL'>('MANUAL');
   const [assigningResident, setAssigningResident] = useState(false);
+  const filteredResidentPersoneller = useMemo(() => {
+    const q = residentSearchQuery.trim().toLocaleLowerCase('tr-TR');
+    return personeller.filter((p) => {
+      const isPasif = p.durum === false || String(p.durum).toLowerCase() === 'false' || String(p.durum).toLowerCase() === 'pasif';
+      if (isPasif) return false;
+      if (!q) return true;
+      const fullName = `${p.ad || ''} ${p.soyad || ''}`.toLocaleLowerCase('tr-TR');
+      return (
+        fullName.includes(q) ||
+        String(p.gorev || '').toLocaleLowerCase('tr-TR').includes(q) ||
+        String(p.firmaAdi || '').toLocaleLowerCase('tr-TR').includes(q)
+      );
+    });
+  }, [personeller, residentSearchQuery]);
 
   const yerleskeler = kampYerleskeleri;
   const katlar = kampKatlari;
@@ -575,6 +590,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const resetAssignModal = () => {
     setSelectedRoomToAssign(null);
     setResidentInputName('');
+    setResidentSearchQuery('');
     setResidentInputFirma('');
     setResidentPersonelId('');
     setResidentFirmaTipi('ANA_FIRMA');
@@ -2761,8 +2777,18 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
 
                   <div className="space-y-1">
                     <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Veritabanından Personel Seç</span>
+                    <div className="relative mb-1.5">
+                      <Search size={12} className="absolute left-2.5 top-2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="İsim/görev ara..."
+                        value={residentSearchQuery}
+                        onChange={(e) => setResidentSearchQuery(e.target.value)}
+                        className="w-full text-[10px] bg-white border border-slate-200 rounded-lg pl-7 pr-2 py-1.5"
+                      />
+                    </div>
                     <div className="grid grid-cols-2 gap-1.5 max-h-28 overflow-y-auto border p-2 rounded-xl bg-slate-100/50">
-                      {personeller.map(p => (
+                      {filteredResidentPersoneller.map(p => (
                         <button
                           key={p.id}
                           type="button"
