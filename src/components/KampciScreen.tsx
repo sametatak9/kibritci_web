@@ -194,6 +194,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   const [selectedFirma, setSelectedFirma] = useState('');
   const [manualFirma, setManualFirma] = useState('');
   const [loadingPlacement, setLoadingPlacement] = useState(false);
+  const [placementModalRoom, setPlacementModalRoom] = useState<KampOdasi | null>(null);
 
   const normalizeNameKey = (raw: string) =>
     String(raw || '')
@@ -616,9 +617,69 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   // ─────────────────────────────────────────────────────────────
   // 👥 ACTIONS: PERSONNEL PLACEMENT
   // ─────────────────────────────────────────────────────────────
+  const resetPlacementPersonFields = () => {
+    setSelectedPersonelId('');
+    setManualPersonelIsim('');
+    setSearchPersonelQuery('');
+    setSelectedFirma('');
+    setManualFirma('');
+    setPlacementType('DB');
+    setPlacementFirmaTipi('ANA_FIRMA');
+    setFirmaType('DB');
+  };
+
+  const prefillPlacementFromRoom = (room: KampOdasi) => {
+    setSelectedRoomId(room.id);
+    const yerleskeMatch = placementYerleskeOptions.find(
+      (y) => y.id === room.yerleskeId || y.ad === room.yerleskeAdi
+    );
+    setPlacementYerleskeId(room.yerleskeId || yerleskeMatch?.id || '');
+    setPlacementKatId(room.katId || room.kogusNo || '');
+  };
+
+  const applyPersonelFirmaMatch = (person: Personel) => {
+    if (person.firmaTipi === 'TASERON') {
+      setPlacementFirmaTipi('TASERON');
+      const firmaAdi = String(person.firmaAdi || '').trim();
+      if (!firmaAdi) return;
+      const inDb = taseronCariler.some(
+        (c) => normalizeNameKey(c.unvan) === normalizeNameKey(firmaAdi)
+      );
+      if (inDb) {
+        setFirmaType('DB');
+        setSelectedFirma(firmaAdi);
+        setManualFirma('');
+      } else {
+        setFirmaType('MANUAL');
+        setManualFirma(firmaAdi);
+        setSelectedFirma('');
+      }
+      return;
+    }
+    setPlacementFirmaTipi('ANA_FIRMA');
+    setFirmaType('DB');
+    setSelectedFirma('');
+    setManualFirma('');
+  };
+
+  const openPlacementModalForRoom = (room: KampOdasi) => {
+    prefillPlacementFromRoom(room);
+    resetPlacementPersonFields();
+    setPlacementModalRoom(room);
+  };
+
+  const closePlacementModal = () => {
+    setPlacementModalRoom(null);
+  };
+
   const handlePlacementSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!placementYerleskeId || !placementKatId || !selectedRoomId) {
+    const activeRoomId = placementModalRoom?.id || selectedRoomId;
+    if (!activeRoomId) {
+      showStatus('error', 'Lütfen yerleşim yapılacak odayı seçin!');
+      return;
+    }
+    if (!placementModalRoom && (!placementYerleskeId || !placementKatId || !selectedRoomId)) {
       showStatus('error', 'Lütfen sırayla yerleşke, kat ve oda seçin!');
       return;
     }
@@ -670,7 +731,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       resolvedFirma = manualFirma.trim();
     }
 
-    const targetRoom = kampOdalari.find(r => r.id === selectedRoomId);
+    const targetRoom = kampOdalari.find(r => r.id === activeRoomId);
     if (!targetRoom) {
       showStatus('error', 'Oda bulunamadı!');
       return;
@@ -707,7 +768,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       const finalFirmaTipi: 'ANA_FIRMA' | 'TASERON' = placementFirmaTipi;
 
       await assignKampResident({
-        roomId: selectedRoomId,
+        roomId: activeRoomId,
         personelIsim,
         personelId,
         calistigiFirma: resolvedFirma || undefined,
@@ -724,6 +785,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       setManualPersonelIsim('');
       setSelectedFirma('');
       setManualFirma('');
+      setPlacementModalRoom(null);
       const dbNote =
         createdPersonel || createdCari
           ? ` (${[
@@ -802,9 +864,9 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   };
 
   const handleSelectRoomForPlacement = (roomId: string) => {
-    setSelectedRoomId(roomId);
-    setActiveSubTab('placement');
-    showStatus('success', 'Oda seçildi. Şimdi personeli seçerek kampa yerleştirebilirsiniz.');
+    const room = kampOdalari.find((r) => r.id === roomId);
+    if (!room) return;
+    openPlacementModalForRoom(room);
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -978,6 +1040,180 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
     const queryStr = searchPersonelQuery.toLowerCase();
     return nameStr.includes(queryStr) || (p.gorev || '').toLowerCase().includes(queryStr);
   });
+
+  const renderPlacementPersonForm = () => (
+    <>
+      <div className="space-y-1.5">
+        <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Giriş Türü</label>
+        <div className="grid grid-cols-2 gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+          <button
+            type="button"
+            onClick={() => setPlacementType('DB')}
+            className={`py-1.5 rounded-lg text-[10px] font-bold text-center transition ${
+              placementType === 'DB' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Kayıtlı Personel
+          </button>
+          <button
+            type="button"
+            onClick={() => setPlacementType('MANUAL')}
+            className={`py-1.5 rounded-lg text-[10px] font-bold text-center transition ${
+              placementType === 'MANUAL' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Elle Giriş (Misafir/Taşeron)
+          </button>
+        </div>
+      </div>
+
+      <div className="border-t border-slate-850 pt-3 space-y-3">
+        <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest block">ADIM 1: Personel Bilgisi</span>
+
+        {placementType === 'DB' ? (
+          <div className="space-y-3 animate-in fade-in duration-100">
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Personel Filtrele / Ara</label>
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-3 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Personel adı veya görevi..."
+                  value={searchPersonelQuery}
+                  onChange={(e) => setSearchPersonelQuery(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 pl-9 pr-3 py-2.5 rounded-xl outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Kayıtlı Personel Listesinden Seçin *</label>
+              <select
+                required={placementType === 'DB'}
+                value={selectedPersonelId}
+                onChange={(e) => {
+                  const pid = e.target.value;
+                  setSelectedPersonelId(pid);
+                  const matched = personeller.find((p) => p.id === pid);
+                  if (matched) applyPersonelFirmaMatch(matched);
+                }}
+                className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none"
+              >
+                <option value="">-- Personel Seçin --</option>
+                {filteredPersonel.slice(0, 30).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.ad} {p.soyad} ({p.gorev}){p.firmaTipi === 'TASERON' && p.firmaAdi ? ` · ${p.firmaAdi}` : ''}
+                  </option>
+                ))}
+              </select>
+              {filteredPersonel.length > 30 && (
+                <span className="text-[9px] text-slate-500 italic block mt-1">+ {filteredPersonel.length - 30} personel daha filtrelendi. Kelime arayarak daraltın.</span>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-1.5 animate-in fade-in duration-100">
+            <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Personel Adı Soyadı *</label>
+            <input
+              type="text"
+              required={placementType === 'MANUAL'}
+              placeholder="Örn: Ahmet Yılmaz"
+              value={manualPersonelIsim}
+              onChange={(e) => setManualPersonelIsim(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 p-3 rounded-xl outline-none"
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-slate-850 pt-3 space-y-3">
+        <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest block">ADIM 2: Firma Bilgisi</span>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setPlacementFirmaTipi('ANA_FIRMA')}
+            className={`py-1.5 rounded-lg text-[10px] font-bold ${placementFirmaTipi === 'ANA_FIRMA' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+          >
+            Ana Firma
+          </button>
+          <button
+            type="button"
+            onClick={() => setPlacementFirmaTipi('TASERON')}
+            className={`py-1.5 rounded-lg text-[10px] font-bold ${placementFirmaTipi === 'TASERON' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+          >
+            Taşeron
+          </button>
+        </div>
+
+        {placementFirmaTipi === 'TASERON' && (
+          <>
+            <div className="grid grid-cols-2 gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200/60">
+              <button
+                type="button"
+                onClick={() => setFirmaType('DB')}
+                className={`py-1 rounded-md text-[9px] font-bold text-center transition ${
+                  firmaType === 'DB' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Kayıtlı Firmalar
+              </button>
+              <button
+                type="button"
+                onClick={() => setFirmaType('MANUAL')}
+                className={`py-1 rounded-md text-[9px] font-bold text-center transition ${
+                  firmaType === 'MANUAL' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Yeni Firma Yaz
+              </button>
+            </div>
+
+            {firmaType === 'DB' ? (
+              <div className="space-y-1.5 animate-in fade-in duration-100">
+                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Kayıtlı Firmalardan Seçin *</label>
+                <select
+                  required={firmaType === 'DB'}
+                  value={selectedFirma}
+                  onChange={(e) => setSelectedFirma(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none"
+                >
+                  <option value="">-- Taşeron / Firma Seçin --</option>
+                  {taseronCariler.map((c) => (
+                    <option key={c.id} value={c.unvan}>{c.unvan}</option>
+                  ))}
+                  {cariKartlar.filter((c) => c.kartTipi !== 'TASERON' && c.durum === 'AKTIF').map((c) => (
+                    <option key={c.id} value={c.unvan}>{c.unvan}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="space-y-1.5 animate-in fade-in duration-100">
+                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Firma Adını Yazın *</label>
+                <input
+                  type="text"
+                  required={firmaType === 'MANUAL'}
+                  placeholder="Örn: Özdemir Hafriyat Ltd. Şti."
+                  value={manualFirma}
+                  onChange={(e) => setManualFirma(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 p-3 rounded-xl outline-none"
+                />
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <button
+        type="submit"
+        disabled={loadingPlacement}
+        className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800/40 text-white font-bold text-xs py-3 rounded-xl transition cursor-pointer flex items-center justify-center space-x-2 shadow-lg shadow-blue-500/10"
+      >
+        {loadingPlacement ? <RefreshCw size={13} className="animate-spin" /> : <UserPlus size={14} />}
+        <span>Odaya Yerleştir ve Kaydet</span>
+      </button>
+    </>
+  );
 
   const content = (
     <>
@@ -1183,187 +1419,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                 </div>
               </div>
 
-              {/* Source Type Toggle */}
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Giriş Türü</label>
-                <div className="grid grid-cols-2 gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
-                  <button
-                    type="button"
-                    onClick={() => setPlacementType('DB')}
-                    className={`py-1.5 rounded-lg text-[10px] font-bold text-center transition ${
-                      placementType === 'DB' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    Kayıtlı Personel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPlacementType('MANUAL')}
-                    className={`py-1.5 rounded-lg text-[10px] font-bold text-center transition ${
-                      placementType === 'MANUAL' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    Elle Giriş (Misafir/Taşeron)
-                  </button>
-                </div>
-              </div>
-
-              {/* STAGE 1: PERSONEL SEÇ VEYA İSİM GİR */}
-              <div className="border-t border-slate-850 pt-3 space-y-3">
-                <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest block">ADIM 1: Personel Bilgisi</span>
-                
-                {placementType === 'DB' ? (
-                  <div className="space-y-3 animate-in fade-in duration-100">
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Personel Filtrele / Ara</label>
-                      <div className="relative">
-                        <Search size={14} className="absolute left-3 top-3 text-slate-500" />
-                        <input
-                          type="text"
-                          placeholder="Personel adı veya görevi..."
-                          value={searchPersonelQuery}
-                          onChange={(e) => setSearchPersonelQuery(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 pl-9 pr-3 py-2.5 rounded-xl outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Kayıtlı Personel Listesinden Seçin *</label>
-                      <select
-                        required={placementType === 'DB'}
-                        value={selectedPersonelId}
-                        onChange={(e) => {
-                          const pid = e.target.value;
-                          setSelectedPersonelId(pid);
-                          const matched = personeller.find(p => p.id === pid);
-                          if (matched) {
-                            if (matched.calistigiFirma) {
-                              setFirmaType('MANUAL');
-                              setManualFirma(matched.calistigiFirma);
-                            } else if (matched.firma) {
-                              setFirmaType('MANUAL');
-                              setManualFirma(matched.firma);
-                            }
-                          }
-                        }}
-                        className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none"
-                      >
-                        <option value="">-- Personel Seçin --</option>
-                        {filteredPersonel.slice(0, 30).map(p => (
-                          <option key={p.id} value={p.id}>
-                            {p.ad} {p.soyad} ({p.gorev})
-                          </option>
-                        ))}
-                      </select>
-                      {filteredPersonel.length > 30 && (
-                        <span className="text-[9px] text-slate-500 italic block mt-1">+ {filteredPersonel.length - 30} personel daha filtrelendi. Kelime arayarak daraltın.</span>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-1.5 animate-in fade-in duration-100">
-                    <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Personel Adı Soyadı *</label>
-                    <input
-                      type="text"
-                      required={placementType === 'MANUAL'}
-                      placeholder="Örn: Ahmet Yılmaz"
-                      value={manualPersonelIsim}
-                      onChange={(e) => setManualPersonelIsim(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 p-3 rounded-xl outline-none"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* STAGE 2: FİRMA SEÇ VEYA İSMİNİ YAZ */}
-              <div className="border-t border-slate-850 pt-3 space-y-3">
-                <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest block">ADIM 2: Firma Bilgisi</span>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPlacementFirmaTipi('ANA_FIRMA')}
-                    className={`py-1.5 rounded-lg text-[10px] font-bold ${placementFirmaTipi === 'ANA_FIRMA' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}
-                  >
-                    Ana Firma
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPlacementFirmaTipi('TASERON')}
-                    className={`py-1.5 rounded-lg text-[10px] font-bold ${placementFirmaTipi === 'TASERON' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600'}`}
-                  >
-                    Taşeron
-                  </button>
-                </div>
-
-                {placementFirmaTipi === 'TASERON' && (
-                <>
-                <div className="grid grid-cols-2 gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200/60">
-                  <button
-                    type="button"
-                    onClick={() => setFirmaType('DB')}
-                    className={`py-1 rounded-md text-[9px] font-bold text-center transition ${
-                      firmaType === 'DB' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    Kayıtlı Firmalar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFirmaType('MANUAL')}
-                    className={`py-1 rounded-md text-[9px] font-bold text-center transition ${
-                      firmaType === 'MANUAL' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    Yeni Firma Yaz
-                  </button>
-                </div>
-
-                {firmaType === 'DB' ? (
-                  <div className="space-y-1.5 animate-in fade-in duration-100">
-                    <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Kayıtlı Firmalardan Seçin *</label>
-                    <select
-                      required={firmaType === 'DB'}
-                      value={selectedFirma}
-                      onChange={(e) => setSelectedFirma(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none"
-                    >
-                      <option value="">-- Taşeron / Firma Seçin --</option>
-                      {taseronCariler.map((c) => (
-                        <option key={c.id} value={c.unvan}>{c.unvan}</option>
-                      ))}
-                      {cariKartlar.filter((c) => c.kartTipi !== 'TASERON' && c.durum === 'AKTIF').map((c) => (
-                        <option key={c.id} value={c.unvan}>{c.unvan}</option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <div className="space-y-1.5 animate-in fade-in duration-100">
-                    <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Firma Adını Yazın *</label>
-                    <input
-                      type="text"
-                      required={firmaType === 'MANUAL'}
-                      placeholder="Örn: Özdemir Hafriyat Ltd. Şti."
-                      value={manualFirma}
-                      onChange={(e) => setManualFirma(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 p-3 rounded-xl outline-none"
-                    />
-                  </div>
-                )}
-                </>
-                )}
-              </div>
-
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={loadingPlacement}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800/40 text-white font-bold text-xs py-3 rounded-xl transition cursor-pointer flex items-center justify-center space-x-2 shadow-lg shadow-blue-500/10"
-              >
-                {loadingPlacement ? <RefreshCw size={13} className="animate-spin" /> : <UserPlus size={14} />}
-                <span>Check-In Yerleşimini Kaydet</span>
-              </button>
+              {renderPlacementPersonForm()}
             </form>
           </div>
 
@@ -2209,6 +2265,35 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
               </>
             );
           })()}
+        </div>
+      )}
+
+      {placementModalRoom && (
+        <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-slate-950/70 p-3 sm:p-6">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-4 py-3 flex items-start justify-between gap-3">
+              <div>
+                <span className="text-[9px] font-extrabold text-blue-500 uppercase tracking-wider block">Odaya Personel Yerleştir</span>
+                <h3 className="font-black text-sm text-slate-900 mt-0.5">
+                  {placementModalRoom.yerleskeAdi} · {placementModalRoom.kogusNo} / Oda {placementModalRoom.odaNo}
+                </h3>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  DB, taşeron veya elle giriş — firmaya göre otomatik eşleştirilir.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closePlacementModal}
+                className="text-slate-400 hover:text-slate-700 font-bold text-lg leading-none px-2"
+                aria-label="Kapat"
+              >
+                ×
+              </button>
+            </div>
+            <form onSubmit={handlePlacementSubmit} className="p-4 space-y-4">
+              {renderPlacementPersonForm()}
+            </form>
+          </div>
         </div>
       )}
 
