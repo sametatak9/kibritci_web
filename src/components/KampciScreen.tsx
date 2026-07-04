@@ -7,7 +7,7 @@ import { KampOdasi, KampKaydi, Personel, StokKart, KampYerleske, KampKat, CariKa
 import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { createKampYerleske, createKampKat, katsForYerleske, createKampOdasi, deleteKampOdasi, hasLegacySeedRooms, purgeLegacyKampData, purgeAllKampData, updateKampOdasi } from '../lib/kampYapisi';
-import { assignKampResident, evictKampResident, suggestPersonelKaydi } from '../lib/kampPlacementUtils';
+import { assignKampResident, evictKampResident } from '../lib/kampPlacementUtils';
 import { isProductionLive } from '../lib/productionDataGuard';
 import { buildKampciGunlukOzet } from '../lib/gunlukAkisUtils';
 import { buildWhatsAppUrl } from '../lib/mobilOnayUtils';
@@ -23,7 +23,9 @@ interface KampciScreenProps {
   kampYerleskeleri?: KampYerleske[];
   kampKatlari?: KampKat[];
   personeller: Personel[];
+  setPersoneller?: React.Dispatch<React.SetStateAction<Personel[]>>;
   cariKartlar?: CariKart[];
+  setCariKartlar?: React.Dispatch<React.SetStateAction<CariKart[]>>;
   yoklamalar?: AylikYoklamaMap;
   setYoklamalar?: (updater: AylikYoklamaMap | ((y: AylikYoklamaMap) => AylikYoklamaMap)) => void;
   stokKartlar?: StokKart[];
@@ -42,7 +44,9 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   kampYerleskeleri = [],
   kampKatlari = [],
   personeller,
+  setPersoneller,
   cariKartlar = [],
+  setCariKartlar,
   yoklamalar = {},
   setYoklamalar,
   stokKartlar = [],
@@ -233,11 +237,27 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
     return undefined;
   };
 
+  const findExistingTaseronPersonel = (rawName: string, firmaAdi: string) => {
+    const nameKey = normalizeNameKey(sanitizeManualName(rawName));
+    const firmaKey = normalizeNameKey(firmaAdi);
+    if (!nameKey || !firmaKey) return undefined;
+    return personeller.find(
+      (p) =>
+        p.firmaTipi === 'TASERON' &&
+        normalizeNameKey(`${p.ad} ${p.soyad}`) === nameKey &&
+        normalizeNameKey(p.firmaAdi || '') === firmaKey
+    );
+  };
+
   const createTaseronPersonel = async (rawName: string, firmaAdi: string) => {
+    const existing = findExistingTaseronPersonel(rawName, firmaAdi);
+    if (existing) return existing;
+
     const cleaned = sanitizeManualName(rawName);
     const parts = cleaned.split(' ').filter(Boolean);
     const ad = (parts[0] || 'ADI').toLocaleUpperCase('tr-TR');
     const soyad = (parts.slice(1).join(' ') || 'BİLİNMİYOR').toLocaleUpperCase('tr-TR');
+    const normalizedFirma = String(firmaAdi || '').trim() || 'Taşeron';
     const personel: Personel = {
       id: `prs_taseron_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       tcNo: '',
@@ -262,19 +282,19 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       ibanNo: '',
       durum: true,
       firmaTipi: 'TASERON',
-      firmaAdi,
+      firmaAdi: normalizedFirma,
     };
     await saveDocument('personeller', personel);
     return personel;
   };
 
-  const ensureTaseronCari = async (firmaAdi: string) => {
+  const ensureTaseronCari = async (firmaAdi: string): Promise<CariKart | null> => {
     const cleanedFirma = String(firmaAdi || '').trim();
-    if (!cleanedFirma || isKibritciName(cleanedFirma)) return;
-    const exists = cariKartlar.some(
+    if (!cleanedFirma || isKibritciName(cleanedFirma)) return null;
+    const existing = cariKartlar.find(
       (c) => c.kartTipi === 'TASERON' && normalizeNameKey(c.unvan) === normalizeNameKey(cleanedFirma)
     );
-    if (exists) return;
+    if (existing) return existing;
     const newCari: CariKart = {
       id: `ck_taseron_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       kartTipi: 'TASERON',
@@ -291,6 +311,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       notlar: 'Kamp oda yerleşiminden otomatik oluşturulan taşeron cari kartı.',
     };
     await saveDocument('cariKartlar', newCari);
+    return newCari;
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -622,18 +643,24 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
         showStatus('error', 'Lütfen personel adını soyadını yazın!');
         return;
       }
-      const found = findDbPersonelByRawName(manualPersonelIsim);
-      if (found) {
-        personelIsim = `${found.ad} ${found.soyad}`;
-        personelId = found.id;
-        matchedPersonel = found;
-      } else {
+      const isManualTaseronPair =
+        placementFirmaTipi === 'TASERON' && firmaType === 'MANUAL';
+      if (isManualTaseronPair) {
         personelIsim = sanitizeManualName(manualPersonelIsim);
+      } else {
+        const found = findDbPersonelByRawName(manualPersonelIsim);
+        if (found) {
+          personelIsim = `${found.ad} ${found.soyad}`;
+          personelId = found.id;
+          matchedPersonel = found;
+        } else {
+          personelIsim = sanitizeManualName(manualPersonelIsim);
+        }
       }
     }
 
     let resolvedFirma = '';
-    if (matchedPersonel) {
+    if (matchedPersonel && placementFirmaTipi === 'ANA_FIRMA') {
       resolvedFirma = matchedPersonel.firmaAdi || 'Kibritçi İnşaat';
     } else if (placementFirmaTipi === 'ANA_FIRMA') {
       resolvedFirma = 'Ana Firma';
@@ -656,16 +683,28 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
 
     setLoadingPlacement(true);
     try {
-      // Manuel girişte DB'de bulunamayan isimleri taşeron personel olarak otomatik kur.
-      if (!matchedPersonel && placementType === 'MANUAL') {
+      let createdPersonel = false;
+      let createdCari = false;
+
+      if (placementFirmaTipi === 'TASERON' && resolvedFirma) {
+        const cari = await ensureTaseronCari(resolvedFirma);
+        if (cari) {
+          createdCari = !cariKartlar.some((c) => c.id === cari.id);
+          setCariKartlar?.((prev) => (prev.some((c) => c.id === cari.id) ? prev : [...prev, cari]));
+        }
+      }
+
+      if (!matchedPersonel && placementType === 'MANUAL' && placementFirmaTipi === 'TASERON') {
+        const beforeId = findExistingTaseronPersonel(personelIsim, resolvedFirma || 'Taşeron')?.id;
         const created = await createTaseronPersonel(personelIsim, resolvedFirma || 'Taşeron');
         personelId = created.id;
         personelIsim = `${created.ad} ${created.soyad}`;
-        await ensureTaseronCari(created.firmaAdi || resolvedFirma || 'Taşeron');
+        createdPersonel = !beforeId;
+        setPersoneller?.((prev) => (prev.some((p) => p.id === created.id) ? prev : [...prev, created]));
+        matchedPersonel = created;
       }
 
-      const finalFirmaTipi: 'ANA_FIRMA' | 'TASERON' =
-        matchedPersonel ? 'ANA_FIRMA' : placementFirmaTipi;
+      const finalFirmaTipi: 'ANA_FIRMA' | 'TASERON' = placementFirmaTipi;
 
       await assignKampResident({
         roomId: selectedRoomId,
@@ -681,15 +720,20 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
         addNotification(`${personelIsim} (${resolvedFirma}) ${targetRoom.odaNo} nolu odaya yerleştirildi.`);
       }
 
-      if (placementType === 'MANUAL' && !matchedPersonel && placementFirmaTipi === 'TASERON') {
-        suggestPersonelKaydi(personelIsim, resolvedFirma);
-      }
-
       setSelectedPersonelId('');
       setManualPersonelIsim('');
       setSelectedFirma('');
       setManualFirma('');
-      showStatus('success', `${personelIsim} başarıyla ${targetRoom.odaNo} no'lu odaya yerleştirildi.`);
+      const dbNote =
+        createdPersonel || createdCari
+          ? ` (${[
+              createdCari ? 'taşeron firma DB' : '',
+              createdPersonel ? 'personel DB' : '',
+            ]
+              .filter(Boolean)
+              .join(' + ')})`
+          : '';
+      showStatus('success', `${personelIsim} başarıyla ${targetRoom.odaNo} no'lu odaya yerleştirildi.${dbNote}`);
     } catch (err) {
       console.error(err);
       showStatus('error', err instanceof Error ? err.message : 'Yerleşim yapılırken hata oluştu!');

@@ -57,8 +57,8 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     return () => window.removeEventListener('resize', checkMobile);
   }, [isStandalone]);
 
-  // Active Tab: 'yoklama' | 'saha_faaliyet' | 'faaliyet_gecmis' | 'personel_giris' | 'personel_listesi'
-  const [activeTab, setActiveTab] = useState<'yoklama' | 'saha_faaliyet' | 'faaliyet_gecmis' | 'personel_giris' | 'personel_listesi' | 'gunluk_akis' | 'aylik_puantaj'>('yoklama');
+  // Active Tab: 'yoklama' | 'saha_faaliyet' | 'personel_giris' | 'personel_listesi'
+  const [activeTab, setActiveTab] = useState<'yoklama' | 'saha_faaliyet' | 'personel_giris' | 'personel_listesi' | 'gunluk_akis' | 'aylik_puantaj'>('yoklama');
   const [sendingGunlukAkis, setSendingGunlukAkis] = useState(false);
 
   // Helper to match current user to a personnel record
@@ -102,13 +102,18 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const [selectedDate, setSelectedDate] = useState(todayDateKey);
 
   const formenEmail = currentUser?.email?.trim().toLowerCase() || '';
-  const visibleSahaFaaliyetleri = sahaFaaliyetleri.filter(
-    (f) =>
-      !isLegacySahaRecord(f.id) &&
-      ((f as SahaFaaliyetiType & { kaydedenFormen?: string }).kaydedenFormen
-        ? (f as SahaFaaliyetiType & { kaydedenFormen?: string }).kaydedenFormen === formenEmail
-        : normalizeDateKey(f.tarih) >= selectedDate)
-  );
+  const visibleSahaFaaliyetleri = sahaFaaliyetleri.filter((f) => {
+    if (isLegacySahaRecord(f.id)) return false;
+    const rec = f as SahaFaaliyetiType & { kaydedenFormen?: string };
+    if (rec.kaydedenFormen && formenEmail) {
+      return rec.kaydedenFormen.trim().toLowerCase() === formenEmail;
+    }
+    if (f.kaydedenUid && currentUser?.uid) {
+      return f.kaydedenUid === currentUser.uid;
+    }
+    // kaydedenFormen yoksa (idari/eski kayıt) — tarih kısıtı olmadan göster, gün filtresi altta uygulanır
+    return true;
+  });
   const daySahaFaaliyetleri = visibleSahaFaaliyetleri.filter((f) => normalizeDateKey(f.tarih) === selectedDate);
 
   // Parsed date components
@@ -145,10 +150,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const [yeniKimlikFoto, setYeniKimlikFoto] = useState<string | null>(null);
   const [personelGirisListesi, setPersonelGirisListesi] = useState<any[]>([]);
 
-  // 4. FAALİYET EDİT & SEARCH STATES
-  const [faaliyetSearchKeyword, setFaaliyetSearchKeyword] = useState('');
-  const [faaliyetArsivDateFilter, setFaaliyetArsivDateFilter] = useState('');
-  const [faaliyetArsivSubTab, setFaaliyetArsivSubTab] = useState<'saha' | 'gun'>('saha');
+  // 4. FAALİYET EDİT STATES
   const [editingFaaliyet, setEditingFaaliyet] = useState<SahaFaaliyetiType | null>(null);
   const [lastDeletedFaaliyet, setLastDeletedFaaliyet] = useState<SahaFaaliyetiType | null>(null);
 
@@ -156,7 +158,6 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const [havaDurumu, setHavaDurumu] = useState('Güneşli');
   const [genelNotlar, setGenelNotlar] = useState('');
   const [showPdfPreview, setShowPdfPreview] = useState(false);
-  const [gunlukRaporlar, setGunlukRaporlar] = useState<Record<string, any>>({});
 
   // Status message
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -248,12 +249,6 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     return { gelenCount: gelenIds.length, gelenIds };
   };
   const selectedDateAttendance = getAttendanceSummaryForDate(selectedDate);
-
-  const reportEntries = Object.entries(gunlukRaporlar)
-    .map(([id, data]) => ({ id, ...(data as any) }))
-    .filter((r) => !r.gonderen || String(r.gonderen).toLocaleLowerCase('tr-TR').includes((currentUser?.email || '').toLocaleLowerCase('tr-TR')))
-    .filter((r) => (faaliyetArsivDateFilter ? normalizeDateKey(r.tarih) === faaliyetArsivDateFilter : true))
-    .sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || ''), 'tr'));
 
   // Handlers for personel action requests
 
@@ -424,8 +419,6 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
       snapshot.forEach((doc) => {
         reports[doc.id] = doc.data();
       });
-      setGunlukRaporlar(reports);
-      
       const existing = reports[`report_${selectedDate}`];
       if (existing) {
         setHavaDurumu(existing.havaDurumu || 'Güneşli');
@@ -1087,15 +1080,6 @@ ${satirlar
                   <span>Saha Raporu</span>
                 </button>
                 <button
-                  onClick={() => setActiveTab('faaliyet_gecmis')}
-                  className={`py-1.5 rounded-lg text-[8px] font-extrabold flex flex-col items-center justify-center transition duration-150 cursor-pointer ${
-                    activeTab === 'faaliyet_gecmis' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <FileText size={11} className="mb-0.5" />
-                  <span>Rapor Arşivi</span>
-                </button>
-                <button
                   onClick={() => setActiveTab('personel_giris')}
                   className={`py-1.5 rounded-lg text-[8px] font-extrabold flex flex-col items-center justify-center transition duration-150 cursor-pointer ${
                     activeTab === 'personel_giris' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
@@ -1497,6 +1481,91 @@ ${satirlar
               {/* TAB 2: SAHA FAALİYETİ RAPORLAMA FORM */}
               {activeTab === 'saha_faaliyet' && (
                 <>
+                  {lastDeletedFaaliyet && (
+                    <div className="bg-amber-50 border border-amber-300 p-2.5 rounded-2xl flex items-center justify-between text-[9px] font-bold text-amber-900 shadow-sm mb-3">
+                      <span>🗑️ Faaliyet silindi. Geri almak ister misiniz?</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSahaFaaliyetleri(prev => [lastDeletedFaaliyet, ...prev]);
+                          setLastDeletedFaaliyet(null);
+                          showStatus('success', 'Silme işlemi geri alındı, faaliyet başarıyla kurtarıldı!');
+                        }}
+                        className="bg-amber-600 text-white px-2 py-1 rounded-lg text-[8px] uppercase tracking-wider hover:bg-amber-700"
+                      >
+                        Geri Al
+                      </button>
+                    </div>
+                  )}
+
+                  {editingFaaliyet && (
+                    <div className="bg-amber-50/70 border border-amber-200 p-3 rounded-3xl space-y-2.5 shadow-inner mb-3">
+                      <div className="flex justify-between items-center">
+                        <span className="font-black text-[9px] text-amber-800 uppercase tracking-widest">Faaliyeti Düzenle</span>
+                        <button
+                          type="button"
+                          onClick={() => setEditingFaaliyet(null)}
+                          className="text-slate-400 hover:text-slate-600 font-bold text-[10px]"
+                        >
+                          ✕ Kapat
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        <div>
+                          <label className="text-[8px] font-bold text-slate-500 uppercase">İş Niteliği</label>
+                          <input
+                            type="text"
+                            value={editingFaaliyet.isNiteligi}
+                            onChange={(e) => setEditingFaaliyet({ ...editingFaaliyet, isNiteligi: e.target.value })}
+                            className="w-full bg-white border border-slate-200 py-1.5 px-2 rounded-xl text-[9px] font-bold text-slate-800"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[8px] font-bold text-slate-500 uppercase">Parsel</label>
+                            <select
+                              value={editingFaaliyet.parsel}
+                              onChange={(e) => setEditingFaaliyet({ ...editingFaaliyet, parsel: e.target.value })}
+                              className="w-full bg-white border border-slate-200 p-1 rounded-xl text-[9px] font-bold text-slate-850"
+                            >
+                              {parsellerList.map(p => (
+                                <option key={p} value={p}>{p}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[8px] font-bold text-slate-500 uppercase">Blok</label>
+                            <select
+                              value={editingFaaliyet.blok}
+                              onChange={(e) => setEditingFaaliyet({ ...editingFaaliyet, blok: e.target.value })}
+                              className="w-full bg-white border border-slate-200 p-1 rounded-xl text-[9px] font-bold text-slate-850"
+                            >
+                              {(PARSEL_BLOK_MAP[editingFaaliyet.parsel] || ['GENEL SAHA']).map(b => (
+                                <option key={b} value={b}>{b}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[8px] font-bold text-slate-500 uppercase">Açıklama</label>
+                          <textarea
+                            rows={2}
+                            value={editingFaaliyet.aciklama || ''}
+                            onChange={(e) => setEditingFaaliyet({ ...editingFaaliyet, aciklama: e.target.value })}
+                            className="w-full bg-white border border-slate-200 py-1 px-2 rounded-xl text-[9px] font-semibold text-slate-850 leading-tight"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleSaveEditedFaaliyet}
+                          className="w-full bg-slate-900 text-white font-extrabold text-[9px] py-2 rounded-xl uppercase hover:bg-slate-950"
+                        >
+                          Değişiklikleri Kaydet
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <form onSubmit={handleSaveFaaliyet} className="space-y-3.5 animate-in fade-in duration-150">
                   
                   <div className="bg-white rounded-3xl border p-4 shadow-xs space-y-3">
@@ -1818,317 +1887,6 @@ ${satirlar
                   </div>
                 </div>
                 </>
-              )}
-
-              {/* TAB 3: SAHA FAALİYETLERİ ARŞİV GEÇMİŞİ */}
-              {activeTab === 'faaliyet_gecmis' && (
-                <div className="space-y-3.5 animate-in fade-in duration-150">
-                  
-                  {/* Undo Deleted Alert Banner */}
-                  {lastDeletedFaaliyet && (
-                    <div className="bg-amber-50 border border-amber-300 p-2.5 rounded-2xl flex items-center justify-between text-[9px] font-bold text-amber-900 shadow-sm">
-                      <span>🗑️ Faaliyet silindi. Geri almak ister misiniz?</span>
-                      <button
-                        onClick={() => {
-                          setSahaFaaliyetleri(prev => [lastDeletedFaaliyet, ...prev]);
-                          setLastDeletedFaaliyet(null);
-                          showStatus('success', 'Silme işlemi geri alındı, faaliyet başarıyla kurtarıldı!');
-                        }}
-                        className="bg-amber-600 text-white px-2 py-1 rounded-lg text-[8px] uppercase tracking-wider hover:bg-amber-700"
-                      >
-                        Geri Al
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Edit Form Modal/Inline Drawer */}
-                  {editingFaaliyet && (
-                    <div className="bg-amber-50/70 border border-amber-200 p-3 rounded-3xl space-y-2.5 shadow-inner">
-                      <div className="flex justify-between items-center">
-                        <span className="font-black text-[9px] text-amber-800 uppercase tracking-widest">Faaliyeti Düzenle</span>
-                        <button
-                          onClick={() => setEditingFaaliyet(null)}
-                          className="text-slate-400 hover:text-slate-600 font-bold text-[10px]"
-                        >
-                          ✕ Kapat
-                        </button>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div>
-                          <label className="text-[8px] font-bold text-slate-500 uppercase">İş Niteliği</label>
-                          <input
-                            type="text"
-                            value={editingFaaliyet.isNiteligi}
-                            onChange={(e) => setEditingFaaliyet({ ...editingFaaliyet, isNiteligi: e.target.value })}
-                            className="w-full bg-white border border-slate-200 py-1.5 px-2 rounded-xl text-[9px] font-bold text-slate-800"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[8px] font-bold text-slate-500 uppercase">Parsel</label>
-                            <select
-                              value={editingFaaliyet.parsel}
-                              onChange={(e) => setEditingFaaliyet({ ...editingFaaliyet, parsel: e.target.value })}
-                              className="w-full bg-white border border-slate-200 p-1 rounded-xl text-[9px] font-bold text-slate-850"
-                            >
-                              {parsellerList.map(p => (
-                                <option key={p} value={p}>{p}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="text-[8px] font-bold text-slate-500 uppercase">Blok</label>
-                            <select
-                              value={editingFaaliyet.blok}
-                              onChange={(e) => setEditingFaaliyet({ ...editingFaaliyet, blok: e.target.value })}
-                              className="w-full bg-white border border-slate-200 p-1 rounded-xl text-[9px] font-bold text-slate-850"
-                            >
-                              {(PARSEL_BLOK_MAP[editingFaaliyet.parsel] || ['GENEL SAHA']).map(b => (
-                                <option key={b} value={b}>{b}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="text-[8px] font-bold text-slate-500 uppercase">Açıklama</label>
-                          <textarea
-                            rows={2}
-                            value={editingFaaliyet.aciklama || ''}
-                            onChange={(e) => setEditingFaaliyet({ ...editingFaaliyet, aciklama: e.target.value })}
-                            className="w-full bg-white border border-slate-200 py-1 px-2 rounded-xl text-[9px] font-semibold text-slate-850 leading-tight"
-                          />
-                        </div>
-
-                        <button
-                          onClick={handleSaveEditedFaaliyet}
-                          className="w-full bg-slate-900 text-white font-extrabold text-[9px] py-2 rounded-xl uppercase hover:bg-slate-950"
-                        >
-                          Değişiklikleri Kaydet
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="bg-white rounded-3xl border p-4 shadow-xs space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2 text-slate-950">
-                        <Users size={14} className="text-amber-500" />
-                        <span className="font-bold text-[10px] uppercase tracking-wider">SAHA FAALİYETLERİ ARŞİVİ</span>
-                      </div>
-                      <span className="text-[8px] font-mono text-slate-400 font-bold">
-                        Toplam: {faaliyetArsivSubTab === 'saha' ? visibleSahaFaaliyetleri.length : reportEntries.length}
-                      </span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setFaaliyetArsivSubTab('saha')}
-                        className={`text-[9px] px-2 py-1 rounded-lg border font-bold ${faaliyetArsivSubTab === 'saha' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}
-                      >
-                        Saha Faaliyetleri
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setFaaliyetArsivSubTab('gun')}
-                        className={`text-[9px] px-2 py-1 rounded-lg border font-bold ${faaliyetArsivSubTab === 'gun' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}
-                      >
-                        Gün Rapor Arşivi
-                      </button>
-                    </div>
-
-                    {/* Search Field */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div className="relative sm:col-span-2">
-                        <Search size={11} className="absolute left-2.5 top-2.5 text-slate-400" />
-                        <input
-                          type="text"
-                          placeholder="Raporlarda ara (Nitelik, parsel, açıklama)..."
-                          value={faaliyetSearchKeyword}
-                          onChange={(e) => setFaaliyetSearchKeyword(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-250 py-1.5 pl-8 pr-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-[9px] font-semibold text-slate-700"
-                        />
-                      </div>
-                      <input
-                        type="date"
-                        value={faaliyetArsivDateFilter}
-                        onChange={(e) => setFaaliyetArsivDateFilter(e.target.value)}
-                        className="text-xs border border-slate-250 rounded-lg px-2 py-1.5"
-                      />
-                    </div>
-
-                    <div className="space-y-3.5 divide-y divide-slate-100 max-h-96 overflow-y-auto pr-1">
-                      {faaliyetArsivSubTab === 'saha' && (
-                        <>
-                      {visibleSahaFaaliyetleri.filter((f) => {
-                        const dateOk = faaliyetArsivDateFilter ? normalizeDateKey(f.tarih) === faaliyetArsivDateFilter : true;
-                        const q = faaliyetSearchKeyword.toLowerCase();
-                        const searchOk =
-                          f.isNiteligi.toLowerCase().includes(q) ||
-                          f.parsel.toLowerCase().includes(q) ||
-                          (f.blok && f.blok.toLowerCase().includes(q)) ||
-                          (f.aciklama && f.aciklama.toLowerCase().includes(q));
-                        return dateOk && searchOk;
-                      }).length === 0 ? (
-                        <p className="text-[9px] text-slate-400 italic text-center py-8">Aranan kriterlere uygun faaliyet bulunamadı.</p>
-                      ) : (
-                        visibleSahaFaaliyetleri
-                          .filter((f) => {
-                            const dateOk = faaliyetArsivDateFilter ? normalizeDateKey(f.tarih) === faaliyetArsivDateFilter : true;
-                            const q = faaliyetSearchKeyword.toLowerCase();
-                            const searchOk =
-                              f.isNiteligi.toLowerCase().includes(q) ||
-                              f.parsel.toLowerCase().includes(q) ||
-                              (f.blok && f.blok.toLowerCase().includes(q)) ||
-                              (f.aciklama && f.aciklama.toLowerCase().includes(q));
-                            return dateOk && searchOk;
-                          })
-                          .map((sf, idx) => {
-                            return (
-                              <div key={sf.id} className={`pt-3.5 ${idx === 0 ? 'pt-0' : ''} space-y-1.5 text-[9px]`}>
-                                <div className="flex justify-between items-start">
-                                  <div>
-                                    <h5 className="font-bold text-xs text-slate-900 leading-tight">{sf.isNiteligi}</h5>
-                                    <span className="text-[8px] text-slate-400 font-bold block mt-0.5">Kimlik: {sf.id}</span>
-                                  </div>
-                                  <span className="text-[8px] font-mono font-extrabold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-lg shrink-0">
-                                    {formatDateLabelTr(sf.tarih)}
-                                  </span>
-                                </div>
-
-                                <div className="flex items-center space-x-1.5 text-[8px] text-slate-500">
-                                  <span className="bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded">
-                                    📍 {sf.parsel} / {sf.blok}
-                                  </span>
-                                </div>
-
-                                {sf.aciklama && (
-                                  <p className="text-slate-650 leading-relaxed font-medium bg-slate-50 p-2 rounded-xl border border-slate-150/40">
-                                    {sf.aciklama}
-                                  </p>
-                                )}
-
-                                {/* Photo image attachment if present */}
-                                {getFaaliyetFoto(sf) && (
-                                  <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-32">
-                                    <img src={getFaaliyetFoto(sf)} alt="Saha İlerleme Görseli" className="w-full h-full object-cover" />
-                                  </div>
-                                )}
-
-                                {/* Workers count if any */}
-                                {(sf.ustaSayisi !== undefined || sf.isciSayisi !== undefined) && (
-                                  <div className="flex gap-2.5 items-center bg-slate-50 p-1.5 rounded-lg border border-slate-100 mt-1">
-                                    {sf.ustaSayisi !== undefined && (
-                                      <span className="text-[8.5px] font-semibold text-blue-800">
-                                        👷 Usta: <strong>{sf.ustaSayisi} Kişi</strong>
-                                      </span>
-                                    )}
-                                    {sf.isciSayisi !== undefined && (
-                                      <span className="text-[8.5px] font-semibold text-slate-700">
-                                        👷 Düz İşçi: <strong>{sf.isciSayisi} Kişi</strong>
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-
-                                {(!sf.ustaSayisi && !sf.isciSayisi && sf.aktifPersonelListesi && sf.aktifPersonelListesi.length > 0) && (
-                                  <div className="flex flex-wrap gap-1 items-center">
-                                    <span className="text-[8px] font-bold text-slate-400">Çalışanlar ({sf.aktifPersonelListesi.length}):</span>
-                                    {sf.aktifPersonelListesi.map((pId) => {
-                                      const p = personeller.find(emp => emp.id === pId);
-                                      if (!p) return null;
-                                      return (
-                                        <span key={pId} className="bg-slate-100 text-slate-600 text-[8px] font-medium px-1 rounded">
-                                          {(p.ad || '-')} {((p.soyad || '').charAt(0) || '')}.
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-
-                                {/* Edit & Delete Controls (Değiştir ve Sil) */}
-                                <div className="flex items-center justify-end space-x-2 pt-1">
-                                  <button
-                                    onClick={() => {
-                                      setSelectedDate(normalizeDateKey(sf.tarih));
-                                      setShowPdfPreview(true);
-                                    }}
-                                    className="text-slate-700 hover:text-slate-900 font-extrabold text-[8.5px] uppercase tracking-wider flex items-center space-x-0.5"
-                                  >
-                                    <Eye size={10} />
-                                    <span>Önizleme</span>
-                                  </button>
-                                  <span className="text-slate-200">|</span>
-                                  <button
-                                    onClick={() => setEditingFaaliyet(sf)}
-                                    className="text-amber-700 hover:text-amber-800 font-extrabold text-[8.5px] uppercase tracking-wider flex items-center space-x-0.5"
-                                  >
-                                    <Edit2 size={10} />
-                                    <span>Değiştir</span>
-                                  </button>
-                                  <span className="text-slate-200">|</span>
-                                  <button
-                                    onClick={() => handleDeleteFaaliyet(sf)}
-                                    className="text-rose-600 hover:text-rose-700 font-extrabold text-[8.5px] uppercase tracking-wider flex items-center space-x-0.5"
-                                  >
-                                    <Trash2 size={10} />
-                                    <span>Sil</span>
-                                  </button>
-                                </div>
-
-                              </div>
-                            );
-                          })
-                      )}
-                        </>
-                      )}
-                      {faaliyetArsivSubTab === 'gun' && (
-                        <>
-                          {reportEntries.length === 0 && (
-                            <p className="text-[9px] text-slate-400 italic text-center py-8">Gün raporu bulunamadı.</p>
-                          )}
-                          {reportEntries.map((r) => (
-                            <div key={r.id} className="pt-3.5 space-y-1.5 text-[9px]">
-                              <div className="flex items-center justify-between">
-                                <div className="font-bold text-slate-900">{r.tarih} Gün Raporu</div>
-                                <span className="text-[8px] text-slate-500">{r.toplamEkip || 0} kişi</span>
-                              </div>
-                              <p className="text-[8px] text-slate-500">
-                                Faaliyet: {Array.isArray(r.faaliyetler) ? r.faaliyetler.length : 0} · Formen: {String(r.gonderen || '').split('@')[0] || '-'}
-                              </p>
-                              <div className="flex justify-end gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedDate(normalizeDateKey(r.tarih));
-                                    setShowPdfPreview(true);
-                                  }}
-                                  className="text-[8.5px] px-2 py-1 border border-slate-250 rounded-lg font-bold bg-slate-100 hover:bg-slate-200"
-                                >
-                                  Önizleme
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedDate(normalizeDateKey(r.tarih));
-                                    setShowPdfPreview(true);
-                                  }}
-                                  className="text-[8.5px] px-2 py-1 border border-amber-600 rounded-lg font-black bg-amber-500 text-slate-950 hover:bg-amber-600"
-                                >
-                                  PDF Gönder
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </>
-                      )}
-                    </div>
-
-                  </div>
-
-                </div>
               )}
 
               {/* TAB 4: PERSONEL GİRİŞE YOLLA */}

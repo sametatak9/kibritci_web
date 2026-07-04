@@ -1676,7 +1676,9 @@ export default function App() {
           kampYerleskeleri={kampYerleskeleri}
           kampKatlari={kampKatlari}
           personeller={personeller}
+          setPersoneller={setPersonellerWithSync}
           cariKartlar={cariKartlar}
+          setCariKartlar={setCariKartlarWithSync}
           yoklamalar={yoklamalar}
           setYoklamalar={setYoklamalarWithSync}
           stokKartlar={stokKartlar}
@@ -1758,7 +1760,9 @@ export default function App() {
           kampYerleskeleri={kampYerleskeleri}
           kampKatlari={kampKatlari}
           personeller={personeller}
+          setPersoneller={setPersonellerWithSync}
           cariKartlar={cariKartlar}
+          setCariKartlar={setCariKartlarWithSync}
           yoklamalar={yoklamalar}
           setYoklamalar={setYoklamalarWithSync}
           stokKartlar={stokKartlar}
@@ -2242,7 +2246,9 @@ export default function App() {
                     kampYerleskeleri={kampYerleskeleri}
                     kampKatlari={kampKatlari}
                     personeller={personeller}
+                    setPersoneller={setPersonellerWithSync}
                     cariKartlar={cariKartlar}
+                    setCariKartlar={setCariKartlarWithSync}
                     yoklamalar={yoklamalar}
                     setYoklamalar={setYoklamalarWithSync}
                     stokKartlar={stokKartlar}
