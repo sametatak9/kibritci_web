@@ -64,6 +64,19 @@ interface IdariScreenProps {
   yoklamalar?: any;
 }
 
+interface FormenGunlukRaporKaydi {
+  id: string;
+  tarih: string;
+  guncellenmeTarihi?: string;
+  olusturulma?: string;
+  gonderen?: string;
+  gonderenFormen?: string;
+  toplamEkip?: number;
+  genelNotlar?: string;
+  ozetMetin?: string;
+  faaliyetler?: any[];
+}
+
 export const IdariScreen: React.FC<IdariScreenProps> = ({
   currentSubTab,
   araclar, setAraclar,
@@ -677,9 +690,12 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [sahaTakvimAy, setSahaTakvimAy] = useState(new Date().toISOString().slice(0, 7));
   const [showSahaGunModal, setShowSahaGunModal] = useState(false);
   const [selectedSahaGun, setSelectedSahaGun] = useState(new Date().toISOString().split('T')[0]);
-  const [formenTarihFiltre, setFormenTarihFiltre] = useState(new Date().toISOString().split('T')[0]);
+  const [formenTarihFiltre, setFormenTarihFiltre] = useState('');
+  const [tumKayitTarihFiltre, setTumKayitTarihFiltre] = useState('');
+  const [gunArsivTarihFiltre, setGunArsivTarihFiltre] = useState('');
   const [gunRaporNotu, setGunRaporNotu] = useState('');
   const [sahaGunRaporArsivleri, setSahaGunRaporArsivleri] = useState<SahaGunRaporArsiv[]>([]);
+  const [formenGunlukRaporlari, setFormenGunlukRaporlari] = useState<FormenGunlukRaporKaydi[]>([]);
 
   const selectedFieldStaffList = useMemo(
     () => personeller.filter((p) => selectedFieldStaff.includes(p.id)),
@@ -733,6 +749,24 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       snapshot.forEach((d) => list.push({ id: d.id, ...d.data() } as SahaGunRaporArsiv));
       list.sort((a, b) => String(b.tarih).localeCompare(String(a.tarih), 'tr'));
       setSahaGunRaporArsivleri(list);
+    });
+    return () => unsub();
+  }, []);
+
+  React.useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'gunlukSahaRaporlari'), (snapshot) => {
+      const list: FormenGunlukRaporKaydi[] = [];
+      snapshot.forEach((d) => {
+        const data = d.data() as FormenGunlukRaporKaydi;
+        if (typeof data?.tarih !== 'string' || !data.tarih) return;
+        list.push({ id: d.id, ...data });
+      });
+      list.sort((a, b) => {
+        const aTs = new Date(a.guncellenmeTarihi || a.olusturulma || a.tarih).getTime();
+        const bTs = new Date(b.guncellenmeTarihi || b.olusturulma || b.tarih).getTime();
+        return bTs - aTs;
+      });
+      setFormenGunlukRaporlari(list);
     });
     return () => unsub();
   }, []);
@@ -1027,6 +1061,25 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     () => sahaFaaliyetleri.filter((sf) => sf.tarih === selectedSahaGun),
     [sahaFaaliyetleri, selectedSahaGun]
   );
+  const filteredTumSahaFaaliyetleri = useMemo(() => {
+    const keyword = sahaSearchKeyword.toLocaleLowerCase('tr-TR').trim();
+    return [...sahaFaaliyetleri]
+      .filter((sf) => (tumKayitTarihFiltre ? sf.tarih === tumKayitTarihFiltre : true))
+      .filter((sf) => {
+        if (!keyword) return true;
+        return (
+          sf.isNiteligi.toLocaleLowerCase('tr-TR').includes(keyword) ||
+          sf.aciklama.toLocaleLowerCase('tr-TR').includes(keyword) ||
+          sf.parsel.toLocaleLowerCase('tr-TR').includes(keyword) ||
+          String(sf.blok || '').toLocaleLowerCase('tr-TR').includes(keyword)
+        );
+      })
+      .sort((a, b) => {
+        const aTs = new Date(a.programaGonderimTarihi || a.tarih).getTime();
+        const bTs = new Date(b.programaGonderimTarihi || b.tarih).getTime();
+        return bTs - aTs;
+      });
+  }, [sahaFaaliyetleri, sahaSearchKeyword, tumKayitTarihFiltre]);
   const filteredFormenFaaliyetleri = useMemo(
     () =>
       sahaFaaliyetleri
@@ -1034,6 +1087,39 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
         .filter((sf) => (formenTarihFiltre ? sf.tarih === formenTarihFiltre : true))
         .sort((a, b) => String(b.tarih).localeCompare(String(a.tarih), 'tr')),
     [sahaFaaliyetleri, formenTarihFiltre]
+  );
+  const filteredFormenGunlukRaporlari = useMemo(
+    () =>
+      formenGunlukRaporlari
+        .filter((r) => (formenTarihFiltre ? r.tarih === formenTarihFiltre : true))
+        .sort((a, b) => String(b.tarih).localeCompare(String(a.tarih), 'tr')),
+    [formenGunlukRaporlari, formenTarihFiltre]
+  );
+  const displayGunRaporArsivi = useMemo(() => {
+    if (sahaGunRaporArsivleri.length > 0) return sahaGunRaporArsivleri;
+    return filteredFormenGunlukRaporlari.map((r) => ({
+      id: `formen_${r.id}`,
+      tarih: r.tarih,
+      olusturmaTarihi: r.guncellenmeTarihi || r.olusturulma || '',
+      olusturan: r.gonderen || r.gonderenFormen || 'FORMEN',
+      faaliyetIds: Array.isArray(r.faaliyetler) ? r.faaliyetler.map((f: any) => String(f?.id || '')) : [],
+      faaliyetAdet: Array.isArray(r.faaliyetler) ? r.faaliyetler.length : 0,
+      formenFaaliyetAdet: Array.isArray(r.faaliyetler) ? r.faaliyetler.length : 0,
+      yoklamaOzet: {
+        gelen: Number(r.toplamEkip || 0),
+        yok: 0,
+        izinli: 0,
+        raporlu: 0,
+      },
+      aciklama: r.genelNotlar || r.ozetMetin || '',
+    })) as SahaGunRaporArsiv[];
+  }, [sahaGunRaporArsivleri, filteredFormenGunlukRaporlari]);
+  const filteredDisplayGunRaporArsivi = useMemo(
+    () =>
+      displayGunRaporArsivi.filter((r) =>
+        gunArsivTarihFiltre ? String(r.tarih) === gunArsivTarihFiltre : true
+      ),
+    [displayGunRaporArsivi, gunArsivTarihFiltre]
   );
 
   const sahaTakvimGunleri = useMemo(() => {
@@ -3087,31 +3173,39 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 <button type="button" onClick={() => setSahaSubTab('gun_arsiv')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'gun_arsiv' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}>Gün Rapor Arşivi</button>
               </div>
               {sahaSubTab === 'tum' && (
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="İş niteliği, açıklama veya parsel ara..."
-                    value={sahaSearchKeyword}
-                    onChange={(e) => setSahaSearchKeyword(e.target.value)}
-                    className="w-full bg-white text-xs text-slate-800 border border-slate-250 rounded-lg py-1.5 pl-3 pr-8 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition font-medium"
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  <div className="relative md:col-span-2">
+                    <input
+                      type="text"
+                      placeholder="İş niteliği, açıklama veya parsel ara..."
+                      value={sahaSearchKeyword}
+                      onChange={(e) => setSahaSearchKeyword(e.target.value)}
+                      className="w-full bg-white text-xs text-slate-800 border border-slate-250 rounded-lg py-1.5 pl-3 pr-8 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition font-medium"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={tumKayitTarihFiltre}
+                      onChange={(e) => setTumKayitTarihFiltre(e.target.value)}
+                      className="w-full text-xs border border-slate-250 rounded-lg px-2 py-1.5"
+                    />
+                    {tumKayitTarihFiltre && (
+                      <button
+                        type="button"
+                        onClick={() => setTumKayitTarihFiltre('')}
+                        className="text-[10px] border border-slate-300 bg-white hover:bg-slate-100 px-2 py-1 rounded-lg font-semibold cursor-pointer"
+                      >
+                        Temizle
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
 
             {sahaSubTab === 'tum' &&
-              renderSahaFaaliyetList(
-                sahaFaaliyetleri.filter((sf) => {
-                  const keyword = sahaSearchKeyword.toLowerCase().trim();
-                  if (!keyword) return true;
-                  return (
-                    sf.isNiteligi.toLowerCase().includes(keyword) ||
-                    sf.aciklama.toLowerCase().includes(keyword) ||
-                    sf.parsel.toLowerCase().includes(keyword) ||
-                    (sf.blok && sf.blok.toLowerCase().includes(keyword))
-                  );
-                })
-              )}
+              renderSahaFaaliyetList(filteredTumSahaFaaliyetleri)}
 
             {sahaSubTab === 'formen' && (
               <div className="flex-grow overflow-y-auto p-4 space-y-3 bg-slate-50/20">
@@ -3123,9 +3217,45 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   <button onClick={handleIceriAlVeGunRaporla} className="text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg font-bold cursor-pointer">
                     İçeri Al ve Günü Raporla
                   </button>
-                  <button onClick={() => openSahaGunDetay(formenTarihFiltre)} className="text-[11px] bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg font-bold cursor-pointer">
+                  <button
+                    onClick={() => {
+                      if (!formenTarihFiltre) {
+                        alert('Gün detayı için önce tarih seçin.');
+                        return;
+                      }
+                      openSahaGunDetay(formenTarihFiltre);
+                    }}
+                    className="text-[11px] bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg font-bold cursor-pointer"
+                  >
                     Gün Detayı Aç
                   </button>
+                  {formenTarihFiltre && (
+                    <button onClick={() => setFormenTarihFiltre('')} className="text-[11px] bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg font-bold cursor-pointer">
+                      Tüm Tarihler
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <div className="text-[11px] font-bold text-slate-700">Formen Günlük Kayıtları ({filteredFormenGunlukRaporlari.length})</div>
+                  {filteredFormenGunlukRaporlari.length === 0 && (
+                    <div className="border border-dashed border-slate-250 rounded-xl p-4 text-xs text-slate-500">
+                      Seçili filtreye uygun formen günlük kaydı bulunamadı.
+                    </div>
+                  )}
+                  {filteredFormenGunlukRaporlari.map((rapor) => (
+                    <div key={rapor.id} className="bg-white border border-slate-200 rounded-xl p-3 text-xs">
+                      <div className="flex justify-between items-center gap-2">
+                        <div className="font-bold text-slate-800">{rapor.tarih} · Formen Günlük Raporu</div>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 font-bold">
+                          {(rapor.gonderen || rapor.gonderenFormen || 'FORMEN').split('@')[0]}
+                        </span>
+                      </div>
+                      <p className="text-slate-500 mt-1">Toplam ekip: {rapor.toplamEkip || 0} · Faaliyet: {Array.isArray(rapor.faaliyetler) ? rapor.faaliyetler.length : 0}</p>
+                      {(rapor.genelNotlar || rapor.ozetMetin) && (
+                        <p className="text-slate-700 mt-1 line-clamp-2">{rapor.genelNotlar || rapor.ozetMetin}</p>
+                      )}
+                    </div>
+                  ))}
                 </div>
                 {renderSahaFaaliyetList(filteredFormenFaaliyetleri)}
               </div>
@@ -3164,12 +3294,29 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
 
             {sahaSubTab === 'gun_arsiv' && (
               <div className="flex-grow overflow-y-auto p-4 space-y-3 bg-slate-50/20">
-                {sahaGunRaporArsivleri.length === 0 && (
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="date"
+                    value={gunArsivTarihFiltre}
+                    onChange={(e) => setGunArsivTarihFiltre(e.target.value)}
+                    className="text-xs border border-slate-250 rounded-lg px-2 py-1.5"
+                  />
+                  {gunArsivTarihFiltre && (
+                    <button
+                      type="button"
+                      onClick={() => setGunArsivTarihFiltre('')}
+                      className="text-[10px] border border-slate-300 bg-white hover:bg-slate-100 px-2 py-1 rounded-lg font-semibold cursor-pointer"
+                    >
+                      Tüm Tarihler
+                    </button>
+                  )}
+                </div>
+                {filteredDisplayGunRaporArsivi.length === 0 && (
                   <div className="border border-dashed border-slate-250 rounded-xl p-4 text-xs text-slate-500">
                     Henüz arşivlenmiş gün raporu yok.
                   </div>
                 )}
-                {sahaGunRaporArsivleri.map((r) => (
+                {filteredDisplayGunRaporArsivi.map((r) => (
                   <div key={r.id} className="bg-white border border-slate-200 rounded-xl p-3 text-xs">
                     <div className="flex justify-between items-center">
                       <div className="font-bold text-slate-800">{r.tarih} Gün Raporu</div>

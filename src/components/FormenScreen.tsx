@@ -9,10 +9,10 @@ import {
 import { Personel, AylikYoklamaMap, YoklamaDurum, SahaFaaliyeti as SahaFaaliyetiType } from '../types/erp';
 import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
-import { buildPersonelListForMonth, getYoklamaDay, isDayActiveForPersonel, setYoklamaDay } from '../lib/yoklamaUtils';
+import { buildPersonelListForMonth, getYoklamaDay, isDayActiveForPersonel, isTaseronPersonel, setYoklamaDay } from '../lib/yoklamaUtils';
 import { buildFormenGunlukOzet } from '../lib/gunlukAkisUtils';
 import { buildWhatsAppUrl, isLegacySahaRecord } from '../lib/mobilOnayUtils';
-import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { downloadCsv } from '../lib/reportExport';
 
 interface FormenScreenProps {
@@ -89,20 +89,17 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const logActionToPersonelHistory = async (islem: string, detay: string) => {
     const p = matchUserToPersonel();
     if (!p) return;
-    
-    const updatedGecmis = p.gecmis ? [...p.gecmis] : [];
-    updatedGecmis.unshift({
-      id: `log_${Date.now()}`,
-      tarih: new Date().toISOString().split('T')[0] + ' ' + new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
-      islem,
-      detay
-    });
-    
-    if (updatedGecmis.length > 50) updatedGecmis.pop();
-    
+
     try {
       const docRef = doc(db, 'personeller', p.id);
-      await setDoc(docRef, { ...p, gecmis: updatedGecmis });
+      await updateDoc(docRef, {
+        gecmis: arrayUnion({
+          id: `log_${Date.now()}`,
+          tarih: `${new Date().toISOString().split('T')[0]} ${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`,
+          islem,
+          detay,
+        }),
+      });
     } catch (error) {
       console.error('Error logging to personnel history:', error);
     }
@@ -149,6 +146,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const [aciklama, setAciklama] = useState('');
   const [fotoUrl, setFotoUrl] = useState<string | null>(null);
   const [faaliyetPersonelIds, setFaaliyetPersonelIds] = useState<string[]>([]);
+  const [faaliyetPersonelSearch, setFaaliyetPersonelSearch] = useState('');
   const [sahaUstaSayisi, setSahaUstaSayisi] = useState<number>(0);
   const [sahaIsciSayisi, setSahaIsciSayisi] = useState<number>(0);
 
@@ -218,9 +216,18 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
 
   const monthPersonelList = buildPersonelListForMonth(personeller, yoklamalar, year, month);
   const activeStaff = monthPersonelList.filter((p) => {
+    if (isTaseronPersonel(p)) return false;
     const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
     if (!isAktif && !p.istenCikisTarihi) return false;
     return isDayActiveForPersonel(p, year, month, day, yoklamalar[p.id] as any);
+  });
+  const filteredFaaliyetPersonelPool = activeStaff.filter((p) => {
+    const q = faaliyetPersonelSearch.trim().toLocaleLowerCase('tr-TR');
+    if (!q) return true;
+    return (
+      `${p.ad} ${p.soyad}`.toLocaleLowerCase('tr-TR').includes(q) ||
+      String(p.gorev || '').toLocaleLowerCase('tr-TR').includes(q)
+    );
   });
 
   // Get start of the week (Monday) based on selectedDate
@@ -679,6 +686,52 @@ ${satirlar
     }
   };
 
+  const handleFillWorkerCountsFromSelection = () => {
+    if (!faaliyetPersonelIds.length) {
+      setSahaUstaSayisi(0);
+      setSahaIsciSayisi(0);
+      showStatus('error', 'Önce listeden personel seçin.');
+      return;
+    }
+    let usta = 0;
+    let isci = 0;
+    faaliyetPersonelIds.forEach((pid) => {
+      const p = personeller.find((x) => x.id === pid);
+      const gorev = String(p?.gorev || '').toLocaleLowerCase('tr-TR');
+      if (gorev.includes('usta')) {
+        usta += 1;
+      } else {
+        isci += 1;
+      }
+    });
+    setSahaUstaSayisi(usta);
+    setSahaIsciSayisi(isci);
+    showStatus('success', `Seçimden sayı dolduruldu: ${usta} usta, ${isci} düz işçi.`);
+  };
+
+  const logAssignedPersonelHistory = async (faaliyet: SahaFaaliyetiType) => {
+    if (!Array.isArray(faaliyet.aktifPersonelListesi) || faaliyet.aktifPersonelListesi.length === 0) return;
+    const faaliyetOzeti = `${faaliyet.tarih} tarihinde "${faaliyet.isNiteligi}" işi için ${faaliyet.parsel} / ${faaliyet.blok} sahasında görevlendirildi.`;
+    await Promise.all(
+      faaliyet.aktifPersonelListesi.map(async (pid) => {
+        try {
+          const personelRef = doc(db, 'personeller', pid);
+          await updateDoc(personelRef, {
+            gecmis: arrayUnion({
+              id: `saha_gorev_${faaliyet.id}_${pid}`,
+              tarih: `${faaliyet.tarih} ${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`,
+              islem: 'Saha Görevlendirme',
+              detay: faaliyetOzeti,
+              kaynak: 'FORMEN_MOBIL',
+            }),
+          });
+        } catch (error) {
+          console.error('Personel görev geçmişi güncellenemedi:', pid, error);
+        }
+      })
+    );
+  };
+
   // Submit Saha Faaliyeti
   const handleSaveFaaliyet = async (e: React.SyntheticEvent, notifyProgram = true) => {
     e.preventDefault();
@@ -710,6 +763,7 @@ ${satirlar
 
     try {
       await saveDocument('sahaFaaliyetleri', newFaaliyet);
+      await logAssignedPersonelHistory(newFaaliyet);
     } catch (err: any) {
       showStatus('error', `Faaliyet gönderilemedi: ${err?.message || 'Bağlantı hatası'}`);
       return;
@@ -730,6 +784,7 @@ ${satirlar
     setFotoUrl(null);
     setSahaUstaSayisi(0);
     setSahaIsciSayisi(0);
+    setFaaliyetPersonelSearch('');
   };
 
   const handleSendGunlukAkis = async () => {
@@ -1496,6 +1551,57 @@ ${satirlar
                         onChange={(e) => setAciklama(e.target.value)}
                         className="w-full bg-slate-50 border border-slate-200 py-2 px-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-[10px] font-semibold text-slate-800 leading-snug"
                       />
+                    </div>
+
+                    <div className="space-y-1.5 border border-slate-200 rounded-2xl p-3 bg-slate-50/60">
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="font-bold text-slate-600 uppercase text-[8px] tracking-wider block">DB Personel Görevlendirme (Yeni Metod)</label>
+                        <button
+                          type="button"
+                          onClick={handleFillWorkerCountsFromSelection}
+                          className="text-[8px] bg-blue-600 hover:bg-blue-700 text-white font-bold px-2 py-1 rounded-lg"
+                        >
+                          Seçimden Sayıyı Doldur
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={faaliyetPersonelSearch}
+                        onChange={(e) => setFaaliyetPersonelSearch(e.target.value)}
+                        placeholder="Personel ad/görev ara..."
+                        className="w-full bg-white border border-slate-200 py-1.5 px-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 text-[10px] font-medium text-slate-800"
+                      />
+                      <div className="max-h-36 overflow-y-auto space-y-1 pr-0.5">
+                        {filteredFaaliyetPersonelPool.length === 0 && (
+                          <div className="text-[10px] text-slate-400 border border-dashed border-slate-200 rounded-xl py-2 px-2">
+                            Aramaya uygun aktif personel bulunamadı.
+                          </div>
+                        )}
+                        {filteredFaaliyetPersonelPool.map((p) => {
+                          const selected = faaliyetPersonelIds.includes(p.id);
+                          return (
+                            <button
+                              type="button"
+                              key={p.id}
+                              onClick={() =>
+                                setFaaliyetPersonelIds((prev) =>
+                                  prev.includes(p.id) ? prev.filter((id) => id !== p.id) : [...prev, p.id]
+                                )
+                              }
+                              className={`w-full text-left border rounded-xl px-2.5 py-1.5 text-[10px] font-bold transition ${
+                                selected
+                                  ? 'bg-blue-50 border-blue-300 text-blue-900'
+                                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                              }`}
+                            >
+                              {p.ad} {p.soyad} · {p.gorev || 'Görev yok'}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="text-[10px] text-slate-700 font-semibold">
+                        Seçili Personel: {faaliyetPersonelIds.length}
+                      </div>
                     </div>
 
                     {/* Photo upload / camera */}

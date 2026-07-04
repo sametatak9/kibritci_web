@@ -228,6 +228,32 @@ export function normalizeTurkishName(name: string): string {
     .replace(/\s/g, '');
 }
 
+function normalizeCompanyName(name: string): string {
+  return String(name || '')
+    .toLocaleUpperCase('tr-TR')
+    .replace(/İ/g, 'I')
+    .replace(/Ş/g, 'S')
+    .replace(/Ğ/g, 'G')
+    .replace(/Ü/g, 'U')
+    .replace(/Ö/g, 'O')
+    .replace(/Ç/g, 'C')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isKibritciCompany(name: string): boolean {
+  const n = normalizeCompanyName(name);
+  return !n || n.includes('KIBRITCI');
+}
+
+export function isTaseronPersonel(p?: Personel): boolean {
+  if (!p) return false;
+  if (p.firmaTipi === 'TASERON') return true;
+  const firmaAdi = String(p.firmaAdi || '').trim();
+  if (!firmaAdi) return false;
+  return !isKibritciCompany(firmaAdi);
+}
+
 export function findPersonelByName(personeller: Personel[], adSoyad: string): Personel | undefined {
   const target = normalizeTurkishName(adSoyad);
   if (!target) return undefined;
@@ -285,7 +311,7 @@ export function buildPersonelListForMonth(
 
   personeller.forEach(p => {
     // Taşeron personeller kamp/personel kart akışında tutulur; yoklama listesine girmez.
-    if (p.firmaTipi === 'TASERON') return;
+    if (isTaseronPersonel(p)) return;
     if (isPersonelVisibleInMonth(p, year, month, asYoklamaGunMap(yoklamalar[p.id]))) ids.add(p.id);
   });
   Object.entries(yoklamalar).forEach(([id, map]) => {
@@ -293,7 +319,7 @@ export function buildPersonelListForMonth(
     // Bu, "kayıtlı olmayan personel yoklamada görünüyor" ve mükerrer satır riskini azaltır.
     const existing = byId.get(id);
     if (!existing) return;
-    if (existing.firmaTipi === 'TASERON') return;
+    if (isTaseronPersonel(existing)) return;
     const personMap = asYoklamaGunMap(map);
     if (!personHasYoklamaInMonth(personMap, year, month)) return;
     if (!isPersonelVisibleInMonth(existing, year, month, personMap)) return;
