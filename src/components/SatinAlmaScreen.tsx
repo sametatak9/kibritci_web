@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { 
   ShoppingCart, Plus, Trash2, Edit3, Eye, Upload, 
   Send, ShieldCheck, Search, Sparkles, CheckCircle2, AlertCircle 
@@ -44,6 +44,8 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
   const [editingSaId, setEditingSaId] = useState<string | null>(null);
   const [saAttachmentUrl, setSaAttachmentUrl] = useState<string | null>(null);
   const [saSearchKeyword, setSaSearchKeyword] = useState("");
+  const [talepTab, setTalepTab] = useState<'MEVCUT' | 'ARSIV'>('MEVCUT');
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const [tempItem, setTempItem] = useState<Omit<SatinAlmaItem, 'id'>>({
     urunAdi: "",
@@ -375,6 +377,229 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     e.target.value = '';
   };
 
+  const setTalepDurumu = (saId: string, durum: SatinAlmaTalebi['onayDurumu']) => {
+    setSatinAlmaTalepleri((prev) =>
+      prev.map((item) => (item.id === saId ? { ...item, onayDurumu: durum } : item))
+    );
+  };
+
+  const toggleArsiv = (saId: string, arsivde: boolean) => {
+    setSatinAlmaTalepleri((prev) =>
+      prev.map((item) => (item.id === saId ? { ...item, arsivde } : item))
+    );
+  };
+
+  const sanitizeOnayDurumu = (durum: unknown): SatinAlmaTalebi['onayDurumu'] => {
+    const allowed: SatinAlmaTalebi['onayDurumu'][] = [
+      'ONAY BEKLİYOR',
+      '1. ONAY TAMAMLANDI',
+      '2. ONAY TAMAMLANDI',
+      'REDDEDİLDİ',
+      'KAPATILDI',
+      'ONAYLANDI',
+      'BİLİNMİYOR',
+    ];
+    const text = String(durum || '').trim().toUpperCase();
+    return allowed.find((x) => x === text) || 'BİLİNMİYOR';
+  };
+
+  const handleExportSatinAlmaExcel = async () => {
+    const { Workbook } = await import('exceljs');
+    const wb = new Workbook();
+
+    const current = satinAlmaTalepleri.filter((t) => !t.arsivde);
+    const archive = satinAlmaTalepleri.filter((t) => t.arsivde);
+
+    const buildSheet = (name: string, data: SatinAlmaTalebi[]) => {
+      const ws = wb.addWorksheet(name);
+      ws.addRow([
+        'SA ID',
+        'Tarih',
+        'Cari Firma',
+        'Talep Eden',
+        'Durum',
+        'Arşiv',
+        'Kalem Sayısı',
+        'Açıklama',
+        'İmzalı Evrak',
+      ]);
+      ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
+      data.forEach((sa) => {
+        ws.addRow([
+          sa.saId,
+          sa.tarih,
+          sa.cariFirma,
+          sa.talepEden,
+          sa.onayDurumu,
+          sa.arsivde ? 'EVET' : 'HAYIR',
+          sa.kalemler.length,
+          sa.aciklama || '',
+          sa.imzaliEvrakUrl ? 'VAR' : 'YOK',
+        ]);
+      });
+      ws.columns = [
+        { width: 22 },
+        { width: 14 },
+        { width: 24 },
+        { width: 20 },
+        { width: 20 },
+        { width: 10 },
+        { width: 12 },
+        { width: 38 },
+        { width: 12 },
+      ];
+    };
+
+    buildSheet('Mevcut Talepler', current);
+    buildSheet('Arşiv Talepler', archive);
+
+    const lines = wb.addWorksheet('Kalem Dökümü');
+    lines.addRow([
+      'SA ID',
+      'Tarih',
+      'Cari',
+      'Ürün',
+      'Miktar',
+      'Birim',
+      'Marka',
+      'Kullanım Yeri',
+      'Kalem Notu',
+      'Durum',
+      'Arşiv',
+    ]);
+    lines.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    lines.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+
+    satinAlmaTalepleri.forEach((sa) => {
+      sa.kalemler.forEach((k) => {
+        lines.addRow([
+          sa.saId,
+          sa.tarih,
+          sa.cariFirma,
+          k.urunAdi,
+          k.miktar,
+          k.birim,
+          k.marka || '',
+          k.kullanilacakYer || '',
+          k.aciklama || '',
+          sa.onayDurumu,
+          sa.arsivde ? 'EVET' : 'HAYIR',
+        ]);
+      });
+    });
+    lines.columns = [
+      { width: 22 },
+      { width: 14 },
+      { width: 20 },
+      { width: 32 },
+      { width: 12 },
+      { width: 10 },
+      { width: 18 },
+      { width: 18 },
+      { width: 30 },
+      { width: 18 },
+      { width: 10 },
+    ];
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `SatinAlma_Rapor_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportProgramJson = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      version: 'satin-alma-v1',
+      records: satinAlmaTalepleri,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `satin-alma-program-format-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportProgramJson = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as { records?: any[] } | any[];
+      const incoming = Array.isArray(parsed) ? parsed : Array.isArray(parsed.records) ? parsed.records : [];
+      if (incoming.length === 0) {
+        alert('Dosyada içe aktarılacak satın alma kaydı bulunamadı.');
+        return;
+      }
+
+      const normalized: SatinAlmaTalebi[] = incoming
+        .map((row) => ({
+          id: String(row.id || `sa_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`),
+          saId: String(row.saId || buildSaId(String(row.tarih || '').slice(0, 10) || saDate)),
+          tarih: String(row.tarih || saDate || new Date().toISOString().slice(0, 10)).slice(0, 10),
+          talepEden: String(row.talepEden || 'Bilinmiyor'),
+          cariFirma: String(row.cariFirma || 'Bilinmiyor'),
+          aciklama: String(row.aciklama || ''),
+          onayDurumu: sanitizeOnayDurumu(row.onayDurumu),
+          imzaliEvrakUrl: row.imzaliEvrakUrl || undefined,
+          imzaliEvrakUyumsuz: Boolean(row.imzaliEvrakUyumsuz),
+          gonderimTarihi: row.gonderimTarihi || undefined,
+          kalemler: Array.isArray(row.kalemler)
+            ? row.kalemler.map((k: any) => ({
+                id: String(k.id || `sai_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`),
+                urunAdi: String(k.urunAdi || 'Belirsiz Ürün'),
+                miktar: Number(k.miktar || 0),
+                birim: String(k.birim || 'ADET'),
+                marka: String(k.marka || ''),
+                kullanilacakYer: String(k.kullanilacakYer || ''),
+                aciklama: String(k.aciklama || ''),
+              }))
+            : [],
+          eImzalar: Array.isArray(row.eImzalar) ? row.eImzalar.map((x: unknown) => String(x)) : [],
+          arsivde: Boolean(row.arsivde),
+        }))
+        .filter((x) => x.saId && x.kalemler.length > 0);
+
+      if (normalized.length === 0) {
+        alert('Dosya formatı uygun değil. Program format JSON dışa aktarımını örnek alarak tekrar deneyin.');
+        return;
+      }
+
+      setSatinAlmaTalepleri((prev) => {
+        const bySa = new Map(prev.map((p) => [p.saId, p]));
+        normalized.forEach((item) => {
+          const existing = bySa.get(item.saId);
+          if (!existing) {
+            bySa.set(item.saId, item);
+            return;
+          }
+          bySa.set(item.saId, {
+            ...existing,
+            ...item,
+            id: existing.id || item.id,
+            kalemler: item.kalemler.length > 0 ? item.kalemler : existing.kalemler,
+          });
+        });
+        return Array.from(bySa.values()).sort((a, b) => String(b.tarih).localeCompare(String(a.tarih), 'tr'));
+      });
+      alert(`${normalized.length} kayıt program formatından içe aktarıldı/güncellendi.`);
+    } catch (err) {
+      console.error(err);
+      alert('JSON içe aktarımı başarısız. Dosya bozuk veya format hatalı.');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
   const handlePreviewPdf = (sa: SatinAlmaTalebi) => {
     const htmlContent = `
       <html>
@@ -497,7 +722,9 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
 
   const filteredTalepler = satinAlmaTalepleri.filter(sa => {
     const kw = saSearchKeyword.toLowerCase();
-    return sa.saId.toLowerCase().includes(kw) || 
+    const inTab = talepTab === 'MEVCUT' ? !sa.arsivde : Boolean(sa.arsivde);
+    if (!inTab) return false;
+    return sa.saId.toLowerCase().includes(kw) ||
            sa.cariFirma.toLowerCase().includes(kw) || 
            sa.talepEden.toLowerCase().includes(kw);
   });
@@ -643,16 +870,62 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
       {/* RIGHT LIST PANEL */}
       <div className="flex-1 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-[450px]">
         <div className="p-4 border-b border-[#e2e8f0] bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shrink-0">
-          <h4 className="font-display font-bold text-xs text-slate-800 uppercase tracking-widest">
-            📋 Mevcut Talepler
-          </h4>
-          <input 
-            type="text"
-            placeholder="Kod veya firma ara..."
-            value={saSearchKeyword}
-            onChange={(e) => setSaSearchKeyword(e.target.value)}
-            className="text-xs border p-2 rounded-xl bg-white w-48 sm:w-64"
-          />
+          <div className="flex items-center gap-2">
+            <h4 className="font-display font-bold text-xs text-slate-800 uppercase tracking-widest">
+              📋 Satın Alma Talepleri
+            </h4>
+            <button
+              type="button"
+              onClick={() => setTalepTab('MEVCUT')}
+              className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${talepTab === 'MEVCUT' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}
+            >
+              Mevcut Talepler
+            </button>
+            <button
+              type="button"
+              onClick={() => setTalepTab('ARSIV')}
+              className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${talepTab === 'ARSIV' ? 'bg-amber-600 text-white border-amber-700' : 'bg-white text-slate-700 border-slate-250'}`}
+            >
+              Eski Talepler (Arşiv)
+            </button>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleExportSatinAlmaExcel}
+              className="text-[10px] font-bold px-2.5 py-2 rounded-lg border bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700"
+            >
+              Excel Raporu İndir
+            </button>
+            <button
+              type="button"
+              onClick={handleExportProgramJson}
+              className="text-[10px] font-bold px-2.5 py-2 rounded-lg border bg-slate-900 text-white border-slate-900 hover:bg-black"
+            >
+              Program Formatı JSON İndir
+            </button>
+            <button
+              type="button"
+              onClick={() => importInputRef.current?.click()}
+              className="text-[10px] font-bold px-2.5 py-2 rounded-lg border bg-blue-600 text-white border-blue-700 hover:bg-blue-700"
+            >
+              Program Formatı JSON Yükle
+            </button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={handleImportProgramJson}
+            />
+            <input
+              type="text"
+              placeholder="Kod veya firma ara..."
+              value={saSearchKeyword}
+              onChange={(e) => setSaSearchKeyword(e.target.value)}
+              className="text-xs border p-2 rounded-xl bg-white w-48 sm:w-64"
+            />
+          </div>
         </div>
 
         <div className="flex-grow overflow-y-auto p-4 space-y-4">
@@ -670,11 +943,13 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
                           {sa.saId}
                         </span>
                         <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase border ${
-                          isLocked 
+                          sa.onayDurumu === 'ONAYLANDI'
                             ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
-                            : 'bg-amber-50 text-amber-800 border-amber-100'
+                            : sa.onayDurumu === 'BİLİNMİYOR'
+                              ? 'bg-slate-100 text-slate-700 border-slate-200'
+                              : 'bg-amber-50 text-amber-800 border-amber-100'
                         }`}>
-                          {sa.onayDurumu === 'ONAYLANDI' ? '✓ ONAYLANDI (KİLİTLİ)' : 'ONAY BEKLİYOR'}
+                          {sa.onayDurumu === 'ONAYLANDI' ? '✓ ONAYLANDI (KİLİTLİ)' : sa.onayDurumu}
                         </span>
                       </div>
                       <h5 className="font-bold text-slate-950 mt-1">Firma: {sa.cariFirma} · Tarih: {sa.tarih}</h5>
@@ -753,10 +1028,58 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
                         >
                           🗑️ Sil
                         </button>
+                        {!sa.arsivde ? (
+                          <button
+                            onClick={() => toggleArsiv(sa.id, true)}
+                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-250 px-3 py-1.5 rounded-xl font-bold transition cursor-pointer"
+                          >
+                            Arşive Gönder
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => toggleArsiv(sa.id, false)}
+                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-xl font-bold transition cursor-pointer"
+                          >
+                            Arşivden Çıkar
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setTalepDurumu(sa.id, 'ONAYLANDI')}
+                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-xl font-bold transition cursor-pointer"
+                        >
+                          Durumu ONAYLANDI Yap
+                        </button>
+                        <button
+                          onClick={() => setTalepDurumu(sa.id, 'BİLİNMİYOR')}
+                          className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-xl font-bold transition cursor-pointer"
+                        >
+                          Durumu BİLİNMİYOR Yap
+                        </button>
                       </>
                     ) : (
-                      <div className="flex items-center gap-1.5 text-slate-400 font-mono text-[9px]">
+                      <div className="flex flex-wrap items-center gap-1.5 text-slate-400 font-mono text-[9px]">
                         <span>✍️ İmzalayanlar: {sa.eImzalar && sa.eImzalar.length > 0 ? sa.eImzalar.join(', ') : 'Fiziksel Evrak Yüklendi'}</span>
+                        {!sa.arsivde ? (
+                          <button
+                            onClick={() => toggleArsiv(sa.id, true)}
+                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-250 px-2 py-1 rounded-lg font-bold transition cursor-pointer"
+                          >
+                            Arşive Gönder
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => toggleArsiv(sa.id, false)}
+                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-1 rounded-lg font-bold transition cursor-pointer"
+                          >
+                            Arşivden Çıkar
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setTalepDurumu(sa.id, 'BİLİNMİYOR')}
+                          className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 px-2 py-1 rounded-lg font-bold transition cursor-pointer"
+                        >
+                          BİLİNMİYOR Yap
+                        </button>
                       </div>
                     )}
                   </div>

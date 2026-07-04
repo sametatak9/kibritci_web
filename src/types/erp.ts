@@ -58,12 +58,13 @@ export interface SatinAlmaTalebi {
   talepEden: string;
   cariFirma: string;
   aciklama: string;
-  onayDurumu: 'ONAY BEKLİYOR' | '1. ONAY TAMAMLANDI' | '2. ONAY TAMAMLANDI' | 'REDDEDİLDİ' | 'KAPATILDI' | 'ONAYLANDI';
+  onayDurumu: 'ONAY BEKLİYOR' | '1. ONAY TAMAMLANDI' | '2. ONAY TAMAMLANDI' | 'REDDEDİLDİ' | 'KAPATILDI' | 'ONAYLANDI' | 'BİLİNMİYOR';
   imzaliEvrakUrl?: string;
   imzaliEvrakUyumsuz?: boolean;
   gonderimTarihi?: string;
   kalemler: SatinAlmaItem[];
   eImzalar?: string[];
+  arsivde?: boolean;
 }
 
 export interface IrsaliyeItem {
