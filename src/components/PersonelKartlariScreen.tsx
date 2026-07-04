@@ -171,8 +171,26 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
                   {selectedPersonnel.ad[0]}{selectedPersonnel.soyad[0]}
                 </div>
                 <div className="space-y-1">
-                  <span className="text-[9px] font-bold text-blue-600 uppercase tracking-widest bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5">{selectedPersonnel.gorev}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] font-bold text-blue-600 uppercase tracking-widest bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5">
+                      {selectedPersonnel.gorev}
+                    </span>
+                    {selectedPersonnel.firmaTipi === 'TASERON' ? (
+                      <span className="text-[9px] font-bold text-purple-700 uppercase tracking-widest bg-purple-50 border border-purple-150 rounded px-1.5 py-0.5">
+                        Taşeron Personel
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-bold text-emerald-700 uppercase tracking-widest bg-emerald-50 border border-emerald-150 rounded px-1.5 py-0.5">
+                        Kibritçi İnşaat Personeli
+                      </span>
+                    )}
+                  </div>
                   <h3 className="font-display font-bold text-sm text-slate-900 mt-1">{selectedPersonnel.ad} {selectedPersonnel.soyad}</h3>
+                  {selectedPersonnel.firmaTipi === 'TASERON' && (
+                    <p className="text-[10px] font-semibold text-purple-700">
+                      Firma: {selectedPersonnel.firmaAdi || '-'}
+                    </p>
+                  )}
                 </div>
               </div>
 

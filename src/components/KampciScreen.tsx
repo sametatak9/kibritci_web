@@ -191,6 +191,108 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   const [manualFirma, setManualFirma] = useState('');
   const [loadingPlacement, setLoadingPlacement] = useState(false);
 
+  const normalizeNameKey = (raw: string) =>
+    String(raw || '')
+      .toLocaleUpperCase('tr-TR')
+      .replace(/İ/g, 'I')
+      .replace(/Ş/g, 'S')
+      .replace(/Ğ/g, 'G')
+      .replace(/Ü/g, 'U')
+      .replace(/Ö/g, 'O')
+      .replace(/Ç/g, 'C')
+      .replace(/["']/g, '')
+      .replace(/\(.*?\)/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const sanitizeManualName = (raw: string) =>
+    raw
+      .replace(/"[^"]*"/g, ' ')
+      .replace(/\bsoyadı?\s+belli\s+değil\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const isKibritciName = (firma: string) =>
+    normalizeNameKey(firma).includes('KIBRITCI');
+
+  const findDbPersonelByRawName = (rawName: string) => {
+    const cleaned = sanitizeManualName(rawName);
+    const targetKey = normalizeNameKey(cleaned);
+    if (!targetKey) return undefined;
+    const tokens = targetKey.split(' ').filter(Boolean);
+    const exact = personeller.find((p) => normalizeNameKey(`${p.ad} ${p.soyad}`) === targetKey);
+    if (exact) return exact;
+    if (tokens.length >= 2) {
+      return personeller.find((p) => {
+        const full = normalizeNameKey(`${p.ad} ${p.soyad}`);
+        return full.includes(targetKey) || targetKey.includes(full);
+      });
+    }
+    const sameFirstName = personeller.filter((p) => normalizeNameKey(p.ad) === tokens[0]);
+    if (sameFirstName.length === 1) return sameFirstName[0];
+    return undefined;
+  };
+
+  const createTaseronPersonel = async (rawName: string, firmaAdi: string) => {
+    const cleaned = sanitizeManualName(rawName);
+    const parts = cleaned.split(' ').filter(Boolean);
+    const ad = (parts[0] || 'ADI').toLocaleUpperCase('tr-TR');
+    const soyad = (parts.slice(1).join(' ') || 'BİLİNMİYOR').toLocaleUpperCase('tr-TR');
+    const personel: Personel = {
+      id: `prs_taseron_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      tcNo: '',
+      ad,
+      soyad,
+      babaAdi: '',
+      dogumTarihi: '1990-01-01',
+      telefonNo: '',
+      eposta: '',
+      adres: 'Kamp Yerleşimi',
+      il: '',
+      ilce: '',
+      departman: 'TAŞERON',
+      gorev: 'TAŞERON PERSONEL',
+      iseGirisTarihi: new Date().toISOString().slice(0, 10),
+      cinsiyet: 'Belirtilmedi',
+      maas: 0,
+      ucretTipi: 'Günlük',
+      sgkDurumu: 'Sigortasız',
+      bankaAdi: '',
+      subeAdi: '',
+      ibanNo: '',
+      durum: true,
+      firmaTipi: 'TASERON',
+      firmaAdi,
+    };
+    await saveDocument('personeller', personel);
+    return personel;
+  };
+
+  const ensureTaseronCari = async (firmaAdi: string) => {
+    const cleanedFirma = String(firmaAdi || '').trim();
+    if (!cleanedFirma || isKibritciName(cleanedFirma)) return;
+    const exists = cariKartlar.some(
+      (c) => c.kartTipi === 'TASERON' && normalizeNameKey(c.unvan) === normalizeNameKey(cleanedFirma)
+    );
+    if (exists) return;
+    const newCari: CariKart = {
+      id: `ck_taseron_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      kartTipi: 'TASERON',
+      kod: `TSR-${Math.floor(100 + Math.random() * 900)}`,
+      unvan: cleanedFirma,
+      yetkili: '',
+      telefon: '',
+      eposta: '',
+      vergiNo: '',
+      vergiDairesi: '',
+      adres: 'Kamp yerleşim entegrasyonu ile oluşturuldu.',
+      iban: '',
+      durum: 'AKTIF',
+      notlar: 'Kamp oda yerleşiminden otomatik oluşturulan taşeron cari kartı.',
+    };
+    await saveDocument('cariKartlar', newCari);
+  };
+
   // ─────────────────────────────────────────────────────────────
   // 📦 3. DEPO SAYIMI (WAREHOUSE AUDIT) STATE
   // ─────────────────────────────────────────────────────────────
@@ -502,6 +604,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
 
     let personelIsim = '';
     let personelId: string | undefined = undefined;
+    let matchedPersonel: Personel | undefined = undefined;
 
     if (placementType === 'DB') {
       if (!selectedPersonelId) {
@@ -512,17 +615,27 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       if (matched) {
         personelIsim = `${matched.ad} ${matched.soyad}`;
         personelId = matched.id;
+        matchedPersonel = matched;
       }
     } else {
       if (!manualPersonelIsim.trim()) {
         showStatus('error', 'Lütfen personel adını soyadını yazın!');
         return;
       }
-      personelIsim = manualPersonelIsim.trim();
+      const found = findDbPersonelByRawName(manualPersonelIsim);
+      if (found) {
+        personelIsim = `${found.ad} ${found.soyad}`;
+        personelId = found.id;
+        matchedPersonel = found;
+      } else {
+        personelIsim = sanitizeManualName(manualPersonelIsim);
+      }
     }
 
     let resolvedFirma = '';
-    if (placementFirmaTipi === 'ANA_FIRMA') {
+    if (matchedPersonel) {
+      resolvedFirma = matchedPersonel.firmaAdi || 'Kibritçi İnşaat';
+    } else if (placementFirmaTipi === 'ANA_FIRMA') {
       resolvedFirma = 'Ana Firma';
     } else if (firmaType === 'DB') {
       resolvedFirma = selectedFirma || '';
@@ -536,19 +649,30 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       return;
     }
 
-    if (placementFirmaTipi === 'TASERON' && !resolvedFirma) {
+    if (!matchedPersonel && placementFirmaTipi === 'TASERON' && !resolvedFirma) {
       showStatus('error', 'Taşeron personel için firma bilgisi zorunludur.');
       return;
     }
 
     setLoadingPlacement(true);
     try {
+      // Manuel girişte DB'de bulunamayan isimleri taşeron personel olarak otomatik kur.
+      if (!matchedPersonel && placementType === 'MANUAL') {
+        const created = await createTaseronPersonel(personelIsim, resolvedFirma || 'Taşeron');
+        personelId = created.id;
+        personelIsim = `${created.ad} ${created.soyad}`;
+        await ensureTaseronCari(created.firmaAdi || resolvedFirma || 'Taşeron');
+      }
+
+      const finalFirmaTipi: 'ANA_FIRMA' | 'TASERON' =
+        matchedPersonel ? 'ANA_FIRMA' : placementFirmaTipi;
+
       await assignKampResident({
         roomId: selectedRoomId,
         personelIsim,
         personelId,
         calistigiFirma: resolvedFirma || undefined,
-        firmaTipi: placementFirmaTipi,
+        firmaTipi: finalFirmaTipi,
         kampOdalari,
         kampKayitlari,
       });
@@ -557,7 +681,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
         addNotification(`${personelIsim} (${resolvedFirma}) ${targetRoom.odaNo} nolu odaya yerleştirildi.`);
       }
 
-      if (placementType === 'MANUAL' && placementFirmaTipi === 'TASERON') {
+      if (placementType === 'MANUAL' && !matchedPersonel && placementFirmaTipi === 'TASERON') {
         suggestPersonelKaydi(personelIsim, resolvedFirma);
       }
 

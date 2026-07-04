@@ -284,6 +284,8 @@ export function buildPersonelListForMonth(
   const ids = new Set<string>();
 
   personeller.forEach(p => {
+    // Taşeron personeller kamp/personel kart akışında tutulur; yoklama listesine girmez.
+    if (p.firmaTipi === 'TASERON') return;
     if (isPersonelVisibleInMonth(p, year, month, asYoklamaGunMap(yoklamalar[p.id]))) ids.add(p.id);
   });
   Object.entries(yoklamalar).forEach(([id, map]) => {
@@ -291,6 +293,7 @@ export function buildPersonelListForMonth(
     // Bu, "kayıtlı olmayan personel yoklamada görünüyor" ve mükerrer satır riskini azaltır.
     const existing = byId.get(id);
     if (!existing) return;
+    if (existing.firmaTipi === 'TASERON') return;
     const personMap = asYoklamaGunMap(map);
     if (!personHasYoklamaInMonth(personMap, year, month)) return;
     if (!isPersonelVisibleInMonth(existing, year, month, personMap)) return;
