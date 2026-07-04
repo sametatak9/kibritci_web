@@ -1301,6 +1301,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   // 🏢 5. CARI & STOK STATES & EVENTS
   // ─────────────────────────────────────────────────────────────
   const [csTab, setCsTab] = useState<'cari' | 'stok'>('cari');
+  const [cariSearchQuery, setCariSearchQuery] = useState("");
+  const [stokSearchQuery, setStokSearchQuery] = useState("");
   const [newCariUnvan, setNewCariUnvan] = useState("");
   const [newCariType, setNewCariType] = useState<CariKart['kartTipi']>("TEDARIKCI");
   const [newCariYetkili, setNewCariYetkili] = useState("");
@@ -1323,6 +1325,28 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [historyModalData, setHistoryModalData] = useState<{ type: 'cari' | 'stok'; id: string; name: string } | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyList, setHistoryList] = useState<any[]>([]);
+
+  const filteredCariKartlar = cariKartlar.filter((cr) => {
+    const q = cariSearchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      String(cr.unvan || "").toLowerCase().includes(q) ||
+      String(cr.kod || "").toLowerCase().includes(q) ||
+      String(cr.kartTipi || "").toLowerCase().includes(q) ||
+      String(cr.iban || "").toLowerCase().includes(q)
+    );
+  });
+
+  const filteredStokKartlar = stokKartlar.filter((st) => {
+    const q = stokSearchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      String(st.stokAdi || "").toLowerCase().includes(q) ||
+      String(st.stokKodu || "").toLowerCase().includes(q) ||
+      String(st.kategori || "").toLowerCase().includes(q) ||
+      String(st.birim || "").toLowerCase().includes(q)
+    );
+  });
 
   const loadHistoryData = async (type: 'cari' | 'stok', id: string, name: string, code: string) => {
     setHistoryLoading(true);
@@ -3681,8 +3705,21 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     <h4 className="font-display font-bold text-sm text-slate-800 uppercase tracking-widest">Mevcut Cariler</h4>
                   </div>
 
+                  <div className="px-4 pt-3">
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                      <input
+                        type="text"
+                        value={cariSearchQuery}
+                        onChange={(e) => setCariSearchQuery(e.target.value)}
+                        placeholder="Cari ara (ünvan, kod, IBAN, tip)..."
+                        className="w-full bg-white border border-slate-250 rounded-xl text-xs pl-8 pr-3 py-2"
+                      />
+                    </div>
+                  </div>
+
                   <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {cariKartlar.map(cr => (
+                    {filteredCariKartlar.map(cr => (
                       <div key={cr.id} className="border border-slate-100 rounded-xl p-4 bg-white hover:shadow transition">
                         <div className="flex justify-between items-start text-xs border-b pb-2 mb-2">
                           <div>
@@ -3821,8 +3858,21 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     <h4 className="font-display font-bold text-sm text-slate-800 uppercase tracking-widest">Mevcut Malzemeler</h4>
                   </div>
 
+                  <div className="px-4 pt-3">
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                      <input
+                        type="text"
+                        value={stokSearchQuery}
+                        onChange={(e) => setStokSearchQuery(e.target.value)}
+                        placeholder="Stok ara (adı, kod, kategori, birim)..."
+                        className="w-full bg-white border border-slate-250 rounded-xl text-xs pl-8 pr-3 py-2"
+                      />
+                    </div>
+                  </div>
+
                   <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {stokKartlar.map(st => (
+                    {filteredStokKartlar.map(st => (
                       <div key={st.id} className="border border-slate-100 rounded-xl p-4 bg-white hover:shadow transition flex flex-col space-y-3 text-xs">
                         <div className="flex justify-between items-start">
                           <div>
