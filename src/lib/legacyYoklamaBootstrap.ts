@@ -29,12 +29,11 @@ export function haziran2026NeedsBootstrap(yoklamalar: AylikYoklamaMap): boolean 
 }
 
 export function shouldBootstrapLegacyYoklama(yoklamalar: AylikYoklamaMap): boolean {
-  // Veri güvenliği: canlı sistemde legacy bootstrap'i tekrar çalıştırmayız.
-  // Böylece manuel silinen/düzenlenen personel ve yoklama kayıtları geri gelmez.
-  if (isProductionLive() || hasSubstantialYoklamaData(yoklamalar)) return false;
+  if (isProductionLive() && hasSubstantialYoklamaData(yoklamalar)) return false;
 
-  const hasAnyYoklama = Object.keys(yoklamalar || {}).length > 0;
-  if (hasAnyYoklama) return false;
+  // Veri silinmişse/azalmışsa localStorage versiyonu ne olursa olsun yeniden bootstrap et.
+  if (mayis2026NeedsBootstrap(yoklamalar)) return true;
+  if (haziran2026NeedsBootstrap(yoklamalar)) return true;
 
   const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
   if (stored === String(LEGACY_YOKLAMA_VERSION)) return false;

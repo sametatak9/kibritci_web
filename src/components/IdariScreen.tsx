@@ -34,6 +34,10 @@ import { compressImage } from '../lib/imageCompress';
 import { warnIfDuplicateCari, warnIfDuplicateStok } from '../lib/duplicateNameUtils';
 import { exportHistoryReport } from '../lib/reportExport';
 import { collection, onSnapshot, getDocs, doc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { PARSEL_BLOK_MAP, defaultBlokForParsel } from '../data/parselBlokMap';
+import { normalizeDateKey, todayDateKey } from '../lib/dateKeyUtils';
+import { getYoklamaDay, isTaseronPersonel } from '../lib/yoklamaUtils';
+import { ParselBlokAnalizPanel } from './ParselBlokAnalizPanel';
 
 interface IdariScreenProps {
   currentSubTab: string; // arac, kamp, saha, tutanak, cari_stok, eposta
@@ -663,16 +667,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   // ─────────────────────────────────────────────────────────────
   // 🏢 3. SAHA FAALİYETLERİ STATES & EVENTS
   // ─────────────────────────────────────────────────────────────
-  const PARSEL_BLOK_MAP: Record<string, string[]> = {
-    "GENEL SAHA": [],
-    "Parsel Bölge 157/46": ["GENEL SAHA", "A1", "A2", "B1", "B2", "C1", "C2", "D1", "D2", "E1", "E2", "F1", "F2", "G", "H", "I"],
-    "Parsel Bölge 157/51": ["GENEL SAHA", "A1", "A2", "A3", "B1", "B2", "C1", "C2", "C3", "C4"],
-    "Parsel Bölge 160/2":  ["GENEL SAHA", "A1A", "A1B", "A2A", "A2B", "B1", "B2", "C1", "C2", "C3", "C4", "B3"]
-  };
-
+  const [sahaKayitTarihi, setSahaKayitTarihi] = useState(todayDateKey());
   const [sahaNitelik, setSahaNitelik] = useState("");
   const [sahaParsel, setSahaParsel] = useState("GENEL SAHA");
-  const [sahaBlok, setSahaBlok] = useState("");
+  const [sahaBlok, setSahaBlok] = useState(defaultBlokForParsel('GENEL SAHA'));
   const [sahaAciklama, setSahaAciklama] = useState("");
   const [sahaUstaSayisi, setSahaUstaSayisi] = useState<number>(0);
   const [sahaIsciSayisi, setSahaIsciSayisi] = useState<number>(0);
@@ -686,7 +684,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [sahaSearchKeyword, setSahaSearchKeyword] = useState("");
   const [editingSahaId, setEditingSahaId] = useState<string | null>(null);
   const [deleteConfirmSahaId, setDeleteConfirmSahaId] = useState<string | null>(null);
-  const [sahaSubTab, setSahaSubTab] = useState<'tum' | 'formen' | 'takvim' | 'gun_arsiv'>('tum');
+  const [sahaSubTab, setSahaSubTab] = useState<'tum' | 'formen' | 'takvim' | 'gun_arsiv' | 'parsel_analiz'>('tum');
   const [sahaTakvimAy, setSahaTakvimAy] = useState(new Date().toISOString().slice(0, 7));
   const [showSahaGunModal, setShowSahaGunModal] = useState(false);
   const [selectedSahaGun, setSelectedSahaGun] = useState(new Date().toISOString().split('T')[0]);
@@ -697,18 +695,46 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [sahaGunRaporArsivleri, setSahaGunRaporArsivleri] = useState<SahaGunRaporArsiv[]>([]);
   const [formenGunlukRaporlari, setFormenGunlukRaporlari] = useState<FormenGunlukRaporKaydi[]>([]);
 
+  const sahaKayitDateParts = useMemo(() => {
+    const [y, m, d] = sahaKayitTarihi.split('-').map(Number);
+    return { y, m, d };
+  }, [sahaKayitTarihi]);
+
+  const assignedPersonelOnKayitTarihi = useMemo(() => {
+    const ids = new Set<string>();
+    sahaFaaliyetleri.forEach((sf) => {
+      if (normalizeDateKey(sf.tarih) !== sahaKayitTarihi) return;
+      if (editingSahaId && sf.id === editingSahaId) return;
+      (sf.aktifPersonelListesi || []).forEach((id) => ids.add(id));
+    });
+    return ids;
+  }, [sahaFaaliyetleri, sahaKayitTarihi, editingSahaId]);
+
+  const geldiPersonelOnKayitTarihi = useMemo(() => {
+    const { y, m, d } = sahaKayitDateParts;
+    if (!y || !m || !d) return [] as Personel[];
+    return personeller.filter((p) => {
+      if (isTaseronPersonel(p)) return false;
+      const dayData = getYoklamaDay(yoklamalar[p.id], y, m, d);
+      return dayData?.durum === 'Geldi';
+    });
+  }, [personeller, yoklamalar, sahaKayitDateParts]);
+
   const selectedFieldStaffList = useMemo(
     () => personeller.filter((p) => selectedFieldStaff.includes(p.id)),
     [personeller, selectedFieldStaff]
   );
   const filteredStaffPool = useMemo(() => {
     const q = sahaStaffSearch.trim().toLocaleLowerCase('tr-TR');
-    if (!q) return personeller;
-    return personeller.filter((p) =>
-      `${p.ad} ${p.soyad}`.toLocaleLowerCase('tr-TR').includes(q) ||
-      String(p.gorev || '').toLocaleLowerCase('tr-TR').includes(q)
-    );
-  }, [personeller, sahaStaffSearch]);
+    return geldiPersonelOnKayitTarihi.filter((p) => {
+      if (assignedPersonelOnKayitTarihi.has(p.id)) return false;
+      if (!q) return true;
+      return (
+        `${p.ad} ${p.soyad}`.toLocaleLowerCase('tr-TR').includes(q) ||
+        String(p.gorev || '').toLocaleLowerCase('tr-TR').includes(q)
+      );
+    });
+  }, [geldiPersonelOnKayitTarihi, assignedPersonelOnKayitTarihi, sahaStaffSearch]);
 
   // Saha PDF Report parameters
   const [sahaReportModal, setSahaReportModal] = useState(false);
@@ -907,11 +933,12 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
 
     if (editingSahaId) {
       const faaliyetId = editingSahaId;
-      const faaliyetTarih = new Date().toISOString().split('T')[0];
+      const faaliyetTarih = sahaKayitTarihi;
       setSahaFaaliyetleri(prev => prev.map(sf => {
         if (sf.id === editingSahaId) {
           return {
             ...sf,
+            tarih: faaliyetTarih,
             isNiteligi: sahaNitelik,
             parsel: sahaParsel,
             blok: sahaBlok,
@@ -957,7 +984,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       const newLog: SahaFaaliyeti = {
         id: faaliyetId,
         personelId: "p1",
-        tarih: new Date().toISOString().split('T')[0],
+        tarih: sahaKayitTarihi,
         isNiteligi: sahaNitelik,
         parsel: sahaParsel,
         blok: sahaBlok,
@@ -1001,6 +1028,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
 
   const handleStartEditSaha = (sf: SahaFaaliyeti) => {
     setEditingSahaId(sf.id);
+    setSahaKayitTarihi(normalizeDateKey(sf.tarih) || todayDateKey());
     setSahaNitelik(sf.isNiteligi);
     setSahaParsel(sf.parsel);
     setSahaBlok(sf.blok);
@@ -1058,13 +1086,13 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   };
 
   const daySahaFaaliyetleri = useMemo(
-    () => sahaFaaliyetleri.filter((sf) => sf.tarih === selectedSahaGun),
+    () => sahaFaaliyetleri.filter((sf) => normalizeDateKey(sf.tarih) === selectedSahaGun),
     [sahaFaaliyetleri, selectedSahaGun]
   );
   const filteredTumSahaFaaliyetleri = useMemo(() => {
     const keyword = sahaSearchKeyword.toLocaleLowerCase('tr-TR').trim();
     return [...sahaFaaliyetleri]
-      .filter((sf) => (tumKayitTarihFiltre ? sf.tarih === tumKayitTarihFiltre : true))
+      .filter((sf) => (tumKayitTarihFiltre ? normalizeDateKey(sf.tarih) === tumKayitTarihFiltre : true))
       .filter((sf) => {
         if (!keyword) return true;
         return (
@@ -1084,14 +1112,14 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     () =>
       sahaFaaliyetleri
         .filter((sf) => sf.kaynakEkran === 'FORMEN_MOBIL')
-        .filter((sf) => (formenTarihFiltre ? sf.tarih === formenTarihFiltre : true))
+        .filter((sf) => (formenTarihFiltre ? normalizeDateKey(sf.tarih) === formenTarihFiltre : true))
         .sort((a, b) => String(b.tarih).localeCompare(String(a.tarih), 'tr')),
     [sahaFaaliyetleri, formenTarihFiltre]
   );
   const filteredFormenGunlukRaporlari = useMemo(
     () =>
       formenGunlukRaporlari
-        .filter((r) => (formenTarihFiltre ? r.tarih === formenTarihFiltre : true))
+        .filter((r) => (formenTarihFiltre ? normalizeDateKey(r.tarih) === formenTarihFiltre : true))
         .sort((a, b) => String(b.tarih).localeCompare(String(a.tarih), 'tr')),
     [formenGunlukRaporlari, formenTarihFiltre]
   );
@@ -1099,7 +1127,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     if (sahaGunRaporArsivleri.length > 0) return sahaGunRaporArsivleri;
     return filteredFormenGunlukRaporlari.map((r) => ({
       id: `formen_${r.id}`,
-      tarih: r.tarih,
+      tarih: normalizeDateKey(r.tarih),
       olusturmaTarihi: r.guncellenmeTarihi || r.olusturulma || '',
       olusturan: r.gonderen || r.gonderenFormen || 'FORMEN',
       faaliyetIds: Array.isArray(r.faaliyetler) ? r.faaliyetler.map((f: any) => String(f?.id || '')) : [],
@@ -1117,7 +1145,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const filteredDisplayGunRaporArsivi = useMemo(
     () =>
       displayGunRaporArsivi.filter((r) =>
-        gunArsivTarihFiltre ? String(r.tarih) === gunArsivTarihFiltre : true
+        gunArsivTarihFiltre ? normalizeDateKey(r.tarih) === gunArsivTarihFiltre : true
       ),
     [displayGunRaporArsivi, gunArsivTarihFiltre]
   );
@@ -1139,8 +1167,9 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   };
 
   const handlePrintSahaGun = (date: string) => {
-    const gunlukFaaliyetler = sahaFaaliyetleri.filter((sf) => sf.tarih === date);
-    const yoklama = buildYoklamaSummaryForDate(date);
+    const targetDate = normalizeDateKey(date);
+    const gunlukFaaliyetler = sahaFaaliyetleri.filter((sf) => normalizeDateKey(sf.tarih) === targetDate);
+    const yoklama = buildYoklamaSummaryForDate(targetDate);
     const rows = gunlukFaaliyetler
       .map(
         (sf, idx) =>
@@ -1176,10 +1205,15 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       alert('Lütfen tarih seçin.');
       return;
     }
-    const dayRecords = sahaFaaliyetleri.filter((sf) => sf.tarih === formenTarihFiltre);
+    const dayRecords = sahaFaaliyetleri.filter((sf) => normalizeDateKey(sf.tarih) === formenTarihFiltre);
     const formenRecords = dayRecords.filter((sf) => sf.kaynakEkran === 'FORMEN_MOBIL');
     if (formenRecords.length === 0) {
       alert('Seçili tarihte Formen kaydı bulunmuyor.');
+      return;
+    }
+    const alreadyArchived = sahaGunRaporArsivleri.some((r) => normalizeDateKey(r.tarih) === formenTarihFiltre);
+    if (alreadyArchived) {
+      alert('Bu tarih daha önce arşivlenmiş. Mükerrer arşiv kaydı oluşturulmadı.');
       return;
     }
 
@@ -1199,7 +1233,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     await setDoc(doc(db, 'sahaGunRaporArsiv', rapor.id), rapor);
     setSahaFaaliyetleri((prev) =>
       prev.map((sf) =>
-        sf.tarih === formenTarihFiltre && sf.kaynakEkran === 'FORMEN_MOBIL'
+        normalizeDateKey(sf.tarih) === formenTarihFiltre && sf.kaynakEkran === 'FORMEN_MOBIL'
           ? { ...sf, iceriAktarimDurumu: 'AKTARILDI', programaGonderildi: true }
           : sf
       )
@@ -2973,6 +3007,20 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
 
             <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
               <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Faaliyet Tarihi *</label>
+                <input
+                  type="date"
+                  value={sahaKayitTarihi}
+                  onChange={(e) => {
+                    setSahaKayitTarihi(e.target.value);
+                    setSelectedFieldStaff([]);
+                  }}
+                  className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg focus:outline-none focus:border-blue-500"
+                />
+                <p className="text-[9px] text-slate-400 mt-1">Personel listesi seçilen tarihte yoklamada &quot;Geldi&quot; olan ve başka faaliyete atanmamış kişilerden oluşur.</p>
+              </div>
+
+              <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">İş Niteliği / Yapılan İmalat *</label>
                 <input 
                   type="text"
@@ -2992,8 +3040,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     onChange={(e) => {
                       const parsel = e.target.value;
                       setSahaParsel(parsel);
-                      const availableBloks = PARSEL_BLOK_MAP[parsel] || [];
-                      setSahaBlok(availableBloks.length > 0 ? availableBloks[0] : "");
+                      setSahaBlok(defaultBlokForParsel(parsel));
                     }}
                   >
                     {Object.keys(PARSEL_BLOK_MAP).map((parselKey) => (
@@ -3078,6 +3125,11 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg"
                 />
                 <div className="max-h-32 overflow-y-auto grid grid-cols-1 gap-1 pr-1">
+                  {filteredStaffPool.length === 0 && (
+                    <p className="text-[10px] text-slate-400 italic py-2 px-1">
+                      {sahaKayitTarihi} tarihinde görevlendirilebilir personel yok (Geldi işaretli ve başka faaliyete atanmamış).
+                    </p>
+                  )}
                   {filteredStaffPool.map((p) => {
                     const isSelected = selectedFieldStaff.includes(p.id);
                     return (
@@ -3175,6 +3227,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 <button type="button" onClick={() => setSahaSubTab('formen')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'formen' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}>Formen Gönderimleri</button>
                 <button type="button" onClick={() => setSahaSubTab('takvim')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'takvim' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}>Tarih Cetveli</button>
                 <button type="button" onClick={() => setSahaSubTab('gun_arsiv')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'gun_arsiv' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}>Gün Rapor Arşivi</button>
+                <button type="button" onClick={() => setSahaSubTab('parsel_analiz')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'parsel_analiz' ? 'bg-violet-600 text-white border-violet-700' : 'bg-white text-slate-700 border-slate-250'}`}>Parsel Blok Analiz</button>
               </div>
               {sahaSubTab === 'tum' && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -3276,8 +3329,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     <div key={d} className="text-[10px] font-bold text-slate-500 text-center">{d}</div>
                   ))}
                   {sahaTakvimGunleri.map((d) => {
-                    const dayCount = sahaFaaliyetleri.filter((sf) => sf.tarih === d.date).length;
-                    const dayFormen = sahaFaaliyetleri.filter((sf) => sf.tarih === d.date && sf.kaynakEkran === 'FORMEN_MOBIL').length;
+                    const dayCount = sahaFaaliyetleri.filter((sf) => normalizeDateKey(sf.tarih) === d.date).length;
+                    const dayFormen = sahaFaaliyetleri.filter((sf) => normalizeDateKey(sf.tarih) === d.date && sf.kaynakEkran === 'FORMEN_MOBIL').length;
                     return (
                       <button
                         key={d.date}
@@ -3332,6 +3385,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   </div>
                 ))}
               </div>
+            )}
+
+            {sahaSubTab === 'parsel_analiz' && (
+              <ParselBlokAnalizPanel sahaFaaliyetleri={sahaFaaliyetleri} />
             )}
           </div>
 

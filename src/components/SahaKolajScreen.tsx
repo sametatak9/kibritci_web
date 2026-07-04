@@ -15,6 +15,7 @@ import {
   groupKolajFotolari,
   readFileAsDataUrl,
 } from '../lib/sahaKolajUtils';
+import { PARSEL_BLOK_MAP, PARSEL_LIST, defaultBlokForParsel } from '../data/parselBlokMap';
 
 interface SahaKolajScreenProps {
   currentUser?: { email?: string };
@@ -37,6 +38,10 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({ currentUser })
   const [editAciklama, setEditAciklama] = useState('');
   const [editGrup, setEditGrup] = useState('');
   const [bulkGrup, setBulkGrup] = useState('');
+  const [uploadParsel, setUploadParsel] = useState('Parsel Bölge 157/46');
+  const [uploadBlok, setUploadBlok] = useState(defaultBlokForParsel('Parsel Bölge 157/46'));
+  const [editParsel, setEditParsel] = useState('');
+  const [editBlok, setEditBlok] = useState('');
 
   const [viewMode, setViewMode] = useState<'grid' | 'dergi' | 'kolaj'>('grid');
   const [showPreview, setShowPreview] = useState(false);
@@ -94,6 +99,8 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({ currentUser })
     setEditBaslik(f.baslik || '');
     setEditAciklama(f.aciklama || '');
     setEditGrup(f.grupAdi || '');
+    setEditParsel(f.parsel || 'Parsel Bölge 157/46');
+    setEditBlok(f.blok || defaultBlokForParsel(f.parsel || 'Parsel Bölge 157/46'));
   };
 
   const handleSaveEdit = async () => {
@@ -105,6 +112,8 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({ currentUser })
       baslik: editBaslik.trim() || undefined,
       aciklama: editAciklama.trim() || undefined,
       grupAdi: editGrup.trim() || undefined,
+      parsel: editParsel || undefined,
+      blok: editBlok || undefined,
     };
     await saveDocument('sahaKolajFotolari', updated);
     setEditId(null);
@@ -148,6 +157,8 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({ currentUser })
           dosyaAdi: file.name,
           yuklemeTarihi: new Date().toISOString(),
           yukleyen: currentUser?.email,
+          parsel: uploadParsel,
+          blok: uploadBlok,
         };
         await saveDocument('sahaKolajFotolari', foto);
         setUploadProgress((p) => ({ ...p, done: p.done + 1 }));
@@ -304,6 +315,27 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({ currentUser })
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 border border-slate-200 rounded-xl p-3 bg-slate-50">
+              <span className="text-[9px] font-bold text-slate-500 uppercase">Parsel / Blok (Analiz için)</span>
+              <select
+                value={uploadParsel}
+                onChange={(e) => {
+                  setUploadParsel(e.target.value);
+                  setUploadBlok(defaultBlokForParsel(e.target.value));
+                }}
+                className="w-full p-2 border rounded-lg text-xs"
+              >
+                {PARSEL_LIST.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+              <select value={uploadBlok} onChange={(e) => setUploadBlok(e.target.value)} className="w-full p-2 border rounded-lg text-xs">
+                {(PARSEL_BLOK_MAP[uploadParsel] || ['GENEL SAHA']).map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
             </div>
 
             <div className="border-2 border-dashed border-amber-200 rounded-xl p-4 bg-amber-50/50 text-center space-y-2">
@@ -502,6 +534,22 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({ currentUser })
                         placeholder="Örn: C30 Perde Betonu"
                         className="w-full mt-1 p-2 border rounded-lg"
                       />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-500 uppercase">Parsel</label>
+                      <select value={editParsel} onChange={(e) => { setEditParsel(e.target.value); setEditBlok(defaultBlokForParsel(e.target.value)); }} className="w-full mt-1 p-2 border rounded-lg">
+                        {PARSEL_LIST.map((p) => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-500 uppercase">Blok</label>
+                      <select value={editBlok} onChange={(e) => setEditBlok(e.target.value)} className="w-full mt-1 p-2 border rounded-lg">
+                        {(PARSEL_BLOK_MAP[editParsel] || ['GENEL SAHA']).map((b) => (
+                          <option key={b} value={b}>{b}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="text-[9px] font-bold text-slate-500 uppercase">Grup / Bölüm</label>

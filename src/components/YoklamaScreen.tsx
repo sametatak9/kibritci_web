@@ -360,8 +360,11 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   const isEmployeeVisibleInMonth = (p: Personel) =>
     isPersonelVisibleInMonth(p, selectedYear, selectedMonth, draftYoklamalar[p.id]);
 
+  const isDayActiveForEmployeeInPeriod = (p: Personel, year: number, month: number, day: number) =>
+    isDayActiveForPersonel(p, year, month, day, draftYoklamalar[p.id]);
+
   const isDayActiveForEmployee = (p: Personel, day: number) =>
-    isDayActiveForPersonel(p, selectedYear, selectedMonth, day, draftYoklamalar[p.id]);
+    isDayActiveForEmployeeInPeriod(p, selectedYear, selectedMonth, day);
 
   const handleCellClick = (personelId: string, day: number) => {
     const p = personeller.find(emp => emp.id === personelId);
@@ -2029,7 +2032,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {days.map(day => {
-                      const isActive = isDayActiveForEmployee(selectedEmp, day);
+                      const isActive = isDayActiveForEmployeeInPeriod(selectedEmp, bireyselYear, bireyselMonth, day);
                       if (!isActive) return null;
 
                       const currentMap = draftYoklamalar[bireyselStaffId] || {};

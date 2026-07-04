@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, CheckCircle, XCircle, Users, ClipboardCheck, 
   MapPin, Camera, Sparkles, Undo2, ChevronRight, User, 
@@ -6,12 +6,14 @@ import {
   FileSignature, Briefcase, RefreshCw, Send, Image as ImageIcon,
   Check, X, FileText, UserPlus, Upload, ShieldCheck, Edit2, ArrowLeft, Eye
 } from 'lucide-react';
-import { Personel, AylikYoklamaMap, SahaFaaliyeti as SahaFaaliyetiType } from '../types/erp';
+import { Personel, AylikYoklamaMap, YoklamaDurum, SahaFaaliyeti as SahaFaaliyetiType } from '../types/erp';
 import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { buildPersonelListForMonth, getYoklamaDay, isDayActiveForPersonel, isTaseronPersonel, setYoklamaDay } from '../lib/yoklamaUtils';
 import { buildFormenGunlukOzet } from '../lib/gunlukAkisUtils';
 import { buildWhatsAppUrl, isLegacySahaRecord } from '../lib/mobilOnayUtils';
+import { PARSEL_BLOK_MAP, PARSEL_LIST, defaultBlokForParsel } from '../data/parselBlokMap';
+import { normalizeDateKey, formatDateLabelTr, todayDateKey } from '../lib/dateKeyUtils';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { downloadCsv } from '../lib/reportExport';
 
@@ -97,12 +99,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   };
 
   // Selected Date - Defaults to today's date in Turkey time
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const today = new Date();
-    const offset = today.getTimezoneOffset();
-    const localToday = new Date(today.getTime() - (offset * 60 * 1000));
-    return localToday.toISOString().split('T')[0];
-  });
+  const [selectedDate, setSelectedDate] = useState(todayDateKey);
 
   const formenEmail = currentUser?.email?.trim().toLowerCase() || '';
   const visibleSahaFaaliyetleri = sahaFaaliyetleri.filter(
@@ -110,9 +107,9 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
       !isLegacySahaRecord(f.id) &&
       ((f as SahaFaaliyetiType & { kaydedenFormen?: string }).kaydedenFormen
         ? (f as SahaFaaliyetiType & { kaydedenFormen?: string }).kaydedenFormen === formenEmail
-        : f.tarih >= selectedDate)
+        : normalizeDateKey(f.tarih) >= selectedDate)
   );
-  const daySahaFaaliyetleri = visibleSahaFaaliyetleri.filter((f) => f.tarih === selectedDate);
+  const daySahaFaaliyetleri = visibleSahaFaaliyetleri.filter((f) => normalizeDateKey(f.tarih) === selectedDate);
 
   // Parsed date components
   const [year, month, day] = selectedDate.split('-').map(Number);
@@ -198,14 +195,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     'Hafriyat ve Çevre Düzenleme'
   ];
 
-  const PARSEL_BLOK_MAP: Record<string, string[]> = {
-    "GENEL SAHA": [],
-    "Parsel Bölge 157/46": ["GENEL SAHA", "A1", "A2", "B1", "B2", "C1", "C2", "D1", "D2", "E1", "E2", "F1", "F2", "G", "H", "I"],
-    "Parsel Bölge 157/51": ["GENEL SAHA", "A1", "A2", "A3", "B1", "B2", "C1", "C2", "C3", "C4"],
-    "Parsel Bölge 160/2":  ["GENEL SAHA", "A1A", "A1B", "A2A", "A2B", "B1", "B2", "C1", "C2", "C3", "C4", "B3"]
-  };
-
-  const parsellerList = Object.keys(PARSEL_BLOK_MAP);
+  const parsellerList = PARSEL_LIST;
 
   const monthPersonelList = buildPersonelListForMonth(personeller, yoklamalar, year, month);
   const activeStaff = monthPersonelList.filter((p) => {
@@ -214,7 +204,25 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     if (!isAktif && !p.istenCikisTarihi) return false;
     return isDayActiveForPersonel(p, year, month, day, yoklamalar[p.id] as any);
   });
-  const faaliyetPersonelPoolBase = activeStaff.filter((p) => presentIds.includes(p.id));
+  const getFaaliyetFoto = (sf: SahaFaaliyetiType | any): string => {
+    return String(sf?.fotoUrl || sf?.sahaFotoBase64 || sf?.fotoBase64 || '').trim();
+  };
+  const selectedDateFaaliyetleri = visibleSahaFaaliyetleri
+    .filter((f) => normalizeDateKey(f.tarih) === selectedDate)
+    .sort((a, b) => String(b.id).localeCompare(String(a.id), 'tr'));
+
+  const assignedPersonelOnSelectedDate = useMemo(() => {
+    const ids = new Set<string>();
+    selectedDateFaaliyetleri.forEach((f) => {
+      if (editingFaaliyet?.id === f.id) return;
+      (f.aktifPersonelListesi || []).forEach((id) => ids.add(id));
+    });
+    return ids;
+  }, [selectedDateFaaliyetleri, editingFaaliyet]);
+
+  const faaliyetPersonelPoolBase = activeStaff.filter(
+    (p) => presentIds.includes(p.id) && !assignedPersonelOnSelectedDate.has(p.id)
+  );
   const filteredFaaliyetPersonelPool = faaliyetPersonelPoolBase.filter((p) => {
     const q = faaliyetPersonelSearch.trim().toLocaleLowerCase('tr-TR');
     if (!q) return true;
@@ -223,12 +231,6 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
       String(p.gorev || '').toLocaleLowerCase('tr-TR').includes(q)
     );
   });
-  const getFaaliyetFoto = (sf: SahaFaaliyetiType | any): string => {
-    return String(sf?.fotoUrl || sf?.sahaFotoBase64 || sf?.fotoBase64 || '').trim();
-  };
-  const selectedDateFaaliyetleri = visibleSahaFaaliyetleri
-    .filter((f) => f.tarih === selectedDate)
-    .sort((a, b) => String(b.id).localeCompare(String(a.id), 'tr'));
 
   const parseDateParts = (dateStr: string) => {
     const [y, m, d] = String(dateStr || '').split('-').map(Number);
@@ -250,7 +252,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const reportEntries = Object.entries(gunlukRaporlar)
     .map(([id, data]) => ({ id, ...(data as any) }))
     .filter((r) => !r.gonderen || String(r.gonderen).toLocaleLowerCase('tr-TR').includes((currentUser?.email || '').toLocaleLowerCase('tr-TR')))
-    .filter((r) => (faaliyetArsivDateFilter ? String(r.tarih) === faaliyetArsivDateFilter : true))
+    .filter((r) => (faaliyetArsivDateFilter ? normalizeDateKey(r.tarih) === faaliyetArsivDateFilter : true))
     .sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || ''), 'tr'));
 
   // Handlers for personel action requests
@@ -364,9 +366,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     setPresentIds(present);
     setAbsentIds(absent);
     setMesaiSaatleri(localMesai);
-    
-    // Automatically pre-fill active activities staff with currently marked present staff
-    setFaaliyetPersonelIds(present);
+    setFaaliyetPersonelIds([]);
   }, [selectedDate, yoklamalar, personeller, hasLocalAttendanceDraft]);
 
   useEffect(() => {
@@ -524,10 +524,9 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
             mesaiSaati: 0,
             gonderen: currentUser?.email || 'formen',
           });
-        } else {
-          // Her kayıtta günün son halini netleştir: işaret kaldırıldıysa Girilmedi olarak yaz.
+        } else if (!dayData) {
+          // O gün için hiç kayıt yoksa varsayılan satırı oluştur.
           next[p.id] = setYoklamaDay(next[p.id], year, month, day, {
-            ...(dayData || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 }),
             durum: 'Girilmedi',
             mesaiSaati: 0,
             gonderen: currentUser?.email || 'formen',
@@ -795,6 +794,7 @@ ${satirlar
     setFotoUrl(null);
     setSahaUstaSayisi(0);
     setSahaIsciSayisi(0);
+    setFaaliyetPersonelIds([]);
     setFaaliyetPersonelSearch('');
   };
 
@@ -1619,7 +1619,7 @@ ${satirlar
                       <div className="max-h-36 overflow-y-auto space-y-1 pr-0.5">
                         {filteredFaaliyetPersonelPool.length === 0 && (
                           <div className="text-[10px] text-slate-400 border border-dashed border-slate-200 rounded-xl py-2 px-2">
-                            Seçili tarihte yoklamada "Geldi" işaretli personel bulunamadı.
+                            Seçili tarihte yoklamada &quot;Geldi&quot; işaretli ve başka faaliyete atanmamış personel bulunamadı.
                           </div>
                         )}
                         {filteredFaaliyetPersonelPool.map((p) => {
@@ -1780,7 +1780,7 @@ ${satirlar
                           <button
                             type="button"
                             onClick={() => {
-                              setSelectedDate(sf.tarih);
+                              setSelectedDate(normalizeDateKey(sf.tarih));
                               setShowPdfPreview(true);
                             }}
                             className="text-[9px] bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-250 px-2 py-1 rounded-lg font-bold flex items-center gap-1"
@@ -1791,7 +1791,7 @@ ${satirlar
                           <button
                             type="button"
                             onClick={() => {
-                              setSelectedDate(sf.tarih);
+                              setSelectedDate(normalizeDateKey(sf.tarih));
                               setShowPdfPreview(true);
                             }}
                             className="text-[9px] bg-amber-500 hover:bg-amber-600 text-slate-950 border border-amber-600 px-2 py-1 rounded-lg font-black"
@@ -1963,7 +1963,7 @@ ${satirlar
                       {faaliyetArsivSubTab === 'saha' && (
                         <>
                       {visibleSahaFaaliyetleri.filter((f) => {
-                        const dateOk = faaliyetArsivDateFilter ? f.tarih === faaliyetArsivDateFilter : true;
+                        const dateOk = faaliyetArsivDateFilter ? normalizeDateKey(f.tarih) === faaliyetArsivDateFilter : true;
                         const q = faaliyetSearchKeyword.toLowerCase();
                         const searchOk =
                           f.isNiteligi.toLowerCase().includes(q) ||
@@ -1976,7 +1976,7 @@ ${satirlar
                       ) : (
                         visibleSahaFaaliyetleri
                           .filter((f) => {
-                            const dateOk = faaliyetArsivDateFilter ? f.tarih === faaliyetArsivDateFilter : true;
+                            const dateOk = faaliyetArsivDateFilter ? normalizeDateKey(f.tarih) === faaliyetArsivDateFilter : true;
                             const q = faaliyetSearchKeyword.toLowerCase();
                             const searchOk =
                               f.isNiteligi.toLowerCase().includes(q) ||
@@ -1994,7 +1994,7 @@ ${satirlar
                                     <span className="text-[8px] text-slate-400 font-bold block mt-0.5">Kimlik: {sf.id}</span>
                                   </div>
                                   <span className="text-[8px] font-mono font-extrabold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-lg shrink-0">
-                                    {sf.tarih.split('-').reverse().join('.')}
+                                    {formatDateLabelTr(sf.tarih)}
                                   </span>
                                 </div>
 
@@ -2052,7 +2052,7 @@ ${satirlar
                                 <div className="flex items-center justify-end space-x-2 pt-1">
                                   <button
                                     onClick={() => {
-                                      setSelectedDate(sf.tarih);
+                                      setSelectedDate(normalizeDateKey(sf.tarih));
                                       setShowPdfPreview(true);
                                     }}
                                     className="text-slate-700 hover:text-slate-900 font-extrabold text-[8.5px] uppercase tracking-wider flex items-center space-x-0.5"
@@ -2102,7 +2102,7 @@ ${satirlar
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setSelectedDate(r.tarih);
+                                    setSelectedDate(normalizeDateKey(r.tarih));
                                     setShowPdfPreview(true);
                                   }}
                                   className="text-[8.5px] px-2 py-1 border border-slate-250 rounded-lg font-bold bg-slate-100 hover:bg-slate-200"
@@ -2112,7 +2112,7 @@ ${satirlar
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setSelectedDate(r.tarih);
+                                    setSelectedDate(normalizeDateKey(r.tarih));
                                     setShowPdfPreview(true);
                                   }}
                                   className="text-[8.5px] px-2 py-1 border border-amber-600 rounded-lg font-black bg-amber-500 text-slate-950 hover:bg-amber-600"

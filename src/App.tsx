@@ -1726,6 +1726,7 @@ export default function App() {
           personeller={personeller}
           yoklamalar={yoklamalar}
           setYoklamalar={setYoklamalarWithSync}
+          saveYoklamalarNow={saveYoklamalarNow}
           sahaFaaliyetleri={sahaFaaliyetleri}
           setSahaFaaliyetleri={setSahaFaaliyetleriWithSync}
           currentUser={currentUser}

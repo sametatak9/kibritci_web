@@ -324,6 +324,8 @@ export interface SahaKolajFoto {
   dosyaAdi?: string;
   yuklemeTarihi: string;
   yukleyen?: string;
+  parsel?: string;
+  blok?: string;
 }
 
 export interface HazirTutanak {

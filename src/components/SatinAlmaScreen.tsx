@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import { 
   ShoppingCart, Plus, Trash2, Edit3, Eye, Upload, 
   Send, ShieldCheck, Search, Sparkles, CheckCircle2, AlertCircle 
@@ -8,6 +8,8 @@ import { compressImage } from '../lib/imageCompress';
 import { confirmSignedUploadWithMismatchCheck } from '../lib/evrakOnayUtils';
 import { findNearDuplicateStokName, normalizeCardName } from '../lib/duplicateNameUtils';
 import { fetchApiJson } from '../lib/apiClient';
+import { normalizeDateKey } from '../lib/dateKeyUtils';
+import { kibritciLogoHtml } from '../lib/kibritciBrand';
 
 interface SatinAlmaScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
@@ -46,6 +48,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
   const [saAttachmentUrl, setSaAttachmentUrl] = useState<string | null>(null);
   const [saSearchKeyword, setSaSearchKeyword] = useState("");
   const [talepTab, setTalepTab] = useState<'MEVCUT' | 'ARSIV'>('MEVCUT');
+  const [talepTarihFiltre, setTalepTarihFiltre] = useState('');
   const legacyDocInputRef = useRef<HTMLInputElement | null>(null);
   const [legacyImportLoading, setLegacyImportLoading] = useState(false);
   const [selectedSaIds, setSelectedSaIds] = useState<Set<string>>(new Set());
@@ -230,7 +233,18 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     });
 
     if (setStokIslemGecmisi && islemSatirlari.length > 0) {
-      setStokIslemGecmisi((prev) => [...islemSatirlari, ...prev]);
+      setStokIslemGecmisi((prev) => {
+        const existingKeys = new Set(
+          prev.map((row) => `${row.stokKartId}|${row.belgeNo}|${row.islemTipi}`)
+        );
+        const uniqueIncoming = islemSatirlari.filter((row) => {
+          const key = `${row.stokKartId}|${row.belgeNo}|${row.islemTipi}`;
+          if (existingKeys.has(key)) return false;
+          existingKeys.add(key);
+          return true;
+        });
+        return [...uniqueIncoming, ...prev];
+      });
     }
   };
 
@@ -754,8 +768,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
         <body>
           <div class="corporate-header">
             <div class="logo-placeholder">
-              <svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2L2 22h20L12 2zm0 3.5L18.5 19H5.5L12 5.5z"/></svg>
-              KİBRİTÇİ İNŞAAT A.Ş.
+              ${kibritciLogoHtml(48)}
             </div>
             <div class="title-area">
               <h2>SATIN ALMA SİPARİŞİ / PO FORMU</h2>
@@ -841,14 +854,22 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     if (win) win.print();
   };
 
-  const filteredTalepler = satinAlmaTalepleri.filter(sa => {
+  const filteredTalepler = useMemo(() => {
     const kw = saSearchKeyword.toLowerCase();
-    const inTab = talepTab === 'MEVCUT' ? !sa.arsivde : Boolean(sa.arsivde);
-    if (!inTab) return false;
-    return sa.saId.toLowerCase().includes(kw) ||
-           sa.cariFirma.toLowerCase().includes(kw) || 
-           sa.talepEden.toLowerCase().includes(kw);
-  });
+    return satinAlmaTalepleri
+      .filter((sa) => {
+        const inTab = talepTab === 'MEVCUT' ? !sa.arsivde : Boolean(sa.arsivde);
+        if (!inTab) return false;
+        if (talepTarihFiltre && normalizeDateKey(sa.tarih) !== talepTarihFiltre) return false;
+        if (!kw) return true;
+        return (
+          sa.saId.toLowerCase().includes(kw) ||
+          sa.cariFirma.toLowerCase().includes(kw) ||
+          sa.talepEden.toLowerCase().includes(kw)
+        );
+      })
+      .sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || ''), 'tr'));
+  }, [satinAlmaTalepleri, talepTab, talepTarihFiltre, saSearchKeyword]);
 
   return (
     <div className="flex-grow p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col lg:flex-row font-sans gap-6 select-none bg-slate-50/50">
@@ -1009,6 +1030,22 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
             >
               Eski Talepler (Arşiv)
             </button>
+            <input
+              type="date"
+              value={talepTarihFiltre}
+              onChange={(e) => setTalepTarihFiltre(e.target.value)}
+              className="text-xs border border-slate-250 rounded-lg px-2 py-1"
+              title="Tarihe göre filtrele"
+            />
+            {talepTarihFiltre && (
+              <button
+                type="button"
+                onClick={() => setTalepTarihFiltre('')}
+                className="text-[10px] border border-slate-300 bg-white hover:bg-slate-100 px-2 py-1 rounded-lg font-semibold"
+              >
+                Tüm Tarihler
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <button
