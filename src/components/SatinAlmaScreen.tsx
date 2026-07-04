@@ -3,9 +3,10 @@ import {
   ShoppingCart, Plus, Trash2, Edit3, Eye, Upload, 
   Send, ShieldCheck, Search, Sparkles, CheckCircle2, AlertCircle 
 } from 'lucide-react';
-import { SatinAlmaTalebi, SatinAlmaItem, CariKart, StokKart } from '../types/erp';
+import { SatinAlmaTalebi, SatinAlmaItem, CariKart, StokKart, StokKartIslem } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
 import { confirmSignedUploadWithMismatchCheck } from '../lib/evrakOnayUtils';
+import { findNearDuplicateStokName, normalizeCardName } from '../lib/duplicateNameUtils';
 
 interface SatinAlmaScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
@@ -18,6 +19,7 @@ interface SatinAlmaScreenProps {
   setCariKartlar?: React.Dispatch<React.SetStateAction<CariKart[]>>;
   stokKartlar: StokKart[];
   setStokKartlar?: React.Dispatch<React.SetStateAction<StokKart[]>>;
+  setStokIslemGecmisi?: React.Dispatch<React.SetStateAction<StokKartIslem[]>>;
   kullanicilar?: any[];
   currentUser?: any;
   addNotification?: (mesaj: string) => void;
@@ -30,11 +32,13 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
   setCariKartlar,
   stokKartlar,
   setStokKartlar,
+  setStokIslemGecmisi,
   currentUser,
   addNotification
 }) => {
   const [saRequestor, setSaRequestor] = useState(currentUser?.email ? currentUser.email.split('@')[0].toUpperCase() : "ŞANTİYE");
   const [saSupplier, setSaSupplier] = useState("");
+  const [saDate, setSaDate] = useState(new Date().toISOString().split('T')[0]);
   const [saNotes, setSaNotes] = useState("");
   const [cartItems, setCartItems] = useState<SatinAlmaItem[]>([]);
   const [editingSaId, setEditingSaId] = useState<string | null>(null);
@@ -69,11 +73,16 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
   };
 
   const checkAndSuggestStok = (name: string, unit: string = "ADET") => {
-    const exists = stokKartlar.some(s => s.stokAdi.toLowerCase().trim() === name.toLowerCase().trim());
-    if (!exists) {
+    const exact = stokKartlar.find((s) => normalizeCardName(s.stokAdi) === normalizeCardName(name));
+    const near = findNearDuplicateStokName(stokKartlar, name, 1);
+    if (!exact && !near) {
       setSuggestedStokName(name);
       setSuggestedStokUnit(unit);
       setShowStokSuggest(true);
+      return;
+    }
+    if (!exact && near) {
+      setTempItem((prev) => ({ ...prev, urunAdi: near.stokAdi }));
     }
   };
 
@@ -110,8 +119,10 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
   const handleCreateStok = () => {
     if (!suggestedStokName) return;
     const exists = stokKartlar.some(s => s.stokAdi.toLowerCase().trim() === suggestedStokName.toLowerCase().trim());
-    if (exists) {
-      alert("Hata: Bu isimde bir stok zaten bulunmaktadır.");
+    const near = findNearDuplicateStokName(stokKartlar, suggestedStokName, 1);
+    if (exists || near) {
+      const existingName = stokKartlar.find(s => s.stokAdi.toLowerCase().trim() === suggestedStokName.toLowerCase().trim())?.stokAdi || near?.stokAdi;
+      alert(`Hata: Bu isme çok yakın stok zaten var (${existingName}). Mükerrer kart açılmadı.`);
       setShowStokSuggest(false);
       return;
     }
@@ -132,13 +143,102 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     alert(`Yeni Stok Kartı (${suggestedStokName}) başarıyla oluşturuldu!`);
   };
 
+  const buildSaId = (orderDate: string) => {
+    const dateKey = String(orderDate || new Date().toISOString().split('T')[0]).replace(/-/g, '');
+    const existing = new Set(satinAlmaTalepleri.map((s) => s.saId));
+    let seq = satinAlmaTalepleri.filter((s) => String(s.saId || '').includes(`SA-${dateKey}-`)).length + 1;
+    let candidate = `SA-${dateKey}-${String(seq).padStart(3, '0')}`;
+    while (existing.has(candidate)) {
+      seq += 1;
+      candidate = `SA-${dateKey}-${String(seq).padStart(3, '0')}`;
+    }
+    return candidate;
+  };
+
+  const findExistingStok = (name: string, list: StokKart[]) => {
+    const exact = list.find((s) => normalizeCardName(s.stokAdi) === normalizeCardName(name));
+    if (exact) return exact;
+    return findNearDuplicateStokName(list, name, 1);
+  };
+
+  const normalizeCartItemsByKnownStok = (items: SatinAlmaItem[]) =>
+    items.map((item) => {
+      const match = findExistingStok(item.urunAdi, stokKartlar);
+      if (!match) return item;
+      return { ...item, urunAdi: match.stokAdi, birim: item.birim || match.birim || 'ADET' };
+    });
+
+  const syncPurchaseToStokCards = (items: SatinAlmaItem[], saId: string, tarih: string, supplier: string) => {
+    if (!setStokKartlar) return;
+    const islemSatirlari: StokKartIslem[] = [];
+
+    setStokKartlar((prev) => {
+      let next = [...prev];
+      for (const kalem of items) {
+        const rawName = String(kalem.urunAdi || '').trim();
+        if (!rawName) continue;
+
+        let stok = findExistingStok(rawName, next);
+        if (!stok) {
+          stok = {
+            id: `sk_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            stokKodu: `STK-${Math.floor(1000 + Math.random() * 9000)}`,
+            stokAdi: rawName,
+            kategori: suggestedStokCat || 'Kaba İnşaat İmalatı',
+            birim: kalem.birim || suggestedStokUnit || 'ADET',
+            kritikSeviye: 5,
+            durum: 'AKTIF',
+            aciklama: 'Satın alma entegrasyonuyla otomatik oluşturuldu.',
+          };
+          next = [stok, ...next];
+        }
+
+        const historyLine = `${tarih} ${saId} · ${supplier} · ${kalem.miktar} ${kalem.birim || stok.birim}`;
+        next = next.map((s) => {
+          if (s.id !== stok!.id) return s;
+          const oldDesc = String(s.aciklama || '');
+          const alreadyLogged = oldDesc.includes(saId);
+          const mergedDesc = alreadyLogged
+            ? oldDesc
+            : `${oldDesc}\n[Satın Alma] ${historyLine}`.trim();
+          return {
+            ...s,
+            stokAdi: stok!.stokAdi,
+            birim: s.birim || kalem.birim || 'ADET',
+            aciklama: mergedDesc,
+          };
+        });
+
+        islemSatirlari.push({
+          id: `stk_islem_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          stokKartId: stok.id,
+          islemTipi: 'GIRIS',
+          islemId: saId,
+          islemBaslik: 'Satın Alma Talebi',
+          islemDetay: `${supplier} firmasından satın alma kaydı işlendi.`,
+          miktarDegisimi: Number(kalem.miktar || 0),
+          tarih,
+          belgeNo: saId,
+        });
+      }
+      return next;
+    });
+
+    if (setStokIslemGecmisi && islemSatirlari.length > 0) {
+      setStokIslemGecmisi((prev) => [...islemSatirlari, ...prev]);
+    }
+  };
+
   const handleAddToCart = () => {
     if (!tempItem.urunAdi || tempItem.miktar <= 0) {
       alert("Lütfen ürün adı ve miktarını doldurun.");
       return;
     }
+    const existingStok = findExistingStok(tempItem.urunAdi, stokKartlar);
     const newItem: SatinAlmaItem = {
       ...tempItem,
+      urunAdi: existingStok?.stokAdi || tempItem.urunAdi.trim(),
+      birim: tempItem.birim || existingStok?.birim || 'ADET',
       id: `sai_${Date.now()}`
     };
     setCartItems(prev => [...prev, newItem]);
@@ -159,17 +259,23 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
       return;
     }
 
-    const cleanDate = new Date().toISOString().split('T')[0];
+    const cleanDate = saDate || new Date().toISOString().split('T')[0];
+    const normalizedCartItems = normalizeCartItemsByKnownStok(cartItems);
+    const purchaseSaId = editingSaId
+      ? satinAlmaTalepleri.find((s) => s.id === editingSaId)?.saId || buildSaId(cleanDate)
+      : buildSaId(cleanDate);
 
     if (editingSaId) {
       setSatinAlmaTalepleri(prev => prev.map(sa => {
         if (sa.id === editingSaId) {
           return {
             ...sa,
+            tarih: cleanDate,
+            saId: purchaseSaId,
             talepEden: saRequestor,
             cariFirma: saSupplier,
             aciklama: saNotes,
-            kalemler: cartItems,
+            kalemler: normalizedCartItems,
             imzaliEvrakUrl: saAttachmentUrl || sa.imzaliEvrakUrl
           };
         }
@@ -177,16 +283,15 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
       }));
       setEditingSaId(null);
     } else {
-      const randomHex = Math.random().toString(16).substring(2, 6).toUpperCase();
       const newSa: SatinAlmaTalebi = {
         id: `sa_${Date.now()}`,
-        saId: `PO-${cleanDate.replace(/-/g, '')}-${randomHex}`,
+        saId: purchaseSaId,
         tarih: cleanDate,
         talepEden: saRequestor,
         cariFirma: saSupplier,
         onayDurumu: 'ONAY BEKLİYOR',
         aciklama: saNotes,
-        kalemler: cartItems,
+        kalemler: normalizedCartItems,
         imzaliEvrakUrl: saAttachmentUrl || undefined,
         eImzalar: []
       };
@@ -194,9 +299,14 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     }
 
     checkAndSuggestCari(saSupplier);
+    syncPurchaseToStokCards(normalizedCartItems, purchaseSaId, cleanDate, saSupplier);
+    if (addNotification) {
+      addNotification(`${purchaseSaId} satın alma kaydı işlendi. ${normalizedCartItems.length} kalem stok kart geçmişine eklendi.`);
+    }
 
     // reset
     setSaSupplier("");
+    setSaDate(new Date().toISOString().split('T')[0]);
     setSaNotes("");
     setCartItems([]);
     setSaAttachmentUrl(null);
@@ -407,6 +517,15 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
 
         <div className="flex-grow p-5 space-y-4 overflow-y-auto text-xs text-slate-700">
           <div>
+            <label className="text-[10px] font-bold text-slate-500 uppercase">Belge Tarihi *</label>
+            <input
+              type="date"
+              value={saDate}
+              onChange={(e) => setSaDate(e.target.value)}
+              className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
+            />
+          </div>
+          <div>
             <label className="text-[10px] font-bold text-slate-500 uppercase">Tedarikçi Cari Firma *</label>
             <input 
               type="text"
@@ -613,6 +732,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
                         <button
                           onClick={() => {
                             setEditingSaId(sa.id);
+                            setSaDate(sa.tarih || new Date().toISOString().split('T')[0]);
                             setSaSupplier(sa.cariFirma);
                             setSaNotes(sa.aciklama || "");
                             setCartItems(sa.kalemler);

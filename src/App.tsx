@@ -2017,6 +2017,7 @@ export default function App() {
                   setCariKartlar={setCariKartlarWithSync}
                   stokKartlar={stokKartlar}
                   setStokKartlar={setStokKartlarWithSync}
+                  setStokIslemGecmisi={setStokIslemGecmisiWithSync}
                   kullanicilar={kullanicilar}
                   currentUser={currentUser}
                   addNotification={addNotification}
