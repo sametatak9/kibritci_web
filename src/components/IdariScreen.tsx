@@ -1167,6 +1167,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     popup.document.close();
   };
 
+  const getSahaFaaliyetFotoUrl = (sf: SahaFaaliyeti | any): string => {
+    return String(sf?.fotoUrl || sf?.sahaFotoBase64 || sf?.fotoBase64 || '').trim();
+  };
+
   const handleIceriAlVeGunRaporla = async () => {
     if (!formenTarihFiltre) {
       alert('Lütfen tarih seçin.');
@@ -1258,12 +1262,12 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
             </div>
           )}
 
-          {sf.fotoUrl && (
+          {getSahaFaaliyetFotoUrl(sf) && (
             <div className="mt-3 space-y-1">
               <span className="text-[9px] font-bold text-slate-400 block uppercase">📷 İMALAT SAHA FOTOĞRAFI:</span>
               <div className="relative border rounded-xl overflow-hidden max-w-sm max-h-48 bg-slate-50">
                 <img
-                  src={sf.fotoUrl}
+                  src={getSahaFaaliyetFotoUrl(sf)}
                   alt="Saha İmalat Görseli"
                   referrerPolicy="no-referrer"
                   className="max-h-48 max-w-full object-contain"
@@ -4296,7 +4300,9 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
               {sahaReportType === 'GUNLUK' && (() => {
                 const parts = sahaReportDate.split('-');
                 const dayNum = parseInt(parts[2]);
-                const activePersonel = personeller.filter(p => p.durum === true || String(p.durum) === 'true');
+                const activePersonel = personeller.filter(
+                  (p) => (p.durum === true || String(p.durum) === 'true') && p.firmaTipi !== 'TASERON'
+                );
                 let countGeldi = 0;
                 let countYok = 0;
                 let countIzinli = 0;
@@ -4305,7 +4311,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
 
                 activePersonel.forEach(p => {
                   const pYoklama = yoklamalar[p.id] || {};
-                  const dayData = pYoklama[dayNum];
+                  const dayData = pYoklama[sahaReportDate] ?? pYoklama[String(dayNum)] ?? pYoklama[dayNum];
                   if (dayData) {
                     if (dayData.durum === 'Geldi') countGeldi++;
                     else if (dayData.durum === 'Yok') countYok++;
@@ -4388,10 +4394,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                             </td>
                             <td className="p-3 text-slate-650 leading-relaxed font-normal">
                               <p className="whitespace-pre-line leading-relaxed">{sf.aciklama}</p>
-                              {sf.fotoUrl && (
+                              {getSahaFaaliyetFotoUrl(sf) && (
                                 <div className="mt-3 inline-block border border-slate-200 rounded-lg p-1 bg-white max-w-[160px] shadow-xs">
                                   <img 
-                                    src={sf.fotoUrl} 
+                                    src={getSahaFaaliyetFotoUrl(sf)} 
                                     alt="İmalat Saha Fotoğrafı" 
                                     referrerPolicy="no-referrer"
                                     className="h-20 w-auto object-cover rounded-md block mx-auto"
@@ -4411,10 +4417,12 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 {sahaReportType === 'GUNLUK' && (() => {
                   const parts = sahaReportDate.split('-');
                   const dayNum = parseInt(parts[2]);
-                  const activePersonel = personeller.filter(p => p.durum === true || String(p.durum) === 'true');
+                  const activePersonel = personeller.filter(
+                    (p) => (p.durum === true || String(p.durum) === 'true') && p.firmaTipi !== 'TASERON'
+                  );
                   const sahadakiAktifKadro = activePersonel.filter(p => {
                     const pYoklama = yoklamalar[p.id] || {};
-                    const dayData = pYoklama[dayNum];
+                    const dayData = pYoklama[sahaReportDate] ?? pYoklama[String(dayNum)] ?? pYoklama[dayNum];
                     return dayData && dayData.durum === 'Geldi';
                   });
 

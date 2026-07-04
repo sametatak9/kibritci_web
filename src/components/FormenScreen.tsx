@@ -4,9 +4,9 @@ import {
   MapPin, Camera, Sparkles, Undo2, ChevronRight, User, 
   Info, Smartphone, Monitor, Search, PlusCircle, Trash2, 
   FileSignature, Briefcase, RefreshCw, Send, Image as ImageIcon,
-  Check, X, FileText, UserPlus, Upload, ShieldCheck, Edit2, ArrowLeft
+  Check, X, FileText, UserPlus, Upload, ShieldCheck, Edit2, ArrowLeft, Eye
 } from 'lucide-react';
-import { Personel, AylikYoklamaMap, YoklamaDurum, SahaFaaliyeti as SahaFaaliyetiType } from '../types/erp';
+import { Personel, AylikYoklamaMap, SahaFaaliyeti as SahaFaaliyetiType } from '../types/erp';
 import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { buildPersonelListForMonth, getYoklamaDay, isDayActiveForPersonel, isTaseronPersonel, setYoklamaDay } from '../lib/yoklamaUtils';
@@ -55,18 +55,9 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     return () => window.removeEventListener('resize', checkMobile);
   }, [isStandalone]);
 
-  // Active Tab: 'yoklama' | 'saha_faaliyet' | 'faaliyet_gecmis' | 'personel_giris' | 'personel_listesi' | 'toplu_puantaj'
-  const [activeTab, setActiveTab] = useState<'yoklama' | 'saha_faaliyet' | 'faaliyet_gecmis' | 'personel_giris' | 'personel_listesi' | 'toplu_puantaj' | 'gunluk_akis' | 'aylik_puantaj'>('yoklama');
+  // Active Tab: 'yoklama' | 'saha_faaliyet' | 'faaliyet_gecmis' | 'personel_giris' | 'personel_listesi'
+  const [activeTab, setActiveTab] = useState<'yoklama' | 'saha_faaliyet' | 'faaliyet_gecmis' | 'personel_giris' | 'personel_listesi' | 'gunluk_akis' | 'aylik_puantaj'>('yoklama');
   const [sendingGunlukAkis, setSendingGunlukAkis] = useState(false);
-
-  // Selected cell state for bulk weekly puantaj
-  const [selectedCell, setSelectedCell] = useState<{
-    personelId: string;
-    personelName: string;
-    date: Date;
-    currentDurum: YoklamaDurum;
-    currentMesai: number;
-  } | null>(null);
 
   // Helper to match current user to a personnel record
   const matchUserToPersonel = () => {
@@ -159,6 +150,8 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
 
   // 4. FAALİYET EDİT & SEARCH STATES
   const [faaliyetSearchKeyword, setFaaliyetSearchKeyword] = useState('');
+  const [faaliyetArsivDateFilter, setFaaliyetArsivDateFilter] = useState('');
+  const [faaliyetArsivSubTab, setFaaliyetArsivSubTab] = useState<'saha' | 'gun'>('saha');
   const [editingFaaliyet, setEditingFaaliyet] = useState<SahaFaaliyetiType | null>(null);
   const [lastDeletedFaaliyet, setLastDeletedFaaliyet] = useState<SahaFaaliyetiType | null>(null);
 
@@ -221,7 +214,13 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     if (!isAktif && !p.istenCikisTarihi) return false;
     return isDayActiveForPersonel(p, year, month, day, yoklamalar[p.id] as any);
   });
-  const filteredFaaliyetPersonelPool = activeStaff.filter((p) => {
+  const faaliyetPersonelPoolBase =
+    activeStaff.length > 0
+      ? activeStaff
+      : personeller.filter(
+          (p) => (p.durum === true || String(p.durum).toLowerCase() === 'true') && !isTaseronPersonel(p)
+        );
+  const filteredFaaliyetPersonelPool = faaliyetPersonelPoolBase.filter((p) => {
     const q = faaliyetPersonelSearch.trim().toLocaleLowerCase('tr-TR');
     if (!q) return true;
     return (
@@ -229,22 +228,35 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
       String(p.gorev || '').toLocaleLowerCase('tr-TR').includes(q)
     );
   });
-
-  // Get start of the week (Monday) based on selectedDate
-  const getDaysOfWeek = () => {
-    const current = new Date(selectedDate);
-    const dayOfWeek = current.getDay(); // 0 is Sunday, 1 is Monday...
-    const diff = current.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // adjust when day is sunday
-    const startOfWeek = new Date(current.setDate(diff));
-    
-    const days = [];
-    for (let i = 0; i < 7; i++) {
-      const nextDay = new Date(startOfWeek);
-      nextDay.setDate(startOfWeek.getDate() + i);
-      days.push(nextDay);
-    }
-    return days;
+  const getFaaliyetFoto = (sf: SahaFaaliyetiType | any): string => {
+    return String(sf?.fotoUrl || sf?.sahaFotoBase64 || sf?.fotoBase64 || '').trim();
   };
+  const selectedDateFaaliyetleri = visibleSahaFaaliyetleri
+    .filter((f) => f.tarih === selectedDate)
+    .sort((a, b) => String(b.id).localeCompare(String(a.id), 'tr'));
+
+  const parseDateParts = (dateStr: string) => {
+    const [y, m, d] = String(dateStr || '').split('-').map(Number);
+    return { y, m, d };
+  };
+  const getAttendanceSummaryForDate = (dateStr: string) => {
+    const { y, m, d } = parseDateParts(dateStr);
+    if (!y || !m || !d) return { gelenCount: 0, gelenIds: [] as string[] };
+    const gelenIds = activeStaff
+      .filter((p) => {
+        const dayData = getYoklamaDay(yoklamalar[p.id], y, m, d);
+        return dayData?.durum === 'Geldi';
+      })
+      .map((p) => p.id);
+    return { gelenCount: gelenIds.length, gelenIds };
+  };
+  const selectedDateAttendance = getAttendanceSummaryForDate(selectedDate);
+
+  const reportEntries = Object.entries(gunlukRaporlar)
+    .map(([id, data]) => ({ id, ...(data as any) }))
+    .filter((r) => !r.gonderen || String(r.gonderen).toLocaleLowerCase('tr-TR').includes((currentUser?.email || '').toLocaleLowerCase('tr-TR')))
+    .filter((r) => (faaliyetArsivDateFilter ? String(r.tarih) === faaliyetArsivDateFilter : true))
+    .sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || ''), 'tr'));
 
   // Handlers for personel action requests
 
@@ -679,8 +691,14 @@ ${satirlar
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
-      const compressed = await compressImage(rawBase64);
-      setFotoUrl(compressed);
+      try {
+        const compressed = await compressImage(rawBase64);
+        setFotoUrl(compressed);
+      } catch {
+        // Bazı cihazlarda (özellikle HEIC) sıkıştırma başarısız olabiliyor; ham base64 ile devam et.
+        setFotoUrl(rawBase64);
+      }
+      e.target.value = '';
     } catch {
       showStatus('error', 'Fotoğraf yüklenemedi, tekrar deneyin.');
     }
@@ -733,7 +751,7 @@ ${satirlar
   };
 
   // Submit Saha Faaliyeti
-  const handleSaveFaaliyet = async (e: React.SyntheticEvent, notifyProgram = true) => {
+  const handleSaveFaaliyet = async (e: React.SyntheticEvent) => {
     e.preventDefault();
     if (!isNiteligi) {
       showStatus('error', 'Lütfen iş niteliğini giriniz veya şablondan seçiniz!');
@@ -756,8 +774,8 @@ ${satirlar
       kaydeden: currentUser?.displayName || currentUser?.email || 'FORMEN',
       kaydedenUid: currentUser?.uid || '',
       kaynakEkran: 'FORMEN_MOBIL',
-      programaGonderildi: notifyProgram,
-      programaGonderimTarihi: notifyProgram ? new Date().toISOString() : '',
+      programaGonderildi: true,
+      programaGonderimTarihi: new Date().toISOString(),
       iceriAktarimDurumu: 'BEKLIYOR',
     };
 
@@ -773,9 +791,7 @@ ${satirlar
     logActionToPersonelHistory('Saha Faaliyeti Ekledi', `"${isNiteligi}" iş niteliğiyle, ${parsel} / ${blok} bölgesinde yeni saha imalat faaliyeti kaydetti.`);
     showStatus(
       'success',
-      notifyProgram
-        ? '🧱 Faaliyet kaydedildi ve ana programa gönderildi.'
-        : '🧱 Faaliyet taslak olarak kaydedildi.'
+      '🧱 Faaliyet kaydedildi ve ana programa gönderildi.'
     );
     
     // Reset form fields
@@ -785,6 +801,30 @@ ${satirlar
     setSahaUstaSayisi(0);
     setSahaIsciSayisi(0);
     setFaaliyetPersonelSearch('');
+  };
+
+  const handleDeleteFaaliyet = async (faaliyet: SahaFaaliyetiType) => {
+    if (!window.confirm('Bu saha raporunu silmek istediğinize emin misiniz?')) return;
+    try {
+      await deleteDoc(doc(db, 'sahaFaaliyetleri', faaliyet.id));
+      setLastDeletedFaaliyet(faaliyet);
+      setSahaFaaliyetleri((prev) => prev.filter((item) => item.id !== faaliyet.id));
+      showStatus('success', 'Rapor silindi. Ekranın üstünden geri alabilirsiniz.');
+    } catch (err: any) {
+      showStatus('error', `Silme işlemi başarısız: ${err?.message || 'Bilinmeyen hata'}`);
+    }
+  };
+
+  const handleSaveEditedFaaliyet = async () => {
+    if (!editingFaaliyet) return;
+    try {
+      await setDoc(doc(db, 'sahaFaaliyetleri', editingFaaliyet.id), editingFaaliyet, { merge: true });
+      setSahaFaaliyetleri((prev) => prev.map((f) => (f.id === editingFaaliyet.id ? editingFaaliyet : f)));
+      setEditingFaaliyet(null);
+      showStatus('success', 'Saha faaliyeti başarıyla güncellendi!');
+    } catch (err: any) {
+      showStatus('error', `Düzenleme kaydedilemedi: ${err?.message || 'Bilinmeyen hata'}`);
+    }
   };
 
   const handleSendGunlukAkis = async () => {
@@ -833,9 +873,9 @@ ${satirlar
 
   const handleSaveGunlukRapor = async () => {
     const reportId = `report_${selectedDate}`;
-    const dayActivities = daySahaFaaliyetleri;
+    const dayActivities = selectedDateFaaliyetleri;
     const presentStaffNames = activeStaff
-      .filter(p => presentIds.includes(p.id))
+      .filter(p => selectedDateAttendance.gelenIds.includes(p.id))
       .map(p => `${p.ad} ${p.soyad} (${p.gorev})`);
 
     const reportData = {
@@ -844,7 +884,7 @@ ${satirlar
       havaDurumu,
       genelNotlar,
       gonderen: currentUser?.displayName || (currentUser?.ad ? `${currentUser.ad} ${currentUser.soyad || ''}` : '') || 'FORMEN',
-      toplamEkip: presentIds.length,
+      toplamEkip: selectedDateAttendance.gelenCount,
       faaliyetler: dayActivities,
       yoklama: presentStaffNames,
       onayDurumu: 'BEKLİYOR',
@@ -853,7 +893,26 @@ ${satirlar
 
     try {
       await setDoc(doc(db, 'gunlukSahaRaporlari', reportId), reportData);
-      showStatus('success', '📄 Fiili Günlük Rapor başarıyla kaydedildi ve ana programa gönderildi!');
+      const rows = dayActivities
+        .map(
+          (sf, idx) =>
+            `<tr><td>${idx + 1}</td><td>${escapeHtml(sf.tarih)}</td><td>${escapeHtml(sf.isNiteligi)}</td><td>${escapeHtml(sf.parsel)} / ${escapeHtml(sf.blok)}</td><td>${escapeHtml(sf.aciklama || '-')}</td></tr>`
+        )
+        .join('');
+      const html = `<!doctype html><html><head><meta charset="utf-8"/><title>Formen Raporu ${selectedDate}</title>
+      <style>body{font-family:Arial,sans-serif;padding:20px;color:#0f172a}h1{font-size:16px;margin-bottom:10px}.meta{font-size:12px;color:#475569;margin-bottom:12px}
+      table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #cbd5e1;padding:6px;text-align:left;vertical-align:top}th{background:#f1f5f9}</style>
+      </head><body><h1>KİBRİTÇİ İNŞAAT - FORMen GÜNLÜK SAHA RAPORU</h1>
+      <div class="meta">Tarih: ${escapeHtml(selectedDate)} | Gelen personel: ${selectedDateAttendance.gelenCount}</div>
+      <table><thead><tr><th>#</th><th>Tarih</th><th>İş Niteliği</th><th>Lokasyon</th><th>Açıklama</th></tr></thead><tbody>${rows || '<tr><td colspan="5">Kayıt yok</td></tr>'}</tbody></table>
+      <script>window.onload=()=>window.print()</script></body></html>`;
+      const popup = window.open('', '_blank', 'width=1000,height=700');
+      if (popup) {
+        popup.document.open();
+        popup.document.write(html);
+        popup.document.close();
+      }
+      showStatus('success', '📄 Günlük rapor kaydedildi. PDF penceresi açıldı.');
       setShowPdfPreview(false);
     } catch (err: any) {
       showStatus('error', 'Rapor kaydedilirken hata oluştu: ' + err.message);
@@ -1013,15 +1072,6 @@ ${satirlar
                 >
                   <ClipboardCheck size={11} className="mb-0.5" />
                   <span>Yoklama Al</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('toplu_puantaj')}
-                  className={`py-1.5 rounded-lg text-[8px] font-extrabold flex flex-col items-center justify-center transition duration-150 cursor-pointer ${
-                    activeTab === 'toplu_puantaj' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Calendar size={11} className="mb-0.5" />
-                  <span>Toplu Puantaj</span>
                 </button>
                 <button
                   onClick={() => setActiveTab('aylik_puantaj')}
@@ -1680,82 +1730,96 @@ ${satirlar
                     </div>
 
                     {/* Submit activity report */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={(e) => handleSaveFaaliyet(e, false)}
-                        className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-[10px] py-2.5 px-4 rounded-xl transition duration-150 shadow-sm flex items-center justify-center space-x-1.5 cursor-pointer border border-slate-300"
-                      >
-                        <Send size={12} />
-                        <span>TASLAK KAYDET</span>
-                      </button>
-                      <button
-                        type="submit"
-                        className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] py-2.5 px-4 rounded-xl transition duration-150 shadow-md flex items-center justify-center space-x-1.5 cursor-pointer border-b-4 border-amber-700"
-                      >
-                        <Send size={12} />
-                        <span>FAALİYETİ KAYDET VE PROGRAMA GÖNDER</span>
-                      </button>
-                    </div>
+                    <button
+                      type="submit"
+                      className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] py-2.5 px-4 rounded-xl transition duration-150 shadow-md flex items-center justify-center space-x-1.5 cursor-pointer border-b-4 border-amber-700"
+                    >
+                      <Send size={12} />
+                      <span>KAYDET</span>
+                    </button>
 
                   </div>
 
                 </form>
 
                 <div className="bg-white rounded-3xl border p-4 shadow-xs space-y-3 mt-3">
-                  <div className="flex items-center space-x-2 text-slate-950">
-                    <FileText size={14} className="text-amber-500" />
-                    <span className="font-bold text-[10px] uppercase tracking-wider">FİİLİ GÜNLÜK RAPOR PARAMETRELERİ</span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">🌦️ Hava Durumu</label>
-                      <select
-                        value={havaDurumu}
-                        onChange={(e) => setHavaDurumu(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 p-1.5 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-[10px] font-bold text-slate-800"
-                      >
-                        <option value="Güneşli">☀️ Güneşli</option>
-                        <option value="Bulutlu">☁️ Bulutlu</option>
-                        <option value="Yağmurlu">🌧️ Yağmurlu</option>
-                        <option value="Karlı">❄️ Karlı</option>
-                        <option value="Rüzgarlı">💨 Rüzgarlı</option>
-                      </select>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2 text-slate-950">
+                      <FileText size={14} className="text-amber-500" />
+                      <span className="font-bold text-[10px] uppercase tracking-wider">SEÇİLEN GÜN SAHA KAYITLARI</span>
                     </div>
-
-                    <div className="space-y-1">
-                      <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">👥 Toplam Ekip</label>
-                      <div className="w-full bg-slate-100 border border-slate-200 p-1.5 rounded-xl text-[10px] font-extrabold text-slate-800 text-center">
-                        {presentIds.length} Personel Sahada
-                      </div>
-                    </div>
+                    <span className="text-[9px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
+                      Gelen: {selectedDateAttendance.gelenCount}
+                    </span>
                   </div>
-
-                  <div className="space-y-1">
-                    <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">📝 Genel Şantiye Notları</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      className="text-xs border border-slate-250 rounded-lg px-2 py-1.5"
+                    />
                     <textarea
-                      rows={2}
-                      placeholder="Şantiyeye dair genel notlar, malzeme teslimatları veya aksaklıkları buraya yazabilirsiniz..."
+                      rows={1}
+                      placeholder="Genel şantiye notu (opsiyonel)"
                       value={genelNotlar}
                       onChange={(e) => setGenelNotlar(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 py-1.5 px-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-[10px] font-semibold text-slate-800 leading-snug"
+                      className="sm:col-span-2 w-full bg-slate-50 border border-slate-200 py-1.5 px-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-[10px] font-semibold text-slate-800 leading-snug"
                     />
                   </div>
-
-                  <div className="bg-amber-50/60 border border-amber-200 p-3 rounded-2xl space-y-2">
-                    <p className="text-[8.5px] font-bold text-amber-900 leading-normal">
-                      Bugün için girilen <strong>{daySahaFaaliyetleri.length} adet</strong> faaliyeti ve yoklama durumlarını tek bir resmi raporda birleştirip onaylayın.
-                    </p>
-                    
-                    <button
-                      type="button"
-                      onClick={() => setShowPdfPreview(true)}
-                      className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] py-2.5 px-3 rounded-xl transition flex items-center justify-center space-x-1 cursor-pointer shadow-sm border border-amber-600"
-                    >
-                      <FileText size={12} />
-                      <span>📄 FİİLİ RAPORU OLUŞTUR &amp; PDF ÖNİZLE</span>
-                    </button>
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {selectedDateFaaliyetleri.length === 0 && (
+                      <div className="border border-dashed border-slate-250 rounded-xl p-3 text-xs text-slate-500">
+                        Seçilen tarihte faaliyet kaydı bulunamadı.
+                      </div>
+                    )}
+                    {selectedDateFaaliyetleri.map((sf) => (
+                      <div key={sf.id} className="border border-slate-200 rounded-xl p-2.5 text-[10px] space-y-1.5">
+                        <div className="flex justify-between gap-2">
+                          <div className="font-bold text-slate-900">{sf.isNiteligi}</div>
+                          <span className="text-[8px] text-slate-500 font-mono">{sf.tarih}</span>
+                        </div>
+                        <div className="text-[9px] text-slate-500">{sf.parsel} / {sf.blok}</div>
+                        {!!sf.aciklama && <div className="text-[9px] text-slate-700 line-clamp-2">{sf.aciklama}</div>}
+                        <div className="flex flex-wrap gap-2 justify-end pt-1 border-t border-slate-100">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedDate(sf.tarih);
+                              setShowPdfPreview(true);
+                            }}
+                            className="text-[9px] bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-250 px-2 py-1 rounded-lg font-bold flex items-center gap-1"
+                          >
+                            <Eye size={11} />
+                            Önizleme
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedDate(sf.tarih);
+                              setShowPdfPreview(true);
+                            }}
+                            className="text-[9px] bg-amber-500 hover:bg-amber-600 text-slate-950 border border-amber-600 px-2 py-1 rounded-lg font-black"
+                          >
+                            PDF Gönder
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingFaaliyet(sf)}
+                            className="text-[9px] bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-1 rounded-lg font-bold"
+                          >
+                            Düzelt
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteFaaliyet(sf)}
+                            className="text-[9px] bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1 rounded-lg font-bold"
+                          >
+                            Sil
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
                 </>
@@ -1844,11 +1908,7 @@ ${satirlar
                         </div>
 
                         <button
-                          onClick={() => {
-                            setSahaFaaliyetleri(prev => prev.map(f => f.id === editingFaaliyet.id ? editingFaaliyet : f));
-                            setEditingFaaliyet(null);
-                            showStatus('success', 'Saha faaliyeti başarıyla güncellendi!');
-                          }}
+                          onClick={handleSaveEditedFaaliyet}
                           className="w-full bg-slate-900 text-white font-extrabold text-[9px] py-2 rounded-xl uppercase hover:bg-slate-950"
                         >
                           Değişiklikleri Kaydet
@@ -1863,37 +1923,73 @@ ${satirlar
                         <Users size={14} className="text-amber-500" />
                         <span className="font-bold text-[10px] uppercase tracking-wider">SAHA FAALİYETLERİ ARŞİVİ</span>
                       </div>
-                      <span className="text-[8px] font-mono text-slate-400 font-bold">Toplam: {sahaFaaliyetleri.length}</span>
+                      <span className="text-[8px] font-mono text-slate-400 font-bold">
+                        Toplam: {faaliyetArsivSubTab === 'saha' ? visibleSahaFaaliyetleri.length : reportEntries.length}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setFaaliyetArsivSubTab('saha')}
+                        className={`text-[9px] px-2 py-1 rounded-lg border font-bold ${faaliyetArsivSubTab === 'saha' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}
+                      >
+                        Saha Faaliyetleri
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFaaliyetArsivSubTab('gun')}
+                        className={`text-[9px] px-2 py-1 rounded-lg border font-bold ${faaliyetArsivSubTab === 'gun' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}
+                      >
+                        Gün Rapor Arşivi
+                      </button>
                     </div>
 
                     {/* Search Field */}
-                    <div className="relative">
-                      <Search size={11} className="absolute left-2.5 top-2.5 text-slate-400" />
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="relative sm:col-span-2">
+                        <Search size={11} className="absolute left-2.5 top-2.5 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Raporlarda ara (Nitelik, parsel, açıklama)..."
+                          value={faaliyetSearchKeyword}
+                          onChange={(e) => setFaaliyetSearchKeyword(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-250 py-1.5 pl-8 pr-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-[9px] font-semibold text-slate-700"
+                        />
+                      </div>
                       <input
-                        type="text"
-                        placeholder="Raporlarda ara (Nitelik, parsel, açıklama)..."
-                        value={faaliyetSearchKeyword}
-                        onChange={(e) => setFaaliyetSearchKeyword(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-250 py-1.5 pl-8 pr-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-[9px] font-semibold text-slate-700"
+                        type="date"
+                        value={faaliyetArsivDateFilter}
+                        onChange={(e) => setFaaliyetArsivDateFilter(e.target.value)}
+                        className="text-xs border border-slate-250 rounded-lg px-2 py-1.5"
                       />
                     </div>
 
                     <div className="space-y-3.5 divide-y divide-slate-100 max-h-96 overflow-y-auto pr-1">
-                      {visibleSahaFaaliyetleri.filter(f => 
-                        f.isNiteligi.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase()) ||
-                        f.parsel.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase()) ||
-                        (f.blok && f.blok.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase())) ||
-                        (f.aciklama && f.aciklama.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase()))
-                      ).length === 0 ? (
+                      {faaliyetArsivSubTab === 'saha' && (
+                        <>
+                      {visibleSahaFaaliyetleri.filter((f) => {
+                        const dateOk = faaliyetArsivDateFilter ? f.tarih === faaliyetArsivDateFilter : true;
+                        const q = faaliyetSearchKeyword.toLowerCase();
+                        const searchOk =
+                          f.isNiteligi.toLowerCase().includes(q) ||
+                          f.parsel.toLowerCase().includes(q) ||
+                          (f.blok && f.blok.toLowerCase().includes(q)) ||
+                          (f.aciklama && f.aciklama.toLowerCase().includes(q));
+                        return dateOk && searchOk;
+                      }).length === 0 ? (
                         <p className="text-[9px] text-slate-400 italic text-center py-8">Aranan kriterlere uygun faaliyet bulunamadı.</p>
                       ) : (
                         visibleSahaFaaliyetleri
-                          .filter(f => 
-                            f.isNiteligi.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase()) ||
-                            f.parsel.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase()) ||
-                            (f.blok && f.blok.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase())) ||
-                            (f.aciklama && f.aciklama.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase()))
-                          )
+                          .filter((f) => {
+                            const dateOk = faaliyetArsivDateFilter ? f.tarih === faaliyetArsivDateFilter : true;
+                            const q = faaliyetSearchKeyword.toLowerCase();
+                            const searchOk =
+                              f.isNiteligi.toLowerCase().includes(q) ||
+                              f.parsel.toLowerCase().includes(q) ||
+                              (f.blok && f.blok.toLowerCase().includes(q)) ||
+                              (f.aciklama && f.aciklama.toLowerCase().includes(q));
+                            return dateOk && searchOk;
+                          })
                           .map((sf, idx) => {
                             return (
                               <div key={sf.id} className={`pt-3.5 ${idx === 0 ? 'pt-0' : ''} space-y-1.5 text-[9px]`}>
@@ -1920,9 +2016,9 @@ ${satirlar
                                 )}
 
                                 {/* Photo image attachment if present */}
-                                {sf.fotoUrl && (
+                                {getFaaliyetFoto(sf) && (
                                   <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-32">
-                                    <img src={sf.fotoUrl} alt="Saha İlerleme Görseli" className="w-full h-full object-cover" />
+                                    <img src={getFaaliyetFoto(sf)} alt="Saha İlerleme Görseli" className="w-full h-full object-cover" />
                                   </div>
                                 )}
 
@@ -1960,6 +2056,17 @@ ${satirlar
                                 {/* Edit & Delete Controls (Değiştir ve Sil) */}
                                 <div className="flex items-center justify-end space-x-2 pt-1">
                                   <button
+                                    onClick={() => {
+                                      setSelectedDate(sf.tarih);
+                                      setShowPdfPreview(true);
+                                    }}
+                                    className="text-slate-700 hover:text-slate-900 font-extrabold text-[8.5px] uppercase tracking-wider flex items-center space-x-0.5"
+                                  >
+                                    <Eye size={10} />
+                                    <span>Önizleme</span>
+                                  </button>
+                                  <span className="text-slate-200">|</span>
+                                  <button
                                     onClick={() => setEditingFaaliyet(sf)}
                                     className="text-amber-700 hover:text-amber-800 font-extrabold text-[8.5px] uppercase tracking-wider flex items-center space-x-0.5"
                                   >
@@ -1968,13 +2075,7 @@ ${satirlar
                                   </button>
                                   <span className="text-slate-200">|</span>
                                   <button
-                                    onClick={() => {
-                                      if (window.confirm("Bu saha raporunu silmek istediğinize emin misiniz?")) {
-                                        setLastDeletedFaaliyet(sf);
-                                        setSahaFaaliyetleri(prev => prev.filter(item => item.id !== sf.id));
-                                        showStatus('success', 'Rapor silindi. Ekranın üstünden geri alabilirsiniz.');
-                                      }
-                                    }}
+                                    onClick={() => handleDeleteFaaliyet(sf)}
                                     className="text-rose-600 hover:text-rose-700 font-extrabold text-[8.5px] uppercase tracking-wider flex items-center space-x-0.5"
                                   >
                                     <Trash2 size={10} />
@@ -1985,6 +2086,48 @@ ${satirlar
                               </div>
                             );
                           })
+                      )}
+                        </>
+                      )}
+                      {faaliyetArsivSubTab === 'gun' && (
+                        <>
+                          {reportEntries.length === 0 && (
+                            <p className="text-[9px] text-slate-400 italic text-center py-8">Gün raporu bulunamadı.</p>
+                          )}
+                          {reportEntries.map((r) => (
+                            <div key={r.id} className="pt-3.5 space-y-1.5 text-[9px]">
+                              <div className="flex items-center justify-between">
+                                <div className="font-bold text-slate-900">{r.tarih} Gün Raporu</div>
+                                <span className="text-[8px] text-slate-500">{r.toplamEkip || 0} kişi</span>
+                              </div>
+                              <p className="text-[8px] text-slate-500">
+                                Faaliyet: {Array.isArray(r.faaliyetler) ? r.faaliyetler.length : 0} · Formen: {String(r.gonderen || '').split('@')[0] || '-'}
+                              </p>
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedDate(r.tarih);
+                                    setShowPdfPreview(true);
+                                  }}
+                                  className="text-[8.5px] px-2 py-1 border border-slate-250 rounded-lg font-bold bg-slate-100 hover:bg-slate-200"
+                                >
+                                  Önizleme
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedDate(r.tarih);
+                                    setShowPdfPreview(true);
+                                  }}
+                                  className="text-[8.5px] px-2 py-1 border border-amber-600 rounded-lg font-black bg-amber-500 text-slate-950 hover:bg-amber-600"
+                                >
+                                  PDF Gönder
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </>
                       )}
                     </div>
 
@@ -2285,7 +2428,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                     <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                       <div className="flex items-center space-x-2 text-slate-950">
                         <Users size={14} className="text-amber-500" />
-                        <span className="font-bold text-[10px] uppercase tracking-wider">ŞANTİYE PERSONEL LİSTESİ ({personeller.filter(p => p.durum === true || String(p.durum).toLowerCase() === 'true').length})</span>
+                        <span className="font-bold text-[10px] uppercase tracking-wider">ŞANTİYE PERSONEL LİSTESİ ({personeller.filter(p => (p.durum === true || String(p.durum).toLowerCase() === 'true') && !isTaseronPersonel(p)).length})</span>
                       </div>
                       
                       {/* Search Personnel */}
@@ -2303,7 +2446,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
 
                     <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                       {personeller
-                        .filter(p => p.durum === true || String(p.durum).toLowerCase() === 'true')
+                        .filter(p => (p.durum === true || String(p.durum).toLowerCase() === 'true') && !isTaseronPersonel(p))
                         .filter(p => {
                           const q = personelSearchKeyword.toLowerCase().trim();
                           if (!q) return true;
@@ -2651,231 +2794,6 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                 </div>
               )}
 
-              {activeTab === 'toplu_puantaj' && (
-                <div className="space-y-3.5 animate-in fade-in duration-150">
-                  <div className="bg-white rounded-3xl border p-4 shadow-xs space-y-3">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center space-x-2">
-                        <Calendar size={14} className="text-amber-500" />
-                        <span className="font-bold text-[10px] uppercase tracking-wider text-slate-900">HAFTALIK TOPLU PUANTAJ &amp; MESAİ</span>
-                      </div>
-                      <span className="text-[9px] text-slate-500 font-mono font-bold">
-                        Hafta: {(() => {
-                          const days = getDaysOfWeek();
-                          return `${days[0].getDate()}.${days[0].getMonth()+1} - ${days[6].getDate()}.${days[6].getMonth()+1}`;
-                        })()}
-                      </span>
-                    </div>
-                    <p className="text-[9px] text-slate-500 leading-snug">
-                      Seçilen haftanın tüm günlerindeki puantaj ve mesai (fazla mesai) durumlarını toplu olarak görün. Hücrelere dokunarak hızlıca durum veya mesai saati düzenleyebilirsiniz.
-                    </p>
-
-                    {/* Table Container - Horizontally scrollable on mobile */}
-                    <div className="overflow-x-auto border rounded-2xl bg-slate-50">
-                      <table className="w-full text-left border-collapse min-w-[640px]">
-                        <thead>
-                          <tr className="bg-slate-100 border-b border-slate-200">
-                            <th className="p-2 text-[9px] font-black uppercase text-slate-600 tracking-wider">PERSONEL</th>
-                            {getDaysOfWeek().map((d, i) => {
-                              const daysNames = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
-                              const isToday = d.toISOString().split('T')[0] === new Date().toISOString().split('T')[0];
-                              return (
-                                <th key={i} className={`p-2 text-center text-[9px] font-black uppercase tracking-wider ${isToday ? 'bg-amber-100 text-amber-900 font-black' : 'text-slate-600'}`}>
-                                  <div>{daysNames[i]}</div>
-                                  <div className="text-[10px] font-mono">{d.getDate()}</div>
-                                </th>
-                              );
-                            })}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {activeStaff.map(p => {
-                            return (
-                              <tr key={p.id} className="border-b border-slate-150 hover:bg-slate-100/50 transition duration-100">
-                                <td className="p-2 flex items-center space-x-2">
-                                  <div className="w-6 h-6 rounded-full bg-slate-250 flex items-center justify-center font-bold text-[9px] text-slate-700 uppercase">
-                                    {getInitials(p.ad, p.soyad)}
-                                  </div>
-                                  <div>
-                                    <div className="text-[10px] font-bold text-slate-900 leading-tight">{getDisplayName(p.ad, p.soyad)}</div>
-                                    <div className="text-[8px] text-slate-500 leading-none">{p.gorev}</div>
-                                  </div>
-                                </td>
-                                {getDaysOfWeek().map((d, i) => {
-                                  const dYear = d.getFullYear();
-                                  const dMonth = d.getMonth() + 1;
-                                  const dDay = d.getDate();
-                                  const dayData = getYoklamaDay(yoklamalar[p.id], dYear, dMonth, dDay);
-                                  const status = dayData?.durum || 'Girilmedi';
-                                  const mesai = dayData?.mesaiSaati || 0;
-
-                                  let badgeClass = "bg-slate-100 text-slate-450 border border-slate-200";
-                                  let shortLabel = "–";
-
-                                  if (status === 'Geldi') {
-                                    badgeClass = "bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold";
-                                    shortLabel = "G";
-                                  } else if (status === 'Yok') {
-                                    badgeClass = "bg-rose-50 text-rose-700 border border-rose-200 font-bold";
-                                    shortLabel = "Y";
-                                  } else if (status === 'İzinli') {
-                                    badgeClass = "bg-amber-50 text-amber-700 border border-amber-200 font-bold";
-                                    shortLabel = "İ";
-                                  } else if (status === 'Raporlu') {
-                                    badgeClass = "bg-purple-50 text-purple-700 border border-purple-200 font-bold";
-                                    shortLabel = "R";
-                                  } else if (status === 'Pazar') {
-                                    badgeClass = "bg-slate-200 text-slate-700 border border-slate-300 font-bold";
-                                    shortLabel = "P";
-                                  } else if (status === 'Tatil') {
-                                    badgeClass = "bg-blue-50 text-blue-700 border border-blue-200 font-bold";
-                                    shortLabel = "T";
-                                  }
-
-                                  return (
-                                    <td 
-                                      key={i} 
-                                      onClick={() => setSelectedCell({
-                                        personelId: p.id,
-                                        personelName: `${p.ad} ${p.soyad}`,
-                                        date: d,
-                                        currentDurum: status as any,
-                                        currentMesai: mesai
-                                      })}
-                                      className="p-1 text-center cursor-pointer hover:bg-slate-200/40 transition duration-75"
-                                    >
-                                      <div className={`mx-auto rounded-lg py-1 px-1.5 text-[9px] inline-flex items-center justify-center space-x-1 ${badgeClass} min-w-[32px]`}>
-                                        <span>{shortLabel}</span>
-                                        {mesai > 0 && <span className="text-[7.5px] font-mono font-black opacity-80">+{mesai}</span>}
-                                      </div>
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  {/* Cell Edit Popover Mini-Modal */}
-                  {selectedCell && (
-                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[9999] flex items-center justify-center p-4">
-                      <div className="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
-                        <div className="flex justify-between items-center pb-2 border-b">
-                          <div>
-                            <span className="text-[8px] font-extrabold text-amber-600 uppercase tracking-widest block">PUANTAJ DÜZENLE</span>
-                            <h4 className="font-bold text-xs text-slate-900">{selectedCell.personelName}</h4>
-                          </div>
-                          <span className="text-[10px] text-slate-500 font-bold font-mono bg-slate-100 px-2 py-0.5 rounded-md">
-                            {selectedCell.date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', weekday: 'short' })}
-                          </span>
-                        </div>
-
-                        {/* Status Select */}
-                        <div className="space-y-1">
-                          <label className="text-[8px] font-bold text-slate-400 uppercase tracking-wider block">Katılım Durumu *</label>
-                          <select
-                            value={selectedCell.currentDurum}
-                            onChange={(e) => setSelectedCell(prev => prev ? { ...prev, currentDurum: e.target.value as any } : null)}
-                            className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none"
-                          >
-                            <option value="Girilmedi">Girilmedi (–)</option>
-                            <option value="Geldi">Geldi (G)</option>
-                            <option value="Yok">Yok (Y)</option>
-                            <option value="İzinli">İzinli (İ)</option>
-                            <option value="Raporlu">Raporlu (R)</option>
-                            <option value="Pazar">Pazar Tatili (P)</option>
-                            <option value="Tatil">Resmi Tatil (T)</option>
-                          </select>
-                        </div>
-
-                        {/* Overtime (Mesai) Selector */}
-                        <div className="space-y-1.5">
-                          <label className="text-[8px] font-bold text-slate-400 uppercase tracking-wider block">Mesai Saati (Fazla Çalışma) *</label>
-                          <div className="grid grid-cols-5 gap-1.5">
-                            {[0, 1, 2, 3, 4].map(val => (
-                              <button
-                                key={val}
-                                type="button"
-                                onClick={() => setSelectedCell(prev => prev ? { ...prev, currentMesai: val } : null)}
-                                className={`py-1.5 rounded-lg text-[10px] font-mono font-black border transition ${
-                                  selectedCell.currentMesai === val
-                                    ? 'bg-amber-500 border-amber-600 text-slate-950 shadow-sm'
-                                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                                }`}
-                              >
-                                +{val}
-                              </button>
-                            ))}
-                          </div>
-                          <input
-                            type="number"
-                            min="0"
-                            max="24"
-                            value={selectedCell.currentMesai}
-                            onChange={(e) => {
-                              const v = Number(e.target.value);
-                              setSelectedCell(prev => prev ? { ...prev, currentMesai: v } : null);
-                            }}
-                            className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none mt-1"
-                            placeholder="Örn: 2.5 veya diğer saat girin"
-                          />
-                        </div>
-
-                        {/* Buttons */}
-                        <div className="grid grid-cols-2 gap-2 pt-2">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedCell(null)}
-                            className="bg-slate-100 hover:bg-slate-200 text-slate-650 font-extrabold text-[10px] py-2.5 rounded-xl transition"
-                          >
-                            İptal Et
-                          </button>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const dVal = selectedCell.date;
-                              const pId = selectedCell.personelId;
-                              const status = selectedCell.currentDurum;
-                              const mesai = selectedCell.currentMesai;
-                              const dYear = dVal.getFullYear();
-                              const dMonth = dVal.getMonth() + 1;
-                              const dDay = dVal.getDate();
-                              const next: AylikYoklamaMap = {
-                                ...yoklamalar,
-                                [pId]: setYoklamaDay(yoklamalar[pId] as any, dYear, dMonth, dDay, {
-                                  durum: status,
-                                  mesaiSaati: mesai,
-                                  gonderen: currentUser?.email || 'formen',
-                                }),
-                              };
-                              if (saveYoklamalarNow) {
-                                await saveYoklamalarNow(next);
-                              } else {
-                                setYoklamalar(next);
-                              }
-
-                              await logActionToPersonelHistory(
-                                'Puantaj Güncelledi',
-                                `${selectedCell.personelName} için ${dVal.toLocaleDateString('tr-TR')} tarihli puantajı "${status}" ve ${mesai} saat mesai olarak güncelledi.`
-                              );
-
-                              showStatus('success', `📝 ${selectedCell.personelName} için puantaj kaydı güncellendi.`);
-                              setSelectedCell(null);
-                            }}
-                            className="bg-amber-600 hover:bg-amber-700 text-white font-black text-[10px] py-2.5 rounded-xl transition shadow-md border-b-2 border-amber-800"
-                          >
-                            Kaydet
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
               {activeTab === 'aylik_puantaj' && (
                 <div className="space-y-3.5 animate-in fade-in duration-150">
                   <div className="bg-white rounded-3xl border p-4 shadow-xs space-y-3">
@@ -3041,7 +2959,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                       </td>
                       <td className="border border-slate-200 bg-slate-50/50 p-2 font-bold text-slate-500 uppercase">👥 TOPLAM EKİP MEVCUDU</td>
                       <td className="border border-slate-200 p-2 font-bold text-slate-900 font-mono">
-                        {presentIds.length} Personel (Aktif Sahada)
+                        {selectedDateAttendance.gelenCount} Personel (Aktif Sahada)
                       </td>
                     </tr>
                   </tbody>
@@ -3053,15 +2971,15 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                     <span className="font-black text-[10px] text-slate-900">1. PUANTAJ VE YOKLAMA ÖZETİ</span>
                   </div>
                   <p className="text-[8.5px] text-slate-600 leading-normal font-medium">
-                    Bugün şantiyede aktif hazır bulunan <strong>{presentIds.length} personelin</strong> yoklaması ve mesai saatleri Formen tarafından e-imzalanarak sisteme işlenmiştir. Gelmeyen personeller puantaj dışı bırakılmıştır.
+                    Seçili günde şantiyede aktif hazır bulunan <strong>{selectedDateAttendance.gelenCount} personelin</strong> yoklaması ve mesai saatleri Formen tarafından e-imzalanarak sisteme işlenmiştir. Gelmeyen personeller puantaj dışı bırakılmıştır.
                   </p>
                   
                   {/* Small scrollable inline grid of present staff */}
                   <div className="grid grid-cols-2 gap-1 bg-slate-50 p-2 rounded-xl border border-slate-150 max-h-24 overflow-y-auto">
-                    {activeStaff.filter(p => presentIds.includes(p.id)).length === 0 ? (
+                    {activeStaff.filter(p => selectedDateAttendance.gelenIds.includes(p.id)).length === 0 ? (
                       <p className="col-span-2 text-slate-400 italic text-center py-2 text-[8px]">Bugün gelen personel kaydı girilmemiştir.</p>
                     ) : (
-                      activeStaff.filter(p => presentIds.includes(p.id)).map(p => (
+                      activeStaff.filter(p => selectedDateAttendance.gelenIds.includes(p.id)).map(p => (
                         <div key={p.id} className="flex items-center space-x-1 py-0.5 border-b border-slate-100/60">
                           <span className="text-[6.5px] text-emerald-600">●</span>
                           <span className="font-bold text-slate-800">{p.ad} {p.soyad}</span>
@@ -3084,12 +3002,12 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                   </div>
 
                   <div className="space-y-3">
-                    {daySahaFaaliyetleri.length === 0 ? (
+                    {selectedDateFaaliyetleri.length === 0 ? (
                       <div className="text-center py-4 bg-rose-50/50 border border-rose-100 rounded-xl text-rose-800 italic text-[9px]">
                         Bugün için girilmiş herhangi bir imalat faaliyeti bulunmamaktadır. Raporu göndermeden önce imalat girişi yapabilirsiniz.
                       </div>
                     ) : (
-                      daySahaFaaliyetleri.map((sf, idx) => (
+                      selectedDateFaaliyetleri.map((sf, idx) => (
                         <div key={sf.id} className="border border-slate-200 rounded-xl p-3 bg-slate-50/30 space-y-1.5">
                           <div className="flex justify-between items-center border-b border-slate-150 pb-1.5">
                             <span className="font-black text-slate-900 text-[10.5px]">
@@ -3130,8 +3048,8 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
 
                             {/* Activity photo inside report */}
                             <div className="flex flex-col items-center justify-center bg-slate-50 border rounded-xl p-1 shrink-0 h-24 overflow-hidden">
-                              {sf.fotoUrl ? (
-                                <img src={sf.fotoUrl} alt="Kanıt Görsel" className="w-full h-full object-cover rounded-lg" />
+                              {getFaaliyetFoto(sf) ? (
+                                <img src={getFaaliyetFoto(sf)} alt="Kanıt Görsel" className="w-full h-full object-cover rounded-lg" />
                               ) : (
                                 <div className="text-slate-400 italic text-[7.5px] text-center p-2">
                                   📷 Görsel Eklenmedi
@@ -3190,7 +3108,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                 className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-black text-[10px] py-2.5 px-6 rounded-xl transition cursor-pointer flex items-center space-x-1 border-b-4 border-amber-700"
               >
                 <Check size={12} />
-                <span>RAPORU ONAYLA &amp; ANA PROGRAMA GÖNDER</span>
+                <span>PDF OLARAK GÖNDER</span>
               </button>
             </div>
 
