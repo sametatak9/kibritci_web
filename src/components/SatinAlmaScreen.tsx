@@ -771,8 +771,8 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
               <p><strong>Onay Durumu:</strong> ${sa.onayDurumu}</p>
             </div>
             <div class="info-card">
-              <h4>🏢 TEDARİKÇİ CARİ KART</h4>
-              <p><strong>Firma Ünvanı:</strong> ${sa.cariFirma}</p>
+              <h4>🏗️ SİPARİŞ EDEN ŞANTİYE</h4>
+              <p><strong>Şantiye Ünvanı:</strong> ${sa.cariFirma}</p>
               <p><strong>Açıklama/Not:</strong> ${sa.aciklama || 'Belirtilmemiş'}</p>
             </div>
           </div>
@@ -1075,7 +1075,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
                           {sa.onayDurumu === 'ONAYLANDI' ? '✓ ONAYLANDI (KİLİTLİ)' : sa.onayDurumu}
                         </span>
                       </div>
-                      <h5 className="font-bold text-slate-950 mt-1">Firma: {sa.cariFirma} · Tarih: {sa.tarih}</h5>
+                      <h5 className="font-bold text-slate-950 mt-1">Şantiye: {sa.cariFirma} · Tarih: {sa.tarih}</h5>
                     </div>
 
                     {isLocked && (
