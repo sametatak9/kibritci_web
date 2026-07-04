@@ -7,6 +7,7 @@ import { SatinAlmaTalebi, SatinAlmaItem, CariKart, StokKart, StokKartIslem } fro
 import { compressImage } from '../lib/imageCompress';
 import { confirmSignedUploadWithMismatchCheck } from '../lib/evrakOnayUtils';
 import { findNearDuplicateStokName, normalizeCardName } from '../lib/duplicateNameUtils';
+import { fetchApiJson } from '../lib/apiClient';
 
 interface SatinAlmaScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
@@ -45,7 +46,9 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
   const [saAttachmentUrl, setSaAttachmentUrl] = useState<string | null>(null);
   const [saSearchKeyword, setSaSearchKeyword] = useState("");
   const [talepTab, setTalepTab] = useState<'MEVCUT' | 'ARSIV'>('MEVCUT');
-  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const legacyDocInputRef = useRef<HTMLInputElement | null>(null);
+  const [legacyImportLoading, setLegacyImportLoading] = useState(false);
+  const [selectedSaIds, setSelectedSaIds] = useState<Set<string>>(new Set());
 
   const [tempItem, setTempItem] = useState<Omit<SatinAlmaItem, 'id'>>({
     urunAdi: "",
@@ -514,88 +517,164 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const handleExportProgramJson = () => {
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      version: 'satin-alma-v1',
-      records: satinAlmaTalepleri,
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const exportSpecificTaleplerToExcel = async (rows: SatinAlmaTalebi[], fileName: string) => {
+    const { Workbook } = await import('exceljs');
+    const wb = new Workbook();
+    const ws = wb.addWorksheet('Satın Alma Raporu');
+    ws.addRow(['SA ID', 'Tarih', 'Cari Firma', 'Talep Eden', 'Durum', 'Arşiv', 'Açıklama']);
+    ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
+    rows.forEach((r) => {
+      ws.addRow([
+        r.saId,
+        r.tarih,
+        r.cariFirma,
+        r.talepEden,
+        r.onayDurumu,
+        r.arsivde ? 'EVET' : 'HAYIR',
+        r.aciklama || '',
+      ]);
+      r.kalemler.forEach((k) => {
+        ws.addRow(['', '', '↳ Kalem', k.urunAdi, `${k.miktar} ${k.birim}`, k.marka || '', k.kullanilacakYer || '']);
+      });
+    });
+    ws.columns = [
+      { width: 22 },
+      { width: 14 },
+      { width: 24 },
+      { width: 20 },
+      { width: 20 },
+      { width: 10 },
+      { width: 34 },
+    ];
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `satin-alma-program-format-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = fileName;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const handleImportProgramJson = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleExportSelectedExcel = async () => {
+    const selected = filteredTalepler.filter((x) => selectedSaIds.has(x.id));
+    if (selected.length === 0) {
+      alert('Lütfen önce raporlanacak kayıtları seçin.');
+      return;
+    }
+    await exportSpecificTaleplerToExcel(
+      selected,
+      `SatinAlma_Secili_Rapor_${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
+  };
+
+  const toIsoDate = (raw: unknown): string => {
+    const text = String(raw || '').trim();
+    if (!text) return new Date().toISOString().slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+    const m = text.match(/(\d{2})[./-](\d{2})[./-](\d{4})/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return new Date().toISOString().slice(0, 10);
+  };
+
+  const mapParsedLegacyToTalep = (parsed: any): SatinAlmaTalebi => {
+    const tarih = toIsoDate(parsed?.tarih);
+    const saId = buildSaId(tarih);
+    const firma = String(parsed?.firma || parsed?.cariUnvan || saSupplier || 'Eski Kayıt');
+    const kalemlerRaw = Array.isArray(parsed?.kalemler) ? parsed.kalemler : [];
+    const kalemler: SatinAlmaItem[] =
+      kalemlerRaw.length > 0
+        ? kalemlerRaw.map((k: any) => ({
+            id: `sai_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            urunAdi: String(k?.urunAdi || parsed?.detectedType || 'Malzeme'),
+            miktar: Number(k?.miktar || 1),
+            birim: String(k?.birim || 'ADET'),
+            marka: String(k?.marka || ''),
+            kullanilacakYer: String(k?.kullanilacakYer || ''),
+            aciklama: String(k?.aciklama || ''),
+          }))
+        : [
+            {
+              id: `sai_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+              urunAdi: String(parsed?.aciklama || 'Toplu Satın Alma Kalemi'),
+              miktar: 1,
+              birim: 'ADET',
+              marka: '',
+              kullanilacakYer: '',
+              aciklama: String(parsed?.aciklama || ''),
+            },
+          ];
+
+    const isSigned = Boolean(parsed?.imzaliEvrakUrl);
+    return {
+      id: `sa_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      saId,
+      tarih,
+      talepEden: currentUser?.email?.split('@')?.[0]?.toUpperCase() || 'SİSTEM AKTARIM',
+      cariFirma: firma,
+      aciklama: String(parsed?.aciklama || `${parsed?.detectedType || 'legacy'} belgesinden içe aktarıldı.`),
+      onayDurumu: isSigned ? 'ONAYLANDI' : 'BİLİNMİYOR',
+      kalemler,
+      eImzalar: [],
+      arsivde: false,
+    };
+  };
+
+  const handleImportLegacyPurchaseDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     try {
-      const text = await file.text();
-      const parsed = JSON.parse(text) as { records?: any[] } | any[];
-      const incoming = Array.isArray(parsed) ? parsed : Array.isArray(parsed.records) ? parsed.records : [];
-      if (incoming.length === 0) {
-        alert('Dosyada içe aktarılacak satın alma kaydı bulunamadı.');
-        return;
-      }
-
-      const normalized: SatinAlmaTalebi[] = incoming
-        .map((row) => ({
-          id: String(row.id || `sa_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`),
-          saId: String(row.saId || buildSaId(String(row.tarih || '').slice(0, 10) || saDate)),
-          tarih: String(row.tarih || saDate || new Date().toISOString().slice(0, 10)).slice(0, 10),
-          talepEden: String(row.talepEden || 'Bilinmiyor'),
-          cariFirma: String(row.cariFirma || 'Bilinmiyor'),
-          aciklama: String(row.aciklama || ''),
-          onayDurumu: sanitizeOnayDurumu(row.onayDurumu),
-          imzaliEvrakUrl: row.imzaliEvrakUrl || undefined,
-          imzaliEvrakUyumsuz: Boolean(row.imzaliEvrakUyumsuz),
-          gonderimTarihi: row.gonderimTarihi || undefined,
-          kalemler: Array.isArray(row.kalemler)
-            ? row.kalemler.map((k: any) => ({
-                id: String(k.id || `sai_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`),
-                urunAdi: String(k.urunAdi || 'Belirsiz Ürün'),
-                miktar: Number(k.miktar || 0),
-                birim: String(k.birim || 'ADET'),
-                marka: String(k.marka || ''),
-                kullanilacakYer: String(k.kullanilacakYer || ''),
-                aciklama: String(k.aciklama || ''),
-              }))
-            : [],
-          eImzalar: Array.isArray(row.eImzalar) ? row.eImzalar.map((x: unknown) => String(x)) : [],
-          arsivde: Boolean(row.arsivde),
-        }))
-        .filter((x) => x.saId && x.kalemler.length > 0);
-
-      if (normalized.length === 0) {
-        alert('Dosya formatı uygun değil. Program format JSON dışa aktarımını örnek alarak tekrar deneyin.');
-        return;
-      }
-
-      setSatinAlmaTalepleri((prev) => {
-        const bySa = new Map(prev.map((p) => [p.saId, p]));
-        normalized.forEach((item) => {
-          const existing = bySa.get(item.saId);
-          if (!existing) {
-            bySa.set(item.saId, item);
-            return;
-          }
-          bySa.set(item.saId, {
-            ...existing,
-            ...item,
-            id: existing.id || item.id,
-            kalemler: item.kalemler.length > 0 ? item.kalemler : existing.kalemler,
-          });
+      setLegacyImportLoading(true);
+      let dataUrl: string;
+      if (file.type.startsWith('image/')) {
+        const rawData = await new Promise<string>((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result || ''));
+          r.onerror = () => reject(new Error('Dosya okunamadı'));
+          r.readAsDataURL(file);
         });
-        return Array.from(bySa.values()).sort((a, b) => String(b.tarih).localeCompare(String(a.tarih), 'tr'));
-      });
-      alert(`${normalized.length} kayıt program formatından içe aktarıldı/güncellendi.`);
-    } catch (err) {
+        dataUrl = await compressImage(rawData, 1800, 1800, 0.8);
+      } else {
+        dataUrl = await new Promise<string>((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result || ''));
+          r.onerror = () => reject(new Error('PDF okunamadı'));
+          r.readAsDataURL(file);
+        });
+      }
+      const fileBase64 = dataUrl.split(',')[1];
+      const mimeType = file.type || 'application/pdf';
+      const resData = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
+        '/api/parse-legacy-document',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileBase64, mimeType, docType: 'auto' }),
+        }
+      );
+      if (!resData.success || !resData.data) {
+        throw new Error(resData.error || 'Belge içeriği ayrıştırılamadı.');
+      }
+
+      const talep = mapParsedLegacyToTalep(resData.data);
+      const normalizedKalemler = normalizeCartItemsByKnownStok(talep.kalemler);
+      const finalTalep = { ...talep, kalemler: normalizedKalemler };
+      setSatinAlmaTalepleri((prev) => [finalTalep, ...prev]);
+      syncPurchaseToStokCards(normalizedKalemler, finalTalep.saId, finalTalep.tarih, finalTalep.cariFirma);
+      checkAndSuggestCari(finalTalep.cariFirma);
+      if (addNotification) {
+        addNotification(`${finalTalep.saId} belgeden otomatik içe aktarıldı (${resData.data?.detectedType || 'auto'}).`);
+      }
+      alert(`Belge başarıyla içe aktarıldı.\nSA ID: ${finalTalep.saId}\nDurum: ${finalTalep.onayDurumu}`);
+    } catch (err: any) {
       console.error(err);
-      alert('JSON içe aktarımı başarısız. Dosya bozuk veya format hatalı.');
+      alert(err?.message || 'Belge içe aktarımı başarısız oldu.');
     } finally {
+      setLegacyImportLoading(false);
       e.target.value = '';
     }
   };
@@ -892,32 +971,34 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
+              onClick={() => legacyDocInputRef.current?.click()}
+              disabled={legacyImportLoading}
+              className="text-[10px] font-bold px-2.5 py-2 rounded-lg border bg-violet-600 text-white border-violet-700 hover:bg-violet-700 disabled:opacity-60"
+              title="PDF/Görsel satın alma evrakını AI ile okuyup programa içe aktarır."
+            >
+              {legacyImportLoading ? 'Belge Yükleniyor...' : 'PDF/Görselden Satın Alma Aktar (AI)'}
+            </button>
+            <input
+              ref={legacyDocInputRef}
+              type="file"
+              accept=".pdf,image/*"
+              className="hidden"
+              onChange={handleImportLegacyPurchaseDocument}
+            />
+            <button
+              type="button"
               onClick={handleExportSatinAlmaExcel}
               className="text-[10px] font-bold px-2.5 py-2 rounded-lg border bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700"
             >
-              Excel Raporu İndir
+              Tümünü Excel Raporla
             </button>
             <button
               type="button"
-              onClick={handleExportProgramJson}
-              className="text-[10px] font-bold px-2.5 py-2 rounded-lg border bg-slate-900 text-white border-slate-900 hover:bg-black"
-            >
-              Program Formatı JSON İndir
-            </button>
-            <button
-              type="button"
-              onClick={() => importInputRef.current?.click()}
+              onClick={handleExportSelectedExcel}
               className="text-[10px] font-bold px-2.5 py-2 rounded-lg border bg-blue-600 text-white border-blue-700 hover:bg-blue-700"
             >
-              Program Formatı JSON Yükle
+              Seçili Satın Almaları Excel Raporla
             </button>
-            <input
-              ref={importInputRef}
-              type="file"
-              accept=".json,application/json"
-              className="hidden"
-              onChange={handleImportProgramJson}
-            />
             <input
               type="text"
               placeholder="Kod veya firma ara..."
@@ -962,6 +1043,21 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
                       </span>
                     )}
                   </div>
+                  <label className="inline-flex items-center gap-2 text-[10px] font-bold text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={selectedSaIds.has(sa.id)}
+                      onChange={(e) =>
+                        setSelectedSaIds((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(sa.id);
+                          else next.delete(sa.id);
+                          return next;
+                        })
+                      }
+                    />
+                    Rapor için seç
+                  </label>
 
                   <p className="text-[10px] text-slate-500 font-medium">
                     Talep Eden: {sa.talepEden} · Açıklama: {sa.aciklama || "Yok"}
@@ -975,6 +1071,17 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
 
                   {/* Actions buttons */}
                   <div className="flex flex-wrap gap-2 pt-1.5 text-[10px]">
+                    <button
+                      onClick={() =>
+                        exportSpecificTaleplerToExcel(
+                          [sa],
+                          `SatinAlma_${String(sa.saId).replace(/[^a-zA-Z0-9-_]/g, '_')}.xlsx`
+                        )
+                      }
+                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer"
+                    >
+                      Excel İndir
+                    </button>
                     <button
                       onClick={() => handlePreviewPdf(sa)}
                       className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer"
