@@ -1110,6 +1110,34 @@ Tutanak i\xE7eri\u011Fini resmi, a\u011F\u0131rba\u015Fl\u0131 ve \u015Fantiye m
               type: import_genai2.Type.ARRAY,
               items: { type: import_genai2.Type.STRING },
               description: "Sahada g\xF6rev alan personellerin isimleri"
+            },
+            records: {
+              type: import_genai2.Type.ARRAY,
+              description: "Ayn\u0131 belgede birden fazla sat\u0131n alma kayd\u0131 varsa, her bir talep i\xE7in ayr\u0131 kay\u0131t dizisi",
+              items: {
+                type: import_genai2.Type.OBJECT,
+                properties: {
+                  tarih: { type: import_genai2.Type.STRING, description: "YYYY-MM-DD format\u0131nda tarih" },
+                  firma: { type: import_genai2.Type.STRING, description: "Tedarik\xE7i / cari firma" },
+                  cariUnvan: { type: import_genai2.Type.STRING, description: "Firma \xFCnvan\u0131" },
+                  aciklama: { type: import_genai2.Type.STRING, description: "Talep a\xE7\u0131klamas\u0131 veya not" },
+                  onayDurumu: { type: import_genai2.Type.STRING, description: "ONAYLANDI veya B\u0130L\u0130NM\u0130YOR" },
+                  kalemler: {
+                    type: import_genai2.Type.ARRAY,
+                    items: {
+                      type: import_genai2.Type.OBJECT,
+                      properties: {
+                        urunAdi: { type: import_genai2.Type.STRING },
+                        miktar: { type: import_genai2.Type.NUMBER },
+                        birim: { type: import_genai2.Type.STRING },
+                        birimFiyat: { type: import_genai2.Type.NUMBER },
+                        kdvOran: { type: import_genai2.Type.NUMBER },
+                        toplam: { type: import_genai2.Type.NUMBER }
+                      }
+                    }
+                  }
+                }
+              }
             }
           },
           required: ["detectedType"]
@@ -1122,6 +1150,9 @@ D\xF6k\xFCman tipleri \u015Funlar olabilir:
 4. 'hakedis' (Hakedi\u015F Kapa\u011F\u0131 / Ta\u015Feron Hakedi\u015Fi) - Ta\u015Feron hakedi\u015F raporlar\u0131, d\xF6nemler, hakedi\u015F bedeli, i\u015F a\xE7\u0131klamalar\u0131 buraya girer.
 5. 'yoklama' (Yoklama / Puantaj Listesi) - Personel yoklama listesi, puantaj tablosu, g\xFCnl\xFCk/ayl\u0131k yoklama durumlar\u0131 buraya girer.
 6. 'saha_faaliyet' (G\xFCnl\xFCk Saha Faaliyet Raporu) - \u015Eantiyede yap\u0131lan i\u015Fler, beton d\xF6k\xFCm\xFC, kal\u0131p i\u015Fleri, parsel, blok ve sahada \xE7al\u0131\u015Fan aktif personellerin adlar\u0131 buraya girer.
+
+E\u011Fer belge \xE7ok sayfal\u0131 ve birden fazla sat\u0131n alma talebi i\xE7eriyorsa, her talebi records dizisinde ayr\u0131 bir kay\u0131t olarak ver.
+Geriye d\xF6n\xFCk uyumluluk i\xE7in \xFCst seviyedeki alanlar\u0131 ilk kayda g\xF6re de doldur.
 
 L\xFCtfen en uygun kategoriyi 'detectedType' alan\u0131na atay\u0131p d\xF6k\xFCmandaki ilgili t\xFCm alanlar\u0131 b\xFCy\xFCk bir titizlikle \xE7\u0131kar.`;
       } else {

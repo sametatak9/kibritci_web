@@ -918,6 +918,34 @@ app.post("/api/parse-legacy-document", async (req, res) => {
             type: Type.ARRAY,
             items: { type: Type.STRING },
             description: "Sahada görev alan personellerin isimleri"
+          },
+          records: {
+            type: Type.ARRAY,
+            description: "Aynı belgede birden fazla satın alma kaydı varsa, her bir talep için ayrı kayıt dizisi",
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                tarih: { type: Type.STRING, description: "YYYY-MM-DD formatında tarih" },
+                firma: { type: Type.STRING, description: "Tedarikçi / cari firma" },
+                cariUnvan: { type: Type.STRING, description: "Firma ünvanı" },
+                aciklama: { type: Type.STRING, description: "Talep açıklaması veya not" },
+                onayDurumu: { type: Type.STRING, description: "ONAYLANDI veya BİLİNMİYOR" },
+                kalemler: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      urunAdi: { type: Type.STRING },
+                      miktar: { type: Type.NUMBER },
+                      birim: { type: Type.STRING },
+                      birimFiyat: { type: Type.NUMBER },
+                      kdvOran: { type: Type.NUMBER },
+                      toplam: { type: Type.NUMBER }
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         required: ["detectedType"]
@@ -930,6 +958,9 @@ Döküman tipleri şunlar olabilir:
 4. 'hakedis' (Hakediş Kapağı / Taşeron Hakedişi) - Taşeron hakediş raporları, dönemler, hakediş bedeli, iş açıklamaları buraya girer.
 5. 'yoklama' (Yoklama / Puantaj Listesi) - Personel yoklama listesi, puantaj tablosu, günlük/aylık yoklama durumları buraya girer.
 6. 'saha_faaliyet' (Günlük Saha Faaliyet Raporu) - Şantiyede yapılan işler, beton dökümü, kalıp işleri, parsel, blok ve sahada çalışan aktif personellerin adları buraya girer.
+
+Eğer belge çok sayfalı ve birden fazla satın alma talebi içeriyorsa, her talebi records dizisinde ayrı bir kayıt olarak ver.
+Geriye dönük uyumluluk için üst seviyedeki alanları ilk kayda göre de doldur.
 
 Lütfen en uygun kategoriyi 'detectedType' alanına atayıp dökümandaki ilgili tüm alanları büyük bir titizlikle çıkar.`;
     } else {

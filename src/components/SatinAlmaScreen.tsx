@@ -580,16 +580,36 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     return new Date().toISOString().slice(0, 10);
   };
 
-  const mapParsedLegacyToTalep = (parsed: any): SatinAlmaTalebi => {
+  const buildSaIdFromSet = (orderDate: string, usedSaIds: Set<string>) => {
+    const dateKey = String(orderDate || new Date().toISOString().split('T')[0]).replace(/-/g, '');
+    let seq = 1;
+    let candidate = `SA-${dateKey}-${String(seq).padStart(3, '0')}`;
+    while (usedSaIds.has(candidate)) {
+      seq += 1;
+      candidate = `SA-${dateKey}-${String(seq).padStart(3, '0')}`;
+    }
+    usedSaIds.add(candidate);
+    return candidate;
+  };
+
+  const mapParsedLegacyToTalep = (parsed: any, rootParsed: any, usedSaIds: Set<string>): SatinAlmaTalebi => {
     const tarih = toIsoDate(parsed?.tarih);
-    const saId = buildSaId(tarih);
-    const firma = String(parsed?.firma || parsed?.cariUnvan || saSupplier || 'Eski Kayıt');
+    const saId = buildSaIdFromSet(tarih, usedSaIds);
+    const firma = String(
+      parsed?.firma ||
+      parsed?.cariUnvan ||
+      rootParsed?.firma ||
+      rootParsed?.cariUnvan ||
+      saSupplier ||
+      'Eski Kayıt'
+    );
     const kalemlerRaw = Array.isArray(parsed?.kalemler) ? parsed.kalemler : [];
+    const detectedType = String(parsed?.detectedType || rootParsed?.detectedType || 'legacy');
     const kalemler: SatinAlmaItem[] =
       kalemlerRaw.length > 0
         ? kalemlerRaw.map((k: any) => ({
             id: `sai_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-            urunAdi: String(k?.urunAdi || parsed?.detectedType || 'Malzeme'),
+            urunAdi: String(k?.urunAdi || detectedType || 'Malzeme'),
             miktar: Number(k?.miktar || 1),
             birim: String(k?.birim || 'ADET'),
             marka: String(k?.marka || ''),
@@ -599,24 +619,29 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
         : [
             {
               id: `sai_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-              urunAdi: String(parsed?.aciklama || 'Toplu Satın Alma Kalemi'),
+              urunAdi: String(parsed?.aciklama || rootParsed?.aciklama || 'Toplu Satın Alma Kalemi'),
               miktar: 1,
               birim: 'ADET',
               marka: '',
               kullanilacakYer: '',
-              aciklama: String(parsed?.aciklama || ''),
+              aciklama: String(parsed?.aciklama || rootParsed?.aciklama || ''),
             },
           ];
 
-    const isSigned = Boolean(parsed?.imzaliEvrakUrl);
+    const isSigned = Boolean(parsed?.imzaliEvrakUrl || rootParsed?.imzaliEvrakUrl);
+    const onayDurumu = parsed?.onayDurumu
+      ? sanitizeOnayDurumu(parsed?.onayDurumu)
+      : isSigned
+      ? 'ONAYLANDI'
+      : 'BİLİNMİYOR';
     return {
       id: `sa_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       saId,
       tarih,
       talepEden: currentUser?.email?.split('@')?.[0]?.toUpperCase() || 'SİSTEM AKTARIM',
       cariFirma: firma,
-      aciklama: String(parsed?.aciklama || `${parsed?.detectedType || 'legacy'} belgesinden içe aktarıldı.`),
-      onayDurumu: isSigned ? 'ONAYLANDI' : 'BİLİNMİYOR',
+      aciklama: String(parsed?.aciklama || rootParsed?.aciklama || `${detectedType} belgesinden içe aktarıldı.`),
+      onayDurumu,
       kalemler,
       eImzalar: [],
       // Legacy belge importları doğrudan arşiv sekmesinde başlar.
@@ -661,16 +686,32 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
         throw new Error(resData.error || 'Belge içeriği ayrıştırılamadı.');
       }
 
-      const talep = mapParsedLegacyToTalep(resData.data);
-      const normalizedKalemler = normalizeCartItemsByKnownStok(talep.kalemler);
-      const finalTalep = { ...talep, kalemler: normalizedKalemler };
-      setSatinAlmaTalepleri((prev) => [finalTalep, ...prev]);
-      syncPurchaseToStokCards(normalizedKalemler, finalTalep.saId, finalTalep.tarih, finalTalep.cariFirma);
-      checkAndSuggestCari(finalTalep.cariFirma);
+      const parsedRoot = resData.data;
+      const rawRecords = Array.isArray(parsedRoot?.records) && parsedRoot.records.length > 0
+        ? parsedRoot.records
+        : [parsedRoot];
+      const usedSaIds = new Set(satinAlmaTalepleri.map((x) => x.saId));
+      const finalTalepler = rawRecords.map((record: any) => {
+        const talep = mapParsedLegacyToTalep(record, parsedRoot, usedSaIds);
+        const normalizedKalemler = normalizeCartItemsByKnownStok(talep.kalemler);
+        return { ...talep, kalemler: normalizedKalemler };
+      });
+      setSatinAlmaTalepleri((prev) => [...finalTalepler, ...prev]);
+      finalTalepler.forEach((talep) => {
+        syncPurchaseToStokCards(talep.kalemler, talep.saId, talep.tarih, talep.cariFirma);
+        checkAndSuggestCari(talep.cariFirma);
+      });
       if (addNotification) {
-        addNotification(`${finalTalep.saId} belgeden otomatik içe aktarıldı (${resData.data?.detectedType || 'auto'}).`);
+        const first = finalTalepler[0];
+        const suffix = finalTalepler.length > 1 ? ` ve ${finalTalepler.length - 1} kayıt daha` : '';
+        addNotification(
+          `${first?.saId || 'SA'} belgeden otomatik içe aktarıldı${suffix} (${parsedRoot?.detectedType || 'auto'}).`
+        );
       }
-      alert(`Belge başarıyla içe aktarıldı.\nSA ID: ${finalTalep.saId}\nDurum: ${finalTalep.onayDurumu}`);
+      alert(
+        `Belge başarıyla içe aktarıldı.\nAktarılan kayıt: ${finalTalepler.length}\n` +
+          `İlk SA ID: ${finalTalepler[0]?.saId || '-'}`
+      );
     } catch (err: any) {
       console.error(err);
       alert(err?.message || 'Belge içe aktarımı başarısız oldu.');
