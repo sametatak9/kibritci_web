@@ -8,7 +8,7 @@ import { KibritciLogo } from './KibritciLogo';
 import { 
   AracBakim, Demisbas, Tahsis, KampOdasi, KampKaydi, KampSarf, KampFaaliyet,
   SahaFaaliyeti, HazirTutanak, CariKart, StokKart, EpostaGonderim, Personel,
-  KampYerleske, KampKat, SahaGunRaporArsiv, SahaFaaliyetKategori, AylikYoklamaMap
+  KampYerleske, KampKat, SahaGunRaporArsiv, SahaFaaliyetTipi, AylikYoklamaMap
 } from '../types/erp';
 import { db } from '../lib/firebase';
 import {
@@ -37,7 +37,12 @@ import { collection, onSnapshot, getDocs, doc, setDoc, updateDoc, arrayUnion } f
 import { PARSEL_BLOK_MAP, defaultBlokForParsel } from '../data/parselBlokMap';
 import { normalizeDateKey, todayDateKey } from '../lib/dateKeyUtils';
 import { getYoklamaDay, isTaseronPersonel } from '../lib/yoklamaUtils';
-import { applySahaMesaiToYoklama, clampMesaiSaati, formatFaaliyetKategoriLabel } from '../lib/sahaFaaliyetUtils';
+import {
+  applySahaMesaiToYoklama,
+  formatMesaiFaaliyetLabel,
+  isMesaiSahaFaaliyet,
+  normalizeMesaiHours as normalizeSahaMesaiHours,
+} from '../lib/sahaFaaliyetUtils';
 import { ParselBlokAnalizPanel } from './ParselBlokAnalizPanel';
 
 interface IdariScreenProps {
@@ -105,7 +110,6 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   setYoklamalar,
   saveYoklamalarNow,
 }) => {
-  const MAX_MESAI_SAATI = 14;
 
   // ─────────────────────────────────────────────────────────────
   // 🚛 1. ARAÇ & DEMİRBAŞ STATES & EVENTS
@@ -682,17 +686,13 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [sahaIsciSayisi, setSahaIsciSayisi] = useState<number>(0);
   const [sahaFotoBase64, setSahaFotoBase64] = useState<string | undefined>(undefined);
   const [photoSelectedSim, setPhotoSelectedSim] = useState(false);
+  const [faaliyetTipi, setFaaliyetTipi] = useState<SahaFaaliyetTipi>('NORMAL');
+  const [personelMesaiSaatleri, setPersonelMesaiSaatleri] = useState<Record<string, number>>({});
   
   // Selected daily/monthly field worker selection
   const [selectedFieldStaff, setSelectedFieldStaff] = useState<string[]>([]);
   const [sahaStaffSearch, setSahaStaffSearch] = useState('');
-  const [sahaFaaliyetKategori, setSahaFaaliyetKategori] = useState<SahaFaaliyetKategori>('IMALAT');
-  const [sahaMesaiSaatleri, setSahaMesaiSaatleri] = useState<Record<string, number>>({});
   
-  const sahaKayitTarihiKey = useMemo(
-    () => normalizeDateKey(sahaKayitTarihi) || sahaKayitTarihi,
-    [sahaKayitTarihi]
-  );
   const [sahaSearchKeyword, setSahaSearchKeyword] = useState("");
   const [editingSahaId, setEditingSahaId] = useState<string | null>(null);
   const [deleteConfirmSahaId, setDeleteConfirmSahaId] = useState<string | null>(null);
@@ -715,12 +715,12 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const assignedPersonelOnKayitTarihi = useMemo(() => {
     const ids = new Set<string>();
     sahaFaaliyetleri.forEach((sf) => {
-      if (normalizeDateKey(sf.tarih) !== sahaKayitTarihiKey) return;
+      if (normalizeDateKey(sf.tarih) !== sahaKayitTarihi) return;
       if (editingSahaId && sf.id === editingSahaId) return;
       (sf.aktifPersonelListesi || []).forEach((id) => ids.add(id));
     });
     return ids;
-  }, [sahaFaaliyetleri, sahaKayitTarihiKey, editingSahaId]);
+  }, [sahaFaaliyetleri, sahaKayitTarihi, editingSahaId]);
 
   const geldiPersonelOnKayitTarihi = useMemo(() => {
     const { y, m, d } = sahaKayitDateParts;
@@ -925,6 +925,33 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     }
   };
 
+  const syncIdariMesaiFromFaaliyet = async (
+    tarih: string,
+    mesaiMap: Record<string, number> | undefined,
+    previousMesaiMap?: Record<string, number>
+  ) => {
+    if (!setYoklamalar) return;
+    const hasNew = mesaiMap && Object.values(mesaiMap).some((h) => Number(h) > 0);
+    const hasPrev = previousMesaiMap && Object.values(previousMesaiMap).some((h) => Number(h) > 0);
+    if (!hasNew && !hasPrev) return;
+    let next: AylikYoklamaMap = { ...(yoklamalar || {}) };
+    const gonderen = 'IDARI_SAHA';
+    if (hasPrev) next = applySahaMesaiToYoklama(next, tarih, previousMesaiMap, gonderen, 'subtract');
+    if (hasNew) next = applySahaMesaiToYoklama(next, tarih, mesaiMap, gonderen, 'add');
+    if (saveYoklamalarNow) await saveYoklamalarNow(next);
+    else setYoklamalar(next);
+  };
+
+  const buildMesaiMapFromSelection = (): Record<string, number> | undefined => {
+    if (faaliyetTipi !== 'MESAI_SAHA') return undefined;
+    const map = Object.fromEntries(
+      selectedFieldStaff
+        .map((id) => [id, normalizeSahaMesaiHours(Number(personelMesaiSaatleri[id] || 0))])
+        .filter(([, h]) => Number(h) > 0)
+    );
+    return Object.keys(map).length > 0 ? map : undefined;
+  };
+
   const resetSahaForm = () => {
     setEditingSahaId(null);
     setSahaAciklama('');
@@ -935,104 +962,59 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     setSahaIsciSayisi(0);
     setSelectedFieldStaff([]);
     setSahaStaffSearch('');
-    setSahaFaaliyetKategori('IMALAT');
-    setSahaMesaiSaatleri({});
-  };
-
-  const syncIdariMesaiToYoklama = async (
-    tarih: string,
-    personelIds: string[],
-    mesaiMap: Record<string, number> | undefined
-  ) => {
-    if (!setYoklamalar) return;
-    const next = applySahaMesaiToYoklama(
-      yoklamalar,
-      tarih,
-      mesaiMap,
-      personelIds,
-      'idari_saha',
-      MAX_MESAI_SAATI
-    );
-    if (saveYoklamalarNow) {
-      await saveYoklamalarNow(next);
-    } else {
-      setYoklamalar(next);
-    }
+    setFaaliyetTipi('NORMAL');
+    setPersonelMesaiSaatleri({});
   };
 
   const handleSaveSahaFaaliyeti = async () => {
     if (!sahaNitelik) {
-      alert('Lütfen iş niteliğini girin.');
+      alert("Lütfen iş niteliğini girin.");
       return;
     }
     if (!sahaAciklama) {
-      alert('Lütfen günlük çalışma açıklamasını girin.');
+      alert("Lütfen günlük çalışma açıklamasını girin.");
       return;
     }
-
-    const isMesaiFaaliyet = sahaFaaliyetKategori === 'MESAI_SAHA';
-    if (isMesaiFaaliyet && selectedFieldStaff.length === 0) {
-      alert('Mesai saha faaliyeti için en az bir personel seçin.');
+    if (faaliyetTipi === 'MESAI_SAHA' && !buildMesaiMapFromSelection()) {
+      alert('Mesai Saha Faaliyeti için en az bir personele mesai saati girin.');
       return;
-    }
-    if (isMesaiFaaliyet) {
-      const hasMesai = selectedFieldStaff.some(
-        (pid) => clampMesaiSaati(sahaMesaiSaatleri[pid] || 0, MAX_MESAI_SAATI) > 0
-      );
-      if (!hasMesai) {
-        alert('Mesai saha faaliyeti için personellere mesai saati girin.');
-        return;
-      }
     }
 
     const applyAutoCountsFromSelection = () => {
       if (selectedFieldStaffList.length === 0) return { usta: sahaUstaSayisi, isci: sahaIsciSayisi };
-      const usta = selectedFieldStaffList.filter((p) =>
-        String(p.gorev || '').toLocaleUpperCase('tr-TR').includes('USTA')
-      ).length;
+      const usta = selectedFieldStaffList.filter((p) => String(p.gorev || '').toLocaleUpperCase('tr-TR').includes('USTA')).length;
       const isci = Math.max(0, selectedFieldStaffList.length - usta);
       return { usta, isci };
     };
     const selectedCounts = applyAutoCountsFromSelection();
-    const faaliyetTarih = sahaKayitTarihiKey;
-    const mesaiPayload = isMesaiFaaliyet
-      ? Object.fromEntries(
-          selectedFieldStaff.map((pid) => [
-            pid,
-            clampMesaiSaati(sahaMesaiSaatleri[pid] || 0, MAX_MESAI_SAATI),
-          ])
-        )
-      : undefined;
+    const mesaiMap = buildMesaiMapFromSelection();
+    const previousRecord = editingSahaId ? sahaFaaliyetleri.find((sf) => sf.id === editingSahaId) : undefined;
 
     if (editingSahaId) {
       const faaliyetId = editingSahaId;
-      setSahaFaaliyetleri((prev) =>
-        prev.map((sf) => {
-          if (sf.id === editingSahaId) {
-            return {
-              ...sf,
-              tarih: faaliyetTarih,
-              isNiteligi: sahaNitelik,
-              parsel: sahaParsel,
-              blok: sahaBlok,
-              aciklama: sahaAciklama,
-              fotoUrl: sahaFotoBase64 !== undefined ? sahaFotoBase64 || undefined : sf.fotoUrl,
-              ustaSayisi: selectedCounts.usta,
-              isciSayisi: selectedCounts.isci,
-              aktifPersonelListesi: selectedFieldStaff,
-              faaliyetKategori: sahaFaaliyetKategori,
-              mesaiSaatleri: isMesaiFaaliyet ? mesaiPayload : undefined,
-              kaynakEkran: sf.kaynakEkran || 'IDARI_SAHA',
-            };
-          }
-          return sf;
-        })
-      );
-      if (isMesaiFaaliyet && mesaiPayload) {
-        await syncIdariMesaiToYoklama(faaliyetTarih, selectedFieldStaff, mesaiPayload);
-      }
+      const faaliyetTarih = sahaKayitTarihi;
+      setSahaFaaliyetleri(prev => prev.map(sf => {
+        if (sf.id === editingSahaId) {
+          return {
+            ...sf,
+            tarih: faaliyetTarih,
+            isNiteligi: sahaNitelik,
+            parsel: sahaParsel,
+            blok: sahaBlok,
+            aciklama: sahaAciklama,
+            fotoUrl: sahaFotoBase64 !== undefined ? (sahaFotoBase64 || undefined) : sf.fotoUrl,
+            ustaSayisi: selectedCounts.usta,
+            isciSayisi: selectedCounts.isci,
+            aktifPersonelListesi: selectedFieldStaff,
+            faaliyetTipi,
+            personelMesaiSaatleri: mesaiMap,
+            kaynakEkran: sf.kaynakEkran || 'IDARI_SAHA'
+          };
+        }
+        return sf;
+      }));
       if (selectedFieldStaff.length > 0) {
-        const assignmentText = `${faaliyetTarih} tarihinde ${sahaParsel} / ${sahaBlok} alanında "${sahaNitelik}" görevlendirmesi güncellendi (${formatFaaliyetKategoriLabel(sahaFaaliyetKategori)}).`;
+        const assignmentText = `${faaliyetTarih} tarihinde ${sahaParsel} / ${sahaBlok} alanında "${sahaNitelik}" görevlendirmesi güncellendi.`;
         const assignmentPromises = selectedFieldStaff.map(async (personelId) => {
           const personel = personeller.find((p) => p.id === personelId);
           if (!personel) return;
@@ -1048,33 +1030,37 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
         });
         await Promise.all(assignmentPromises);
       }
+      if (faaliyetTipi === 'MESAI_SAHA' || isMesaiSahaFaaliyet(previousRecord)) {
+        await syncIdariMesaiFromFaaliyet(
+          faaliyetTarih,
+          faaliyetTipi === 'MESAI_SAHA' ? mesaiMap : undefined,
+          isMesaiSahaFaaliyet(previousRecord) ? previousRecord?.personelMesaiSaatleri : undefined
+        );
+      }
       resetSahaForm();
-      alert('Saha faaliyeti başarıyla güncellendi.' + (isMesaiFaaliyet ? ' Mesai puantaja işlendi.' : ''));
+      alert("Saha faaliyeti başarıyla güncellendi.");
     } else {
       const faaliyetId = `sf_${Date.now()}`;
       const newLog: SahaFaaliyeti = {
         id: faaliyetId,
-        personelId: 'p1',
-        tarih: faaliyetTarih,
+        personelId: "p1",
+        tarih: sahaKayitTarihi,
         isNiteligi: sahaNitelik,
         parsel: sahaParsel,
         blok: sahaBlok,
         aciklama: sahaAciklama,
-        fotoUrl: sahaFotoBase64 || (photoSelectedSim ? 'saha_foto_example.jpg' : undefined),
+        fotoUrl: sahaFotoBase64 || (photoSelectedSim ? "saha_foto_example.jpg" : undefined),
         ustaSayisi: selectedCounts.usta,
         isciSayisi: selectedCounts.isci,
         aktifPersonelListesi: selectedFieldStaff,
-        faaliyetKategori: sahaFaaliyetKategori,
-        mesaiSaatleri: isMesaiFaaliyet ? mesaiPayload : undefined,
-        kaynakEkran: 'IDARI_SAHA',
+        faaliyetTipi,
+        personelMesaiSaatleri: mesaiMap,
+        kaynakEkran: 'IDARI_SAHA'
       };
 
-      setSahaFaaliyetleri((prev) => [newLog, ...prev]);
-      if (isMesaiFaaliyet && mesaiPayload) {
-        await syncIdariMesaiToYoklama(faaliyetTarih, selectedFieldStaff, mesaiPayload);
-      }
+      setSahaFaaliyetleri(prev => [newLog, ...prev]);
       if (selectedFieldStaff.length > 0) {
-        const assignmentText = `${newLog.tarih} tarihinde ${newLog.parsel} / ${newLog.blok} alanında "${newLog.isNiteligi}" görevlendirmesi (${formatFaaliyetKategoriLabel(sahaFaaliyetKategori)}).`;
+        const assignmentText = `${newLog.tarih} tarihinde ${newLog.parsel} / ${newLog.blok} alanında "${newLog.isNiteligi}" görevlendirmesi.`;
         const assignmentPromises = selectedFieldStaff.map(async (personelId) => {
           const personel = personeller.find((p) => p.id === personelId);
           if (!personel) return;
@@ -1090,8 +1076,13 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
         });
         await Promise.all(assignmentPromises);
       }
+      if (faaliyetTipi === 'MESAI_SAHA' && mesaiMap) {
+        await syncIdariMesaiFromFaaliyet(sahaKayitTarihi, mesaiMap);
+      }
       resetSahaForm();
-      alert('Günlük saha imalat raporu başarıyla kaydedildi.' + (isMesaiFaaliyet ? ' Mesai puantaja işlendi.' : ''));
+      alert(faaliyetTipi === 'MESAI_SAHA'
+        ? 'Mesai saha faaliyeti kaydedildi; mesai saatleri puantaja işlendi.'
+        : 'Günlük saha imalat raporu başarıyla kaydedildi.');
     }
   };
 
@@ -1104,9 +1095,9 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     setSahaAciklama(sf.aciklama);
     setSahaUstaSayisi(sf.ustaSayisi || 0);
     setSahaIsciSayisi(sf.isciSayisi || 0);
-    setSelectedFieldStaff(Array.isArray(sf.aktifPersonelListesi) ? [...sf.aktifPersonelListesi] : []);
-    setSahaFaaliyetKategori(sf.faaliyetKategori === 'MESAI_SAHA' ? 'MESAI_SAHA' : 'IMALAT');
-    setSahaMesaiSaatleri({ ...(sf.mesaiSaatleri || {}) });
+    setSelectedFieldStaff(Array.isArray(sf.aktifPersonelListesi) ? sf.aktifPersonelListesi : []);
+    setFaaliyetTipi(sf.faaliyetTipi || 'NORMAL');
+    setPersonelMesaiSaatleri({ ...(sf.personelMesaiSaatleri || {}) });
   };
 
   const handleCancelEditSaha = () => {
@@ -1317,6 +1308,11 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           <div className="flex justify-between items-start text-xs border-b pb-2 mb-2">
             <div>
               <span className="font-bold text-slate-800">{sf.isNiteligi}</span>
+              {isMesaiSahaFaaliyet(sf) && (
+                <span className="ml-2 text-[8px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-200 rounded-full px-2 py-0.5">
+                  Mesai Faaliyet
+                </span>
+              )}
               <p className="text-[9px] text-[#2563EB] font-bold mt-1">Saha Lokasyon: {sf.parsel} · {sf.blok} · {sf.tarih}</p>
             </div>
             {sf.kaynakEkran === 'FORMEN_MOBIL' && (
@@ -1327,6 +1323,12 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           </div>
 
           <p className="text-xs text-slate-600 font-sans tracking-tight leading-relaxed">{sf.aciklama}</p>
+
+          {isMesaiSahaFaaliyet(sf) && (
+            <p className="text-[10px] text-amber-800 font-semibold mt-2">
+              Mesai ile gerçekleştirildi: {formatMesaiFaaliyetLabel(sf, personeller) || '—'}
+            </p>
+          )}
 
           {(sf.ustaSayisi !== undefined || sf.isciSayisi !== undefined) && (
             <div className="mt-3 bg-slate-50 p-2.5 rounded-xl border border-slate-150 flex gap-4">
@@ -3083,38 +3085,33 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 <p className="text-[9px] text-slate-400 mt-1">Personel listesi seçilen tarihte yoklamada &quot;Geldi&quot; olan ve başka faaliyete atanmamış kişilerden oluşur.</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSahaFaaliyetKategori('IMALAT')}
-                  className={`py-2 px-2 rounded-lg text-[10px] font-bold border ${
-                    sahaFaaliyetKategori === 'IMALAT'
-                      ? 'bg-amber-50 border-amber-300 text-amber-900'
-                      : 'bg-slate-50 border-slate-200 text-slate-600'
-                  }`}
-                >
-                  İmalat Faaliyeti
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSahaFaaliyetKategori('MESAI_SAHA')}
-                  className={`py-2 px-2 rounded-lg text-[10px] font-bold border ${
-                    sahaFaaliyetKategori === 'MESAI_SAHA'
-                      ? 'bg-purple-50 border-purple-300 text-purple-900'
-                      : 'bg-slate-50 border-slate-200 text-slate-600'
-                  }`}
-                >
-                  Mesai Saha Faaliyeti
-                </button>
-              </div>
-              {sahaFaaliyetKategori === 'MESAI_SAHA' && (
-                <p className="text-[9px] text-purple-700 bg-purple-50 border border-purple-100 rounded-lg px-2 py-1">
-                  Girilen mesai saatleri Yoklama ve Puantaj tablosuna yazılır.
-                </p>
-              )}
-
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">İş Niteliği / Yapılan İmalat *</label>
+                <div className="grid grid-cols-2 gap-2 mt-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setFaaliyetTipi('NORMAL')}
+                    className={`py-2 px-2 rounded-lg text-[10px] font-bold border ${
+                      faaliyetTipi === 'NORMAL' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    Normal Saha Faaliyeti
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFaaliyetTipi('MESAI_SAHA')}
+                    className={`py-2 px-2 rounded-lg text-[10px] font-bold border ${
+                      faaliyetTipi === 'MESAI_SAHA' ? 'bg-amber-500 text-slate-950 border-amber-600' : 'bg-white text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    Mesai Saha Faaliyeti
+                  </button>
+                </div>
+                {faaliyetTipi === 'MESAI_SAHA' && (
+                  <p className="text-[9px] text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1 mb-2">
+                    Girilen mesai saatleri Yoklama ve Puantaj sekmesine otomatik aktarılır.
+                  </p>
+                )}
                 <input 
                   type="text"
                   placeholder="Örn: C30 Beton Dökümü, Demir Bağlama vb."
@@ -3244,30 +3241,29 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 <div className="text-[10px] text-slate-600 font-semibold">
                   Seçili Personel: {selectedFieldStaffList.length}
                 </div>
-                {sahaFaaliyetKategori === 'MESAI_SAHA' && selectedFieldStaff.length > 0 && (
-                  <div className="border-t border-slate-200 pt-2 space-y-1.5">
-                    <span className="font-bold text-purple-700 uppercase text-[9px] block">Personel Mesai Saatleri</span>
+                {faaliyetTipi === 'MESAI_SAHA' && selectedFieldStaff.length > 0 && (
+                  <div className="space-y-1.5 border border-amber-200 bg-amber-50/50 rounded-lg p-2 mt-2">
+                    <div className="text-[9px] font-black text-amber-800 uppercase">Personel Mesai Saatleri</div>
                     {selectedFieldStaff.map((pid) => {
                       const p = personeller.find((x) => x.id === pid);
+                      if (!p) return null;
                       return (
-                        <div key={pid} className="flex items-center justify-between gap-2 bg-white border border-purple-100 rounded-lg px-2 py-1">
-                          <span className="text-[10px] font-semibold text-slate-800 truncate">
-                            {p ? `${p.ad} ${p.soyad}` : pid}
-                          </span>
-                          <div className="flex items-center gap-1 shrink-0">
+                        <div key={pid} className="flex items-center justify-between gap-2 bg-white border border-amber-100 rounded-lg px-2 py-1">
+                          <span className="text-[10px] font-semibold text-slate-800">{p.ad} {p.soyad}</span>
+                          <div className="flex items-center gap-1">
                             <input
                               type="number"
                               min={0}
-                              max={MAX_MESAI_SAATI}
+                              max={14}
                               step={0.5}
-                              value={sahaMesaiSaatleri[pid] ?? ''}
+                              value={personelMesaiSaatleri[pid] ?? 0}
                               onChange={(e) =>
-                                setSahaMesaiSaatleri((prev) => ({
+                                setPersonelMesaiSaatleri((prev) => ({
                                   ...prev,
-                                  [pid]: clampMesaiSaati(parseFloat(e.target.value) || 0, MAX_MESAI_SAATI),
+                                  [pid]: normalizeSahaMesaiHours(parseFloat(e.target.value) || 0),
                                 }))
                               }
-                              className="w-16 text-center text-[10px] font-mono font-bold border border-purple-200 rounded py-0.5"
+                              className="w-16 text-center text-[10px] font-mono font-bold border border-slate-200 rounded-lg py-1"
                             />
                             <span className="text-[9px] text-slate-500">sa</span>
                           </div>

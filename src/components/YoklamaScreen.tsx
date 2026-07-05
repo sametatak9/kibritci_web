@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Calendar, Trash2, ShieldAlert, CheckCircle, FileText, ChevronRight, RefreshCw, Database, Undo2, Redo2, Camera } from 'lucide-react';
 import { Personel, AylikYoklamaMap, YoklamaDurum, SahaFaaliyeti } from '../types/erp';
 import { normalizeDateKey } from '../lib/dateKeyUtils';
+import { formatMesaiFaaliyetLabel, isMesaiSahaFaaliyet } from '../lib/sahaFaaliyetUtils';
 import { KibritciLogo } from './KibritciLogo';
 import { buildPersonelListForMonth, findPersonelByName, getYoklamaDay, isDayActiveForPersonel, isPersonelVisibleInMonth, normalizeTurkishName, setYoklamaDay } from '../lib/yoklamaUtils';
 import { importAllLegacyExcelMonths, importLegacyExcelMonth, aiMonthlyDataToLegacyMonth, resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
@@ -2319,20 +2320,25 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                       <div className="flex-1 p-4 min-w-0">
                         <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
                           <span className="text-[11px] font-bold text-slate-700">{tarihLabel}</span>
-                          <div className="flex gap-1 flex-wrap">
-                            {f.faaliyetKategori === 'MESAI_SAHA' && (
-                              <span className="text-[9px] font-bold uppercase tracking-wide text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full">
-                                Mesai Saha
-                              </span>
-                            )}
-                            {f.kaynakEkran && (
-                              <span className="text-[9px] font-bold uppercase tracking-wide text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                                {f.kaynakEkran.replace(/_/g, ' ')}
-                              </span>
-                            )}
-                          </div>
+                          {f.kaynakEkran && (
+                            <span className="text-[9px] font-bold uppercase tracking-wide text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                              {f.kaynakEkran.replace(/_/g, ' ')}
+                            </span>
+                          )}
                         </div>
-                        <div className="text-xs font-bold text-slate-900 mb-1">{f.isNiteligi || 'İş niteliği belirtilmemiş'}</div>
+                        <div className="text-xs font-bold text-slate-900 mb-1 flex items-center gap-2 flex-wrap">
+                          {f.isNiteligi || 'İş niteliği belirtilmemiş'}
+                          {isMesaiSahaFaaliyet(f) && (
+                            <span className="text-[8px] font-black uppercase bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                              Mesai Faaliyet
+                            </span>
+                          )}
+                        </div>
+                        {isMesaiSahaFaaliyet(f) && (
+                          <div className="text-[10px] text-amber-800 font-semibold mb-1.5">
+                            Mesai: {formatMesaiFaaliyetLabel(f, personeller) || '—'}
+                          </div>
+                        )}
                         {(f.parsel || f.blok) && (
                           <div className="text-[10px] text-slate-500 font-semibold mb-1.5">
                             {[f.parsel && `Parsel: ${f.parsel}`, f.blok && `Blok: ${f.blok}`].filter(Boolean).join(' · ')}
@@ -2340,20 +2346,6 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                         )}
                         {f.aciklama && (
                           <p className="text-[11px] text-slate-600 leading-relaxed">{f.aciklama}</p>
-                        )}
-                        {f.faaliyetKategori === 'MESAI_SAHA' && f.mesaiSaatleri && (
-                          <div className="mt-2 text-[10px] text-purple-700 font-semibold">
-                            Faaliyet mesaisi:{' '}
-                            {(f.aktifPersonelListesi || [])
-                              .map((pid) => {
-                                const saat = f.mesaiSaatleri?.[pid];
-                                if (!saat) return null;
-                                const p = personeller.find((x) => x.id === pid);
-                                return `${p ? `${p.ad} ${p.soyad}` : pid}: ${saat} sa`;
-                              })
-                              .filter(Boolean)
-                              .join(' · ') || '-'}
-                          </div>
                         )}
                         {!foto && (
                           <div className="mt-2 text-[10px] text-slate-400 italic flex items-center gap-1">

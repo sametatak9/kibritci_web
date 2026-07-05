@@ -6,13 +6,19 @@ import {
   FileSignature, Briefcase, RefreshCw, Send, Image as ImageIcon,
   Check, X, FileText, UserPlus, Upload, ShieldCheck, Edit2, ArrowLeft, Eye
 } from 'lucide-react';
-import { Personel, AylikYoklamaMap, YoklamaDurum, SahaFaaliyeti as SahaFaaliyetiType, SahaFaaliyetKategori } from '../types/erp';
-import { applySahaMesaiToYoklama, clampMesaiSaati, formatFaaliyetKategoriLabel } from '../lib/sahaFaaliyetUtils';
+import { Personel, AylikYoklamaMap, YoklamaDurum, SahaFaaliyeti as SahaFaaliyetiType, SahaFaaliyetTipi } from '../types/erp';
 import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { buildPersonelListForMonth, getYoklamaDay, isDayActiveForPersonel, isTaseronPersonel, setYoklamaDay } from '../lib/yoklamaUtils';
 import { buildFormenGunlukOzet } from '../lib/gunlukAkisUtils';
 import { buildWhatsAppUrl, isLegacySahaRecord } from '../lib/mobilOnayUtils';
+import {
+  applySahaMesaiToYoklama,
+  filterFormenDayFaaliyetleri,
+  formatMesaiFaaliyetLabel,
+  isMesaiSahaFaaliyet,
+  normalizeMesaiHours as normalizeSahaMesaiHours,
+} from '../lib/sahaFaaliyetUtils';
 import { PARSEL_BLOK_MAP, PARSEL_LIST, defaultBlokForParsel } from '../data/parselBlokMap';
 import { normalizeDateKey, formatDateLabelTr, todayDateKey } from '../lib/dateKeyUtils';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, arrayUnion } from 'firebase/firestore';
@@ -43,7 +49,6 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   isStandalone,
   kullanicilar = []
 }) => {
-  const MAX_MESAI_SAATI = 14;
   // Mobile Frame simulation toggle
   const [isMobileFrame, setIsMobileFrame] = useState(true);
   
@@ -102,27 +107,16 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
 
   // Selected Date - Defaults to today's date in Turkey time
   const [selectedDate, setSelectedDate] = useState(todayDateKey);
-  const selectedDateKey = useMemo(() => normalizeDateKey(selectedDate) || selectedDate, [selectedDate]);
 
   const formenEmail = currentUser?.email?.trim().toLowerCase() || '';
+  const formenUid = currentUser?.uid || '';
 
-  const isFormenOwnedRecord = (f: SahaFaaliyetiType): boolean => {
-    const rec = f as SahaFaaliyetiType & { kaydedenFormen?: string };
-    if (formenEmail && rec.kaydedenFormen?.trim().toLowerCase() === formenEmail) return true;
-    if (currentUser?.uid && f.kaydedenUid === currentUser.uid) return true;
-    return false;
-  };
-
-  const visibleSahaFaaliyetleri = sahaFaaliyetleri.filter((f) => {
-    if (isLegacySahaRecord(f.id)) return false;
-    if (isFormenOwnedRecord(f)) return true;
-    if (f.kaynakEkran === 'IDARI_SAHA') return true;
-    if (!f.kaydedenFormen && !f.kaydedenUid) return true;
-    return false;
-  });
-  const daySahaFaaliyetleri = visibleSahaFaaliyetleri.filter(
-    (f) => normalizeDateKey(f.tarih) === selectedDateKey
+  const selectedDateFaaliyetleri = useMemo(
+    () => filterFormenDayFaaliyetleri(sahaFaaliyetleri, selectedDate, formenEmail, formenUid, isLegacySahaRecord),
+    [sahaFaaliyetleri, selectedDate, formenEmail, formenUid]
   );
+
+  const daySahaFaaliyetleri = selectedDateFaaliyetleri;
 
   // Parsed date components
   const [year, month, day] = selectedDate.split('-').map(Number);
@@ -150,8 +144,8 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const [faaliyetPersonelSearch, setFaaliyetPersonelSearch] = useState('');
   const [sahaUstaSayisi, setSahaUstaSayisi] = useState<number>(0);
   const [sahaIsciSayisi, setSahaIsciSayisi] = useState<number>(0);
-  const [faaliyetKategori, setFaaliyetKategori] = useState<SahaFaaliyetKategori>('IMALAT');
-  const [faaliyetMesaiSaatleri, setFaaliyetMesaiSaatleri] = useState<Record<string, number>>({});
+  const [faaliyetTipi, setFaaliyetTipi] = useState<SahaFaaliyetTipi>('NORMAL');
+  const [personelMesaiSaatleri, setPersonelMesaiSaatleri] = useState<Record<string, number>>({});
 
   // 3. PERSONEL GİRİŞE YOLLA STATE
   const [yeniAd, setYeniAd] = useState('');
@@ -218,14 +212,11 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const getFaaliyetFoto = (sf: SahaFaaliyetiType | any): string => {
     return String(sf?.fotoUrl || sf?.sahaFotoBase64 || sf?.fotoBase64 || '').trim();
   };
-  const selectedDateFaaliyetleri = visibleSahaFaaliyetleri
-    .filter((f) => normalizeDateKey(f.tarih) === selectedDateKey)
-    .sort((a, b) => String(b.id).localeCompare(String(a.id), 'tr'));
 
   const assignedPersonelOnSelectedDate = useMemo(() => {
     const ids = new Set<string>();
     selectedDateFaaliyetleri.forEach((f) => {
-      if (editingFaaliyetId && f.id === editingFaaliyetId) return;
+      if (editingFaaliyetId === f.id) return;
       (f.aktifPersonelListesi || []).forEach((id) => ids.add(id));
     });
     return ids;
@@ -747,8 +738,8 @@ ${satirlar
     );
   };
 
+  // Submit Saha Faaliyeti
   const resetFaaliyetForm = () => {
-    setEditingFaaliyetId(null);
     setIsNiteligi('');
     setAciklama('');
     setFotoUrl(null);
@@ -756,13 +747,14 @@ ${satirlar
     setSahaIsciSayisi(0);
     setFaaliyetPersonelIds([]);
     setFaaliyetPersonelSearch('');
-    setFaaliyetKategori('IMALAT');
-    setFaaliyetMesaiSaatleri({});
+    setFaaliyetTipi('NORMAL');
+    setPersonelMesaiSaatleri({});
+    setEditingFaaliyetId(null);
   };
 
-  const startEditFaaliyet = (sf: SahaFaaliyetiType) => {
+  const loadFaaliyetIntoForm = (sf: SahaFaaliyetiType) => {
     setEditingFaaliyetId(sf.id);
-    setSelectedDate(normalizeDateKey(sf.tarih) || selectedDateKey);
+    setSelectedDate(normalizeDateKey(sf.tarih) || selectedDate);
     setIsNiteligi(sf.isNiteligi);
     setParsel(sf.parsel);
     setBlok(sf.blok);
@@ -771,21 +763,28 @@ ${satirlar
     setFaaliyetPersonelIds(Array.isArray(sf.aktifPersonelListesi) ? [...sf.aktifPersonelListesi] : []);
     setSahaUstaSayisi(sf.ustaSayisi || 0);
     setSahaIsciSayisi(sf.isciSayisi || 0);
-    setFaaliyetKategori(sf.faaliyetKategori === 'MESAI_SAHA' ? 'MESAI_SAHA' : 'IMALAT');
-    setFaaliyetMesaiSaatleri({ ...(sf.mesaiSaatleri || {}) });
+    setFaaliyetTipi(sf.faaliyetTipi || 'NORMAL');
+    setPersonelMesaiSaatleri({ ...(sf.personelMesaiSaatleri || {}) });
     setFaaliyetPersonelSearch('');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const syncMesaiFaaliyetToYoklama = async (tarih: string, personelIds: string[], mesaiMap: Record<string, number>) => {
-    const next = applySahaMesaiToYoklama(
-      yoklamalar,
-      tarih,
-      mesaiMap,
-      personelIds,
-      currentUser?.email || 'formen',
-      MAX_MESAI_SAATI
-    );
+  const syncMesaiFromFaaliyet = async (
+    tarih: string,
+    mesaiMap: Record<string, number> | undefined,
+    previousMesaiMap?: Record<string, number>
+  ) => {
+    const hasNew = mesaiMap && Object.values(mesaiMap).some((h) => Number(h) > 0);
+    const hasPrev = previousMesaiMap && Object.values(previousMesaiMap).some((h) => Number(h) > 0);
+    if (!hasNew && !hasPrev) return;
+
+    let next = { ...yoklamalar };
+    const gonderen = formenEmail || 'FORMEN_MOBIL';
+    if (hasPrev) {
+      next = applySahaMesaiToYoklama(next, tarih, previousMesaiMap, gonderen, 'subtract');
+    }
+    if (hasNew) {
+      next = applySahaMesaiToYoklama(next, tarih, mesaiMap, gonderen, 'add');
+    }
     if (saveYoklamalarNow) {
       await saveYoklamalarNow(next);
     } else {
@@ -793,7 +792,6 @@ ${satirlar
     }
   };
 
-  // Submit Saha Faaliyeti
   const handleSaveFaaliyet = async (e: React.SyntheticEvent) => {
     e.preventDefault();
     if (!isNiteligi) {
@@ -801,86 +799,84 @@ ${satirlar
       return;
     }
 
-    const tarihKey = normalizeDateKey(selectedDate) || selectedDateKey;
-    const isMesaiFaaliyet = faaliyetKategori === 'MESAI_SAHA';
-    if (isMesaiFaaliyet && faaliyetPersonelIds.length === 0) {
-      showStatus('error', 'Mesai saha faaliyeti için en az bir personel seçiniz.');
-      return;
-    }
-    if (isMesaiFaaliyet) {
-      const hasMesai = faaliyetPersonelIds.some((pid) => clampMesaiSaati(faaliyetMesaiSaatleri[pid] || 0, MAX_MESAI_SAATI) > 0);
+    if (faaliyetTipi === 'MESAI_SAHA') {
+      const hasMesai = faaliyetPersonelIds.some((id) => Number(personelMesaiSaatleri[id] || 0) > 0);
       if (!hasMesai) {
-        showStatus('error', 'Mesai saha faaliyeti için personellere mesai saati giriniz.');
+        showStatus('error', 'Mesai Saha Faaliyeti için en az bir personele mesai saati girin.');
         return;
       }
     }
 
-    const existing = editingFaaliyetId
+    const previousRecord = editingFaaliyetId
       ? sahaFaaliyetleri.find((f) => f.id === editingFaaliyetId)
       : undefined;
-    const faaliyetId = editingFaaliyetId || `sf_${Date.now()}`;
-    const mesaiPayload = isMesaiFaaliyet
-      ? Object.fromEntries(
-          faaliyetPersonelIds.map((pid) => [
-            pid,
-            clampMesaiSaati(faaliyetMesaiSaatleri[pid] || 0, MAX_MESAI_SAATI),
-          ])
-        )
-      : undefined;
 
-    const payload: SahaFaaliyetiType & { kaydedenFormen?: string } = {
-      ...(existing || {}),
-      id: faaliyetId,
-      personelId: existing?.personelId || currentUser?.uid || 'formen_uid',
-      tarih: tarihKey,
+    const faaliyetPayload: SahaFaaliyetiType & { kaydedenFormen?: string } = {
+      id: editingFaaliyetId || `sf_${Date.now()}`,
+      personelId: previousRecord?.personelId || currentUser?.uid || 'formen_uid',
+      tarih: selectedDate,
       isNiteligi,
       parsel,
       blok,
       aciklama,
       fotoUrl: fotoUrl || undefined,
       aktifPersonelListesi: faaliyetPersonelIds,
-      faaliyetKategori,
-      mesaiSaatleri: isMesaiFaaliyet ? mesaiPayload : undefined,
       ustaSayisi: sahaUstaSayisi,
       isciSayisi: sahaIsciSayisi,
-      kaydedenFormen: existing?.kaydedenFormen || formenEmail,
-      kaydeden: existing?.kaydeden || currentUser?.displayName || currentUser?.email || 'FORMEN',
-      kaydedenUid: existing?.kaydedenUid || currentUser?.uid || '',
-      kaynakEkran: existing?.kaynakEkran || 'FORMEN_MOBIL',
+      faaliyetTipi,
+      personelMesaiSaatleri:
+        faaliyetTipi === 'MESAI_SAHA'
+          ? Object.fromEntries(
+              faaliyetPersonelIds
+                .map((id) => [id, normalizeSahaMesaiHours(Number(personelMesaiSaatleri[id] || 0))])
+                .filter(([, h]) => Number(h) > 0)
+            )
+          : undefined,
+      kaydedenFormen: previousRecord?.kaydedenFormen || formenEmail,
+      kaydeden: previousRecord?.kaydeden || currentUser?.displayName || currentUser?.email || 'FORMEN',
+      kaydedenUid: previousRecord?.kaydedenUid || currentUser?.uid || '',
+      kaynakEkran: previousRecord?.kaynakEkran || 'FORMEN_MOBIL',
       programaGonderildi: true,
-      programaGonderimTarihi: existing?.programaGonderimTarihi || new Date().toISOString(),
-      iceriAktarimDurumu: existing?.iceriAktarimDurumu || 'BEKLIYOR',
+      programaGonderimTarihi: previousRecord?.programaGonderimTarihi || new Date().toISOString(),
+      iceriAktarimDurumu: previousRecord?.iceriAktarimDurumu || 'BEKLIYOR',
     };
 
     try {
-      await saveDocument('sahaFaaliyetleri', payload);
+      await saveDocument('sahaFaaliyetleri', faaliyetPayload);
       if (!editingFaaliyetId) {
-        await logAssignedPersonelHistory(payload);
+        await logAssignedPersonelHistory(faaliyetPayload);
       }
-      if (isMesaiFaaliyet && mesaiPayload) {
-        await syncMesaiFaaliyetToYoklama(tarihKey, faaliyetPersonelIds, mesaiPayload);
+      if (faaliyetTipi === 'MESAI_SAHA' || isMesaiSahaFaaliyet(previousRecord)) {
+        await syncMesaiFromFaaliyet(
+          selectedDate,
+          faaliyetTipi === 'MESAI_SAHA' ? faaliyetPayload.personelMesaiSaatleri : undefined,
+          isMesaiSahaFaaliyet(previousRecord) ? previousRecord?.personelMesaiSaatleri : undefined
+        );
       }
     } catch (err: any) {
-      showStatus('error', `Faaliyet ${editingFaaliyetId ? 'güncellenemedi' : 'gönderilemedi'}: ${err?.message || 'Bağlantı hatası'}`);
+      showStatus('error', `Faaliyet gönderilemedi: ${err?.message || 'Bağlantı hatası'}`);
       return;
     }
 
     setSahaFaaliyetleri((prev) => {
-      const exists = prev.some((f) => f.id === faaliyetId);
-      if (exists) return prev.map((f) => (f.id === faaliyetId ? payload : f));
-      return [payload, ...prev];
+      if (editingFaaliyetId) {
+        return prev.map((f) => (f.id === editingFaaliyetId ? faaliyetPayload : f));
+      }
+      return prev.some((f) => f.id === faaliyetPayload.id) ? prev : [faaliyetPayload, ...prev];
     });
 
-    logActionToPersonelHistory(
-      editingFaaliyetId ? 'Saha Faaliyeti Güncelledi' : 'Saha Faaliyeti Ekledi',
-      `"${isNiteligi}" — ${parsel} / ${blok} (${formatFaaliyetKategoriLabel(faaliyetKategori)})`
-    );
-    showStatus(
-      'success',
-      editingFaaliyetId
-        ? '✏️ Faaliyet güncellendi.' + (isMesaiFaaliyet ? ' Mesai saatleri puantaja işlendi.' : '')
-        : '🧱 Faaliyet kaydedildi ve ana programa gönderildi.' + (isMesaiFaaliyet ? ' Mesai saatleri puantaja işlendi.' : '')
-    );
+    if (editingFaaliyetId) {
+      logActionToPersonelHistory('Saha Faaliyeti Güncelledi', `"${isNiteligi}" faaliyet kaydı düzenlendi (${parsel} / ${blok}).`);
+      showStatus('success', '✏️ Faaliyet kaydı güncellendi.');
+    } else {
+      logActionToPersonelHistory('Saha Faaliyeti Ekledi', `"${isNiteligi}" iş niteliğiyle, ${parsel} / ${blok} bölgesinde yeni saha imalat faaliyeti kaydetti.`);
+      showStatus(
+        'success',
+        faaliyetTipi === 'MESAI_SAHA'
+          ? '🧱 Mesai saha faaliyeti kaydedildi; mesai saatleri puantaja işlendi.'
+          : '🧱 Faaliyet kaydedildi ve ana programa gönderildi.'
+      );
+    }
 
     resetFaaliyetForm();
   };
@@ -888,6 +884,9 @@ ${satirlar
   const handleDeleteFaaliyet = async (faaliyet: SahaFaaliyetiType) => {
     if (!window.confirm('Bu saha raporunu silmek istediğinize emin misiniz?')) return;
     try {
+      if (isMesaiSahaFaaliyet(faaliyet)) {
+        await syncMesaiFromFaaliyet(faaliyet.tarih, undefined, faaliyet.personelMesaiSaatleri);
+      }
       await deleteDoc(doc(db, 'sahaFaaliyetleri', faaliyet.id));
       setLastDeletedFaaliyet(faaliyet);
       setSahaFaaliyetleri((prev) => prev.filter((item) => item.id !== faaliyet.id));
@@ -1583,11 +1582,11 @@ ${satirlar
 
                   {editingFaaliyetId && (
                     <div className="bg-blue-50 border border-blue-200 p-2.5 rounded-2xl flex items-center justify-between text-[9px] font-bold text-blue-900 shadow-sm mb-3">
-                      <span>✏️ Düzenleme modu — kayıt güncellenecek (yeni kayıt açılmaz)</span>
+                      <span>✏️ Kayıt düzenleniyor — değişiklikleri kaydetmek için formu kullanın.</span>
                       <button
                         type="button"
                         onClick={resetFaaliyetForm}
-                        className="text-blue-700 hover:text-blue-900 underline"
+                        className="bg-white border border-blue-200 text-blue-700 px-2 py-1 rounded-lg text-[8px] uppercase"
                       >
                         İptal
                       </button>
@@ -1606,33 +1605,34 @@ ${satirlar
                       </span>
                     </div>
 
+                    {/* Faaliyet tipi */}
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        onClick={() => setFaaliyetKategori('IMALAT')}
-                        className={`py-2 px-2 rounded-xl text-[9px] font-bold border transition ${
-                          faaliyetKategori === 'IMALAT'
-                            ? 'bg-amber-100 border-amber-400 text-amber-950'
-                            : 'bg-slate-50 border-slate-200 text-slate-600'
+                        onClick={() => setFaaliyetTipi('NORMAL')}
+                        className={`py-2 px-2 rounded-xl text-[9px] font-black border transition ${
+                          faaliyetTipi === 'NORMAL'
+                            ? 'bg-slate-900 text-white border-slate-900'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                         }`}
                       >
-                        İmalat Faaliyeti
+                        Normal Saha Faaliyeti
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFaaliyetKategori('MESAI_SAHA')}
-                        className={`py-2 px-2 rounded-xl text-[9px] font-bold border transition ${
-                          faaliyetKategori === 'MESAI_SAHA'
-                            ? 'bg-purple-100 border-purple-400 text-purple-950'
-                            : 'bg-slate-50 border-slate-200 text-slate-600'
+                        onClick={() => setFaaliyetTipi('MESAI_SAHA')}
+                        className={`py-2 px-2 rounded-xl text-[9px] font-black border transition ${
+                          faaliyetTipi === 'MESAI_SAHA'
+                            ? 'bg-amber-500 text-slate-950 border-amber-600'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-amber-50'
                         }`}
                       >
                         Mesai Saha Faaliyeti
                       </button>
                     </div>
-                    {faaliyetKategori === 'MESAI_SAHA' && (
-                      <p className="text-[8px] text-purple-700 font-semibold bg-purple-50 border border-purple-100 rounded-lg px-2 py-1">
-                        Seçilen personellere girilen mesai saatleri Yoklama ve Puantaj tablosuna otomatik yazılır.
+                    {faaliyetTipi === 'MESAI_SAHA' && (
+                      <p className="text-[8px] text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5 leading-snug">
+                        Seçilen personellere girilen mesai saatleri otomatik olarak Yoklama ve Puantaj sekmesine işlenir.
                       </p>
                     )}
 
@@ -1776,33 +1776,29 @@ ${satirlar
                       <div className="text-[10px] text-slate-700 font-semibold">
                         Seçili Personel: {faaliyetPersonelIds.length}
                       </div>
-                      {faaliyetKategori === 'MESAI_SAHA' && faaliyetPersonelIds.length > 0 && (
-                        <div className="border-t border-slate-200 pt-2 space-y-1.5">
-                          <label className="font-bold text-purple-700 uppercase text-[8px] tracking-wider block">
-                            Personel Mesai Saatleri
-                          </label>
+                      {faaliyetTipi === 'MESAI_SAHA' && faaliyetPersonelIds.length > 0 && (
+                        <div className="space-y-1.5 border border-amber-200 bg-amber-50/40 rounded-xl p-2">
+                          <div className="text-[8px] font-black text-amber-800 uppercase">Personel Mesai Saatleri</div>
                           {faaliyetPersonelIds.map((pid) => {
                             const p = personeller.find((x) => x.id === pid);
+                            if (!p) return null;
                             return (
-                              <div key={pid} className="flex items-center justify-between gap-2 bg-white border border-purple-100 rounded-lg px-2 py-1">
-                                <span className="text-[9px] font-bold text-slate-800 truncate">
-                                  {p ? `${p.ad} ${p.soyad}` : pid}
-                                </span>
+                              <div key={pid} className="flex items-center justify-between gap-2 bg-white border border-amber-100 rounded-lg px-2 py-1">
+                                <span className="text-[9px] font-bold text-slate-800 truncate">{p.ad} {p.soyad}</span>
                                 <div className="flex items-center gap-1 shrink-0">
                                   <input
                                     type="number"
                                     min={0}
-                                    max={MAX_MESAI_SAATI}
+                                    max={14}
                                     step={0.5}
-                                    value={faaliyetMesaiSaatleri[pid] ?? ''}
+                                    value={personelMesaiSaatleri[pid] ?? 0}
                                     onChange={(e) =>
-                                      setFaaliyetMesaiSaatleri((prev) => ({
+                                      setPersonelMesaiSaatleri((prev) => ({
                                         ...prev,
-                                        [pid]: clampMesaiSaati(parseFloat(e.target.value) || 0, MAX_MESAI_SAATI),
+                                        [pid]: normalizeSahaMesaiHours(parseFloat(e.target.value) || 0),
                                       }))
                                     }
-                                    className="w-14 text-center text-[9px] font-mono font-bold border border-purple-200 rounded py-0.5"
-                                    placeholder="0"
+                                    className="w-14 text-center bg-slate-50 border border-slate-200 rounded-lg py-0.5 text-[9px] font-mono font-bold"
                                   />
                                   <span className="text-[8px] text-slate-500">sa</span>
                                 </div>
@@ -1905,9 +1901,7 @@ ${satirlar
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2 text-slate-950">
                       <FileText size={14} className="text-amber-500" />
-                      <span className="font-bold text-[10px] uppercase tracking-wider">
-                        SEÇİLEN GÜN SAHA KAYITLARI ({formatDateLabelTr(selectedDateKey)})
-                      </span>
+                      <span className="font-bold text-[10px] uppercase tracking-wider">SEÇİLEN GÜN SAHA KAYITLARI</span>
                     </div>
                     <span className="text-[9px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
                       Gelen: {selectedDateAttendance.gelenCount}
@@ -1936,32 +1930,24 @@ ${satirlar
                     )}
                     {selectedDateFaaliyetleri.map((sf) => (
                       <div key={sf.id} className="border border-slate-200 rounded-xl p-2.5 text-[10px] space-y-1.5">
-                        <div className="flex justify-between gap-2 flex-wrap">
-                          <div className="font-bold text-slate-900">{sf.isNiteligi}</div>
-                          <div className="flex items-center gap-1.5">
-                            {sf.faaliyetKategori === 'MESAI_SAHA' && (
-                              <span className="text-[8px] font-bold bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded">
-                                Mesai Saha
+                        <div className="flex justify-between gap-2">
+                          <div className="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                            {sf.isNiteligi}
+                            {isMesaiSahaFaaliyet(sf) && (
+                              <span className="text-[7px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded">
+                                Mesai Faaliyet
                               </span>
                             )}
-                            <span className="text-[8px] text-slate-500 font-mono">{normalizeDateKey(sf.tarih)}</span>
                           </div>
+                          <span className="text-[8px] text-slate-500 font-mono">{formatDateLabelTr(sf.tarih)}</span>
                         </div>
                         <div className="text-[9px] text-slate-500">{sf.parsel} / {sf.blok}</div>
-                        {!!sf.aciklama && <div className="text-[9px] text-slate-700 line-clamp-2">{sf.aciklama}</div>}
-                        {sf.faaliyetKategori === 'MESAI_SAHA' && sf.mesaiSaatleri && (
-                          <div className="text-[8px] text-purple-700 font-semibold">
-                            Mesai: {(sf.aktifPersonelListesi || [])
-                              .map((pid) => {
-                                const p = personeller.find((x) => x.id === pid);
-                                const saat = sf.mesaiSaatleri?.[pid];
-                                if (!saat) return null;
-                                return `${p ? `${p.ad} ${p.soyad}` : pid}: ${saat}sa`;
-                              })
-                              .filter(Boolean)
-                              .join(' · ') || '-'}
+                        {isMesaiSahaFaaliyet(sf) && (
+                          <div className="text-[8px] text-amber-800 font-semibold">
+                            Mesai: {formatMesaiFaaliyetLabel(sf, personeller) || '—'}
                           </div>
                         )}
+                        {!!sf.aciklama && <div className="text-[9px] text-slate-700 line-clamp-2">{sf.aciklama}</div>}
                         <div className="flex flex-wrap gap-2 justify-end pt-1 border-t border-slate-100">
                           <button
                             type="button"
@@ -1986,7 +1972,7 @@ ${satirlar
                           </button>
                           <button
                             type="button"
-                            onClick={() => startEditFaaliyet(sf)}
+                            onClick={() => loadFaaliyetIntoForm(sf)}
                             className="text-[9px] bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-1 rounded-lg font-bold"
                           >
                             Düzelt
@@ -2879,21 +2865,24 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                     ) : (
                       selectedDateFaaliyetleri.map((sf, idx) => (
                         <div key={sf.id} className="border border-slate-200 rounded-xl p-3 bg-slate-50/30 space-y-1.5">
-                          <div className="flex justify-between items-center border-b border-slate-150 pb-1.5 flex-wrap gap-1">
-                            <span className="font-black text-slate-900 text-[10.5px]">
+                          <div className="flex justify-between items-center border-b border-slate-150 pb-1.5">
+                            <span className="font-black text-slate-900 text-[10.5px] flex items-center gap-1.5 flex-wrap">
                               {idx + 1}. {sf.isNiteligi}
-                            </span>
-                            <div className="flex items-center gap-1">
-                              {sf.faaliyetKategori === 'MESAI_SAHA' && (
-                                <span className="bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded text-[7px] uppercase">
-                                  Mesai Saha
+                              {isMesaiSahaFaaliyet(sf) && (
+                                <span className="text-[7px] font-black uppercase bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">
+                                  Mesai Faaliyet
                                 </span>
                               )}
-                              <span className="bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded text-[8px] uppercase">
-                                📍 {sf.parsel} / {sf.blok}
-                              </span>
-                            </div>
+                            </span>
+                            <span className="bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded text-[8px] uppercase">
+                              📍 {sf.parsel} / {sf.blok}
+                            </span>
                           </div>
+                          {isMesaiSahaFaaliyet(sf) && (
+                            <div className="text-[8px] text-amber-900 font-bold bg-amber-50 border border-amber-100 rounded-lg px-2 py-1">
+                              Bu faaliyet mesai ile gerçekleştirildi: {formatMesaiFaaliyetLabel(sf, personeller) || '—'}
+                            </div>
+                          )}
 
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div className="md:col-span-2 space-y-1.5">
@@ -2910,11 +2899,9 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                                   {sf.aktifPersonelListesi && sf.aktifPersonelListesi.length > 0 ? (
                                     sf.aktifPersonelListesi.map(pid => {
                                       const p = personeller.find(x => x.id === pid);
-                                      const mesaiSaat = sf.mesaiSaatleri?.[pid];
                                       return (
                                         <span key={pid} className="bg-slate-100 border border-slate-250 text-slate-700 font-semibold py-0.5 px-1.5 rounded-md text-[8px] whitespace-nowrap">
                                           {p ? `${p.ad} ${p.soyad}` : 'Personel'}
-                                          {sf.faaliyetKategori === 'MESAI_SAHA' && mesaiSaat ? ` (+${mesaiSaat}sa mesai)` : ''}
                                         </span>
                                       );
                                     })
