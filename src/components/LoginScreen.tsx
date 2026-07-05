@@ -16,6 +16,7 @@ import {
   queueSignupFallback,
 } from '../lib/bekleyenUyelik';
 import { Building2, Lock, Mail, Loader2, ArrowRight, CheckCircle2, AlertTriangle, ShieldCheck, User, Fingerprint, PenTool, Check, Trash, Smartphone } from 'lucide-react';
+import { KibritciLogo } from './KibritciLogo';
 
 function withReadTimeout<T>(promise: Promise<T>, ms = 8000): Promise<T> {
   return Promise.race([
@@ -513,11 +514,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         
         {/* Company Header Card */}
         <div className="text-center space-y-3">
-          <div className="mx-auto w-14 h-14 bg-amber-500 rounded-2xl flex items-center justify-center text-slate-950 shadow-lg transform rotate-3 hover:rotate-0 transition duration-300">
-            <Building2 size={28} className="stroke-[2.5]" />
-          </div>
+          <KibritciLogo size="xl" className="mx-auto h-16" />
           <div>
-            <h1 className="text-lg font-black tracking-widest text-[#F59E0B]">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h1>
             <p className="text-[10px] font-mono tracking-widest text-slate-400 uppercase mt-0.5">Bulut ERP Şantiye Portal Girişi</p>
           </div>
         </div>

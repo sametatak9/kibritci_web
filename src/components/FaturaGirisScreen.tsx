@@ -10,6 +10,7 @@ import { fileToAiPayload } from '../lib/aiFileUpload';
 import { faturaIsLinked } from '../lib/documentLinkUtils';
 import { BagliEvraklarListesi } from './BagliEvraklarListesi';
 import { EvrakTabBilgi } from './EvrakTabBilgi';
+import { kibritciLogoHtml } from '../lib/kibritciBrand';
 
 interface FaturaGirisScreenProps {
   faturalar: Fatura[];
@@ -342,8 +343,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
         <body>
           <div class="corporate-header">
             <div class="logo">
-              <svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 2L2 22h20L12 2zm0 3.5L18.5 19H5.5L12 5.5z"/></svg>
-              KİBRİTÇİ İNŞAAT A.Ş.
+              ${kibritciLogoHtml(48)}
             </div>
             <div class="title-area">
               <h2>RESMİ FATURA İNCELEME FORMU</h2>
@@ -466,7 +466,8 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
           </style>
         </head>
         <body>
-          <h1>KİBRİTÇİ İNŞAAT — FATURA EVRAK ARŞİV RAPORU</h1>
+          <div style="margin-bottom:12px;">${kibritciLogoHtml(44)}</div>
+          <h1 style="font-size:14px;margin:0 0 8px;">FATURA EVRAK ARŞİV RAPORU</h1>
           <p>Kayıt sayısı: ${faturalar.length} • Üretim: ${new Date().toLocaleString('tr-TR')}</p>
           <table>
             <thead>

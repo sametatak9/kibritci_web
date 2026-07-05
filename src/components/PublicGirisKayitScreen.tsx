@@ -5,7 +5,6 @@ import {
   Loader2,
   AlertTriangle,
   CheckCircle2,
-  IdCard,
 } from 'lucide-react';
 import { Personel } from '../types/erp';
 import { fetchCollection, saveDocument } from '../lib/firebase';
@@ -13,6 +12,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { fetchApiJson } from '../lib/apiClient';
 import { compressImage } from '../lib/imageCompress';
+import { KibritciLogo } from './KibritciLogo';
 
 export interface PersonelGirisTalebi {
   id: string;
@@ -274,11 +274,9 @@ const PublicGirisKayitForm: React.FC<PublicGirisKayitScreenProps> = ({
     <div className="min-h-screen bg-slate-950 flex flex-col items-center text-slate-100 font-sans p-4 overflow-y-auto">
       <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl my-4">
         <div className="bg-gradient-to-r from-amber-600 to-amber-500 p-5 flex items-center gap-3">
-          <div className="w-11 h-11 bg-slate-950 rounded-2xl flex items-center justify-center">
-            <IdCard className="w-6 h-6 text-amber-400" />
-          </div>
+          <KibritciLogo size="md" className="h-10" />
           <div>
-            <h1 className="text-sm font-black tracking-wider">KİBRİTÇİ — PERSONEL İŞE GİRİŞ KAYDI</h1>
+            <h1 className="text-sm font-black tracking-wider">PERSONEL İŞE GİRİŞ KAYDI</h1>
             <p className="text-[10px] text-amber-100 font-mono">Talep: {talep.id}</p>
           </div>
         </div>

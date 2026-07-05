@@ -643,7 +643,6 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                   <div className="rpt-header-brand">
                     <KibritciLogo size="lg" showText={false} className="h-11 rpt-logo" />
                     <div>
-                      <h2>KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h2>
                       <p>ZER YAPI · Aylık Hakediş & Faaliyet Mutabakatı</p>
                     </div>
                   </div>

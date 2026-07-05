@@ -7,6 +7,7 @@ import { AracBakim, Personel } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { KibritciLogo } from './KibritciLogo';
 
 interface LojistikScreenProps {
   irsaliyeler: any[];
@@ -1316,7 +1317,9 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                   
                   {/* Print Header */}
                   <div className="text-center space-y-1.5 pb-4 border-b-2 border-slate-950">
-                    <h3 className="text-xs font-black tracking-wide uppercase">KİBRİTÇİ İNŞAAT A.Ş.</h3>
+                    <div className="flex justify-center">
+                      <KibritciLogo size="md" className="h-10" />
+                    </div>
                     <h4 className="text-[11px] font-bold">ŞÖFÖR VE SEVKİYAT GÜNLÜK FAALİYET MUTABAKATI</h4>
                     <div className="flex justify-between text-[9px] pt-1 px-1">
                       <span>Sürücü: {currentChauffeurName}</span>
@@ -1562,10 +1565,12 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                     <div className="border border-slate-350/60 p-6 rounded-2xl bg-white text-slate-900 font-mono text-xs space-y-6 printable-document">
                       {/* Report Header */}
                       <div className="border-b-2 border-slate-900 pb-4 flex justify-between items-center">
-                        <div>
-                          <h3 className="text-sm font-black uppercase text-[#1E4E78]">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h3>
+                        <div className="flex items-center gap-3">
+                          <KibritciLogo size="md" className="h-10" />
+                          <div>
                           <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Lojistik ve Vasıta Yönetim Müdürlüğü</p>
                           <p className="text-[9px] text-slate-800 mt-1">Dönem: <strong className="font-bold">{raporAy}/{raporYil} Aylık Raporu</strong></p>
+                          </div>
                         </div>
                         <div className="text-right">
                           <span className="border border-slate-900 text-[8px] font-bold px-2 py-0.5 bg-slate-50 uppercase tracking-widest block mb-1">

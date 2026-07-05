@@ -23,6 +23,8 @@ import { PARSEL_BLOK_MAP, PARSEL_LIST, defaultBlokForParsel } from '../data/pars
 import { normalizeDateKey, formatDateLabelTr, todayDateKey } from '../lib/dateKeyUtils';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { downloadCsv } from '../lib/reportExport';
+import { KibritciLogo } from './KibritciLogo';
+import { KIBRITCI_LOGO_PATH, kibritciLogoHtml } from '../lib/kibritciBrand';
 
 interface FormenScreenProps {
   personeller: Personel[];
@@ -972,7 +974,7 @@ ${satirlar
       const html = `<!doctype html><html><head><meta charset="utf-8"/><title>Formen Raporu ${selectedDate}</title>
       <style>body{font-family:Arial,sans-serif;padding:20px;color:#0f172a}h1{font-size:16px;margin-bottom:10px}.meta{font-size:12px;color:#475569;margin-bottom:12px}
       table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #cbd5e1;padding:6px;text-align:left;vertical-align:top}th{background:#f1f5f9}</style>
-      </head><body><h1>KİBRİTÇİ İNŞAAT - FORMen GÜNLÜK SAHA RAPORU</h1>
+      </head><body><div style="margin-bottom:10px;">${kibritciLogoHtml(40)}</div><h1 style="font-size:14px;margin:0 0 10px;">FORMEN GÜNLÜK SAHA RAPORU</h1>
       <div class="meta">Tarih: ${escapeHtml(selectedDate)} | Gelen personel: ${selectedDateAttendance.gelenCount}</div>
       <table><thead><tr><th>#</th><th>Tarih</th><th>İş Niteliği</th><th>Lokasyon</th><th>Açıklama</th></tr></thead><tbody>${rows || '<tr><td colspan="5">Kayıt yok</td></tr>'}</tbody></table>
       <script>window.onload=()=>window.print()</script></body></html>`;
@@ -1074,11 +1076,8 @@ ${satirlar
             <div className="bg-slate-900 text-white p-4 pt-5 pb-4 space-y-3 shrink-0 shadow-sm">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <div className="w-7 h-7 bg-amber-500 rounded-lg flex items-center justify-center text-slate-900 font-bold text-xs">
-                    K
-                  </div>
+                  <KibritciLogo size="sm" className="h-7" />
                   <div>
-                    <h3 className="text-xs font-black tracking-wide font-display text-amber-400">KİBRİTÇİ SAHA</h3>
                     <p className="text-[8px] text-slate-400 font-mono tracking-tighter uppercase">Kullanıcı: FORMEN</p>
                   </div>
                 </div>
@@ -2774,14 +2773,14 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
               <div className="bg-white border-2 border-slate-200/80 p-5 md:p-7 shadow-xs rounded-xl max-w-xl mx-auto space-y-5 text-[10px] text-slate-800 relative">
                 
                 {/* A4 Watermark Logo Background */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02]">
-                  <span className="text-[6rem] font-black tracking-widest rotate-12">KİBRİTÇİ</span>
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.04]">
+                  <img src={KIBRITCI_LOGO_PATH} alt="" className="max-w-[85%] h-auto rotate-12" />
                 </div>
 
                 {/* Company Header */}
                 <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3 relative z-10">
-                  <div className="space-y-0.5">
-                    <h1 className="text-sm font-black tracking-tight text-slate-900 uppercase">KİBRİTÇİ İNŞAAT VE TAAHHÜT A.Ş.</h1>
+                  <div className="space-y-0.5 flex items-center gap-3">
+                    <KibritciLogo size="md" className="h-8" />
                     <p className="text-[7.5px] text-slate-500 font-mono tracking-wider uppercase">Merkez Ofis &amp; Şantiye İşleri Koordinatörlüğü</p>
                   </div>
                   <div className="bg-slate-900 text-white font-black px-2 py-1 text-[8.5px] rounded tracking-widest font-mono shrink-0">

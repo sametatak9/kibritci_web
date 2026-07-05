@@ -4,6 +4,7 @@ import { AracBakim, CariKart, OperatorFaaliyet, TaseronKesintiRaporu, Personel }
 import { compressImage } from '../lib/imageCompress';
 import { getTaseronCariKartlar } from '../lib/taseronUtils';
 import { indirIsMakinesiRaporu } from '../lib/taseronReportUtils';
+import { kibritciLogoHtml } from '../lib/kibritciBrand';
 
 interface OperatorScreenProps {
   araclar: AracBakim[];
@@ -232,8 +233,8 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
         <head><meta charset="utf-8"><title>Operatör Raporu</title></head>
         <body style="font-family: Arial, sans-serif; padding: 40px; max-width: 900px; margin: 0 auto;">
           <div style="text-align: center; border-bottom: 3px solid #1e3a5f; padding-bottom: 20px; margin-bottom: 30px;">
-            <h1 style="color: #1e3a5f; margin: 0; font-size: 24px;">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h1>
-            <p style="color: #666; margin: 5px 0; font-size: 12px;">İŞ MAKİNESİ OPERATÖR FAALİYET RAPORU</p>
+            ${kibritciLogoHtml(48)}
+            <p style="color: #666; margin: 8px 0 5px; font-size: 12px;">İŞ MAKİNESİ OPERATÖR FAALİYET RAPORU</p>
             <p style="color: #999; font-size: 11px;">Oluşturulma: ${new Date().toLocaleString('tr-TR')}</p>
           </div>
           <table style="width: 100%; border-collapse: collapse; font-size: 12px;">

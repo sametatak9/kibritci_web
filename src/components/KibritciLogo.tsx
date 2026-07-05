@@ -4,13 +4,13 @@ import { KIBRITCI_LOGO_PATH } from '../lib/kibritciBrand';
 interface KibritciLogoProps {
   className?: string;
   size?: 'sm' | 'md' | 'lg' | 'xl';
+  /** Eski uyumluluk — yeni logo zaten metin içerir, varsayılan false */
   showText?: boolean;
 }
 
 export const KibritciLogo: React.FC<KibritciLogoProps> = ({
   className = '',
   size = 'md',
-  showText = false,
 }) => {
   const sizes = {
     sm: 'h-6',
@@ -26,15 +26,10 @@ export const KibritciLogo: React.FC<KibritciLogoProps> = ({
       <img
         src={KIBRITCI_LOGO_PATH}
         alt="Kibritçi İnşaat"
-        className="h-full w-auto object-contain bg-transparent"
+        className="h-full w-auto object-contain"
         style={{ background: 'transparent' }}
+        draggable={false}
       />
-      {showText && (
-        <div className="flex flex-col leading-none ml-2">
-          <span className="text-[#1E4E78] font-black tracking-wider text-xs sm:text-sm">KİBRİTÇİ</span>
-          <span className="text-[#8B1E1E] font-black tracking-widest text-[8px] sm:text-[9px] mt-0.5">İNŞAAT</span>
-        </div>
-      )}
     </div>
   );
 };

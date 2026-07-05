@@ -8,6 +8,23 @@ export function getKibritciLogoUrl(): string {
   return KIBRITCI_LOGO_PATH;
 }
 
+/** Excel / canvas raporları için PNG data URL */
+export async function loadKibritciLogoDataUrl(): Promise<string | null> {
+  try {
+    const res = await fetch(getKibritciLogoUrl());
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise<string | null>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(typeof reader.result === 'string' ? reader.result : null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
 export function kibritciLogoHtml(heightPx = 56): string {
   const url = getKibritciLogoUrl();
   return `<img src="${url}" alt="Kibritçi İnşaat" class="kibritci-logo" style="height:${heightPx}px;width:auto;max-width:220px;object-fit:contain;background:transparent;border:none;display:block;" />`;

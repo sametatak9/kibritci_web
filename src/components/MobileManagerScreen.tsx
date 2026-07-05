@@ -7,6 +7,7 @@ import {
 import { db } from '../lib/firebase';
 import { saveKullanici, findKullaniciByEmail } from '../lib/kullaniciUtils';
 import { collection, onSnapshot, doc, updateDoc, query, orderBy, limit, addDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { KibritciLogo } from './KibritciLogo';
 
 // Sub-screens for Manager preview
 import { FormenScreen } from './FormenScreen';
@@ -559,11 +560,8 @@ export const MobileManagerScreen: React.FC<MobileManagerScreenProps> = ({
             {/* Premium App Bar Header */}
             <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shrink-0 z-10">
               <div className="flex items-center space-x-2.5">
-                <div className="w-9 h-9 bg-amber-500 rounded-xl flex items-center justify-center text-slate-950 font-black shadow-lg shadow-amber-500/10">
-                  <Smartphone size={18} />
-                </div>
+                <KibritciLogo size="sm" className="h-8" />
                 <div>
-                  <h2 className="text-xs font-black tracking-widest text-amber-600 leading-none">KİBRİTÇİ MOBİL</h2>
                   <span className="text-[9px] text-slate-500 font-medium">{currentUser?.email || 'Yönetici'}</span>
                 </div>
               </div>

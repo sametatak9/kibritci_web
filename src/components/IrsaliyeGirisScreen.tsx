@@ -10,6 +10,7 @@ import { fileToAiPayload } from '../lib/aiFileUpload';
 import { BagliEvraklarListesi } from './BagliEvraklarListesi';
 import { EvrakTabBilgi } from './EvrakTabBilgi';
 import { warnIfDuplicateStok } from '../lib/duplicateNameUtils';
+import { kibritciLogoHtml } from '../lib/kibritciBrand';
 
 interface IrsaliyeGirisScreenProps {
   irsaliyeler: Irsaliye[];
@@ -317,7 +318,8 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
           </style>
         </head>
         <body>
-          <h1>KİBRİTÇİ İNŞAAT — İRSALİYE RAPORU</h1>
+          <div style="margin-bottom:12px;">${kibritciLogoHtml(44)}</div>
+          <h1 style="font-size:14px;margin:0 0 8px;">İRSALİYE RAPORU</h1>
           <p>No: ${ir.irsaliyeNo || '-'} • Tarih: ${ir.tarih || '-'} • Firma: ${ir.firma || '-'}</p>
           <table>
             <thead><tr><th>Malzeme</th><th>Miktar</th><th>Birim</th></tr></thead>
@@ -364,7 +366,8 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
           </style>
         </head>
         <body>
-          <h1>KİBRİTÇİ İNŞAAT — İRSALİYE EVRAK ARŞİV RAPORU</h1>
+          <div style="margin-bottom:12px;">${kibritciLogoHtml(44)}</div>
+          <h1 style="font-size:14px;margin:0 0 8px;">İRSALİYE EVRAK ARŞİV RAPORU</h1>
           <p>Kayıt sayısı: ${irsaliyeler.length} • Üretim: ${new Date().toLocaleString('tr-TR')}</p>
           <table>
             <thead>

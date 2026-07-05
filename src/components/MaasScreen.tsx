@@ -486,7 +486,6 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                 <div className="flex items-center space-x-4">
                   <KibritciLogo size="xl" />
                   <div>
-                    <h1 className="text-xl font-extrabold tracking-tight text-slate-900 uppercase">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h1>
                     <p className="text-xs text-slate-500 font-semibold tracking-wide uppercase">MUHASEBE VE FİNANSAL HAKEDİŞ DAİRE BAŞKANLIĞI</p>
                     <p className="text-xs text-slate-600 mt-1">Hakediş Dönemi: <strong className="text-slate-900 font-bold">{selectedMonth}. Ay / {selectedYear}</strong></p>
                   </div>

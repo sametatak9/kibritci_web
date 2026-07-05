@@ -9,6 +9,7 @@ import { db } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { fetchApiJson } from '../lib/apiClient';
 import { collection, doc, setDoc, onSnapshot, addDoc, getDocs, deleteDoc } from 'firebase/firestore';
+import { KibritciLogo } from './KibritciLogo';
 
 interface GuvenlikScreenProps {
   personeller: Personel[];
@@ -592,11 +593,9 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       {/* 🛡️ Header section */}
       <div className="bg-white p-5 px-6 border-b border-slate-200 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center shrink-0">
         <div className="flex items-center space-x-3.5">
-          <div className="w-10 h-10 bg-gradient-to-tr from-amber-600 to-orange-500 rounded-xl flex items-center justify-center text-white shrink-0 shadow-lg shadow-orange-500/10">
-            <ShieldAlert size={20} className="stroke-[2.5]" />
-          </div>
+          <KibritciLogo size="sm" className="h-9" />
           <div>
-            <h1 className="text-sm font-black text-slate-850 tracking-widest uppercase">🚧 KİBRİTÇİ ŞANTİYE GÜVENLİK KAPISI</h1>
+            <h1 className="text-sm font-black text-slate-850 tracking-widest uppercase">🚧 ŞANTİYE GÜVENLİK KAPISI</h1>
             <p className="text-[10px] text-slate-550 font-mono uppercase tracking-wider">İrsaliye Kayıt, Araç Kantarı, Misafir Defteri ve Personel Giriş Kapısı</p>
           </div>
         </div>
@@ -1681,8 +1680,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             
             {/* Header Badge */}
             <div className="flex flex-col items-center space-y-1.5 text-center border-b pb-4">
-              <span className="text-amber-500"><ShieldAlert size={28} className="fill-amber-500/10" /></span>
-              <h3 className="font-black text-xs uppercase tracking-widest text-slate-800">KİBRİTÇİ İNŞAAT A.Ş.</h3>
+              <KibritciLogo size="sm" className="h-8" />
               <p className="text-[10px] text-slate-500 font-mono">ŞANTİYE RESMİ GÜVENLİK GİRİŞ KARTI</p>
             </div>
 

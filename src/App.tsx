@@ -21,6 +21,7 @@ import { IdariScreen } from './components/IdariScreen';
 import { OnayIslemleriScreen } from './components/OnayIslemleriScreen';
 import { SohbetScreen } from './components/SohbetScreen';
 import { FormenScreen } from './components/FormenScreen';
+import { KibritciLogo } from './components/KibritciLogo';
 import { GuvenlikScreen } from './components/GuvenlikScreen';
 import { KampciScreen } from './components/KampciScreen';
 import { LojistikScreen } from './components/LojistikScreen';
@@ -1500,6 +1501,7 @@ export default function App() {
   if (publicLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-slate-100 font-sans p-6">
+        <KibritciLogo size="lg" className="h-14 mb-4" />
         <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
         <p className="mt-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">KİBRİTÇİ ERP GÖRSEL SORGU...</p>
       </div>
@@ -1517,9 +1519,9 @@ export default function App() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-950 text-white p-8 select-none">
         <div className="text-center space-y-4">
+          <KibritciLogo size="lg" className="mx-auto h-14" />
           <span className="text-4xl animate-spin inline-block">⏳</span>
           <div className="space-y-1">
-            <h1 className="text-xs font-mono font-bold tracking-widest text-[#F59E0B]">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h1>
             <p className="text-[10px] text-slate-500 font-semibold tracking-wider font-sans">OTURUM DOĞRULANIYOR / PORTAL ŞİFRELENİYOR...</p>
           </div>
         </div>
@@ -1568,8 +1570,7 @@ export default function App() {
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-white p-8 select-none">
         <div className="w-full max-w-md text-center space-y-8 animate-fade-in">
           <div className="space-y-3">
-            <span className="text-4xl animate-bounce inline-block">🏢</span>
-            <h1 className="text-xl font-black tracking-widest text-[#F59E0B]">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h1>
+            <KibritciLogo size="xl" className="mx-auto h-16" />
             <p className="text-[10px] font-mono tracking-widest text-slate-400 uppercase">Bulut ERP Yönetim Altyapısı v2.6</p>
           </div>
 

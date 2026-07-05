@@ -706,7 +706,6 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
                 <div className="flex items-center space-x-4">
                   <KibritciLogo size="xl" />
                   <div>
-                    <h1 className="text-xl font-black text-[#1E4E78] tracking-tight">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h1>
                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">ŞANTİYE MERKEZ VE MUHASEBE VE FİNANSAL HAKEDİŞ DAİRESİ</p>
                     <p className="text-[10px] text-slate-650 mt-1">Sorgu Aralığı: <strong className="text-slate-900 font-black">{appliedStartDate} / {appliedEndDate}</strong></p>
                   </div>

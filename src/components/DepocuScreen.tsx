@@ -6,6 +6,7 @@ import {
 import { db, saveDocument } from '../lib/firebase';
 import { collection, onSnapshot, doc, updateDoc, setDoc, getDocs, deleteDoc } from 'firebase/firestore';
 import { StokKart, Personel, SatinAlmaTalebi } from '../types/erp';
+import { KibritciLogo } from './KibritciLogo';
 
 interface DepocuScreenProps {
   stokKartlar: StokKart[];
@@ -440,11 +441,9 @@ export const DepocuScreen: React.FC<DepocuScreenProps> = ({
       {/* 📦 Header */}
       <header className="bg-gradient-to-r from-blue-700 to-indigo-800 p-4 sticky top-0 z-40 flex items-center justify-between select-none shadow-md shrink-0 text-white">
         <div className="flex items-center space-x-2.5">
-          <div className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center text-white border border-white/10">
-            <Package size={18} />
-          </div>
+          <KibritciLogo size="sm" className="h-8" />
           <div>
-            <h1 className="text-xs font-black tracking-widest text-white uppercase leading-none">KİBRİTÇİ DEPO SORUMLUSU</h1>
+            <h1 className="text-xs font-black tracking-widest text-white uppercase leading-none">DEPO SORUMLUSU</h1>
             <p className="text-[10px] text-blue-100 font-mono mt-0.5 uppercase tracking-wider font-semibold">MOBİL SAYIM &amp; ZİMMET PANELİ</p>
           </div>
         </div>

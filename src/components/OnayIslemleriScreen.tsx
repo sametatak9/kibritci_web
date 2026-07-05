@@ -16,6 +16,7 @@ import {
   normalizeKampFaaliyetForDisplay,
   normalizeKampSayimForDisplay,
 } from '../lib/mobilOnayUtils';
+import { kibritciLogoHtml } from '../lib/kibritciBrand';
 
 interface OnayIslemleriScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
@@ -913,8 +914,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
         <table class="header-table">
           <tr>
             <td class="header-left" style="border:none; padding:0;">
-              <h2 class="logo-text-title">KİBRİTÇİ</h2>
-              <h3 class="logo-text-sub">İNŞAAT</h3>
+              ${kibritciLogoHtml(52)}
             </td>
             <td class="header-right" style="border:none; padding:0; text-align:right;">
               <div class="doc-title-badge">DİJİTAL GÜVENLİK HAVUZU RAPORU</div>

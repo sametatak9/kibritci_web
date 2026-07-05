@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Personel, KasaHareketi, SatinAlmaTalebi, AracBakim, AylikYoklamaMap, KampOdasi, KampKaydi } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
+import { getKibritciLogoUrl } from '../lib/kibritciBrand';
 
 interface DashboardScreenProps {
   personeller: Personel[];
@@ -554,11 +555,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                           <!-- Header -->
                           <div class="border-b-2 border-slate-900 pb-4 flex justify-between items-center">
                             <div class="flex items-center space-x-4">
-                              <div class="w-12 h-12 bg-[#1E4E78] text-white rounded-xl flex items-center justify-center text-xl font-bold font-sans">
-                                K
-                              </div>
+                              <img src="${getKibritciLogoUrl()}" alt="Kibritçi İnşaat" style="height:48px;width:auto;object-fit:contain;background:transparent;" />
                               <div>
-                                <h1 class="text-xl font-black text-[#1E4E78] tracking-tight">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h1>
                                 <p class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">İNSAN KAYNAKLARI VE ŞANTİYE GÜVENLİK REFAKAT ŞEFLİĞİ</p>
                               </div>
                             </div>

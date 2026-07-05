@@ -5,6 +5,7 @@ import { fetchApiJson } from '../lib/apiClient';
 import { compressImage } from '../lib/imageCompress';
 import { exportPersonelRows } from '../lib/reportExport';
 import { saveDocument } from '../lib/firebase';
+import { kibritciLogoHtml } from '../lib/kibritciBrand';
 
 interface PersonelScreenProps {
   personeller: Personel[];
@@ -370,8 +371,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
         <head><meta charset="utf-8"><title>Personel Geçmiş Raporu</title></head>
         <body style="font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto;">
           <div style="text-align: center; border-bottom: 3px solid #1e3a5f; padding-bottom: 20px; margin-bottom: 30px;">
-            <h1 style="color: #1e3a5f; margin: 0; font-size: 24px;">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h1>
-            <p style="color: #666; margin: 5px 0; font-size: 12px;">PERSONEL GEÇMİŞ RAPORU</p>
+            ${kibritciLogoHtml(48)}
+            <p style="color: #666; margin: 8px 0 5px; font-size: 12px;">PERSONEL GEÇMİŞ RAPORU</p>
             <p style="color: #999; font-size: 11px;">${historyPersonel.ad} ${historyPersonel.soyad} - ${historyPersonel.tcNo}</p>
           </div>
           <div style="font-size: 12px; line-height: 1.8;">

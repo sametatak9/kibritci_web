@@ -3,6 +3,7 @@ import { Banknote, Search, CircleCheck as CheckCircle, Circle as XCircle, ListFi
 import { Personel, AylikYoklamaMap, MaaşOdeme, MaasKesinti } from '../types/erp';
 import { iterateMonthYoklama, buildPersonelListForMonth, isDayActiveForPersonel } from '../lib/yoklamaUtils';
 import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
+import { kibritciLogoHtml } from '../lib/kibritciBrand';
 
 interface MaasOdeScreenProps {
   personeller: Personel[];
@@ -228,8 +229,8 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
         <head><meta charset="utf-8"><title>Maaş Ödeme Raporu</title></head>
         <body style="font-family: Arial, sans-serif; padding: 40px; max-width: 1000px; margin: 0 auto;">
           <div style="text-align: center; border-bottom: 3px solid #1e3a5f; padding-bottom: 20px; margin-bottom: 30px;">
-            <h1 style="color: #1e3a5f; margin: 0; font-size: 24px;">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h1>
-            <p style="color: #666; margin: 5px 0; font-size: 12px;">MAAŞ ÖDEME RAPORU - ${String(selectedAy).padStart(2, '0')}/${selectedYil}</p>
+            ${kibritciLogoHtml(48)}
+            <p style="color: #666; margin: 8px 0 5px; font-size: 12px;">MAAŞ ÖDEME RAPORU - ${String(selectedAy).padStart(2, '0')}/${selectedYil}</p>
             <p style="color: #999; font-size: 11px;">Oluşturulma: ${new Date().toLocaleString('tr-TR')}</p>
           </div>
           <table style="width: 100%; border-collapse: collapse; font-size: 11px;">

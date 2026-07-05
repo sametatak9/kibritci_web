@@ -5,6 +5,7 @@ import {
   Printer, Download, Upload, Send, Search
 } from 'lucide-react';
 import { KibritciLogo } from './KibritciLogo';
+import { kibritciLogoHtml } from '../lib/kibritciBrand';
 import { 
   AracBakim, Demisbas, Tahsis, KampOdasi, KampKaydi, KampSarf, KampFaaliyet,
   SahaFaaliyeti, HazirTutanak, CariKart, StokKart, EpostaGonderim, Personel,
@@ -21,15 +22,11 @@ import {
   deriveCampusNames,
   deriveCampusFloors,
   findOrCreateYerleske,
-  purgeLegacyKampData,
-  purgeAllKampData,
   updateKampYerleskeAdi,
   updateKampKatAdi,
   updateKampOdasi,
-  isLegacyKampRoom,
 } from '../lib/kampYapisi';
 import { assignKampResident, evictKampResident, suggestPersonelKaydi } from '../lib/kampPlacementUtils';
-import { isProductionLive } from '../lib/productionDataGuard';
 import { compressImage } from '../lib/imageCompress';
 import { warnIfDuplicateCari, warnIfDuplicateStok } from '../lib/duplicateNameUtils';
 import { exportHistoryReport } from '../lib/reportExport';
@@ -506,60 +503,6 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       alert(`${selectedYerleske} - ${selectedKat} bünyesinde Oda No ${roomNo} başarıyla açılmıştır.`);
     } catch {
       alert("Oda oluşturulurken hata oluştu.");
-    }
-  };
-
-  const handleClearLegacyKampData = async () => {
-    if (
-      !window.confirm(
-        'Örnek/demo kamp odaları Firestore\'dan kalıcı silinecek ve boş durum kaydedilecek. Devam edilsin mi?'
-      )
-    ) {
-      return;
-    }
-    try {
-      const result = await purgeLegacyKampData();
-      if (result.roomIds.length === 0 && kampOdalari.some(isLegacyKampRoom)) {
-        alert(
-          'Örnek odalar tanımlanamadı. "Tüm Kamp Verisini Sıfırla" ile tüm yapıyı temizleyebilirsiniz.'
-        );
-        return;
-      }
-      setSelectedYerleske('');
-      setSelectedKat('');
-      const msg = `✅ ${result.roomIds.length} örnek oda, ${result.kayitIds.length} yerleşim kaydı silindi. Sayfa yenilense bile geri gelmez.`;
-      alert(msg);
-    } catch (err) {
-      console.error(err);
-      alert(
-        `Silme ve kaydetme sırasında hata oluştu: ${err instanceof Error ? err.message : 'Bilinmeyen hata'}`
-      );
-    }
-  };
-
-  const handlePurgeAllKampData = async () => {
-    const msg =
-      'TÜM kamp verisi (yerleşkeler, katlar, odalar, konaklama kayıtları) kalıcı olarak silinecek.';
-    if (isProductionLive()) {
-      const typed = window.prompt(
-        `${msg}\n\nCanlı sistem aktif. Silmek için büyük harflerle SIFIRLA yazın:`
-      );
-      if (typed?.trim() !== 'SIFIRLA') return;
-    } else if (!window.confirm(`${msg} Devam edilsin mi?`)) {
-      return;
-    }
-    try {
-      const counts = await purgeAllKampData();
-      setSelectedYerleske('');
-      setSelectedKat('');
-      alert(
-        `✅ Kamp verisi başarıyla sıfırlandı!\n\n${counts.yerleskeler} yerleşke, ${counts.katlar} kat, ${counts.odalar} oda, ${counts.kayitlar} kayıt silindi.`
-      );
-    } catch (err) {
-      console.error(err);
-      alert(
-        `Kamp verisi sıfırlanırken hata oluştu: ${err instanceof Error ? err.message : 'Bilinmeyen hata'}`
-      );
     }
   };
 
@@ -2382,7 +2325,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                             <script src="https://cdn.tailwindcss.com"></script>
                           </head>
                           <body class="p-8 bg-white text-slate-900 font-sans">
-                            <h2 class="text-xl font-bold mb-4 uppercase">KİBRİTÇİ İNŞAAT - ARAÇ SAYAÇ & BAKIM RAPORU</h2>
+                            <div class="mb-4">${kibritciLogoHtml(44)}</div>
+                            <h2 class="text-lg font-bold mb-4 uppercase">ARAÇ SAYAÇ & BAKIM RAPORU</h2>
                             ${el.innerHTML}
                           </body>
                         </html>
@@ -2751,25 +2695,12 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   </strong>
                 </div>
 
-                <div className="pt-2 border-t mt-2 space-y-2">
+                <div className="pt-2 border-t mt-2">
                   <button
                     onClick={() => setShowKampKrokiModal(true)}
                     className="w-full bg-[#2563EB] hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-lg cursor-pointer transition flex items-center justify-center space-x-1"
                   >
                     <span>📋 Boş ve Dolu Kroki Raporu</span>
-                  </button>
-
-                  <button
-                    onClick={handleClearLegacyKampData}
-                    className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-3 rounded-lg cursor-pointer transition text-[10px] uppercase tracking-wider flex items-center justify-center space-x-1"
-                  >
-                    <span>🗑️ Örnek Odaları Sil ve Kaydet</span>
-                  </button>
-                  <button
-                    onClick={handlePurgeAllKampData}
-                    className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold py-1.5 px-3 rounded-lg cursor-pointer transition text-[10px] uppercase tracking-wider flex items-center justify-center space-x-1 border border-rose-200"
-                  >
-                    <span>⚠️ Tüm Kamp Verisini Sıfırla</span>
                   </button>
                 </div>
               </div>
@@ -3061,16 +2992,16 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           🏗️ VIEW: SAHA FAALİYETLERİ
           ───────────────────────────────────────────────────────────── */}
       {currentSubTab === 'saha' && (
-        <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
+        <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0 lg:items-start">
           
           {/* Creator drawer */}
-          <div className="w-full lg:w-[380px] lg:shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
+          <div className="w-full lg:w-[380px] lg:shrink-0 lg:self-start bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
             <div className="bg-[#2563EB] text-slate-100 p-4 shrink-0">
               <span className="text-[10px] font-bold tracking-widest text-blue-200 uppercase">Saha Görev Kaydı</span>
               <h3 className="font-display font-semibold text-sm">🏗️ Günlük İmalat Girişi</h3>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+            <div className="overflow-y-auto max-h-[min(72vh,calc(100vh-14rem))] p-5 space-y-4 text-xs">
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Faaliyet Tarihi *</label>
                 <input
@@ -4450,12 +4381,14 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
               
               {/* Header decor */}
               <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-end">
-                <div>
-                  <h1 className="text-xl font-extrabold tracking-tight text-slate-900 uppercase">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h1>
+                <div className="flex items-end gap-4">
+                  <KibritciLogo size="md" className="h-10" />
+                  <div>
                   <p className="text-xs text-slate-500 font-semibold tracking-wide uppercase">TEKNİK MÜHENDİSLİK VE SAHA FAALİYETLERİ DAİRE BAŞKANLIĞI</p>
                   <p className="text-xs text-slate-600 mt-1">
                     Rapor Kapsamı: <strong className="text-slate-900 font-bold">{sahaReportType === 'GUNLUK' ? `GÜNLÜK (${sahaReportDate})` : `AYLIK (${sahaReportMonth}. Ay / 2026)`}</strong>
                   </p>
+                  </div>
                 </div>
                 <div className="text-right">
                   <span className="border border-slate-900 text-[10px] font-bold px-3 py-1 bg-slate-50 uppercase tracking-widest block mb-1">
@@ -4850,21 +4783,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   {/* Kibritci Logo & Rapor Başlığı */}
                   <div className="flex justify-between items-center border-b pb-4">
                     <div className="flex items-center space-x-3">
-                      <div className="flex items-center space-x-2 shrink-0 h-10">
-                        {/* Elegant Architectural K-shaped SVG Logo */}
-                        <svg viewBox="0 0 140 120" className="h-full w-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <rect x="5" y="5" width="112" height="112" rx="10" stroke="#1E4E78" strokeWidth="4" />
-                          <path d="M15 115 V75 L35 50 V115" fill="#8B1E1E" />
-                          <path d="M35 115 V52 L58 30 V115" fill="#B91C1C" />
-                          <path d="M58 52 L95 90 H72 L45 61 Z" fill="#8B1E1E" />
-                          <path d="M58 85 L95 115 H72 L58 100 Z" fill="#1E4E78" />
-                          <line x1="15" y1="115" x2="115" y2="115" stroke="#1E4E78" strokeWidth="4" />
-                        </svg>
-                        <div className="flex flex-col leading-none font-bold">
-                          <span className="text-[#1E4E78] tracking-wider text-sm uppercase">KİBRİTÇİ</span>
-                          <span className="text-[#8B1E1E] tracking-widest text-[9px] mt-0.5">İNŞAAT A.Ş.</span>
-                        </div>
-                      </div>
+                      <KibritciLogo size="md" className="h-10" />
                     </div>
                     <div className="text-right">
                       <span className="font-mono font-bold block text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-[10px] uppercase">Plaka/Kod: {selectedAracForPdf.plaka}</span>
@@ -5098,7 +5017,6 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   <div className="flex items-center space-x-3">
                     <KibritciLogo size="md" />
                     <div>
-                      <h2 className="text-base font-black text-[#2563EB] font-sans tracking-wide">KİBRİTÇİ İNŞAAT A.Ş.</h2>
                       <span className="text-[9px] text-slate-500 font-bold block uppercase tracking-widest mt-0.5">FİİLİ KONAKLAMA VE KOĞUŞ YERLEŞİM KROKİSİ</span>
                     </div>
                   </div>

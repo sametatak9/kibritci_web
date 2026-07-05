@@ -6,9 +6,8 @@ import {
 import { KampOdasi, KampKaydi, Personel, StokKart, KampYerleske, KampKat, CariKart, AylikYoklamaMap } from '../types/erp';
 import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
-import { createKampYerleske, createKampKat, katsForYerleske, createKampOdasi, deleteKampOdasi, hasLegacySeedRooms, purgeLegacyKampData, purgeAllKampData, updateKampOdasi } from '../lib/kampYapisi';
+import { createKampYerleske, createKampKat, katsForYerleske, createKampOdasi, deleteKampOdasi, updateKampOdasi } from '../lib/kampYapisi';
 import { assignKampResident, evictKampResident } from '../lib/kampPlacementUtils';
-import { isProductionLive } from '../lib/productionDataGuard';
 import { buildKampciGunlukOzet } from '../lib/gunlukAkisUtils';
 import { buildWhatsAppUrl } from '../lib/mobilOnayUtils';
 import { KampHaftalikYoklamaTab } from './KampHaftalikYoklamaTab';
@@ -87,19 +86,6 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   const [firmaTipi, setFirmaTipi] = useState<'ANA_FIRMA' | 'TASERON'>('ANA_FIRMA');
   const [loadingRoom, setLoadingRoom] = useState(false);
   const [loadingYapı, setLoadingYapı] = useState(false);
-  const [clearingLegacy, setClearingLegacy] = useState(false);
-  const [clearingAll, setClearingAll] = useState(false);
-  const legacySeedRooms = hasLegacySeedRooms(kampOdalari);
-
-  useEffect(() => {
-    if (!clearingAll && !clearingLegacy) return;
-    const safety = setTimeout(() => {
-      setClearingAll(false);
-      setClearingLegacy(false);
-      showStatus('error', 'İşlem çok uzun sürdü. Sayfayı yenileyip tekrar deneyin.');
-    }, 95_000);
-    return () => clearTimeout(safety);
-  }, [clearingAll, clearingLegacy]);
 
   const yerleskeler = kampYerleskeleri;
   const katlar = kampKatlari;
@@ -501,63 +487,6 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       showStatus('error', 'Oda oluşturulurken hata oluştu!');
     } finally {
       setLoadingRoom(false);
-    }
-  };
-
-  const handleClearLegacyRooms = async () => {
-    if (
-      !window.confirm(
-        'Örnek/demo odalar kalıcı silinecek ve Firestore\'a boş hali kaydedilecek. Devam edilsin mi?'
-      )
-    ) {
-      return;
-    }
-    setClearingLegacy(true);
-    showStatus('info', 'Örnek odalar siliniyor, lütfen bekleyin…', 0);
-    try {
-      const result = await purgeLegacyKampData(currentUser?.email);
-      if (result.roomIds.length === 0 && legacySeedRooms) {
-        showStatus('error', 'Örnek oda eşleşmedi. Tüm kampı sıfırlamayı deneyin.');
-      } else {
-        const msg = `✅ ${result.roomIds.length} örnek oda silindi. Sayfa yenilense bile geri gelmez.`;
-        showStatus('success', msg, 8000);
-        window.alert(msg);
-      }
-    } catch (err) {
-      console.error(err);
-      showStatus('error', err instanceof Error ? err.message : 'Örnek odalar silinemedi.');
-    } finally {
-      setClearingLegacy(false);
-    }
-  };
-
-  const handlePurgeAllKamp = async () => {
-    const msg = 'Tüm kamp verisi (yerleşke, kat, oda, konaklama) kalıcı silinecek.';
-    if (isProductionLive()) {
-      const typed = window.prompt(`${msg}\n\nCanlı sistem. Silmek için SIFIRLA yazın:`);
-      if (typed?.trim() !== 'SIFIRLA') return;
-    } else if (!window.confirm(`${msg} Devam edilsin mi?`)) {
-      return;
-    }
-    setClearingAll(true);
-    showStatus('info', 'Kamp verisi sıfırlanıyor, lütfen bekleyin…', 0);
-    try {
-      const counts = await purgeAllKampData();
-      setSelectedYerleskeId('');
-      setSelectedKatId('');
-      setPlacementYerleskeId('');
-      setPlacementKatId('');
-      setSelectedRoomId('');
-      const msg =
-        `✅ Kamp başarıyla sıfırlandı!\n\n` +
-        `${counts.yerleskeler} yerleşke, ${counts.katlar} kat, ${counts.odalar} oda, ${counts.kayitlar} konaklama kaydı silindi.`;
-      showStatus('success', '✅ Kamp verisi başarıyla sıfırlandı.', 8000);
-      window.alert(msg);
-    } catch (err) {
-      console.error(err);
-      showStatus('error', err instanceof Error ? err.message : 'Kamp verisi sıfırlanamadı.');
-    } finally {
-      setClearingAll(false);
     }
   };
 
@@ -1557,30 +1486,6 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
               <h3 className="font-bold text-sm text-slate-800 mt-0.5">Yerleşke → Kat → Oda</h3>
               <p className="text-[10px] text-slate-500 mt-1">Kamp Yönetimi ile senkron; sıfırdan kendi yapınızı kurun.</p>
             </div>
-
-            {legacySeedRooms && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
-                <p className="text-[10px] text-amber-900 font-bold">Demo örnek odalar yüklü. Kendi kampınızı kurmak için temizleyin.</p>
-                <button
-                  type="button"
-                  onClick={handleClearLegacyRooms}
-                  disabled={clearingLegacy}
-                  className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-2 rounded-lg cursor-pointer disabled:opacity-60"
-                >
-                  {clearingLegacy ? 'Siliniyor ve kaydediliyor…' : 'Örnek Odaları Sil ve Kaydet'}
-                </button>
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={handlePurgeAllKamp}
-              disabled={clearingAll || clearingLegacy}
-              className="w-full bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-[10px] font-bold py-2 rounded-lg cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
-            >
-              {clearingAll && <RefreshCw size={12} className="animate-spin" />}
-              <span>⚠️ Tüm Kamp Verisini Sıfırla</span>
-            </button>
 
             <div className="flex gap-1 text-[9px] font-bold">
               {[1, 2, 3].map(step => (
