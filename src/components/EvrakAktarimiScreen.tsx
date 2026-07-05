@@ -7,6 +7,15 @@ import { saveDocument } from '../lib/firebase';
 import { CariKart, StokKart, Personel, AylikYoklamaMap, SahaFaaliyeti } from '../types/erp';
 import { findPersonelByName, setYoklamaDay } from '../lib/yoklamaUtils';
 import { fetchApiJson } from '../lib/apiClient';
+import {
+  splitPdfFileToPageBase64,
+  autoEnsureCari,
+  autoEnsureStok,
+  findCariMatch,
+  findStokMatch,
+  normalizeMatchText,
+  BatchImportRow,
+} from '../lib/evrakBatchImportUtils';
 
 interface EvrakAktarimiScreenProps {
   cariKartlar: CariKart[];
@@ -48,6 +57,11 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
   const [status, setStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [loadingStep, setLoadingStep] = useState('');
   const [detectedTypeMsg, setDetectedTypeMsg] = useState<string | null>(null);
+
+  const [batchFile, setBatchFile] = useState<File | null>(null);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchRows, setBatchRows] = useState<BatchImportRow[]>([]);
+  const [batchProgress, setBatchProgress] = useState('');
 
   const getDonemFromDate = (dateStr: string) => {
     try {
@@ -350,6 +364,196 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
     }
   };
 
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  const importParsedPage = async (
+    data: any,
+    pageNo: number,
+    sourceTag: string,
+    workingCari: CariKart[],
+    workingStok: StokKart[]
+  ): Promise<{ evrakNo: string; firma: string; type: string; cariler: CariKart[]; stoklar: StokKart[] }> => {
+    let cariler = [...workingCari];
+    let stoklar = [...workingStok];
+    const type = String(data.detectedType || 'fatura').toLowerCase() as typeof docType;
+    const firma = String(data.cariUnvan || data.firma || '').trim();
+    const kalemler = Array.isArray(data.kalemler) ? data.kalemler : [];
+
+    if (firma) {
+      const before = findCariMatch(firma, workingCari);
+      const ensured = autoEnsureCari(firma, cariler, sourceTag);
+      cariler = ensured.cariler;
+      if (ensured.cari && !before) {
+        await saveDocument('cariKartlar', ensured.cari);
+      }
+    }
+
+    for (const k of kalemler) {
+      const before = findStokMatch(k.urunAdi || '', workingStok);
+      const ensured = autoEnsureStok(k.urunAdi || '', k.birim || 'ADET', stoklar, sourceTag);
+      stoklar = ensured.stoklar;
+      if (ensured.stok && !before) {
+        await saveDocument('stokKartlar', ensured.stok);
+      }
+    }
+
+    if (setCariKartlar) setCariKartlar(cariler);
+    if (setStokKartlar) setStokKartlar(stoklar);
+
+    const matchedCari = cariler.find((c) =>
+      normalizeMatchText(c.unvan).includes(normalizeMatchText(firma)) ||
+      normalizeMatchText(firma).includes(normalizeMatchText(c.unvan))
+    );
+    const systemId = `BATCH-${type}-${Date.now()}-P${pageNo}`;
+    const tarih = data.tarih || new Date().toISOString().slice(0, 10);
+
+    if (type === 'irsaliye') {
+      const doc = {
+        id: systemId,
+        irsaliyeId: `IR-${Date.now().toString().slice(-4)}`,
+        irsaliyeNo: data.irsaliyeNo || `IR-P${pageNo}`,
+        firma: firma || 'Bilinmeyen Firma',
+        tarih,
+        onayDurumu: '2. ONAY TAMAMLANDI' as const,
+        kalemler: kalemler.map((k: any, idx: number) => ({
+          id: `k_${pageNo}_${idx}`,
+          urunAdi: k.urunAdi || 'Malzeme',
+          miktar: Number(k.miktar) || 0,
+          birim: k.birim || 'ADET',
+          stokKartId: findStokMatch(k.urunAdi || '', stoklar)?.id,
+        })),
+        eImzalar: [],
+        notlar: sourceTag,
+      };
+      await saveDocument('irsaliyeler', doc);
+      setIrsaliyeler((prev) => [doc, ...prev]);
+      return { evrakNo: doc.irsaliyeNo, firma: doc.firma, type: 'irsaliye', cariler, stoklar };
+    }
+
+    const faturaDoc = {
+      id: systemId,
+      faturaNo: data.faturaNo || data.irsaliyeNo || `FT-P${pageNo}`,
+      tarih,
+      cariKartId: matchedCari?.id || 'CARI-DIŞ-SERVIS',
+      cariUnvan: firma || 'Bilinmeyen Cari',
+      toplamTutar: Number(data.toplamTutar) || Number(data.genelToplam) || 0,
+      kdvTutar: Number(data.kdvTutar) || 0,
+      genelToplam: Number(data.genelToplam || data.toplamTutar || data.tutar) || 0,
+      durum: 'ONAYLANDI' as const,
+      bagliIrsaliyeler: [],
+      notlar: `Toplu PDF aktarım ${sourceTag}`,
+      kalemler: (kalemler.length ? kalemler : [{ urunAdi: data.aciklama || 'Evrak kalemi', miktar: 1, birim: 'ADET', birimFiyat: 0, kdvOran: 20, toplam: 0 }]).map(
+        (k: any, idx: number) => ({
+          id: `k_${pageNo}_${idx}`,
+          urunAdi: k.urunAdi || 'Ürün',
+          miktar: Number(k.miktar) || 1,
+          birim: k.birim || 'ADET',
+          birimFiyat: Number(k.birimFiyat) || 0,
+          kdvOran: Number(k.kdvOran) || 20,
+          toplam: Number(k.toplam) || 0,
+          stokKartId: findStokMatch(k.urunAdi || '', stoklar)?.id,
+        })
+      ),
+    };
+    await saveDocument('faturalar', faturaDoc);
+    setFaturalar((prev) => [faturaDoc, ...prev]);
+    return {
+      evrakNo: faturaDoc.faturaNo,
+      firma: faturaDoc.cariUnvan,
+      type: type === 'hakedis' ? 'hakedis' : 'fatura',
+      cariler,
+      stoklar,
+    };
+  };
+
+  const handleBatchPdfImport = async () => {
+    if (!batchFile || batchRunning) return;
+    if (!batchFile.type.includes('pdf')) {
+      showStatus('error', 'Toplu aktarım için PDF dosyası seçin.');
+      return;
+    }
+    setBatchRunning(true);
+    setBatchRows([]);
+    setBatchProgress('PDF sayfalara ayrılıyor...');
+
+    try {
+      const pages = await splitPdfFileToPageBase64(batchFile);
+      const rows: BatchImportRow[] = pages.map((_, i) => ({ pageNo: i + 1, status: 'pending' }));
+      setBatchRows(rows);
+
+      let workingCari = [...(cariKartlar || [])];
+      let workingStok = [...(stokKartlar || [])];
+      const sourceBase = batchFile.name;
+
+      for (let i = 0; i < pages.length; i++) {
+        const pageNo = i + 1;
+        setBatchProgress(`Sayfa ${pageNo}/${pages.length} yapay zeka ile okunuyor...`);
+        setBatchRows((prev) =>
+          prev.map((r) => (r.pageNo === pageNo ? { ...r, status: 'parsing' } : r))
+        );
+
+        let parsed: any = null;
+        for (let attempt = 1; attempt <= 4; attempt++) {
+          try {
+            const result = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
+              '/api/parse-legacy-document',
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  fileBase64: pages[i],
+                  mimeType: 'application/pdf',
+                  docType: 'auto',
+                }),
+              }
+            );
+            if (!result.success || !result.data) throw new Error(result.error || 'Parse hatası');
+            parsed = result.data;
+            break;
+          } catch (err: any) {
+            const is429 = /429|quota|RESOURCE_EXHAUSTED/i.test(String(err?.message || err));
+            if (attempt === 4 || !is429) throw err;
+            setBatchProgress(`Sayfa ${pageNo}: kota limiti, ${50 * attempt} sn bekleniyor...`);
+            await sleep(50000 * attempt);
+          }
+        }
+
+        const sourceTag = `[BatchPDF:${sourceBase}#P${pageNo}]`;
+        const imported = await importParsedPage(parsed, pageNo, sourceTag, workingCari, workingStok);
+        workingCari = imported.cariler;
+        workingStok = imported.stoklar;
+
+        setBatchRows((prev) =>
+          prev.map((r) =>
+            r.pageNo === pageNo
+              ? {
+                  ...r,
+                  status: 'ok',
+                  detectedType: imported.type,
+                  evrakNo: imported.evrakNo,
+                  firma: imported.firma,
+                }
+              : r
+          )
+        );
+
+        if (i < pages.length - 1) await sleep(3000);
+      }
+
+      setBatchProgress('');
+      showStatus('success', `Toplu aktarım tamamlandı: ${pages.length} sayfa işlendi.`);
+    } catch (err: any) {
+      console.error(err);
+      setBatchProgress('');
+      showStatus('error', `Toplu aktarım hatası: ${err.message || 'Bilinmeyen hata'}`);
+      setBatchRows((prev) =>
+        prev.map((r) => (r.status === 'parsing' ? { ...r, status: 'error', message: err.message } : r))
+      );
+    } finally {
+      setBatchRunning(false);
+    }
+  };
+
   // Import parsed data to Firestore and state
   const handleImportToSystem = async () => {
     if (!parsedData) return;
@@ -573,6 +777,65 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           <div className="w-12 h-12 bg-white border border-blue-100 rounded-2xl flex items-center justify-center text-blue-500 shrink-0 shadow-xs">
             <Layers size={22} className="animate-pulse" />
           </div>
+        </div>
+
+        {/* Toplu PDF aktarım */}
+        <div className="bg-white border border-amber-200 rounded-3xl p-6 space-y-4 shadow-sm">
+          <span className="text-[10px] font-black tracking-widest text-amber-700 uppercase block">TOPLU PDF AKTARIM (19 SAYFA GİBİ)</span>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Çok sayfalı taranmış PDF&apos;yi sayfa sayfa okur; her sayfayı fatura veya irsaliye olarak algılar, cari kart ve stok kart eşleştirmesi yapar (yoksa otomatik oluşturur).
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+            <label className="flex-1 text-xs border border-dashed border-slate-300 rounded-xl p-3 cursor-pointer hover:bg-slate-50">
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                className="hidden"
+                disabled={batchRunning}
+                onChange={(e) => {
+                  setBatchFile(e.target.files?.[0] || null);
+                  setBatchRows([]);
+                }}
+              />
+              {batchFile ? batchFile.name : 'PDF seçin (örn. 157-46 dograma hesap)'}
+            </label>
+            <button
+              type="button"
+              disabled={!batchFile || batchRunning}
+              onClick={handleBatchPdfImport}
+              className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-3 rounded-xl cursor-pointer flex items-center justify-center gap-2 shrink-0"
+            >
+              {batchRunning ? <RefreshCw size={14} className="animate-spin" /> : <Layers size={14} />}
+              Tüm Sayfaları Tara ve Aktar
+            </button>
+          </div>
+          {batchProgress && (
+            <p className="text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">{batchProgress}</p>
+          )}
+          {batchRows.length > 0 && (
+            <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-xl text-[10px]">
+              <table className="w-full">
+                <thead className="bg-slate-50 sticky top-0">
+                  <tr>
+                    <th className="text-left p-2">Sayfa</th>
+                    <th className="text-left p-2">Durum</th>
+                    <th className="text-left p-2">Tür</th>
+                    <th className="text-left p-2">Firma / No</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {batchRows.map((r) => (
+                    <tr key={r.pageNo} className="border-t border-slate-100">
+                      <td className="p-2 font-mono">{r.pageNo}</td>
+                      <td className="p-2">{r.status}</td>
+                      <td className="p-2">{r.detectedType || '—'}</td>
+                      <td className="p-2 truncate max-w-[200px]">{r.firma || r.evrakNo || r.message || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* Form elements */}

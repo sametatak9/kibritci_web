@@ -19,7 +19,10 @@
     "migrate:firestore": "node scripts/migrate-firestore.mjs --execute",
     "migrate:firestore:verify": "node scripts/migrate-firestore.mjs --verify-only",
     "migrate:ensure-config": "node scripts/ensure-target-config.mjs",
-    "migrate:full": "node scripts/run-full-migration.mjs"
+    "migrate:full": "node scripts/run-full-migration.mjs",
+    "evrak:split-pdf": "node scripts/split-pdf-pages.mjs",
+    "evrak:import-pdf:dry-run": "node scripts/import-legacy-evrak-pdf.mjs --dry-run",
+    "evrak:import-pdf": "node scripts/import-legacy-evrak-pdf.mjs --execute"
   },
   "dependencies": {
     "@google/genai": "^2.10.0",
