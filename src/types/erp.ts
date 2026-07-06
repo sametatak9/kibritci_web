@@ -260,6 +260,8 @@ export interface SahaFaaliyeti {
   blok: string;
   aciklama: string;
   fotoUrl?: string;
+  /** Formen mobil — kayıt başına en fazla 5 saha fotoğrafı */
+  fotoUrls?: string[];
   aktifPersonelListesi?: string[];
   ustaSayisi?: number;
   isciSayisi?: number;

@@ -3,6 +3,27 @@ import { normalizeDateKey } from './dateKeyUtils';
 import { getYoklamaDay, setYoklamaDay } from './yoklamaUtils';
 
 export const MAX_SAHA_MESAI_SAATI = 14;
+export const MAX_SAHA_FOTO_COUNT = 5;
+
+type FaaliyetFotoKaynak = Partial<SahaFaaliyeti> & {
+  sahaFotoBase64?: string;
+  fotoBase64?: string;
+};
+
+/** Kayıttaki tüm saha fotoğrafları (geriye uyumlu: tek fotoUrl dahil) */
+export function getFaaliyetFotolar(sf: FaaliyetFotoKaynak | null | undefined): string[] {
+  if (!sf) return [];
+  const fromArray = Array.isArray(sf.fotoUrls)
+    ? sf.fotoUrls.map((u) => String(u || '').trim()).filter(Boolean)
+    : [];
+  if (fromArray.length > 0) return fromArray.slice(0, MAX_SAHA_FOTO_COUNT);
+  const single = String(sf.fotoUrl || sf.sahaFotoBase64 || sf.fotoBase64 || '').trim();
+  return single ? [single] : [];
+}
+
+export function getFaaliyetFoto(sf: FaaliyetFotoKaynak | null | undefined): string {
+  return getFaaliyetFotolar(sf)[0] || '';
+}
 
 export function isFaaliyetOnDate(f: SahaFaaliyeti, dateKey: string): boolean {
   return normalizeDateKey(f.tarih) === normalizeDateKey(dateKey);

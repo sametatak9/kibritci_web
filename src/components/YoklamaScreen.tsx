@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Calendar, Trash2, ShieldAlert, CheckCircle, FileText, ChevronRight, RefreshCw, Database, Undo2, Redo2, Camera } from 'lucide-react';
 import { Personel, AylikYoklamaMap, YoklamaDurum, SahaFaaliyeti } from '../types/erp';
 import { normalizeDateKey } from '../lib/dateKeyUtils';
-import { formatMesaiFaaliyetLabel, isMesaiSahaFaaliyet } from '../lib/sahaFaaliyetUtils';
+import { formatMesaiFaaliyetLabel, getFaaliyetFotolar, isMesaiSahaFaaliyet } from '../lib/sahaFaaliyetUtils';
 import { KibritciLogo } from './KibritciLogo';
 import { loadKibritciLogoDataUrl } from '../lib/kibritciBrand';
 import { buildPersonelListForMonth, findPersonelByName, getYoklamaDay, isDayActiveForPersonel, isPersonelVisibleInMonth, normalizeTurkishName, setYoklamaDay } from '../lib/yoklamaUtils';
@@ -68,9 +68,6 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   const [bireyselYear, setBireyselYear] = useState(selectedYear);
 
   const [sahaPreviewPerson, setSahaPreviewPerson] = useState<Personel | null>(null);
-
-  const getFaaliyetFoto = (sf: SahaFaaliyeti): string =>
-    String(sf.fotoUrl || (sf as { sahaFotoBase64?: string; fotoBase64?: string }).sahaFotoBase64 || (sf as { fotoBase64?: string }).fotoBase64 || '').trim();
 
   const personMatchesFaaliyet = (p: Personel, f: SahaFaaliyeti): boolean => {
     const list = f.aktifPersonelListesi || [];
@@ -2267,7 +2264,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                 </div>
               ) : (
                 sahaPreviewFaaliyetleri.map((f) => {
-                  const foto = getFaaliyetFoto(f);
+                  const fotolar = getFaaliyetFotolar(f);
+                  const foto = fotolar[0] || '';
                   const tarihLabel = (() => {
                     const dk = normalizeDateKey(f.tarih);
                     if (!dk) return f.tarih;
@@ -2276,14 +2274,21 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                   })();
                   return (
                     <div key={f.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col sm:flex-row">
-                      <div className={`shrink-0 bg-slate-100 flex items-center justify-center ${foto ? 'sm:w-44 h-36 sm:h-auto' : 'hidden'}`}>
+                      <div className={`shrink-0 bg-slate-100 flex items-center justify-center relative ${foto ? 'sm:w-44 h-36 sm:h-auto' : 'hidden'}`}>
                         {foto ? (
-                          <img
-                            src={foto}
-                            alt="Saha fotoğrafı"
-                            className="w-full h-full object-cover min-h-[9rem]"
-                            loading="lazy"
-                          />
+                          <>
+                            <img
+                              src={foto}
+                              alt="Saha fotoğrafı"
+                              className="w-full h-full object-cover min-h-[9rem]"
+                              loading="lazy"
+                            />
+                            {fotolar.length > 1 && (
+                              <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">
+                                +{fotolar.length - 1} foto
+                              </span>
+                            )}
+                          </>
                         ) : null}
                       </div>
                       <div className="flex-1 p-4 min-w-0">

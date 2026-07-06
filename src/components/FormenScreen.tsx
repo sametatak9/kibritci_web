@@ -18,6 +18,9 @@ import {
   formatMesaiFaaliyetLabel,
   isMesaiSahaFaaliyet,
   normalizeMesaiHours as normalizeSahaMesaiHours,
+  getFaaliyetFoto,
+  getFaaliyetFotolar,
+  MAX_SAHA_FOTO_COUNT,
 } from '../lib/sahaFaaliyetUtils';
 import { PARSEL_BLOK_MAP, PARSEL_LIST, defaultBlokForParsel } from '../data/parselBlokMap';
 import { normalizeDateKey, formatDateLabelTr, todayDateKey } from '../lib/dateKeyUtils';
@@ -141,7 +144,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const [parsel, setParsel] = useState('Parsel Bölge 157/46');
   const [blok, setBlok] = useState('GENEL SAHA');
   const [aciklama, setAciklama] = useState('');
-  const [fotoUrl, setFotoUrl] = useState<string | null>(null);
+  const [fotoUrls, setFotoUrls] = useState<string[]>([]);
   const [faaliyetPersonelIds, setFaaliyetPersonelIds] = useState<string[]>([]);
   const [faaliyetPersonelSearch, setFaaliyetPersonelSearch] = useState('');
   const [sahaUstaSayisi, setSahaUstaSayisi] = useState<number>(0);
@@ -211,10 +214,6 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     if (!isAktif && !p.istenCikisTarihi) return false;
     return isDayActiveForPersonel(p, year, month, day, yoklamalar[p.id] as any);
   });
-  const getFaaliyetFoto = (sf: SahaFaaliyetiType | any): string => {
-    return String(sf?.fotoUrl || sf?.sahaFotoBase64 || sf?.fotoBase64 || '').trim();
-  };
-
   const assignedPersonelOnSelectedDate = useMemo(() => {
     const ids = new Set<string>();
     selectedDateFaaliyetleri.forEach((f) => {
@@ -672,26 +671,49 @@ ${satirlar
   };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const reader = new FileReader();
-      const rawBase64 = await new Promise<string>((resolve, reject) => {
-        reader.onload = (event) => resolve(String(event.target?.result || ''));
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      try {
-        const compressed = await compressImage(rawBase64);
-        setFotoUrl(compressed);
-      } catch {
-        // Bazı cihazlarda (özellikle HEIC) sıkıştırma başarısız olabiliyor; ham base64 ile devam et.
-        setFotoUrl(rawBase64);
-      }
+    const files = e.target.files;
+    if (!files?.length) return;
+
+    const remaining = MAX_SAHA_FOTO_COUNT - fotoUrls.length;
+    if (remaining <= 0) {
+      showStatus('error', `En fazla ${MAX_SAHA_FOTO_COUNT} fotoğraf eklenebilir.`);
       e.target.value = '';
+      return;
+    }
+
+    const toProcess = Array.from(files).slice(0, remaining);
+    if (files.length > remaining) {
+      showStatus('error', `En fazla ${MAX_SAHA_FOTO_COUNT} fotoğraf — ${remaining} adet eklendi.`);
+    }
+
+    try {
+      const added: string[] = [];
+      for (const file of toProcess) {
+        const rawBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (event) => resolve(String(event.target?.result || ''));
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        try {
+          added.push(await compressImage(rawBase64));
+        } catch {
+          added.push(rawBase64);
+        }
+      }
+      setFotoUrls((prev) => [...prev, ...added].slice(0, MAX_SAHA_FOTO_COUNT));
+      if (files.length <= remaining) {
+        showStatus('success', `${added.length} fotoğraf eklendi (${Math.min(fotoUrls.length + added.length, MAX_SAHA_FOTO_COUNT)}/${MAX_SAHA_FOTO_COUNT}).`);
+      }
     } catch {
       showStatus('error', 'Fotoğraf yüklenemedi, tekrar deneyin.');
+    } finally {
+      e.target.value = '';
     }
+  };
+
+  const handleRemoveFoto = (index: number) => {
+    setFotoUrls((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleFillWorkerCountsFromSelection = () => {
@@ -744,7 +766,7 @@ ${satirlar
   const resetFaaliyetForm = () => {
     setIsNiteligi('');
     setAciklama('');
-    setFotoUrl(null);
+    setFotoUrls([]);
     setSahaUstaSayisi(0);
     setSahaIsciSayisi(0);
     setFaaliyetPersonelIds([]);
@@ -761,7 +783,7 @@ ${satirlar
     setParsel(sf.parsel);
     setBlok(sf.blok);
     setAciklama(sf.aciklama || '');
-    setFotoUrl(getFaaliyetFoto(sf) || null);
+    setFotoUrls(getFaaliyetFotolar(sf));
     setFaaliyetPersonelIds(Array.isArray(sf.aktifPersonelListesi) ? [...sf.aktifPersonelListesi] : []);
     setSahaUstaSayisi(sf.ustaSayisi || 0);
     setSahaIsciSayisi(sf.isciSayisi || 0);
@@ -821,7 +843,8 @@ ${satirlar
       parsel,
       blok,
       aciklama,
-      fotoUrl: fotoUrl || undefined,
+      fotoUrls: fotoUrls.length ? fotoUrls : undefined,
+      fotoUrl: fotoUrls[0] || undefined,
       aktifPersonelListesi: faaliyetPersonelIds,
       ustaSayisi: sahaUstaSayisi,
       isciSayisi: sahaIsciSayisi,
@@ -1808,51 +1831,85 @@ ${satirlar
                       )}
                     </div>
 
-                    {/* Photo upload / camera */}
+                    {/* Photo upload / camera — max 5 */}
                     <div className="space-y-1.5">
-                      <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">Saha Fotoğrafı (Anlık Çekim / Yükleme)</label>
-                      
-                      <div className="flex items-center space-x-2">
-                        <label className="bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 rounded-2xl p-3 flex flex-col items-center justify-center cursor-pointer transition w-24 h-20 shrink-0 text-slate-500 hover:text-slate-800">
-                          <Camera size={20} />
-                          <span className="text-[8px] font-bold mt-1 text-center leading-none">Kameradan</span>
-                          <input 
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">
+                          Saha Fotoğrafları (Kamera / Galeri)
+                        </label>
+                        <span className="text-[8px] font-black text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                          {fotoUrls.length}/{MAX_SAHA_FOTO_COUNT}
+                        </span>
+                      </div>
+
+                      <div className="flex items-start gap-2">
+                        <label
+                          className={`bg-slate-100 border-2 border-dashed border-slate-300 rounded-2xl p-3 flex flex-col items-center justify-center transition w-20 h-16 shrink-0 text-slate-500 ${
+                            fotoUrls.length >= MAX_SAHA_FOTO_COUNT
+                              ? 'opacity-40 pointer-events-none'
+                              : 'hover:bg-slate-200 hover:text-slate-800 cursor-pointer'
+                          }`}
+                        >
+                          <Camera size={18} />
+                          <span className="text-[7px] font-bold mt-0.5 text-center leading-none">Kameradan</span>
+                          <input
                             type="file"
                             accept="image/*"
                             capture="environment"
                             onChange={handleImageChange}
                             className="hidden"
+                            disabled={fotoUrls.length >= MAX_SAHA_FOTO_COUNT}
                           />
                         </label>
 
-                        <label className="bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 rounded-2xl p-3 flex flex-col items-center justify-center cursor-pointer transition w-24 h-20 shrink-0 text-slate-500 hover:text-slate-800">
-                          <ImageIcon size={20} />
-                          <span className="text-[8px] font-bold mt-1 text-center leading-none">Galeriden</span>
-                          <input 
+                        <label
+                          className={`bg-slate-100 border-2 border-dashed border-slate-300 rounded-2xl p-3 flex flex-col items-center justify-center transition w-20 h-16 shrink-0 text-slate-500 ${
+                            fotoUrls.length >= MAX_SAHA_FOTO_COUNT
+                              ? 'opacity-40 pointer-events-none'
+                              : 'hover:bg-slate-200 hover:text-slate-800 cursor-pointer'
+                          }`}
+                        >
+                          <ImageIcon size={18} />
+                          <span className="text-[7px] font-bold mt-0.5 text-center leading-none">Galeriden</span>
+                          <input
                             type="file"
                             accept="image/*"
+                            multiple
                             onChange={handleImageChange}
                             className="hidden"
+                            disabled={fotoUrls.length >= MAX_SAHA_FOTO_COUNT}
                           />
                         </label>
 
-                        {/* Photo Preview */}
-                        <div className="flex-1 bg-slate-50 border rounded-2xl h-20 overflow-hidden flex items-center justify-center relative">
-                          {fotoUrl ? (
-                            <>
-                              <img src={fotoUrl} alt="Saha Görseli" className="w-full h-full object-cover" />
-                              <button
-                                type="button"
-                                onClick={() => setFotoUrl(null)}
-                                className="absolute top-1 right-1 bg-red-650 hover:bg-red-700 text-white rounded-full p-1 shadow-md text-[8px] font-bold"
-                              >
-                                ✕
-                              </button>
-                            </>
+                        <div className="flex-1 min-w-0">
+                          {fotoUrls.length === 0 ? (
+                            <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl h-16 flex items-center justify-center text-slate-400">
+                              <div className="text-center p-2">
+                                <ImageIcon size={14} className="mx-auto text-slate-300 mb-0.5" />
+                                <span className="text-[7px] block leading-none">En fazla 5 fotoğraf</span>
+                              </div>
+                            </div>
                           ) : (
-                            <div className="text-center p-3 text-slate-400">
-                              <ImageIcon size={16} className="mx-auto text-slate-300 mb-1" />
-                              <span className="text-[7px] block leading-none">Fotoğraf Seçilmedi</span>
+                            <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+                              {fotoUrls.map((url, idx) => (
+                                <div
+                                  key={`${idx}-${url.slice(0, 24)}`}
+                                  className="relative w-16 h-16 shrink-0 bg-slate-50 border border-slate-200 rounded-xl overflow-hidden"
+                                >
+                                  <img src={url} alt={`Saha ${idx + 1}`} className="w-full h-full object-cover" />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveFoto(idx)}
+                                    className="absolute top-0.5 right-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-[8px] font-bold shadow"
+                                    aria-label="Fotoğrafı kaldır"
+                                  >
+                                    ✕
+                                  </button>
+                                  <span className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[6px] font-bold text-center py-0.5">
+                                    {idx + 1}
+                                  </span>
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>
@@ -2911,14 +2968,23 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                               </div>
                             </div>
 
-                            {/* Activity photo inside report */}
-                            <div className="flex flex-col items-center justify-center bg-slate-50 border rounded-xl p-1 shrink-0 h-24 overflow-hidden">
-                              {getFaaliyetFoto(sf) ? (
-                                <img src={getFaaliyetFoto(sf)} alt="Kanıt Görsel" className="w-full h-full object-cover rounded-lg" />
+                            {/* Activity photos inside report */}
+                            <div className="flex flex-col items-center justify-center bg-slate-50 border rounded-xl p-1 shrink-0 min-w-[5.5rem] max-w-[8rem]">
+                              {getFaaliyetFotolar(sf).length > 0 ? (
+                                <div className="grid grid-cols-2 gap-0.5 w-full">
+                                  {getFaaliyetFotolar(sf).slice(0, 4).map((url, i) => (
+                                    <img key={i} src={url} alt={`Kanıt ${i + 1}`} className="w-full h-10 object-cover rounded" />
+                                  ))}
+                                </div>
                               ) : (
-                                <div className="text-slate-400 italic text-[7.5px] text-center p-2">
+                                <div className="text-slate-400 italic text-[7.5px] text-center p-2 h-24 flex items-center">
                                   📷 Görsel Eklenmedi
                                 </div>
+                              )}
+                              {getFaaliyetFotolar(sf).length > 1 && (
+                                <span className="text-[6px] font-bold text-slate-500 mt-0.5">
+                                  {getFaaliyetFotolar(sf).length} fotoğraf
+                                </span>
                               )}
                             </div>
                           </div>
