@@ -236,8 +236,13 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   const handleRejectStokKart = async (item: any) => {
     if (!window.confirm(`"${item.stokAdi}" stok kartını reddetmek istiyor musunuz?`)) return;
     try {
-      await deleteDoc(doc(db, 'stokKartlar', item.id));
-      alert("🛑 Stok kartı talebi reddedildi ve sistemden silindi.");
+      await updateDoc(doc(db, 'stokKartlar', item.id), {
+        durum: 'REDDEDILDI',
+        onaylayanYonetici: currentUser?.email || 'Sistem Yöneticisi',
+        onayTarihi: new Date().toISOString().split('T')[0],
+        redNedeni: 'Yönetici tarafından reddedildi',
+      });
+      alert('🛑 Stok kartı talebi reddedildi (kayıt korunarak arşivlendi).');
     } catch (err) {
       console.error(err);
       alert("Reddetme işlemi başarısız.");

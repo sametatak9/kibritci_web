@@ -354,11 +354,6 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     if (!needsNormalize) return;
 
     setPersoneller((prev) => prev.map((p) => ({ ...p, gorev: normalizePersonelGorev(p.gorev) })));
-    void Promise.all(
-      personeller.map((p) =>
-        saveDocument('personeller', { ...p, gorev: normalizePersonelGorev(p.gorev) } as Personel).catch(() => undefined)
-      )
-    );
   }, [personeller, setPersoneller]);
 
   const appendTaseronCariHistory = (
@@ -387,12 +382,9 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     historyNote?: string
   ) => {
     let savedPersonel: Personel;
-    if (isEdit && 'id' in normalizedPayload) {
+        if (isEdit && 'id' in normalizedPayload) {
       savedPersonel = normalizedPayload as Personel;
       setPersoneller((prev) => prev.map((p) => (p.id === savedPersonel.id ? savedPersonel : p)));
-      void saveDocument('personeller', savedPersonel).catch((err) => {
-        console.error('Personel güncelleme Firestore kaydı başarısız:', err);
-      });
       alert('Personel bilgileri başarıyla güncellendi.');
     } else {
       savedPersonel = {
@@ -400,9 +392,6 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
         id: `p_${Date.now()}`,
       };
       setPersoneller((prev) => [savedPersonel, ...prev]);
-      void saveDocument('personeller', savedPersonel).catch((err) => {
-        console.error('Yeni personel Firestore kaydı başarısız:', err);
-      });
       alert('Yeni personel başarıyla kaydedildi.');
     }
 

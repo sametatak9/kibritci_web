@@ -1,5 +1,6 @@
 import { KampKat, KampKaydi, KampOdasi, KampYerleske } from '../types/erp';
 import { db, fetchCollection, removeDocument, saveDocument, withTimeout } from './firebase';
+import { isProductionLive } from './productionDataGuard';
 import { writeBatch, doc } from 'firebase/firestore';
 
 const KAMP_PURGE_TIMEOUT_MS = 90_000;
@@ -433,6 +434,11 @@ export async function purgeAllKampData(): Promise<{
   yerleskeler: number;
   katlar: number;
 }> {
+  if (isProductionLive()) {
+    throw new Error(
+      'Canlı üretim modunda tüm kamp verisini silme engellendi. Geliştirici modunda veya test ortamında deneyin.'
+    );
+  }
   return enqueueKampPurge(async () => {
   const counts = { odalar: 0, kayitlar: 0, yerleskeler: 0, katlar: 0 };
   const specs: Array<[string, keyof typeof counts]> = [

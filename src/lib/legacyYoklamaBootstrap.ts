@@ -29,7 +29,7 @@ export function haziran2026NeedsBootstrap(yoklamalar: AylikYoklamaMap): boolean 
 }
 
 export function shouldBootstrapLegacyYoklama(yoklamalar: AylikYoklamaMap): boolean {
-  if (isProductionLive() && hasSubstantialYoklamaData(yoklamalar)) return false;
+  if (isProductionLive()) return false;
 
   // Veri silinmişse/azalmışsa localStorage versiyonu ne olursa olsun yeniden bootstrap et.
   if (mayis2026NeedsBootstrap(yoklamalar)) return true;

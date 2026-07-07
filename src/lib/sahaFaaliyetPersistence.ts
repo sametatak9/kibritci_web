@@ -21,6 +21,7 @@ const MAX_ARCHIVES = 150;
 export type SahaFaaliyetSaveSource =
   | 'formen_mobil'
   | 'idari_saha'
+  | 'evrak'
   | 'sync'
   | 'restore'
   | 'delete';

@@ -3,7 +3,6 @@ import {
   FileText, Upload, Check, RefreshCw, AlertCircle, Calendar, 
   ArrowRight, Landmark, FileSpreadsheet, Layers, ShoppingBag, DollarSign, Users, ClipboardCheck
 } from 'lucide-react';
-import { saveDocument } from '../lib/firebase';
 import { CariKart, CariKartIslem, StokKart, Personel, AylikYoklamaMap, SahaFaaliyeti, Fatura } from '../types/erp';
 import { findPersonelByName, setYoklamaDay } from '../lib/yoklamaUtils';
 import { fetchApiJson } from '../lib/apiClient';
@@ -35,6 +34,14 @@ interface EvrakAktarimiScreenProps {
   sahaFaaliyetleri: SahaFaaliyeti[];
   setSahaFaaliyetleri: (updater: SahaFaaliyeti[] | ((s: SahaFaaliyeti[]) => SahaFaaliyeti[])) => void;
   personeller: Personel[];
+  saveYoklamalarNow?: (
+    next: AylikYoklamaMap,
+    kaynak?: import('../lib/yoklamaPersistence').YoklamaSaveSource
+  ) => Promise<unknown>;
+  saveSahaFaaliyetNow?: (
+    record: SahaFaaliyeti,
+    kaynak?: import('../lib/sahaFaaliyetPersistence').SahaFaaliyetSaveSource
+  ) => Promise<unknown>;
 }
 
 export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
@@ -52,7 +59,9 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
   setYoklamalar,
   sahaFaaliyetleri,
   setSahaFaaliyetleri,
-  personeller
+  personeller,
+  saveYoklamalarNow,
+  saveSahaFaaliyetNow,
 }) => {
   const [docType, setDocType] = useState<'fatura' | 'irsaliye' | 'makbuz' | 'hakedis' | 'yoklama' | 'saha_faaliyet' | 'auto'>('auto');
   const [dragActive, setDragActive] = useState(false);
@@ -393,18 +402,11 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
       cariler = resolved.cariler;
       matchedCari = resolved.cari;
       createdCari = resolved.created;
-      if (resolved.cari && resolved.created) {
-        await saveDocument('cariKartlar', resolved.cari);
-      }
     }
 
     for (const k of kalemler) {
-      const before = findStokMatch(k.urunAdi || '', workingStok);
       const ensured = autoEnsureStok(k.urunAdi || '', k.birim || 'ADET', stoklar, sourceTag);
       stoklar = ensured.stoklar;
-      if (ensured.stok && !before) {
-        await saveDocument('stokKartlar', ensured.stok);
-      }
     }
 
     if (setCariKartlar) setCariKartlar(cariler);
@@ -432,7 +434,6 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
         eImzalar: [],
         notlar: sourceTag,
       };
-      await saveDocument('irsaliyeler', doc);
       setIrsaliyeler((prev) => [doc, ...prev]);
       return { evrakNo: doc.irsaliyeNo, firma: doc.firma, type: 'irsaliye', cariler, stoklar, reusedCari: Boolean(matchedCari) };
     }
@@ -462,7 +463,6 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
         })
       ),
     };
-    await saveDocument('faturalar', faturaDoc);
     setFaturalar((prev) => [faturaDoc, ...prev]);
 
     if (matchedCari?.id && setCariIslemGecmisi) {
@@ -476,7 +476,6 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
         createdCari
       );
       setCariIslemGecmisi((prev) => [history, ...prev]);
-      await saveDocument('cariIslemGecmisi', history).catch(() => undefined);
     }
 
     return {
@@ -644,7 +643,6 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           }))
         };
 
-        await saveDocument('faturalar', newFatura);
         setFaturalar(prev => [newFatura, ...prev]);
         showStatus('success', `🎉 ${newFatura.faturaNo} fatura belgesi başarıyla sisteme aktarıldı!`);
 
@@ -664,7 +662,6 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           }))
         };
 
-        await saveDocument('irsaliyeler', newIrsaliye);
         setIrsaliyeler(prev => [newIrsaliye, ...prev]);
         showStatus('success', `🎉 ${newIrsaliye.irsaliyeNo} irsaliye belgesi başarıyla sisteme aktarıldı!`);
 
@@ -679,7 +676,6 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           referansId: parsedData.referansId || `REF-${Date.now()}`
         };
 
-        await saveDocument('kasaHareketleri', newKasaHareketi);
         setKasaHareketleri(prev => [newKasaHareketi, ...prev]);
         showStatus('success', `🎉 ₺${newKasaHareketi.tutar} tutarındaki makbuz hareketi kasa defterine işlendi!`);
 
@@ -713,7 +709,6 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           ]
         };
 
-        await saveDocument('faturalar', newHakedisFatura);
         setFaturalar(prev => [newHakedisFatura, ...prev]);
         showStatus('success', `🎉 ${parsedData.donem} dönemli hakediş faturası başarıyla şantiye hakediş defterine kaydedildi!`);
       
@@ -765,7 +760,11 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           matchedCount++;
         });
 
-        setYoklamalar(newYoklamalar);
+        if (saveYoklamalarNow) {
+          await saveYoklamalarNow(newYoklamalar, 'evrak');
+        } else {
+          setYoklamalar(newYoklamalar);
+        }
         const unmatchedMsg = unmatched.length > 0 ? ` Eşleşmeyen: ${unmatched.join(', ')}` : '';
         showStatus('success', `🎉 Toplam ${matchedCount} personelin yoklama/puantaj verisi (${importMonth}/${importYear}) sisteme aktarıldı!${unmatchedMsg}`);
 
@@ -786,8 +785,11 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           aktifPersonelListesi: mappedList
         };
 
-        await saveDocument('sahaFaaliyetleri', newSahaFaaliyet);
-        setSahaFaaliyetleri(prev => [newSahaFaaliyet, ...prev]);
+        if (saveSahaFaaliyetNow) {
+          await saveSahaFaaliyetNow(newSahaFaaliyet, 'evrak');
+        } else {
+          setSahaFaaliyetleri(prev => [newSahaFaaliyet, ...prev]);
+        }
         showStatus('success', `🎉 Günlük Saha Faaliyet Raporu başarıyla İdari İşler / Günlük Loglar sekmesine kaydedildi!`);
       }
 

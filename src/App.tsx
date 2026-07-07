@@ -21,7 +21,7 @@ import { IdariScreen } from './components/IdariScreen';
 import { OnayIslemleriScreen } from './components/OnayIslemleriScreen';
 import { SohbetScreen } from './components/SohbetScreen';
 import { FormenScreen } from './components/FormenScreen';
-import { KibritciLogo } from './components/KibritciLogo';
+import { queueArrayStateSync } from './lib/collectionSyncQueue';
 import { GuvenlikScreen } from './components/GuvenlikScreen';
 import { KampciScreen } from './components/KampciScreen';
 import { LojistikScreen } from './components/LojistikScreen';
@@ -260,6 +260,9 @@ export default function App() {
   const claimsSyncedRef = useRef(false);
   const bootstrapDoneRef = useRef(false);
   const kampRepairInFlightRef = useRef(false);
+  const persistenceFailureRef = useRef<(collection: string, message: string) => void>((c, m) => {
+    console.error(`[persist:${c}]`, m);
+  });
   const mainScrollRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -562,13 +565,14 @@ export default function App() {
         if (sahaMerge) {
           reportData = sahaMerge;
           console.log(`Legacy saha faaliyet bellekte birleştirildi: ${reportData.length} kayıt`);
-          if (reportData.length < 50) {
+          if (!isProductionLive() && reportData.length < 50) {
             const mergedSaha = reportData;
             void (async () => {
               try {
+                const { enqueueSahaFaaliyetSave } = await import('./lib/sahaFaaliyetPersistence');
                 for (const sf of mergedSaha) {
                   if (sf.id?.startsWith('SF-MAY26-') || sf.id?.startsWith('SF-HAZ26-')) {
-                    await saveDocument('sahaFaaliyetleri', sf);
+                    await enqueueSahaFaaliyetSave(sf, 'legacy_bootstrap');
                   }
                 }
                 if (!haziran2026SahaNeedsBootstrap(mergedSaha)) {
@@ -1186,6 +1190,17 @@ export default function App() {
   };
 
   // 2. Optimistic Intercepting Wrapper State Setters
+  const syncListState = <T extends { id: string }>(
+    collectionName: string,
+    prev: T[],
+    next: T[],
+    setState: React.Dispatch<React.SetStateAction<T[]>>
+  ) => {
+    queueArrayStateSync(collectionName, prev, next, () => setState(prev), (msg) =>
+      persistenceFailureRef.current(collectionName, msg)
+    );
+  };
+
   const setPersonellerWithSync = (updater: Personel[] | ((p: Personel[]) => Personel[])) => {
     setPersoneller(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -1198,7 +1213,7 @@ export default function App() {
       // #region agent log
       fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-1',hypothesisId:'H1',location:'App.tsx:setPersonellerWithSync',message:'personel local state change queued for sync',data:{prevCount:prev.length,nextCount:next.length,added,removed},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
-      setTimeout(() => syncArrayToFirestore('personeller', prev, next), 0);
+      syncListState('personeller', prev, next, setPersoneller);
       return next;
     });
   };
@@ -1206,7 +1221,7 @@ export default function App() {
   const setSatinAlmaTalepleriWithSync = (updater: SatinAlmaTalebi[] | ((s: SatinAlmaTalebi[]) => SatinAlmaTalebi[])) => {
     setSatinAlmaTalepleri(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('satinAlmaTalepleri', prev, next), 0);
+      syncListState('satinAlmaTalepleri', prev, next, setSatinAlmaTalepleri);
       return next;
     });
   };
@@ -1214,7 +1229,7 @@ export default function App() {
   const setIrsaliyelerWithSync = (updater: Irsaliye[] | ((i: Irsaliye[]) => Irsaliye[])) => {
     setIrsaliyeler(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('irsaliyeler', prev, next), 0);
+      syncListState('irsaliyeler', prev, next, setIrsaliyeler);
       return next;
     });
   };
@@ -1222,7 +1237,7 @@ export default function App() {
   const setFaturalarWithSync = (updater: Fatura[] | ((f: Fatura[]) => Fatura[])) => {
     setFaturalar(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('faturalar', prev, next), 0);
+      syncListState('faturalar', prev, next, setFaturalar);
       return next;
     });
   };
@@ -1230,7 +1245,7 @@ export default function App() {
   const setEvrakBaglantiGruplariWithSync = (updater: EvrakBaglantiGrubu[] | ((g: EvrakBaglantiGrubu[]) => EvrakBaglantiGrubu[])) => {
     setEvrakBaglantiGruplari(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('evrakBaglantiGruplari', prev, next), 0);
+      syncListState('evrakBaglantiGruplari', prev, next, setEvrakBaglantiGruplari);
       return next;
     });
   };
@@ -1238,7 +1253,7 @@ export default function App() {
   const setOnayliAnalizRaporlariWithSync = (updater: OnayliAnalizRaporu[] | ((r: OnayliAnalizRaporu[]) => OnayliAnalizRaporu[])) => {
     setOnayliAnalizRaporlari(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('onayliAnalizRaporlari', prev, next), 0);
+      syncListState('onayliAnalizRaporlari', prev, next, setOnayliAnalizRaporlari);
       return next;
     });
   };
@@ -1246,7 +1261,7 @@ export default function App() {
   const setKasaHareketleriWithSync = (updater: KasaHareketi[] | ((k: KasaHareketi[]) => KasaHareketi[])) => {
     setKasaHareketleri(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('kasaHareketleri', prev, next), 0);
+      syncListState('kasaHareketleri', prev, next, setKasaHareketleri);
       return next;
     });
   };
@@ -1254,7 +1269,7 @@ export default function App() {
   const setAraclarWithSync = (updater: AracBakim[] | ((a: AracBakim[]) => AracBakim[])) => {
     setAraclar(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('araclar', prev, next), 0);
+      syncListState('araclar', prev, next, setAraclar);
       return next;
     });
   };
@@ -1262,7 +1277,7 @@ export default function App() {
   const setDemirbaslarWithSync = (updater: Demisbas[] | ((d: Demisbas[]) => Demisbas[])) => {
     setDemirbaslar(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('demirbaslar', prev, next), 0);
+      syncListState('demirbaslar', prev, next, setDemirbaslar);
       return next;
     });
   };
@@ -1290,7 +1305,7 @@ export default function App() {
   ) => {
     setProgramliFaaliyetler((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('programliFaaliyetler', prev, next), 0);
+      syncListState('programliFaaliyetler', prev, next, setProgramliFaaliyetler);
       return next;
     });
   };
@@ -1298,7 +1313,7 @@ export default function App() {
   const setHazirTutanaklarWithSync = (updater: HazirTutanak[] | ((h: HazirTutanak[]) => HazirTutanak[])) => {
     setHazirTutanaklar(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('hazirTutanaklar', prev, next), 0);
+      syncListState('hazirTutanaklar', prev, next, setHazirTutanaklar);
       return next;
     });
   };
@@ -1331,7 +1346,7 @@ export default function App() {
   const setCariKartlarWithSync = (updater: CariKart[] | ((c: CariKart[]) => CariKart[])) => {
     setCariKartlar(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('cariKartlar', prev, next), 0);
+      syncListState('cariKartlar', prev, next, setCariKartlar);
       return next;
     });
   };
@@ -1339,7 +1354,7 @@ export default function App() {
   const setStokKartlarWithSync = (updater: StokKart[] | ((s: StokKart[]) => StokKart[])) => {
     setStokKartlar(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('stokKartlar', prev, next), 0);
+      syncListState('stokKartlar', prev, next, setStokKartlar);
       return next;
     });
   };
@@ -1347,7 +1362,7 @@ export default function App() {
   const setEpostaGonderimleriWithSync = (updater: EpostaGonderim[] | ((e: EpostaGonderim[]) => EpostaGonderim[])) => {
     setEpostaGonderimleri(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('epostaGonderimleri', prev, next), 0);
+      syncListState('epostaGonderimleri', prev, next, setEpostaGonderimleri);
       return next;
     });
   };
@@ -1361,7 +1376,7 @@ export default function App() {
   const setAracKmLoglariWithSync = (updater: any[] | ((a: any[]) => any[])) => {
     setAracKmLoglari(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('aracKmLoglari', prev, next), 0);
+      syncListState('aracKmLoglari', prev, next, setAracKmLoglari);
       return next;
     });
   };
@@ -1369,7 +1384,7 @@ export default function App() {
   const setOperatorFaaliyetleriWithSync = (updater: OperatorFaaliyet[] | ((o: OperatorFaaliyet[]) => OperatorFaaliyet[])) => {
     setOperatorFaaliyetleri(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('operatorFaaliyetleri', prev, next), 0);
+      syncListState('operatorFaaliyetleri', prev, next, setOperatorFaaliyetleri);
       return next;
     });
   };
@@ -1377,7 +1392,7 @@ export default function App() {
   const setTaseronKesintiRaporlariWithSync = (updater: TaseronKesintiRaporu[] | ((t: TaseronKesintiRaporu[]) => TaseronKesintiRaporu[])) => {
     setTaseronKesintiRaporlari(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('taseronKesintiRaporlari', prev, next), 0);
+      syncListState('taseronKesintiRaporlari', prev, next, setTaseronKesintiRaporlari);
       return next;
     });
   };
@@ -1385,7 +1400,7 @@ export default function App() {
   const setTaseronEnerjiKayitlariWithSync = (updater: TaseronEnerjiKaydi[] | ((t: TaseronEnerjiKaydi[]) => TaseronEnerjiKaydi[])) => {
     setTaseronEnerjiKayitlari(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('taseronEnerjiKayitlari', prev, next), 0);
+      syncListState('taseronEnerjiKayitlari', prev, next, setTaseronEnerjiKayitlari);
       return next;
     });
   };
@@ -1393,7 +1408,7 @@ export default function App() {
   const setTaseronYemekKayitlariWithSync = (updater: TaseronYemekKaydi[] | ((t: TaseronYemekKaydi[]) => TaseronYemekKaydi[])) => {
     setTaseronYemekKayitlari(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('taseronYemekKayitlari', prev, next), 0);
+      syncListState('taseronYemekKayitlari', prev, next, setTaseronYemekKayitlari);
       return next;
     });
   };
@@ -1401,7 +1416,7 @@ export default function App() {
   const setMaasOdemeleriWithSync = (updater: MaaşOdeme[] | ((m: MaaşOdeme[]) => MaaşOdeme[])) => {
     setMaasOdemeleri(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('maasOdemeleri', prev, next), 0);
+      syncListState('maasOdemeleri', prev, next, setMaasOdemeleri);
       return next;
     });
   };
@@ -1481,7 +1496,7 @@ export default function App() {
   const setPersonelIslemGecmisiWithSync = (updater: PersonelIslemGecmisi[] | ((p: PersonelIslemGecmisi[]) => PersonelIslemGecmisi[])) => {
     setPersonelIslemGecmisi(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('personelIslemGecmisi', prev, next), 0);
+      syncListState('personelIslemGecmisi', prev, next, setPersonelIslemGecmisi);
       return next;
     });
   };
@@ -1489,7 +1504,7 @@ export default function App() {
   const setCariIslemGecmisiWithSync = (updater: CariKartIslem[] | ((c: CariKartIslem[]) => CariKartIslem[])) => {
     setCariIslemGecmisi(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('cariIslemGecmisi', prev, next), 0);
+      syncListState('cariIslemGecmisi', prev, next, setCariIslemGecmisi);
       return next;
     });
   };
@@ -1497,7 +1512,7 @@ export default function App() {
   const setStokIslemGecmisiWithSync = (updater: StokKartIslem[] | ((s: StokKartIslem[]) => StokKartIslem[])) => {
     setStokIslemGecmisi(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('stokIslemGecmisi', prev, next), 0);
+      syncListState('stokIslemGecmisi', prev, next, setStokIslemGecmisi);
       return next;
     });
   };
@@ -1520,6 +1535,11 @@ export default function App() {
   const notifyYoklamaSaveFailure = (message: string) => {
     console.error('[yoklama]', message);
     void addNotification(`⚠️ Yoklama kaydı korundu: ${message}`);
+  };
+
+  persistenceFailureRef.current = (collection, message) => {
+    console.error(`[persist:${collection}]`, message);
+    void addNotification(`⚠️ ${collection} kaydı korundu: ${message}`);
   };
 
   const saveYoklamalarNow = async (
@@ -1586,12 +1606,7 @@ export default function App() {
   ) => {
     setSahaFaaliyetleri((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      void syncArrayToFirestore('sahaFaaliyetleri', prev, next).catch((err) => {
-        setSahaFaaliyetleri(prev);
-        notifySahaFaaliyetFailure(
-          err instanceof Error ? err.message : 'Saha faaliyet senkronizasyonu başarısız'
-        );
-      });
+      syncListState('sahaFaaliyetleri', prev, next, setSahaFaaliyetleri);
       return next;
     });
   };
@@ -2135,6 +2150,10 @@ export default function App() {
                     currentUser={currentUser}
                     personeller={personeller}
                     addNotification={addNotification}
+                    yoklamalar={yoklamalar}
+                    sahaFaaliyetleri={sahaFaaliyetleri}
+                    kampKayitlari={kampKayitlari}
+                    faturalar={faturalar}
                   />
                 ) : renderAccessDenied()
               )}
@@ -2467,7 +2486,7 @@ export default function App() {
 
               {activeTab === "evrak_aktarimi" && (
                 isYonetici ? (
-                  <EvrakAktarimiScreen 
+                  <EvrakAktarimiScreen
                     cariKartlar={cariKartlar}
                     setCariKartlar={setCariKartlarWithSync}
                     stokKartlar={stokKartlar}
@@ -2483,6 +2502,8 @@ export default function App() {
                     sahaFaaliyetleri={sahaFaaliyetleri}
                     setSahaFaaliyetleri={setSahaFaaliyetleriWithSync}
                     personeller={personeller}
+                    saveYoklamalarNow={saveYoklamalarNow}
+                    saveSahaFaaliyetNow={saveSahaFaaliyetNow}
                   />
                 ) : renderAccessDenied()
               )}

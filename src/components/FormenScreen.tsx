@@ -874,17 +874,7 @@ ${satirlar
     };
 
     try {
-      if (saveSahaFaaliyetNow) {
-        await saveSahaFaaliyetNow(faaliyetPayload, 'formen_mobil');
-      } else {
-        await saveDocument('sahaFaaliyetleri', faaliyetPayload);
-        setSahaFaaliyetleri((prev) => {
-          if (editingFaaliyetId) {
-            return prev.map((f) => (f.id === editingFaaliyetId ? faaliyetPayload : f));
-          }
-          return prev.some((f) => f.id === faaliyetPayload.id) ? prev : [faaliyetPayload, ...prev];
-        });
-      }
+      await saveSahaFaaliyetNow!(faaliyetPayload, 'formen_mobil');
       if (!editingFaaliyetId) {
         await logAssignedPersonelHistory(faaliyetPayload);
       }
@@ -922,12 +912,7 @@ ${satirlar
       if (isMesaiSahaFaaliyet(faaliyet)) {
         await syncMesaiFromFaaliyet(faaliyet.tarih, undefined, faaliyet.personelMesaiSaatleri);
       }
-      if (removeSahaFaaliyetNow) {
-        await removeSahaFaaliyetNow(faaliyet);
-      } else {
-        await deleteDoc(doc(db, 'sahaFaaliyetleri', faaliyet.id));
-        setSahaFaaliyetleri((prev) => prev.filter((item) => item.id !== faaliyet.id));
-      }
+      await removeSahaFaaliyetNow!(faaliyet);
       setLastDeletedFaaliyet(faaliyet);
       if (editingFaaliyetId === faaliyet.id) resetFaaliyetForm();
       showStatus('success', 'Rapor silindi veya arşivlendi. Gerekirse geri alabilirsiniz.');
@@ -1607,11 +1592,7 @@ ${satirlar
                         onClick={async () => {
                           if (!lastDeletedFaaliyet) return;
                           try {
-                            if (saveSahaFaaliyetNow) {
-                              await saveSahaFaaliyetNow(lastDeletedFaaliyet, 'restore');
-                            } else {
-                              setSahaFaaliyetleri((prev) => [lastDeletedFaaliyet, ...prev]);
-                            }
+                            await saveSahaFaaliyetNow!(lastDeletedFaaliyet, 'restore');
                             setLastDeletedFaaliyet(null);
                             showStatus('success', 'Silme işlemi geri alındı, faaliyet başarıyla kurtarıldı!');
                           } catch (err: any) {

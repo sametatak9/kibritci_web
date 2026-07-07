@@ -13,13 +13,20 @@ import {
 import { 
   Users, KeySquare, ShieldAlert, Trash2, CheckCircle, 
   XOctagon, UserCheck, AlertCircle, RefreshCw, Key,
-  Eye, Check, Clipboard, CheckSquare, Save, Loader2, UserPlus, Clock
+  Eye, Check, Clipboard, CheckSquare, Save, Loader2, UserPlus, Clock, Database
 } from 'lucide-react';
 import { AdminYetkiSablonTab } from './AdminYetkiSablonTab';
 import { isFirestoreWriteFailure } from '../lib/bekleyenUyelik';
 import { fetchCollection, removeDocument, saveDocument } from '../lib/firebase';
 import { getMobileRoleDisplayName, isMobileRole } from '../lib/yetkiUtils';
 import { provisionAuthUser, syncAuthClaimsFromServer } from '../lib/authClaimsClient';
+import {
+  createProgramVeriYedegi,
+  fetchVeriKorumaOzeti,
+  listProgramVeriYedekleri,
+  ProgramVeriYedegi,
+} from '../lib/veriKoruma';
+import { AylikYoklamaMap, SahaFaaliyeti, KampKaydi, Fatura } from '../types/erp';
 
 export interface Kullanici {
   id: string; // auth uid
@@ -74,6 +81,10 @@ interface AdminPanelScreenProps {
   currentUser: any;
   personeller?: any[];
   addNotification?: (mesaj: string) => void;
+  yoklamalar?: AylikYoklamaMap;
+  sahaFaaliyetleri?: SahaFaaliyeti[];
+  kampKayitlari?: KampKaydi[];
+  faturalar?: Fatura[];
 }
 
 export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
@@ -81,10 +92,14 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
   setKullanicilar,
   currentUser,
   personeller = [],
-  addNotification
+  addNotification,
+  yoklamalar = {},
+  sahaFaaliyetleri = [],
+  kampKayitlari = [],
+  faturalar = [],
 }) => {
   const visibleKullanicilar = dedupeKullanicilarByEmail(kullanicilar);
-  const [activeTab, setActiveTab] = useState<'users' | 'permissions' | 'pending' | 'create' | 'errors'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'permissions' | 'pending' | 'create' | 'errors' | 'backup'>('users');
   const [hataRaporlari, setHataRaporlari] = useState<HataRaporu[]>([]);
   const [loadingErrors, setLoadingErrors] = useState(false);
   const [selectedError, setSelectedError] = useState<HataRaporu | null>(null);
@@ -105,6 +120,10 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
   const [createTcNo, setCreateTcNo] = useState('');
   const [createYetki, setCreateYetki] = useState<string>('KAMPÇI');
   const [creatingUser, setCreatingUser] = useState(false);
+
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [backupOzeti, setBackupOzeti] = useState<Awaited<ReturnType<typeof fetchVeriKorumaOzeti>> | null>(null);
+  const [programYedekleri, setProgramYedekleri] = useState<ProgramVeriYedegi[]>([]);
 
   const mergedPending = mergePendingLists(
     firestorePending,
@@ -153,6 +172,60 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
       loadErrorReports();
     }
   }, [activeTab]);
+
+  const loadBackupPanel = useCallback(async () => {
+    setBackupLoading(true);
+    try {
+      const [ozet, yedekler] = await Promise.all([
+        fetchVeriKorumaOzeti(),
+        listProgramVeriYedekleri(15),
+      ]);
+      setBackupOzeti(ozet);
+      setProgramYedekleri(yedekler);
+    } catch (err) {
+      console.error('Yedek paneli yüklenemedi:', err);
+    } finally {
+      setBackupLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'backup') {
+      void loadBackupPanel();
+    }
+  }, [activeTab, loadBackupPanel]);
+
+  const handleCreateProgramBackup = async () => {
+    if (!window.confirm('Mevcut program verisinin anlık yedeği alınsın mı?\n(Yoklama arşivine tam kopya + özet manifest kaydedilir)')) {
+      return;
+    }
+    setBackupLoading(true);
+    try {
+      const ozet = {
+        personel: personeller.length,
+        yoklamaKisi: Object.keys(yoklamalar).length,
+        sahaFaaliyet: sahaFaaliyetleri.length,
+        kampKayit: kampKayitlari.length,
+        fatura: faturalar.length,
+      };
+      const yedek = await createProgramVeriYedegi(
+        yoklamalar,
+        ozet,
+        currentUser?.email || 'admin',
+        'Admin panel — manuel anlık yedek'
+      );
+      if (addNotification) {
+        addNotification(`✅ Program yedeği alındı (${new Date(yedek.olusturmaTarihi).toLocaleString('tr-TR')})`);
+      }
+      alert(`✅ Yedek alındı.\nYoklama arşiv ID: ${yedek.yoklamaArsivId || '—'}`);
+      await loadBackupPanel();
+    } catch (err) {
+      console.error(err);
+      alert(`Yedek alınamadı: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBackupLoading(false);
+    }
+  };
 
   const handleToggleStatus = async (id: string) => {
     const target = findKullaniciByEmail(kullanicilar, id) || kullanicilar.find(u => u.id === id);
@@ -488,6 +561,17 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
               <ShieldAlert size={14} className={hataRaporlari.some(h => h.status === 'YENİ') ? 'text-rose-500 animate-pulse' : ''} />
               <span>HATA RAPORLARI ({hataRaporlari.length})</span>
             </button>
+            <button
+              onClick={() => setActiveTab('backup')}
+              className={`px-4 py-3 text-xs font-extrabold flex items-center gap-2 transition-all outline-none cursor-pointer border-b-2 ${
+                activeTab === 'backup'
+                  ? 'border-amber-500 text-slate-900 font-black'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Database size={14} />
+              <span>VERİ KORUMA</span>
+            </button>
           </div>
 
           {activeTab === 'pending' && (
@@ -508,6 +592,17 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
               className="text-slate-500 hover:text-slate-800 p-1.5 hover:bg-slate-200 rounded transition outline-none cursor-pointer flex items-center gap-1 text-[10px] font-bold"
             >
               <RefreshCw size={11} className={loadingErrors ? 'animate-spin' : ''} />
+              <span>Yenile</span>
+            </button>
+          )}
+
+          {activeTab === 'backup' && (
+            <button
+              onClick={() => void loadBackupPanel()}
+              disabled={backupLoading}
+              className="text-slate-500 hover:text-slate-800 p-1.5 hover:bg-slate-200 rounded transition outline-none cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+            >
+              <RefreshCw size={11} className={backupLoading ? 'animate-spin' : ''} />
               <span>Yenile</span>
             </button>
           )}
@@ -1038,6 +1133,87 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                   </div>
 
                 </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'backup' && (
+            <div className="space-y-5 max-w-4xl mx-auto">
+              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-100 rounded-2xl p-5 space-y-3">
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                  <Database size={16} className="text-emerald-600" />
+                  Program Veri Koruma Merkezi
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Yoklama ve saha faaliyetleri her kayıtta otomatik arşivlenir. Buradan ek olarak tüm programın anlık özet yedeğini alabilirsiniz.
+                  Tam sunucu yedeği için bilgisayarınızda <code className="bg-white px-1 rounded text-[10px]">npm run backup:firestore</code> komutunu çalıştırın (gece 02:00 otomatik görev önerilir).
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void handleCreateProgramBackup()}
+                  disabled={backupLoading}
+                  className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-4 py-2.5 rounded-xl disabled:opacity-60"
+                >
+                  {backupLoading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                  ANLIK PROGRAM YEDEĞİ AL
+                </button>
+              </div>
+
+              {backupLoading && !backupOzeti ? (
+                <div className="py-12 text-center text-slate-500 flex flex-col items-center gap-2">
+                  <Loader2 className="animate-spin text-emerald-500" size={22} />
+                  <span className="text-xs font-bold">Yedek bilgileri yükleniyor...</span>
+                </div>
+              ) : (
+                <>
+                  {backupOzeti && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {[
+                        { label: 'Yoklama arşivi', value: backupOzeti.yoklamaArsivSayisi },
+                        { label: 'Saha arşivi', value: backupOzeti.sahaArsivSayisi },
+                        { label: 'Program yedeği', value: backupOzeti.programYedekSayisi },
+                        { label: 'Personel (şimdi)', value: personeller.length },
+                      ].map((item) => (
+                        <div key={item.label} className="bg-white border rounded-xl p-3 text-center">
+                          <p className="text-[9px] font-black text-slate-400 uppercase">{item.label}</p>
+                          <p className="text-xl font-black text-slate-900">{item.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="bg-white border rounded-2xl overflow-hidden">
+                    <div className="bg-slate-50 px-4 py-2 border-b text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                      Son program yedekleri
+                    </div>
+                    {programYedekleri.length === 0 ? (
+                      <p className="p-6 text-xs text-slate-400 text-center">Henüz manuel program yedeği alınmamış.</p>
+                    ) : (
+                      <div className="divide-y">
+                        {programYedekleri.map((y) => (
+                          <div key={y.id} className="px-4 py-3 text-xs flex flex-wrap justify-between gap-2">
+                            <div>
+                              <p className="font-bold text-slate-800">
+                                {new Date(y.olusturmaTarihi).toLocaleString('tr-TR')}
+                              </p>
+                              <p className="text-[10px] text-slate-500">{y.kullanici} · {y.not || '—'}</p>
+                            </div>
+                            <div className="text-[10px] text-slate-600 font-mono">
+                              P:{y.ozet?.personel ?? '—'} Y:{y.ozet?.yoklamaKisi ?? '—'} S:{y.ozet?.sahaFaaliyet ?? '—'} K:{y.ozet?.kampKayit ?? '—'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="text-[10px] text-slate-500 bg-slate-50 border rounded-xl p-4 space-y-1">
+                    <p className="font-bold text-slate-700">Sekme bazlı geri yükleme</p>
+                    <p>• Yoklama / Puantaj → Arşiv panelinden günlük yedekleri geri yükleyin</p>
+                    <p>• Saha Faaliyetleri → İdari İşler sekmesindeki Faaliyet Arşivi</p>
+                    <p>• Tam Firestore yedeği → <code>npm run restore:yoklama:dry-run</code> (sadece yoklama, kamp/saha dokunulmaz)</p>
+                  </div>
+                </>
               )}
             </div>
           )}
