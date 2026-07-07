@@ -3878,17 +3878,19 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
             </button>
           </div>
 
-          <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
+          <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0 lg:items-start">
             {csTab === 'cari' ? (
               <>
                 {/* Form left */}
-                <div className="w-full lg:w-[380px] lg:shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
+                <div className="w-full lg:w-[380px] lg:shrink-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-9rem)] bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
                   <div className="bg-[#f59e0b] text-[#0f172a] p-4 shrink-0">
                     <span className="text-[10px] font-bold tracking-widest uppercase">Finansal Rehber</span>
-                    <h3 className="font-display font-semibold text-sm">🏢 Yeni Cari Firma Kaydet</h3>
+                    <h3 className="font-display font-semibold text-sm">
+                      {editingCariId ? '✏️ Cari Kart Düzenle' : '🏢 Yeni Cari Firma Kaydet'}
+                    </h3>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+                  <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4 text-xs">
                     <div>
                       <label className="text-[10px] font-bold text-slate-500 uppercase">Firma Ünvanı *</label>
                       <input 
@@ -4008,12 +4010,33 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     </div>
                   </div>
 
-                  <div className="p-4 border-t bg-slate-50">
+                  <div className="p-4 border-t bg-slate-50 shrink-0 space-y-2">
+                    {editingCariId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingCariId(null);
+                          setNewCariUnvan('');
+                          setNewCariYetkili('');
+                          setNewCariTelefon('');
+                          setNewCariEposta('');
+                          setNewCariVergiNo('');
+                          setNewCariVergiDairesi('');
+                          setNewCariAdres('');
+                          setNewCariIban('');
+                          setNewCariNotlar('');
+                          setNewCariType('TEDARIKCI');
+                        }}
+                        className="w-full bg-white hover:bg-slate-100 text-slate-600 font-bold text-xs py-2 rounded-xl border border-slate-200 transition"
+                      >
+                        Düzenlemeyi İptal
+                      </button>
+                    )}
                     <button 
                       onClick={handleCreateCari}
                       className="w-full bg-[#10b981] hover:bg-[#059669] text-white font-bold text-xs py-2.5 rounded-xl shadow transition"
                     >
-                      Cari Firma Kaydet
+                      {editingCariId ? 'Değişiklikleri Kaydet' : 'Cari Firma Kaydet'}
                     </button>
                   </div>
                 </div>
@@ -4100,13 +4123,15 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
             ) : (
               <>
                 {/* Form left */}
-                <div className="w-full lg:w-[380px] lg:shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
+                <div className="w-full lg:w-[380px] lg:shrink-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-9rem)] bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
                   <div className="bg-[#2563eb] text-[#ffffff] p-4 shrink-0">
                     <span className="text-[10px] font-bold tracking-widest uppercase">Malzeme Envanteri</span>
-                    <h3 className="font-display font-semibold text-sm">📦 Yeni Stok Kaydı Ekle</h3>
+                    <h3 className="font-display font-semibold text-sm">
+                      {editingStokId ? '✏️ Stok Kartı Düzenle' : '📦 Yeni Stok Kaydı Ekle'}
+                    </h3>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+                  <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4 text-xs">
                     <div>
                       <label className="text-[10px] font-bold text-slate-500 uppercase">Stok &amp; Malzeme Adı *</label>
                       <input 
@@ -4161,12 +4186,27 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     </div>
                   </div>
 
-                  <div className="p-4 border-t bg-slate-50">
+                  <div className="p-4 border-t bg-slate-50 shrink-0 space-y-2">
+                    {editingStokId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingStokId(null);
+                          setNewStokAdi('');
+                          setNewStokAciklama('');
+                          setNewStokBirim('ADET');
+                          setNewStokKategori('Kaba İnşaat İmalatı');
+                        }}
+                        className="w-full bg-white hover:bg-slate-100 text-slate-600 font-bold text-xs py-2 rounded-xl border border-slate-200 transition"
+                      >
+                        Düzenlemeyi İptal
+                      </button>
+                    )}
                     <button 
                       onClick={handleCreateStok}
                       className="w-full bg-[#10b981] hover:bg-[#059669] text-white font-bold text-xs py-2.5 rounded-xl shadow transition"
                     >
-                      Stok Kartı Ekle
+                      {editingStokId ? 'Değişiklikleri Kaydet' : 'Stok Kartı Ekle'}
                     </button>
                   </div>
                 </div>

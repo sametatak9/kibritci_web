@@ -838,7 +838,7 @@ ${satirlar
     const faaliyetPayload: SahaFaaliyetiType & { kaydedenFormen?: string } = {
       id: editingFaaliyetId || `sf_${Date.now()}`,
       personelId: previousRecord?.personelId || currentUser?.uid || 'formen_uid',
-      tarih: selectedDate,
+      tarih: normalizeDateKey(selectedDate),
       isNiteligi,
       parsel,
       blok,
@@ -1148,8 +1148,8 @@ ${satirlar
                 <input 
                   type="date"
                   value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="bg-slate-800 text-white border-0 py-0.5 px-1 rounded-lg text-[10px] font-bold focus:ring-1 focus:ring-amber-500 outline-none max-w-[28px] cursor-pointer"
+                  onChange={(e) => setSelectedDate(normalizeDateKey(e.target.value))}
+                  className="bg-slate-800 text-white border border-slate-700 py-1 px-1.5 rounded-lg text-[10px] font-bold focus:ring-1 focus:ring-amber-500 outline-none min-w-[7.5rem] cursor-pointer"
                   title="Başka Tarih Seç"
                 />
               </div>
@@ -1732,7 +1732,7 @@ ${satirlar
                       <input
                         type="date"
                         value={selectedDate}
-                        onChange={(e) => setSelectedDate(e.target.value)}
+                        onChange={(e) => setSelectedDate(normalizeDateKey(e.target.value))}
                         className="w-full bg-slate-50 border border-slate-200 py-2 px-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-[10px] font-semibold text-slate-800"
                       />
                     </div>
@@ -1967,7 +1967,7 @@ ${satirlar
                     <input
                       type="date"
                       value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
+                      onChange={(e) => setSelectedDate(normalizeDateKey(e.target.value))}
                       className="text-xs border border-slate-250 rounded-lg px-2 py-1.5"
                     />
                     <textarea

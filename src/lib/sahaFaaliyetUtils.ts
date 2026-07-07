@@ -57,6 +57,7 @@ export function filterFormenDayFaaliyetleri(
       if (isLegacy?.(f.id)) return false;
       if (!isFaaliyetOnDate(f, targetDate)) return false;
       if (f.kaynakEkran === 'IDARI_SAHA') return false;
+      if (f.kaynakEkran === 'FORMEN_MOBIL') return true;
       return formenOwnsSahaRecord(f, formenEmail, formenUid);
     })
     .sort((a, b) => String(b.id).localeCompare(String(a.id), 'tr'));
