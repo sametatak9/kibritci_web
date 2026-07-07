@@ -27,7 +27,7 @@ import { normalizeDateKey, formatDateLabelTr, todayDateKey } from '../lib/dateKe
 import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { downloadCsv } from '../lib/reportExport';
 import { KibritciLogo } from './KibritciLogo';
-import { KIBRITCI_LOGO_PATH, kibritciLogoHtml } from '../lib/kibritciBrand';
+import type { SahaFaaliyetSaveSource } from '../lib/sahaFaaliyetPersistence';
 
 interface FormenScreenProps {
   personeller: Personel[];
@@ -36,6 +36,11 @@ interface FormenScreenProps {
   saveYoklamalarNow?: (next: AylikYoklamaMap) => Promise<void>;
   sahaFaaliyetleri: SahaFaaliyetiType[];
   setSahaFaaliyetleri: (updater: SahaFaaliyetiType[] | ((s: SahaFaaliyetiType[]) => SahaFaaliyetiType[])) => void;
+  saveSahaFaaliyetNow?: (
+    record: SahaFaaliyetiType,
+    kaynak?: SahaFaaliyetSaveSource
+  ) => Promise<unknown>;
+  removeSahaFaaliyetNow?: (record: SahaFaaliyetiType) => Promise<unknown>;
   currentUser: any;
   onSignOut?: () => void;
   isStandalone?: boolean;
@@ -49,6 +54,8 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   saveYoklamalarNow,
   sahaFaaliyetleri,
   setSahaFaaliyetleri,
+  saveSahaFaaliyetNow,
+  removeSahaFaaliyetNow,
   currentUser,
   onSignOut,
   isStandalone,
@@ -867,7 +874,17 @@ ${satirlar
     };
 
     try {
-      await saveDocument('sahaFaaliyetleri', faaliyetPayload);
+      if (saveSahaFaaliyetNow) {
+        await saveSahaFaaliyetNow(faaliyetPayload, 'formen_mobil');
+      } else {
+        await saveDocument('sahaFaaliyetleri', faaliyetPayload);
+        setSahaFaaliyetleri((prev) => {
+          if (editingFaaliyetId) {
+            return prev.map((f) => (f.id === editingFaaliyetId ? faaliyetPayload : f));
+          }
+          return prev.some((f) => f.id === faaliyetPayload.id) ? prev : [faaliyetPayload, ...prev];
+        });
+      }
       if (!editingFaaliyetId) {
         await logAssignedPersonelHistory(faaliyetPayload);
       }
@@ -882,13 +899,6 @@ ${satirlar
       showStatus('error', `Faaliyet gönderilemedi: ${err?.message || 'Bağlantı hatası'}`);
       return;
     }
-
-    setSahaFaaliyetleri((prev) => {
-      if (editingFaaliyetId) {
-        return prev.map((f) => (f.id === editingFaaliyetId ? faaliyetPayload : f));
-      }
-      return prev.some((f) => f.id === faaliyetPayload.id) ? prev : [faaliyetPayload, ...prev];
-    });
 
     if (editingFaaliyetId) {
       logActionToPersonelHistory('Saha Faaliyeti Güncelledi', `"${isNiteligi}" faaliyet kaydı düzenlendi (${parsel} / ${blok}).`);
@@ -912,13 +922,17 @@ ${satirlar
       if (isMesaiSahaFaaliyet(faaliyet)) {
         await syncMesaiFromFaaliyet(faaliyet.tarih, undefined, faaliyet.personelMesaiSaatleri);
       }
-      await deleteDoc(doc(db, 'sahaFaaliyetleri', faaliyet.id));
+      if (removeSahaFaaliyetNow) {
+        await removeSahaFaaliyetNow(faaliyet);
+      } else {
+        await deleteDoc(doc(db, 'sahaFaaliyetleri', faaliyet.id));
+        setSahaFaaliyetleri((prev) => prev.filter((item) => item.id !== faaliyet.id));
+      }
       setLastDeletedFaaliyet(faaliyet);
-      setSahaFaaliyetleri((prev) => prev.filter((item) => item.id !== faaliyet.id));
       if (editingFaaliyetId === faaliyet.id) resetFaaliyetForm();
-      showStatus('success', 'Rapor silindi. Ekranın üstünden geri alabilirsiniz.');
+      showStatus('success', 'Rapor silindi veya arşivlendi. Gerekirse geri alabilirsiniz.');
     } catch (err: any) {
-      showStatus('error', `Silme işlemi başarısız: ${err?.message || 'Bilinmeyen hata'}`);
+      showStatus('error', err?.message || 'Silme işlemi başarısız');
     }
   };
 
@@ -1590,10 +1604,19 @@ ${satirlar
                       <span>🗑️ Faaliyet silindi. Geri almak ister misiniz?</span>
                       <button
                         type="button"
-                        onClick={() => {
-                          setSahaFaaliyetleri(prev => [lastDeletedFaaliyet, ...prev]);
-                          setLastDeletedFaaliyet(null);
-                          showStatus('success', 'Silme işlemi geri alındı, faaliyet başarıyla kurtarıldı!');
+                        onClick={async () => {
+                          if (!lastDeletedFaaliyet) return;
+                          try {
+                            if (saveSahaFaaliyetNow) {
+                              await saveSahaFaaliyetNow(lastDeletedFaaliyet, 'restore');
+                            } else {
+                              setSahaFaaliyetleri((prev) => [lastDeletedFaaliyet, ...prev]);
+                            }
+                            setLastDeletedFaaliyet(null);
+                            showStatus('success', 'Silme işlemi geri alındı, faaliyet başarıyla kurtarıldı!');
+                          } catch (err: any) {
+                            showStatus('error', err?.message || 'Geri alma başarısız');
+                          }
                         }}
                         className="bg-amber-600 text-white px-2 py-1 rounded-lg text-[8px] uppercase tracking-wider hover:bg-amber-700"
                       >

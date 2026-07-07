@@ -68,4 +68,5 @@ export const FIRESTORE_COLLECTIONS = [
   'kibarHakedisRaporlari',
   'kampHaftalikYoklamaRaporlari',
   'yoklamaArsivleri',
+  'sahaFaaliyetArsivleri',
 ];

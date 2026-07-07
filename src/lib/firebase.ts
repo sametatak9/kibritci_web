@@ -243,6 +243,18 @@ export async function syncArrayToFirestore<T extends { id: string }>(
   newArray: T[]
 ): Promise<void> {
   try {
+    if (collectionName === 'sahaFaaliyetleri') {
+      const { syncSahaFaaliyetleriArray } = await import('./sahaFaaliyetPersistence');
+      const result = await syncSahaFaaliyetleriArray(
+        oldArray as import('../types/erp').SahaFaaliyeti[],
+        newArray as import('../types/erp').SahaFaaliyeti[]
+      );
+      if (!result.ok) {
+        throw new Error(result.error || 'Saha faaliyet senkronizasyonu başarısız');
+      }
+      return;
+    }
+
     const massDeleteBlocked = shouldBlockMassDelete(collectionName, oldArray.length, newArray.length);
     if (massDeleteBlocked) {
       // #region agent log

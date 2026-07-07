@@ -1285,14 +1285,6 @@ export default function App() {
     setKampKatlari(snapshot.katlar);
   };
 
-  const setSahaFaaliyetleriWithSync = (updater: SahaFaaliyetiType[] | ((s: SahaFaaliyetiType[]) => SahaFaaliyetiType[])) => {
-    setSahaFaaliyetleri(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => syncArrayToFirestore('sahaFaaliyetleri', prev, next), 0);
-      return next;
-    });
-  };
-
   const setProgramliFaaliyetlerWithSync = (
     updater: ProgramliFaaliyet[] | ((s: ProgramliFaaliyet[]) => ProgramliFaaliyet[])
   ) => {
@@ -1551,6 +1543,54 @@ export default function App() {
           setYoklamalar(prev);
           notifyYoklamaSaveFailure(result.error || 'Yoklama kaydı sunucuya yazılamadı');
         }
+      });
+      return next;
+    });
+  };
+
+  const notifySahaFaaliyetFailure = (message: string) => {
+    console.error('[saha-faaliyet]', message);
+    void addNotification(`⚠️ Saha faaliyeti korundu: ${message}`);
+  };
+
+  const saveSahaFaaliyetNow = async (
+    record: SahaFaaliyetiType,
+    kaynak: import('./lib/sahaFaaliyetPersistence').SahaFaaliyetSaveSource = 'formen_mobil'
+  ) => {
+    const { enqueueSahaFaaliyetSave } = await import('./lib/sahaFaaliyetPersistence');
+    const result = await enqueueSahaFaaliyetSave(record, kaynak);
+    if (!result.ok) {
+      notifySahaFaaliyetFailure(result.error || 'Bilinmeyen hata');
+      throw new Error(result.error || 'Saha faaliyeti kaydedilemedi');
+    }
+    setSahaFaaliyetleri((prev) => {
+      const exists = prev.some((f) => f.id === record.id);
+      return exists ? prev.map((f) => (f.id === record.id ? record : f)) : [record, ...prev];
+    });
+    return result;
+  };
+
+  const removeSahaFaaliyetNow = async (record: SahaFaaliyetiType) => {
+    const { removeSahaFaaliyetSafe } = await import('./lib/sahaFaaliyetPersistence');
+    const result = await removeSahaFaaliyetSafe(record.id, 'delete', record);
+    if (!result.ok) {
+      notifySahaFaaliyetFailure(result.error || 'Silme işlemi engellendi');
+      throw new Error(result.error || 'Saha faaliyeti silinemedi');
+    }
+    setSahaFaaliyetleri((prev) => prev.filter((f) => f.id !== record.id));
+    return result;
+  };
+
+  const setSahaFaaliyetleriWithSync = (
+    updater: SahaFaaliyetiType[] | ((s: SahaFaaliyetiType[]) => SahaFaaliyetiType[])
+  ) => {
+    setSahaFaaliyetleri((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      void syncArrayToFirestore('sahaFaaliyetleri', prev, next).catch((err) => {
+        setSahaFaaliyetleri(prev);
+        notifySahaFaaliyetFailure(
+          err instanceof Error ? err.message : 'Saha faaliyet senkronizasyonu başarısız'
+        );
       });
       return next;
     });
@@ -1851,6 +1891,8 @@ export default function App() {
           saveYoklamalarNow={saveYoklamalarNow}
           sahaFaaliyetleri={sahaFaaliyetleri}
           setSahaFaaliyetleri={setSahaFaaliyetleriWithSync}
+          saveSahaFaaliyetNow={saveSahaFaaliyetNow}
+          removeSahaFaaliyetNow={removeSahaFaaliyetNow}
           currentUser={currentUser}
           onSignOut={handleSignOut}
           isStandalone={true}
@@ -2282,6 +2324,8 @@ export default function App() {
                   kampKatlari={kampKatlari}
                   sahaFaaliyetleri={sahaFaaliyetleri}
                   setSahaFaaliyetleri={setSahaFaaliyetleriWithSync}
+                  saveSahaFaaliyetNow={saveSahaFaaliyetNow}
+                  removeSahaFaaliyetNow={removeSahaFaaliyetNow}
                   hazirTutanaklar={hazirTutanaklar}
                   setHazirTutanaklar={setHazirTutanaklarWithSync}
                   cariKartlar={cariKartlar}
@@ -2335,6 +2379,8 @@ export default function App() {
                     saveYoklamalarNow={saveYoklamalarNow}
                     sahaFaaliyetleri={sahaFaaliyetleri}
                     setSahaFaaliyetleri={setSahaFaaliyetleriWithSync}
+                    saveSahaFaaliyetNow={saveSahaFaaliyetNow}
+                    removeSahaFaaliyetNow={removeSahaFaaliyetNow}
                     currentUser={currentUser}
                     onSignOut={handleSignOut}
                     isStandalone={hideSidebarAndTopbar}

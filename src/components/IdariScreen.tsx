@@ -39,9 +39,17 @@ import { getYoklamaDay, isTaseronPersonel } from '../lib/yoklamaUtils';
 import {
   applySahaMesaiToYoklama,
   formatMesaiFaaliyetLabel,
+  getFaaliyetFoto,
+  getFaaliyetFotolar,
   isMesaiSahaFaaliyet,
   normalizeMesaiHours as normalizeSahaMesaiHours,
 } from '../lib/sahaFaaliyetUtils';
+import {
+  listSahaFaaliyetArchives,
+  restoreSahaFaaliyetFromArchive,
+  SahaFaaliyetArchiveEntry,
+} from '../lib/sahaFaaliyetPersistence';
+import type { SahaFaaliyetSaveSource } from '../lib/sahaFaaliyetPersistence';
 import { ParselBlokAnalizPanel } from './ParselBlokAnalizPanel';
 
 interface IdariScreenProps {
@@ -59,6 +67,11 @@ interface IdariScreenProps {
   kampKatlari?: KampKat[];
   sahaFaaliyetleri: SahaFaaliyeti[];
   setSahaFaaliyetleri: React.Dispatch<React.SetStateAction<SahaFaaliyeti[]>>;
+  saveSahaFaaliyetNow?: (
+    record: SahaFaaliyeti,
+    kaynak?: SahaFaaliyetSaveSource
+  ) => Promise<unknown>;
+  removeSahaFaaliyetNow?: (record: SahaFaaliyeti) => Promise<unknown>;
   hazirTutanaklar: HazirTutanak[];
   setHazirTutanaklar: React.Dispatch<React.SetStateAction<HazirTutanak[]>>;
   cariKartlar: CariKart[];
@@ -98,6 +111,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   kampYerleskeleri = [],
   kampKatlari = [],
   sahaFaaliyetleri, setSahaFaaliyetleri,
+  saveSahaFaaliyetNow,
+  removeSahaFaaliyetNow,
   hazirTutanaklar, setHazirTutanaklar,
   cariKartlar, setCariKartlar,
   stokKartlar, setStokKartlar,
@@ -664,6 +679,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [sahaSearchKeyword, setSahaSearchKeyword] = useState("");
   const [editingSahaId, setEditingSahaId] = useState<string | null>(null);
   const [deleteConfirmSahaId, setDeleteConfirmSahaId] = useState<string | null>(null);
+  const [sahaArchiveOpen, setSahaArchiveOpen] = useState(false);
+  const [sahaArchives, setSahaArchives] = useState<SahaFaaliyetArchiveEntry[]>([]);
+  const [sahaArchiveLoading, setSahaArchiveLoading] = useState(false);
+  const [sahaArchiveRestoringId, setSahaArchiveRestoringId] = useState<string | null>(null);
   const [sahaSubTab, setSahaSubTab] = useState<'tum' | 'formen' | 'takvim' | 'gun_arsiv' | 'parsel_analiz'>('tum');
   const [sahaTakvimAy, setSahaTakvimAy] = useState(new Date().toISOString().slice(0, 7));
   const [showSahaGunModal, setShowSahaGunModal] = useState(false);
@@ -971,6 +990,12 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
             blok: sahaBlok,
             aciklama: sahaAciklama,
             fotoUrl: sahaFotoBase64 !== undefined ? (sahaFotoBase64 || undefined) : sf.fotoUrl,
+            fotoUrls:
+              sahaFotoBase64 !== undefined
+                ? sahaFotoBase64
+                  ? [sahaFotoBase64]
+                  : sf.fotoUrls
+                : sf.fotoUrls,
             ustaSayisi: selectedCounts.usta,
             isciSayisi: selectedCounts.isci,
             aktifPersonelListesi: selectedFieldStaff,
@@ -1072,18 +1097,56 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     resetSahaForm();
   };
 
-  const handleDeleteSahaFaaliyeti = (id: string) => {
+  const handleDeleteSahaFaaliyeti = async (id: string) => {
     if (deleteConfirmSahaId === id) {
-      setSahaFaaliyetleri(prev => prev.filter(sf => sf.id !== id));
-      setDeleteConfirmSahaId(null);
-      if (editingSahaId === id) {
-        handleCancelEditSaha();
+      const target = sahaFaaliyetleri.find((sf) => sf.id === id);
+      if (!target) return;
+      try {
+        if (removeSahaFaaliyetNow) {
+          await removeSahaFaaliyetNow(target);
+        } else {
+          setSahaFaaliyetleri((prev) => prev.filter((sf) => sf.id !== id));
+        }
+        setDeleteConfirmSahaId(null);
+        if (editingSahaId === id) {
+          handleCancelEditSaha();
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Silme engellendi';
+        alert(msg);
+        setDeleteConfirmSahaId(null);
       }
     } else {
       setDeleteConfirmSahaId(id);
       setTimeout(() => {
-        setDeleteConfirmSahaId(prev => prev === id ? null : prev);
+        setDeleteConfirmSahaId((prev) => (prev === id ? null : prev));
       }, 4000);
+    }
+  };
+
+  const loadSahaArchiveList = async () => {
+    setSahaArchiveLoading(true);
+    try {
+      setSahaArchives(await listSahaFaaliyetArchives(30));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Arşiv listesi alınamadı');
+    } finally {
+      setSahaArchiveLoading(false);
+    }
+  };
+
+  const handleRestoreSahaArchive = async (archiveId: string) => {
+    if (!window.confirm('Seçilen saha faaliyeti yedeği geri yüklenecek. Devam?')) return;
+    setSahaArchiveRestoringId(archiveId);
+    try {
+      const result = await restoreSahaFaaliyetFromArchive(archiveId);
+      if (!result.ok) throw new Error(result.error || 'Geri yükleme başarısız');
+      alert('Saha faaliyeti arşivden geri yüklendi.');
+      void loadSahaArchiveList();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Geri yükleme başarısız');
+    } finally {
+      setSahaArchiveRestoringId(null);
     }
   };
 
@@ -1218,9 +1281,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     popup.document.close();
   };
 
-  const getSahaFaaliyetFotoUrl = (sf: SahaFaaliyeti | any): string => {
-    return String(sf?.fotoUrl || sf?.sahaFotoBase64 || sf?.fotoBase64 || '').trim();
-  };
+  const getSahaFaaliyetFotoUrl = (sf: SahaFaaliyeti | any): string => getFaaliyetFoto(sf);
 
   const handleIceriAlVeGunRaporla = async () => {
     if (!formenTarihFiltre) {
@@ -3301,13 +3362,80 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   <Building2 size={16} className="text-[#2563EB]" />
                   <h4 className="font-display font-bold text-sm text-slate-800 uppercase tracking-widest">Saha Faaliyet İzleme Merkezi</h4>
                 </div>
-                <button
-                  onClick={() => setSahaReportModal(true)}
-                  className="text-[10px] bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold px-2.5 py-1 rounded-lg shadow transition duration-150 flex items-center space-x-1 cursor-pointer"
-                >
-                  <span>🖨️ Saha Aktif Raporu (Günlük / Aylık)</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !sahaArchiveOpen;
+                      setSahaArchiveOpen(next);
+                      if (next && sahaArchives.length === 0) void loadSahaArchiveList();
+                    }}
+                    className="text-[10px] bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-2.5 py-1 rounded-lg shadow transition cursor-pointer"
+                  >
+                    🗄️ Faaliyet Arşivi
+                  </button>
+                  <button
+                    onClick={() => setSahaReportModal(true)}
+                    className="text-[10px] bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold px-2.5 py-1 rounded-lg shadow transition duration-150 flex items-center space-x-1 cursor-pointer"
+                  >
+                    <span>🖨️ Saha Aktif Raporu (Günlük / Aylık)</span>
+                  </button>
+                </div>
               </div>
+              {sahaArchiveOpen && (
+                <div className="border border-indigo-200 rounded-xl p-3 bg-indigo-50/40 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] text-indigo-900 font-semibold">
+                      Otomatik yedekler (fotoğraflar dahil). Formen Mobil ve bu sekme aynı veriyi paylaşır.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void loadSahaArchiveList()}
+                      disabled={sahaArchiveLoading}
+                      className="text-[10px] bg-indigo-700 text-white px-2 py-1 rounded font-bold disabled:opacity-50"
+                    >
+                      {sahaArchiveLoading ? '...' : 'Yenile'}
+                    </button>
+                  </div>
+                  {sahaArchives.length === 0 ? (
+                    <p className="text-[10px] text-slate-500">Henüz arşiv kaydı yok.</p>
+                  ) : (
+                    <div className="max-h-40 overflow-y-auto border border-indigo-100 rounded-lg bg-white">
+                      <table className="w-full text-[10px]">
+                        <thead className="bg-slate-50 sticky top-0">
+                          <tr>
+                            <th className="text-left p-1.5">Tarih</th>
+                            <th className="text-left p-1.5">İş</th>
+                            <th className="text-left p-1.5">Parsel/Blok</th>
+                            <th className="text-right p-1.5">Foto</th>
+                            <th className="text-right p-1.5">İşlem</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sahaArchives.map((a) => (
+                            <tr key={a.id} className="border-t">
+                              <td className="p-1.5">{new Date(a.olusturmaTarihi).toLocaleString('tr-TR')}</td>
+                              <td className="p-1.5">{a.isNiteligi || '-'}</td>
+                              <td className="p-1.5">{a.parsel}/{a.blok}</td>
+                              <td className="p-1.5 text-right">{a.fotoSayisi}</td>
+                              <td className="p-1.5 text-right">
+                                <button
+                                  type="button"
+                                  disabled={sahaArchiveRestoringId === a.id}
+                                  onClick={() => void handleRestoreSahaArchive(a.id)}
+                                  className="bg-emerald-600 text-white px-1.5 py-0.5 rounded font-bold disabled:opacity-50"
+                                >
+                                  Geri Yükle
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={() => setSahaSubTab('tum')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'tum' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}>Tüm Kayıtlar</button>
                 <button type="button" onClick={() => setSahaSubTab('formen')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'formen' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}>Formen Gönderimleri</button>
