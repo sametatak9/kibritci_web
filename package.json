@@ -26,6 +26,8 @@
     "backup:firestore": "node scripts/firestore-backup-local.mjs",
     "backup:verify": "node scripts/firestore-backup-verify.mjs",
     "backup:audit": "node scripts/migrate-firestore.mjs --audit-only",
+    "restore:yoklama:dry-run": "node scripts/firestore-restore-selective.mjs --dry-run",
+    "restore:yoklama": "node scripts/firestore-restore-selective.mjs --execute",
     "auth:sync-claims": "node scripts/sync-auth-claims.mjs"
   },
   "dependencies": {
