@@ -28,6 +28,7 @@ import {
 } from '../lib/kampYapisi';
 import { assignKampResident, evictKampResident, suggestPersonelKaydi } from '../lib/kampPlacementUtils';
 import { exportKampYerlesimExcel } from '../lib/kampYerlesimExcelExport';
+import { openKampKrokiPrintWindow, type KampKrokiPageFormat } from '../lib/kampKrokiPrintHtml';
 import { compressImage } from '../lib/imageCompress';
 import { warnIfDuplicateCari, warnIfDuplicateStok } from '../lib/duplicateNameUtils';
 import { exportHistoryReport } from '../lib/reportExport';
@@ -5060,7 +5061,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 </div>
 
                 {/* Sinyal Widgets */}
-                <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="kamp-kroki-stats grid grid-cols-3 gap-4 text-center">
                   <div className="bg-blue-50 border border-blue-150 rounded-xl p-3">
                     <span className="text-[8px] text-blue-700 font-bold block uppercase tracking-wide">TOPLAM YATAK KAPASİTESİ</span>
                     <span className="text-base font-extrabold text-[#2563EB] block mt-0.5">
@@ -5087,17 +5088,17 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 {/* Kat Planı ve Krokiler */}
                 <div className="space-y-6">
                   {groupedKampYapisi.map((campusNode) => (
-                    <div key={`print_${campusNode.campus}`} className="border border-slate-200 rounded-2xl p-4 bg-slate-50/30 space-y-3">
+                    <div key={`print_${campusNode.campus}`} className="kamp-campus-block border border-slate-200 rounded-2xl p-4 bg-slate-50/30 space-y-3">
                       <span className="font-bold text-[10px] text-slate-700 block bg-blue-50 p-1 px-3 rounded border-l-4 border-blue-600 uppercase">
                         📍 {campusNode.campus}
                       </span>
 
                       {campusNode.floors.map((floorNode) => (
-                        <div key={`print_${campusNode.campus}_${floorNode.floor}`} className="space-y-2">
+                        <div key={`print_${campusNode.campus}_${floorNode.floor}`} className="kamp-floor-block space-y-2">
                           <span className="font-bold text-[10px] text-slate-700 block bg-slate-100 p-1 px-3 rounded border-l-4 border-amber-500 uppercase">
                             🏢 {floorNode.floor} Mimari Taslağı
                           </span>
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                          <div className="kamp-kroki-room-grid grid grid-cols-2 md:grid-cols-3 gap-3">
                             {floorNode.rooms.map((room) => {
                               const occupants = kampKayitlari.filter((cr) => (cr.roomId === room.id || cr.odaId === room.id) && cr.durum === 'AKTIF');
                               const isFull = occupants.length >= room.kapasite;
@@ -5139,7 +5140,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
 
                 {/* Sorumlu ve İmzalar */}
                 <div className="pt-6 border-t border-slate-200">
-                  <div className="grid grid-cols-2 gap-4 text-center text-[9px]">
+                  <div className="kamp-kroki-signatures grid grid-cols-2 gap-4 text-center text-[9px]">
                     <div className="border p-2 rounded bg-slate-50/50">
                       <span className="font-extrabold text-slate-705 block mb-1">Kamp İdari Amiri / Sürveyan</span>
                       <span className="text-[8px] text-slate-400 block mb-5">Bilgiler Doğrudur</span>
@@ -5159,55 +5160,22 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
             </div>
 
             {/* Footer */}
-            <div className="p-4 bg-slate-50 border-t flex gap-2 justify-end shrink-0">
-              <button 
-                onClick={() => {
-                  const printContent = document.getElementById('kamp-print-area')?.innerHTML;
-                  if (!printContent) return;
-                  const htmlSnippet = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Kibritci_Insaat_Kamp_Krokisi</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-white p-8">
-  <div class="max-w-4xl mx-auto border p-8 rounded-xl shadow-sm">
-    ${printContent}
-  </div>
-  <script>
-    window.onload = function() {
-      window.print();
-    }
-  </script>
-</body>
-</html>
-                  `;
-                  try {
-                    const win = window.open("", "_blank");
-                    if (win) {
-                      win.document.write(htmlSnippet);
-                      win.document.close();
-                    } else {
-                      throw new Error("Popup blocked");
-                    }
-                  } catch (err) {
-                    const blob = new Blob([htmlSnippet], { type: 'text/html;charset=utf-8' });
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = `Kibritci_Kamp_Krokisi.html`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                  }
-                }}
-                className="bg-slate-900 hover:bg-slate-950 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center space-x-1 transition shadow cursor-pointer"
-              >
-                <Printer size={13} />
-                <span>Yazdır / PDF Rapor Kaydet</span>
-              </button>
+            <div className="p-4 bg-slate-50 border-t flex flex-wrap gap-2 justify-end shrink-0">
+              {(['A4', 'A3'] as KampKrokiPageFormat[]).map((format) => (
+                <button
+                  key={format}
+                  type="button"
+                  onClick={() => {
+                    const printContent = document.getElementById('kamp-print-area')?.innerHTML;
+                    if (!printContent) return;
+                    openKampKrokiPrintWindow(printContent, format);
+                  }}
+                  className="bg-slate-900 hover:bg-slate-950 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center space-x-1 transition shadow cursor-pointer"
+                >
+                  <Printer size={13} />
+                  <span>{format} Yazdır / PDF</span>
+                </button>
+              ))}
               <button 
                 onClick={() => setShowKampKrokiModal(false)}
                 className="bg-slate-250 hover:bg-slate-300 text-slate-700 text-xs font-bold py-2.5 px-4 rounded-xl transition cursor-pointer"
