@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Users, UserPlus, Trash2, CreditCard as Edit3, Camera, Search, ShieldCheck, Mail, Phone, MapPin, DollarSign, UserX, FileText, CloudUpload as UploadCloud, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, Loader as Loader2, Building2, History, Download } from 'lucide-react';
-import { Personel } from '../types/erp';
+import { CariKart, Personel } from '../types/erp';
 import { fetchApiJson } from '../lib/apiClient';
 import { compressImage } from '../lib/imageCompress';
 import { exportPersonelRows } from '../lib/reportExport';
@@ -10,7 +10,30 @@ import { kibritciLogoHtml } from '../lib/kibritciBrand';
 interface PersonelScreenProps {
   personeller: Personel[];
   setPersoneller: React.Dispatch<React.SetStateAction<Personel[]>>;
-  cariKartlar?: any[];
+  cariKartlar?: CariKart[];
+}
+
+const TASERON_MANUEL_KEY = '__MANUEL__';
+const GOREV_PRESETS = [
+  'DÜZ İŞÇİ',
+  'FORMEN',
+  'USTA',
+  'MİMAR',
+  'MÜHENDİS',
+  'ŞEF',
+  'GÜVENLİK',
+  'DEPOCU',
+  'KAYNAKÇI',
+  'BOYACI',
+  'ELEKTRİKÇİ',
+  'TESİSATÇI',
+] as const;
+
+function isTaseronCariKart(cari: CariKart): boolean {
+  const tip = String((cari as CariKart & { tur?: string }).kartTipi || (cari as CariKart & { tur?: string }).tur || '')
+    .trim()
+    .toLocaleUpperCase('tr-TR');
+  return tip === 'TASERON';
 }
 
 export const PersonelScreen: React.FC<PersonelScreenProps> = ({
@@ -172,9 +195,31 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   };
 
   const [formData, setFormData] = useState<Omit<Personel, 'id'> | Personel>(emptyForm);
+  const [taseronKaynak, setTaseronKaynak] = useState('');
+  const [manuelTaseronAdi, setManuelTaseronAdi] = useState('');
+
+  const taseronCariList = useMemo(
+    () =>
+      cariKartlar
+        .filter(isTaseronCariKart)
+        .filter((c) => String(c.durum || 'AKTIF').toUpperCase() !== 'PASIF')
+        .sort((a, b) => a.unvan.localeCompare(b.unvan, 'tr')),
+    [cariKartlar]
+  );
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    if (name === 'firmaTipi') {
+      const nextTip = value as Personel['firmaTipi'];
+      setFormData((prev) => ({
+        ...prev,
+        firmaTipi: nextTip,
+        firmaAdi: nextTip === 'TASERON' ? '' : 'Kibritçi İnşaat',
+      }));
+      setTaseronKaynak('');
+      setManuelTaseronAdi('');
+      return;
+    }
     setFormData(prev => ({
       ...prev,
       [name]: name === 'maas' ? (parseFloat(value) || 0) : value
@@ -192,11 +237,49 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   const handleSelectPersonel = (p: Personel) => {
     setSelectedPersonel(p);
     setFormData(p);
+    if (p.firmaTipi === 'TASERON') {
+      const match = taseronCariList.find((c) => c.unvan === p.firmaAdi);
+      if (match) {
+        setTaseronKaynak(match.id);
+        setManuelTaseronAdi('');
+      } else {
+        setTaseronKaynak(TASERON_MANUEL_KEY);
+        setManuelTaseronAdi(p.firmaAdi || '');
+      }
+    } else {
+      setTaseronKaynak('');
+      setManuelTaseronAdi('');
+    }
   };
 
   const handleClearForm = () => {
     setSelectedPersonel(null);
     setFormData(emptyForm);
+    setTaseronKaynak('');
+    setManuelTaseronAdi('');
+  };
+
+  const resolveFirmaFields = (): { firmaTipi: 'ANA_FIRMA' | 'TASERON'; firmaAdi: string } | null => {
+    const firmaTipi = formData.firmaTipi === 'TASERON' ? 'TASERON' : 'ANA_FIRMA';
+    if (firmaTipi === 'ANA_FIRMA') {
+      return { firmaTipi: 'ANA_FIRMA', firmaAdi: 'Kibritçi İnşaat' };
+    }
+
+    let firmaAdi = '';
+    if (taseronKaynak === TASERON_MANUEL_KEY) {
+      firmaAdi = manuelTaseronAdi.trim();
+    } else if (taseronKaynak) {
+      firmaAdi = taseronCariList.find((c) => c.id === taseronKaynak)?.unvan || '';
+    } else {
+      firmaAdi = String(formData.firmaAdi || '').trim();
+    }
+
+    if (!firmaAdi || firmaAdi === 'MANUEL') {
+      alert('Taşeron personel için cari karttan firma seçin veya firma adını elle yazın.');
+      return null;
+    }
+
+    return { firmaTipi: 'TASERON', firmaAdi };
   };
 
   const normalizeIban = (value: string | undefined | null) =>
@@ -267,11 +350,16 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     const existingPersonel = 'id' in formData ? personeller.find((p) => p.id === formData.id) : undefined;
     const inputIban = normalizeIban((formData as any).ibanNo || (formData as any).iban || '');
     const prevIban = normalizeIban(existingPersonel?.ibanNo || (existingPersonel as any)?.iban || '');
+    const firmaFields = resolveFirmaFields();
+    if (!firmaFields) return;
+
     const normalizedPayload = {
       ...formData,
       tcNo: normalizedTc,
       ibanNo: inputIban && inputIban !== 'TR' ? inputIban : prevIban,
-      gorev: normalizePersonelGorev((formData as any).gorev)
+      gorev: normalizePersonelGorev((formData as any).gorev),
+      firmaTipi: firmaFields.firmaTipi,
+      firmaAdi: firmaFields.firmaAdi,
     };
 
     if ('id' in formData) {
@@ -713,18 +801,49 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Firma Adı</label>
                 {formData.firmaTipi === 'TASERON' ? (
-                  <select
-                    name="firmaAdi"
-                    value={formData.firmaAdi || ''}
-                    onChange={handleInputChange}
-                    className="w-full text-xs border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50"
-                  >
-                    <option value="">Taşeron Seçin</option>
-                    {cariKartlar.filter(c => c.tur === 'TASERON').map(c => (
-                      <option key={c.id} value={c.unvan}>{c.unvan}</option>
-                    ))}
-                    <option value="MANUEL">Manuel Giriş (Diğer)</option>
-                  </select>
+                  <div className="space-y-2 mt-1">
+                    <select
+                      value={taseronKaynak}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setTaseronKaynak(next);
+                        if (next === TASERON_MANUEL_KEY) {
+                          setFormData((prev) => ({ ...prev, firmaAdi: manuelTaseronAdi.trim() }));
+                          return;
+                        }
+                        const cari = taseronCariList.find((c) => c.id === next);
+                        setManuelTaseronAdi('');
+                        setFormData((prev) => ({ ...prev, firmaAdi: cari?.unvan || '' }));
+                      }}
+                      className="w-full text-xs border border-[#e2e8f0] rounded-lg p-2 bg-slate-50"
+                    >
+                      <option value="">Cari karttan taşeron seçin…</option>
+                      {taseronCariList.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.unvan} ({c.kod})
+                        </option>
+                      ))}
+                      <option value={TASERON_MANUEL_KEY}>Elle yaz (manuel)</option>
+                    </select>
+                    {taseronKaynak === TASERON_MANUEL_KEY && (
+                      <input
+                        type="text"
+                        value={manuelTaseronAdi}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          setManuelTaseronAdi(next);
+                          setFormData((prev) => ({ ...prev, firmaAdi: next }));
+                        }}
+                        className="w-full text-xs border border-[#e2e8f0] rounded-lg p-2 bg-slate-50"
+                        placeholder="Taşeron firma adını yazın…"
+                      />
+                    )}
+                    {taseronCariList.length === 0 && (
+                      <p className="text-[9px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5">
+                        Cari kartlarda taşeron bulunamadı. İdari → Cari Kartlar’dan kart tipi Taşeron olan firma ekleyin veya elle yazın.
+                      </p>
+                    )}
+                  </div>
                 ) : (
                   <input
                     type="text"
@@ -736,18 +855,10 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                 )}
               </div>
             </div>
-            {formData.firmaTipi === 'TASERON' && formData.firmaAdi === 'MANUEL' && (
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Firma Adı (Manuel)</label>
-                <input
-                  type="text"
-                  name="firmaAdi"
-                  value={formData.firmaAdi === 'MANUEL' ? '' : (formData.firmaAdi || '')}
-                  onChange={handleInputChange}
-                  className="w-full text-xs border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50"
-                  placeholder="Taşeron firma adı..."
-                />
-              </div>
+            {formData.firmaTipi === 'TASERON' && (
+              <p className="text-[9px] text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5">
+                Taşeron personel yoklama listesine dahil edilmez; yalnızca ana firma kadrosu yoklamaya girer.
+              </p>
             )}
           </div>
 
@@ -772,21 +883,21 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Görev/Ünvan</label>
-                <select
+                <input
+                  type="text"
                   name="gorev"
+                  list="personel-gorev-presets"
                   value={formData.gorev}
                   onChange={handleInputChange}
                   className="w-full text-xs border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50"
-                >
-                  <option value="DÜZ İŞÇİ">DÜZ İŞÇİ</option>
-                  <option value="FORMEN">FORMEN</option>
-                  <option value="USTA">USTA</option>
-                  <option value="MİRAR">MİMAR</option>
-                  <option value="MÜHENDİS">MÜHENDİS</option>
-                  <option value="ŞEF">ŞEF</option>
-                  <option value="GÜVENLİK">GÜVENLİK</option>
-                  <option value="DEPOCU">DEPOCU</option>
-                </select>
+                  placeholder="Listeden seçin veya elle yazın"
+                />
+                <datalist id="personel-gorev-presets">
+                  {GOREV_PRESETS.map((gorev) => (
+                    <option key={gorev} value={gorev} />
+                  ))}
+                </datalist>
+                <p className="text-[8px] text-slate-400 mt-1">Önerilen görevler listeden seçilebilir; özel ünvan da yazılabilir.</p>
               </div>
             </div>
 
