@@ -32,6 +32,7 @@ import { MobileManagerScreen } from './components/MobileManagerScreen';
 import { KibarHakedisScreen } from './components/KibarHakedisScreen';
 import { SahaKolajScreen } from './components/SahaKolajScreen';
 import { ProgramliFaaliyetScreen } from './components/ProgramliFaaliyetScreen';
+import { KibritciLogo } from './components/KibritciLogo';
 
 // Type definitions
 import { 

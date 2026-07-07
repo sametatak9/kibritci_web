@@ -27,6 +27,7 @@ import { normalizeDateKey, formatDateLabelTr, todayDateKey } from '../lib/dateKe
 import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { downloadCsv } from '../lib/reportExport';
 import { KibritciLogo } from './KibritciLogo';
+import { kibritciLogoHtml } from '../lib/kibritciBrand';
 import type { SahaFaaliyetSaveSource } from '../lib/sahaFaaliyetPersistence';
 
 interface FormenScreenProps {

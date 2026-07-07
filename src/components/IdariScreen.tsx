@@ -51,6 +51,7 @@ import {
 } from '../lib/sahaFaaliyetPersistence';
 import type { SahaFaaliyetSaveSource } from '../lib/sahaFaaliyetPersistence';
 import { ParselBlokAnalizPanel } from './ParselBlokAnalizPanel';
+import { KampFaaliyetTakipTab } from './KampFaaliyetTakipTab';
 
 interface IdariScreenProps {
   currentSubTab: string; // arac, kamp, saha, tutanak, cari_stok, eposta
@@ -368,6 +369,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [selectedKat, setSelectedKat] = useState("");
   
   const [campCreationStep, setCampCreationStep] = useState<'campus' | 'floor' | 'room'>('room');
+  const [kampMainView, setKampMainView] = useState<'odalar' | 'faaliyet'>('odalar');
   const [newCampusInput, setNewCampusInput] = useState("");
   const [newFloorInput, setNewFloorInput] = useState("");
 
@@ -2514,6 +2516,35 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           🏕️ VIEW: KAMP YÖNETİMİ
           ───────────────────────────────────────────────────────────── */}
       {currentSubTab === 'kamp' && (
+        <div className="flex-1 flex flex-col min-h-0 gap-3">
+          <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit shrink-0">
+            <button
+              type="button"
+              onClick={() => setKampMainView('odalar')}
+              className={`px-4 py-2 text-[10px] font-black rounded-lg transition ${
+                kampMainView === 'odalar'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              🏕️ Oda &amp; Yerleşim
+            </button>
+            <button
+              type="button"
+              onClick={() => setKampMainView('faaliyet')}
+              className={`px-4 py-2 text-[10px] font-black rounded-lg transition ${
+                kampMainView === 'faaliyet'
+                  ? 'bg-white text-emerald-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              📋 Faaliyet Takip
+            </button>
+          </div>
+
+          {kampMainView === 'faaliyet' ? (
+            <KampFaaliyetTakipTab />
+          ) : (
         <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
           
           {/* Left panel: Room Creation Form & Global stats */}
@@ -3080,6 +3111,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
             </div>
           )}
 
+        </div>
+          )}
         </div>
       )}
 
