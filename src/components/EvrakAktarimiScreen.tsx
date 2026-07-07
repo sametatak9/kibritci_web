@@ -4,7 +4,7 @@ import {
   ArrowRight, Landmark, FileSpreadsheet, Layers, ShoppingBag, DollarSign, Users, ClipboardCheck
 } from 'lucide-react';
 import { saveDocument } from '../lib/firebase';
-import { CariKart, StokKart, Personel, AylikYoklamaMap, SahaFaaliyeti } from '../types/erp';
+import { CariKart, CariKartIslem, StokKart, Personel, AylikYoklamaMap, SahaFaaliyeti, Fatura } from '../types/erp';
 import { findPersonelByName, setYoklamaDay } from '../lib/yoklamaUtils';
 import { fetchApiJson } from '../lib/apiClient';
 import {
@@ -14,6 +14,8 @@ import {
   findCariMatch,
   findStokMatch,
   normalizeMatchText,
+  resolveCariForBatchImport,
+  buildCariFaturaHistory,
   BatchImportRow,
 } from '../lib/evrakBatchImportUtils';
 
@@ -22,6 +24,8 @@ interface EvrakAktarimiScreenProps {
   setCariKartlar?: React.Dispatch<React.SetStateAction<CariKart[]>>;
   stokKartlar: StokKart[];
   setStokKartlar?: React.Dispatch<React.SetStateAction<StokKart[]>>;
+  setCariIslemGecmisi?: React.Dispatch<React.SetStateAction<CariKartIslem[]>>;
+  faturalar?: Fatura[];
   currentUser: any;
   setFaturalar: React.Dispatch<React.SetStateAction<any[]>>;
   setIrsaliyeler: React.Dispatch<React.SetStateAction<any[]>>;
@@ -38,6 +42,8 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
   setCariKartlar,
   stokKartlar,
   setStokKartlar,
+  setCariIslemGecmisi,
+  faturalar = [],
   currentUser,
   setFaturalar,
   setIrsaliyeler,
@@ -371,20 +377,24 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
     pageNo: number,
     sourceTag: string,
     workingCari: CariKart[],
-    workingStok: StokKart[]
-  ): Promise<{ evrakNo: string; firma: string; type: string; cariler: CariKart[]; stoklar: StokKart[] }> => {
+    workingStok: StokKart[],
+    createDecisions: Map<string, boolean>
+  ): Promise<{ evrakNo: string; firma: string; type: string; cariler: CariKart[]; stoklar: StokKart[]; reusedCari: boolean }> => {
     let cariler = [...workingCari];
     let stoklar = [...workingStok];
     const type = String(data.detectedType || 'fatura').toLowerCase() as typeof docType;
     const firma = String(data.cariUnvan || data.firma || '').trim();
     const kalemler = Array.isArray(data.kalemler) ? data.kalemler : [];
+    let matchedCari: CariKart | null = null;
+    let createdCari = false;
 
     if (firma) {
-      const before = findCariMatch(firma, workingCari);
-      const ensured = autoEnsureCari(firma, cariler, sourceTag);
-      cariler = ensured.cariler;
-      if (ensured.cari && !before) {
-        await saveDocument('cariKartlar', ensured.cari);
+      const resolved = resolveCariForBatchImport(firma, cariler, sourceTag, createDecisions);
+      cariler = resolved.cariler;
+      matchedCari = resolved.cari;
+      createdCari = resolved.created;
+      if (resolved.cari && resolved.created) {
+        await saveDocument('cariKartlar', resolved.cari);
       }
     }
 
@@ -400,12 +410,9 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
     if (setCariKartlar) setCariKartlar(cariler);
     if (setStokKartlar) setStokKartlar(stoklar);
 
-    const matchedCari = cariler.find((c) =>
-      normalizeMatchText(c.unvan).includes(normalizeMatchText(firma)) ||
-      normalizeMatchText(firma).includes(normalizeMatchText(c.unvan))
-    );
     const systemId = `BATCH-${type}-${Date.now()}-P${pageNo}`;
     const tarih = data.tarih || new Date().toISOString().slice(0, 10);
+    const cariUnvan = matchedCari?.unvan || firma || 'Bilinmeyen Cari';
 
     if (type === 'irsaliye') {
       const doc = {
@@ -427,15 +434,15 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
       };
       await saveDocument('irsaliyeler', doc);
       setIrsaliyeler((prev) => [doc, ...prev]);
-      return { evrakNo: doc.irsaliyeNo, firma: doc.firma, type: 'irsaliye', cariler, stoklar };
+      return { evrakNo: doc.irsaliyeNo, firma: doc.firma, type: 'irsaliye', cariler, stoklar, reusedCari: Boolean(matchedCari) };
     }
 
     const faturaDoc = {
       id: systemId,
       faturaNo: data.faturaNo || data.irsaliyeNo || `FT-P${pageNo}`,
       tarih,
-      cariKartId: matchedCari?.id || 'CARI-DIŞ-SERVIS',
-      cariUnvan: firma || 'Bilinmeyen Cari',
+      cariKartId: matchedCari?.id || '',
+      cariUnvan,
       toplamTutar: Number(data.toplamTutar) || Number(data.genelToplam) || 0,
       kdvTutar: Number(data.kdvTutar) || 0,
       genelToplam: Number(data.genelToplam || data.toplamTutar || data.tutar) || 0,
@@ -457,12 +464,28 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
     };
     await saveDocument('faturalar', faturaDoc);
     setFaturalar((prev) => [faturaDoc, ...prev]);
+
+    if (matchedCari?.id && setCariIslemGecmisi) {
+      const history = buildCariFaturaHistory(
+        matchedCari.id,
+        faturaDoc.id,
+        faturaDoc.faturaNo,
+        cariUnvan,
+        tarih,
+        sourceTag,
+        createdCari
+      );
+      setCariIslemGecmisi((prev) => [history, ...prev]);
+      await saveDocument('cariIslemGecmisi', history).catch(() => undefined);
+    }
+
     return {
       evrakNo: faturaDoc.faturaNo,
       firma: faturaDoc.cariUnvan,
       type: type === 'hakedis' ? 'hakedis' : 'fatura',
       cariler,
       stoklar,
+      reusedCari: Boolean(matchedCari) && !createdCari,
     };
   };
 
@@ -484,9 +507,30 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
       let workingCari = [...(cariKartlar || [])];
       let workingStok = [...(stokKartlar || [])];
       const sourceBase = batchFile.name;
+      const createDecisions = new Map<string, boolean>();
+      const existingTags = new Set(
+        (faturalar || [])
+          .map((f) => String(f.notlar || ''))
+          .flatMap((note) => {
+            const matches = note.match(/\[BatchPDF:[^\]]+\]/g);
+            return matches || [];
+          })
+      );
 
       for (let i = 0; i < pages.length; i++) {
         const pageNo = i + 1;
+        const sourceTag = `[BatchPDF:${sourceBase}#P${pageNo}]`;
+        if (existingTags.has(sourceTag)) {
+          setBatchRows((prev) =>
+            prev.map((r) =>
+              r.pageNo === pageNo
+                ? { ...r, status: 'skipped', message: 'Daha önce aktarılmış' }
+                : r
+            )
+          );
+          continue;
+        }
+
         setBatchProgress(`Sayfa ${pageNo}/${pages.length} yapay zeka ile okunuyor...`);
         setBatchRows((prev) =>
           prev.map((r) => (r.pageNo === pageNo ? { ...r, status: 'parsing' } : r))
@@ -518,8 +562,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           }
         }
 
-        const sourceTag = `[BatchPDF:${sourceBase}#P${pageNo}]`;
-        const imported = await importParsedPage(parsed, pageNo, sourceTag, workingCari, workingStok);
+        const imported = await importParsedPage(parsed, pageNo, sourceTag, workingCari, workingStok, createDecisions);
         workingCari = imported.cariler;
         workingStok = imported.stoklar;
 
@@ -531,7 +574,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
                   status: 'ok',
                   detectedType: imported.type,
                   evrakNo: imported.evrakNo,
-                  firma: imported.firma,
+                  firma: `${imported.firma}${imported.reusedCari ? ' (mevcut cari)' : ''}`,
                 }
               : r
           )
@@ -781,9 +824,9 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
 
         {/* Toplu PDF aktarım */}
         <div className="bg-white border border-amber-200 rounded-3xl p-6 space-y-4 shadow-sm">
-          <span className="text-[10px] font-black tracking-widest text-amber-700 uppercase block">TOPLU PDF AKTARIM (19 SAYFA GİBİ)</span>
+          <span className="text-[10px] font-black tracking-widest text-amber-700 uppercase block">TOPLU PDF AKTARIM (12 SAYFA GİBİ)</span>
           <p className="text-xs text-slate-500 leading-relaxed">
-            Çok sayfalı taranmış PDF&apos;yi sayfa sayfa okur; her sayfayı fatura veya irsaliye olarak algılar, cari kart ve stok kart eşleştirmesi yapar (yoksa otomatik oluşturur).
+            Çok sayfalı taranmış PDF&apos;yi sayfa sayfa ayırır; her sayfayı ayrı fatura evrakı olarak okur. Kayıtlı cari varsa aynı kartın altına devam eder; yoksa bir kez sorar. Stok kartları da eşleştirilir.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
             <label className="flex-1 text-xs border border-dashed border-slate-300 rounded-xl p-3 cursor-pointer hover:bg-slate-50">

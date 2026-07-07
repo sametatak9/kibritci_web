@@ -2336,6 +2336,8 @@ export default function App() {
                     setCariKartlar={setCariKartlarWithSync}
                     stokKartlar={stokKartlar}
                     setStokKartlar={setStokKartlarWithSync}
+                    setCariIslemGecmisi={setCariIslemGecmisiWithSync}
+                    faturalar={faturalar}
                     currentUser={currentUser}
                     setFaturalar={setFaturalarWithSync}
                     setIrsaliyeler={setIrsaliyelerWithSync}

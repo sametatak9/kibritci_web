@@ -1,5 +1,6 @@
 import { PDFDocument } from 'pdf-lib';
-import { CariKart, StokKart } from '../types/erp';
+import { CariKart, CariKartIslem, StokKart } from '../types/erp';
+import { findNearDuplicateCariNames, levenshteinDistance, normalizeStockCompareName } from './duplicateNameUtils';
 
 export const normalizeMatchText = (raw: string) =>
   String(raw || '')
@@ -33,16 +34,85 @@ export async function splitPdfFileToPageBase64(file: File): Promise<string[]> {
 export function findCariMatch(unvan: string, cariler: CariKart[]): CariKart | undefined {
   const norm = normalizeMatchText(unvan);
   if (!norm) return undefined;
-  return cariler.find((c) => {
+
+  const exact = cariler.find((c) => normalizeMatchText(c.unvan) === norm);
+  if (exact) return exact;
+
+  const contains = cariler.find((c) => {
     const cu = normalizeMatchText(c.unvan);
-    return cu === norm || cu.includes(norm) || norm.includes(cu);
+    return cu.includes(norm) || norm.includes(cu);
   });
+  if (contains) return contains;
+
+  const near = findNearDuplicateCariNames(cariler, unvan, 3);
+  return near[0];
 }
 
 export function findStokMatch(urunAdi: string, stoklar: StokKart[]): StokKart | undefined {
-  const norm = normalizeMatchText(urunAdi);
+  const norm = normalizeStockCompareName(urunAdi);
   if (!norm) return undefined;
-  return stoklar.find((s) => normalizeMatchText(s.stokAdi) === norm);
+
+  const exact = stoklar.find((s) => normalizeStockCompareName(s.stokAdi) === norm);
+  if (exact) return exact;
+
+  let best: StokKart | undefined;
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (const stok of stoklar) {
+    const dist = levenshteinDistance(norm, normalizeStockCompareName(stok.stokAdi));
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = stok;
+    }
+  }
+  return bestDist <= 2 ? best : undefined;
+}
+
+export function resolveCariForBatchImport(
+  supplierName: string,
+  cariler: CariKart[],
+  sourceNote: string,
+  createDecisions: Map<string, boolean>
+): { cariler: CariKart[]; cari: CariKart | null; created: boolean } {
+  const name = supplierName.trim();
+  if (!name) return { cariler, cari: null, created: false };
+
+  const existing = findCariMatch(name, cariler);
+  if (existing) return { cariler, cari: existing, created: false };
+
+  if (!createDecisions.has(name)) {
+    const create = window.confirm(
+      `"${name}" cari kartlarda bulunamadı.\n\nEvet = yeni tedarikçi cari kartı açılır\nHayır = yeni kart açılmaz; fatura mevcut firma adıyla kaydedilir`
+    );
+    createDecisions.set(name, create);
+  }
+
+  if (!createDecisions.get(name)) {
+    return { cariler, cari: null, created: false };
+  }
+
+  const ensured = autoEnsureCari(name, cariler, sourceNote);
+  return { cariler: ensured.cariler, cari: ensured.cari, created: Boolean(ensured.cari) };
+}
+
+export function buildCariFaturaHistory(
+  cariKartId: string,
+  faturaId: string,
+  faturaNo: string,
+  firma: string,
+  tarih: string,
+  sourceTag: string,
+  createdCari?: boolean
+): CariKartIslem {
+  return {
+    id: `cari_islem_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    cariKartId,
+    islemTipi: 'FATURA',
+    islemId: faturaId,
+    islemBaslik: 'Toplu PDF Fatura Aktarımı',
+    islemDetay: `${faturaNo} · ${firma}${createdCari ? ' · yeni cari kart açıldı' : ' · mevcut cari kart'} ${sourceTag}`,
+    tarih,
+    belgeNo: faturaNo,
+  };
 }
 
 export function autoEnsureCari(
