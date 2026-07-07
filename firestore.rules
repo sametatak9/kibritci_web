@@ -19,6 +19,12 @@ service cloud.firestore {
       return request.auth.token.durum != null ? request.auth.token.durum : '';
     }
 
+    function isFounderEmail() {
+      return isSignedIn()
+        && !isAnonymous()
+        && request.auth.token.email in ['sametatak9@gmail.com', 'santiye@kibritci.com'];
+    }
+
     // Custom Claims: role + durum=AKTİF + e-posta oturumu (anonim değil)
     function hasPortalAccess() {
       return isSignedIn()
@@ -51,11 +57,11 @@ service cloud.firestore {
     }
 
     function canUseErp() {
-      return hasPortalAccess() || legacyUnclaimedEmailUser() || isYonetici();
+      return hasPortalAccess() || legacyUnclaimedEmailUser() || isFounderEmail();
     }
 
     function canUseFinance() {
-      return isFinanceDesk() || (legacyUnclaimedEmailUser() && !isMobileRole());
+      return isFinanceDesk() || legacyUnclaimedEmailUser() || isFounderEmail();
     }
 
     // ── Herkese açık / kayıt ──
@@ -66,23 +72,23 @@ service cloud.firestore {
 
     match /bekleyenUyelikler/{docId} {
       allow create: if isSignedIn();
-      allow read, update, delete: if isYonetici() || legacyUnclaimedEmailUser();
+      allow read, update, delete: if isYonetici() || legacyUnclaimedEmailUser() || isFounderEmail();
     }
 
     match /kullanicilar/{email} {
       allow read: if isSignedIn()
-        && (request.auth.token.email == email || isYonetici() || legacyUnclaimedEmailUser());
-      allow write: if isYonetici() || legacyUnclaimedEmailUser();
+        && (request.auth.token.email == email || isYonetici() || legacyUnclaimedEmailUser() || isFounderEmail());
+      allow write: if isYonetici() || legacyUnclaimedEmailUser() || isFounderEmail();
     }
 
     match /portalKullanicilar/{email} {
       allow read: if false;
-      allow write: if isYonetici() || legacyUnclaimedEmailUser();
+      allow write: if isYonetici() || legacyUnclaimedEmailUser() || isFounderEmail();
     }
 
     match /yetkiSablonlari/{docId} {
       allow read: if canUseErp();
-      allow write: if isYonetici();
+      allow write: if isYonetici() || isFounderEmail();
     }
 
     // ── Finans / muhasebe (mobil roller erişemez) ──

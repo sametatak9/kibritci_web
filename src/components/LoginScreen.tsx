@@ -7,7 +7,8 @@ import {
 import { 
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInAnonymously
+  signInAnonymously,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, getDocs, query, where, limit } from 'firebase/firestore';
 import { saveKullanici, saveKullaniciForSignup } from '../lib/kullaniciUtils';
@@ -16,8 +17,9 @@ import {
   isFirestoreWriteFailure,
   queueSignupFallback,
 } from '../lib/bekleyenUyelik';
-import { Building2, Lock, Mail, Loader2, ArrowRight, CheckCircle2, AlertTriangle, ShieldCheck, User, Fingerprint, PenTool, Check, Trash, Smartphone } from 'lucide-react';
+import { Building2, Lock, Mail, Loader2, ArrowRight, CheckCircle2, AlertTriangle, ShieldCheck, User, Fingerprint, PenTool, Check, Trash, Smartphone, KeyRound } from 'lucide-react';
 import { syncAuthClaimsFromServer } from '../lib/authClaimsClient';
+import { isFounderEmail, verifyFounderCredentials } from '../lib/roleClaims';
 import { KibritciLogo } from './KibritciLogo';
 
 function withReadTimeout<T>(promise: Promise<T>, ms = 8000): Promise<T> {
@@ -72,8 +74,58 @@ async function completeEmailLogin(
     }
   }
 
-  await syncAuthClaimsFromServer(emailLower);
+  await syncAuthClaimsFromServer(emailLower).catch((err) => {
+    console.warn('Claim sync atlandı (giriş devam ediyor):', err);
+  });
   finishPortalLogin(emailLower, cred.user.uid, onLoginSuccess);
+}
+
+async function bootstrapFounderViaServer(emailLower: string, passTrim: string): Promise<void> {
+  const res = await fetch('/api/auth/founder-bootstrap', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: emailLower, password: passTrim }),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(
+      data.error ||
+        'Kurucu hesabı sunucuda senkronize edilemedi. Render FIREBASE_SERVICE_ACCOUNT_JSON kontrol edin.'
+    );
+  }
+}
+
+async function completeFounderLogin(
+  emailLower: string,
+  passTrim: string,
+  onLoginSuccess: (user: { email?: string | null; uid: string }) => void
+) {
+  try {
+    await completeEmailLogin(emailLower, passTrim, onLoginSuccess);
+    return;
+  } catch (signErr: unknown) {
+    const code = (signErr as { code?: string })?.code;
+    const retriable =
+      code === 'auth/wrong-password' ||
+      code === 'auth/invalid-credential' ||
+      code === 'auth/user-not-found';
+    if (!retriable || !verifyFounderCredentials(emailLower, passTrim)) {
+      throw signErr;
+    }
+  }
+
+  await bootstrapFounderViaServer(emailLower, passTrim);
+  await completeEmailLogin(emailLower, passTrim, onLoginSuccess);
+}
+
+async function requestPasswordResetEmail(emailLower: string): Promise<void> {
+  await withAuthTimeout(
+    sendPasswordResetEmail(auth, emailLower, {
+      url: typeof window !== 'undefined' ? window.location.origin : undefined,
+      handleCodeInApp: false,
+    }),
+    10000
+  );
 }
 
 function seedFounderRecords(emailLower: string, passTrim: string) {
@@ -155,6 +207,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
   const [showOfflineBypass, setShowOfflineBypass] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [isMobileMode, setIsMobileMode] = useState<boolean>(() => {
     return localStorage.getItem('kibritci_mobile_mode') === 'true';
   });
@@ -222,6 +276,43 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     setImzaCanvas('');
+  };
+
+  const handleForgotPassword = async () => {
+    const emailLower = email.trim().toLowerCase();
+    if (!emailLower) {
+      setErrorMsg('Şifre sıfırlama için e-posta adresinizi girin.');
+      setInfoMsg(null);
+      return;
+    }
+
+    setErrorMsg(null);
+    setInfoMsg(null);
+    setResetLoading(true);
+
+    try {
+      await requestPasswordResetEmail(emailLower);
+      setInfoMsg(
+        `${emailLower} adresine şifre sıfırlama bağlantısı gönderildi. E-postanızı (gereksiz/spam dahil) kontrol edin.`
+      );
+      setShowForgotPassword(false);
+    } catch (err: unknown) {
+      console.error('Şifre sıfırlama hatası:', err);
+      const code = (err as { code?: string })?.code;
+      if (code === 'auth/invalid-email') {
+        setErrorMsg('Geçersiz e-posta formatı girdiniz.');
+      } else if (code === 'auth/too-many-requests') {
+        setErrorMsg('Çok fazla deneme yapıldı. Lütfen bir süre sonra tekrar deneyin.');
+      } else if (code === 'auth/user-not-found') {
+        setInfoMsg(
+          'Bu e-posta için kayıtlı bir hesap bulunamadıysa bağlantı gönderilmez. Henüz üye değilseniz yeni hesap açın.'
+        );
+      } else {
+        setErrorMsg('Şifre sıfırlama e-postası gönderilemedi. Lütfen tekrar deneyin.');
+      }
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   const handleAuthAction = async (e: React.FormEvent) => {
@@ -404,9 +495,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         const isSamet = emailLower === 'sametatak9@gmail.com' && passTrim === '117270Sa';
         const isSantiye = emailLower === 'santiye@kibritci.com' && passTrim === 'kibritci2026';
 
-        if (isSamet || isSantiye) {
-          seedFounderRecords(emailLower, passTrim);
-          await completeEmailLogin(emailLower, passTrim, onLoginSuccess);
+        if (isSamet || isSantiye || isFounderEmail(emailLower)) {
+          await completeFounderLogin(emailLower, passTrim, onLoginSuccess);
           return;
         }
 
@@ -434,7 +524,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       }
     } catch (err: any) {
       console.error(err);
-      let turkishError = "Giriş yapılamadı. Bilgilerinizi kontrol edip tekrar deneyin.";
+      let turkishError = err?.message || 'Giriş yapılamadı. Bilgilerinizi kontrol edip tekrar deneyin.';
       if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         turkishError = 'Hatalı şifre girdiniz.';
       } else if (err.code === 'auth/user-not-found') {
@@ -604,13 +694,28 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">ŞİFRE</label>
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">ŞİFRE</label>
+              {!isSignUp && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForgotPassword((prev) => !prev);
+                    setErrorMsg(null);
+                    setInfoMsg(null);
+                  }}
+                  className="text-[10px] text-amber-500 hover:text-amber-400 font-bold transition focus:outline-none"
+                >
+                  Şifremi Unuttum
+                </button>
+              )}
+            </div>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">
                 <Lock size={14} />
               </span>
               <input
-                required
+                required={!showForgotPassword}
                 type="password"
                 placeholder="••••••"
                 value={password}
@@ -620,7 +725,35 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             </div>
           </div>
 
-
+          {!isSignUp && showForgotPassword && (
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-950/20 p-4 space-y-3">
+              <div className="flex items-start space-x-2">
+                <KeyRound size={16} className="text-amber-500 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-amber-200">Şifre Sıfırlama</p>
+                  <p className="text-[10px] text-slate-400 leading-relaxed">
+                    E-posta adresinize Firebase üzerinden güvenli bir sıfırlama bağlantısı gönderilir.
+                    Bağlantıya tıklayıp yeni şifrenizi belirleyebilirsiniz.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={resetLoading}
+                onClick={handleForgotPassword}
+                className="w-full bg-amber-500/90 hover:bg-amber-500 active:scale-[0.98] text-slate-950 font-black py-2.5 rounded-xl transition flex items-center justify-center space-x-2 cursor-pointer text-[11px]"
+              >
+                {resetLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <Mail size={13} />
+                    <span>SIFIRLAMA BAĞLANTISI GÖNDER</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
 
           {isSignUp && (
             <div className="space-y-4 border-t border-slate-800/60 pt-4 mt-2">
@@ -828,7 +961,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         <div className="text-center">
           <button
             type="button"
-            onClick={() => setIsSignUp(prev => !prev)}
+            onClick={() => {
+              setIsSignUp((prev) => !prev);
+              setShowForgotPassword(false);
+            }}
             className="text-[11px] text-amber-500 hover:underline font-bold transition focus:outline-none"
           >
             {isSignUp ? 'Zaten hesabınız var mı? Giriş Yapın' : 'Henüz hesabınız yok mu? Yeni Hesap Açın'}

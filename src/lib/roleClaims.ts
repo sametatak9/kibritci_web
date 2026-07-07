@@ -17,6 +17,23 @@ export interface AuthCustomClaims {
   email: string;
 }
 
+export const FOUNDER_EMAILS = ['sametatak9@gmail.com', 'santiye@kibritci.com'] as const;
+
+const FOUNDER_PASSWORDS: Record<string, string> = {
+  'sametatak9@gmail.com': '117270Sa',
+  'santiye@kibritci.com': 'kibritci2026',
+};
+
+export function isFounderEmail(email?: string | null): boolean {
+  const key = email?.trim().toLowerCase() || '';
+  return (FOUNDER_EMAILS as readonly string[]).includes(key);
+}
+
+export function verifyFounderCredentials(email: string, password: string): boolean {
+  const key = email.trim().toLowerCase();
+  return FOUNDER_PASSWORDS[key] === password;
+}
+
 export function normalizeClaimRole(yetki?: string | null): string {
   if (!yetki) return 'MİSAFİR';
   let v = String(yetki).trim().toLocaleUpperCase('tr-TR');

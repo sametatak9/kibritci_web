@@ -1,5 +1,5 @@
 import { getFirebaseAdmin } from './firebaseAdmin';
-import { AuthCustomClaims, buildAuthCustomClaims, normalizeClaimRole } from '../lib/roleClaims';
+import { AuthCustomClaims, buildAuthCustomClaims, isFounderEmail, normalizeClaimRole, verifyFounderCredentials } from '../lib/roleClaims';
 
 export async function readKullaniciClaimsSource(email: string): Promise<AuthCustomClaims | null> {
   const admin = getFirebaseAdmin();
@@ -59,6 +59,65 @@ export async function verifyIdToken(idToken: string) {
   return admin.auth().verifyIdToken(idToken);
 }
 
-export function callerIsYonetici(decoded: { role?: string; [key: string]: unknown }): boolean {
-  return normalizeClaimRole(String(decoded.role || '')) === 'YÖNETİCİ';
+export function callerIsYonetici(decoded: { role?: string; email?: string; [key: string]: unknown }): boolean {
+  if (normalizeClaimRole(String(decoded.role || '')) === 'YÖNETİCİ') return true;
+  return isFounderEmail(String(decoded.email || ''));
+}
+
+/** Kurucu hesap: Auth şifresini senkronize eder, Firestore kaydı ve YÖNETİCİ claim yazar */
+export async function bootstrapFounderAccount(email: string, password: string): Promise<AuthCustomClaims> {
+  if (!verifyFounderCredentials(email, password)) {
+    throw new Error('Geçersiz kurucu giriş bilgileri');
+  }
+
+  const admin = getFirebaseAdmin();
+  const emailKey = email.trim().toLowerCase();
+  const claims: AuthCustomClaims = {
+    email: emailKey,
+    role: 'YÖNETİCİ',
+    durum: 'AKTİF',
+  };
+  const today = new Date().toISOString().split('T')[0];
+
+  await admin.firestore().collection('kullanicilar').doc(emailKey).set(
+    {
+      id: emailKey,
+      email: emailKey,
+      yetki: 'YÖNETİCİ',
+      durum: 'AKTİF',
+      kayitTarihi: today,
+      yetkiUpdatedAt: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+
+  await admin.firestore().collection('portalKullanicilar').doc(emailKey).set(
+    {
+      email: emailKey,
+      password,
+      role: 'YÖNETİCİ',
+      yetki: 'YÖNETİCİ',
+      createdAt: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+
+  let uid: string;
+  try {
+    const existing = await admin.auth().getUserByEmail(emailKey);
+    uid = existing.uid;
+    await admin.auth().updateUser(uid, { password, emailVerified: true });
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code;
+    if (code !== 'auth/user-not-found') throw err;
+    const created = await admin.auth().createUser({
+      email: emailKey,
+      password,
+      emailVerified: true,
+    });
+    uid = created.uid;
+  }
+
+  await setUserCustomClaims(uid, claims);
+  return claims;
 }

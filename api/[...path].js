@@ -273,8 +273,286 @@ function listPendingSignups() {
   );
 }
 
+// src/server/firebaseAdmin.ts
+var import_firebase_admin = __toESM(require("firebase-admin"), 1);
+var initialized = false;
+function isFirebaseAdminConfigured() {
+  return Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_APPLICATION_CREDENTIALS);
+}
+function getFirebaseAdmin() {
+  if (initialized) return import_firebase_admin.default;
+  const json = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
+  if (json) {
+    const cred = JSON.parse(json);
+    import_firebase_admin.default.initializeApp({ credential: import_firebase_admin.default.credential.cert(cred) });
+  } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    import_firebase_admin.default.initializeApp({ credential: import_firebase_admin.default.credential.applicationDefault() });
+  } else {
+    throw new Error(
+      "FIREBASE_SERVICE_ACCOUNT_JSON tan\u0131ml\u0131 de\u011Fil. Render Environment veya .env.local dosyas\u0131na Firebase service account JSON ekleyin."
+    );
+  }
+  initialized = true;
+  return import_firebase_admin.default;
+}
+
+// src/lib/roleClaims.ts
+var FOUNDER_EMAILS = ["sametatak9@gmail.com", "santiye@kibritci.com"];
+var FOUNDER_PASSWORDS = {
+  "sametatak9@gmail.com": "117270Sa",
+  "santiye@kibritci.com": "kibritci2026"
+};
+function isFounderEmail(email) {
+  const key = email?.trim().toLowerCase() || "";
+  return FOUNDER_EMAILS.includes(key);
+}
+function verifyFounderCredentials(email, password) {
+  const key = email.trim().toLowerCase();
+  return FOUNDER_PASSWORDS[key] === password;
+}
+function normalizeClaimRole(yetki) {
+  if (!yetki) return "M\u0130SAF\u0130R";
+  let v = String(yetki).trim().toLocaleUpperCase("tr-TR");
+  const aliases = {
+    KAMPCI: "KAMP\xC7I",
+    KAMPC\u0130: "KAMP\xC7I",
+    GUVENLIK: "G\xDCVENL\u0130K",
+    LOJISTIK: "LOJ\u0130ST\u0130K",
+    DEPO: "DEPOCU",
+    \u015EOF\u00D6R: "LOJ\u0130ST\u0130K",
+    SOFOR: "LOJ\u0130ST\u0130K"
+  };
+  return aliases[v] ?? v;
+}
+function buildAuthCustomClaims(input) {
+  const email = input.email.trim().toLowerCase();
+  return {
+    email,
+    role: normalizeClaimRole(input.yetki),
+    durum: String(input.durum || "ONAY BEKL\u0130YOR").trim()
+  };
+}
+
+// src/server/authClaimsService.ts
+async function readKullaniciClaimsSource(email) {
+  const admin2 = getFirebaseAdmin();
+  const emailKey = email.trim().toLowerCase();
+  const snap = await admin2.firestore().collection("kullanicilar").doc(emailKey).get();
+  if (!snap.exists) return null;
+  const data = snap.data() || {};
+  return buildAuthCustomClaims({
+    email: emailKey,
+    yetki: String(data.yetki || data.role || "M\u0130SAF\u0130R"),
+    durum: String(data.durum || "ONAY BEKL\u0130YOR")
+  });
+}
+async function ensureAuthUser(email, password) {
+  const admin2 = getFirebaseAdmin();
+  const emailKey = email.trim().toLowerCase();
+  try {
+    const existing = await admin2.auth().getUserByEmail(emailKey);
+    return existing.uid;
+  } catch (err) {
+    const code = err?.code;
+    if (code !== "auth/user-not-found") throw err;
+    if (!password) {
+      throw new Error(`Firebase Auth kullan\u0131c\u0131s\u0131 yok: ${emailKey}. \u015Eifre ile olu\u015Fturulmal\u0131.`);
+    }
+    const created = await admin2.auth().createUser({
+      email: emailKey,
+      password,
+      emailVerified: true
+    });
+    return created.uid;
+  }
+}
+async function setUserCustomClaims(uid, claims) {
+  const admin2 = getFirebaseAdmin();
+  await admin2.auth().setCustomUserClaims(uid, {
+    role: claims.role,
+    durum: claims.durum,
+    email: claims.email
+  });
+}
+async function syncClaimsForEmail(email, password) {
+  const claims = await readKullaniciClaimsSource(email);
+  if (!claims) {
+    throw new Error(`kullanicilar/${email.trim().toLowerCase()} bulunamad\u0131`);
+  }
+  const uid = await ensureAuthUser(email, password);
+  await setUserCustomClaims(uid, claims);
+  return claims;
+}
+async function verifyIdToken(idToken) {
+  const admin2 = getFirebaseAdmin();
+  return admin2.auth().verifyIdToken(idToken);
+}
+function callerIsYonetici(decoded) {
+  if (normalizeClaimRole(String(decoded.role || "")) === "Y\xD6NET\u0130C\u0130") return true;
+  return isFounderEmail(String(decoded.email || ""));
+}
+async function bootstrapFounderAccount(email, password) {
+  if (!verifyFounderCredentials(email, password)) {
+    throw new Error("Ge\xE7ersiz kurucu giri\u015F bilgileri");
+  }
+  const admin2 = getFirebaseAdmin();
+  const emailKey = email.trim().toLowerCase();
+  const claims = {
+    email: emailKey,
+    role: "Y\xD6NET\u0130C\u0130",
+    durum: "AKT\u0130F"
+  };
+  const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+  await admin2.firestore().collection("kullanicilar").doc(emailKey).set(
+    {
+      id: emailKey,
+      email: emailKey,
+      yetki: "Y\xD6NET\u0130C\u0130",
+      durum: "AKT\u0130F",
+      kayitTarihi: today,
+      yetkiUpdatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    },
+    { merge: true }
+  );
+  await admin2.firestore().collection("portalKullanicilar").doc(emailKey).set(
+    {
+      email: emailKey,
+      password,
+      role: "Y\xD6NET\u0130C\u0130",
+      yetki: "Y\xD6NET\u0130C\u0130",
+      createdAt: (/* @__PURE__ */ new Date()).toISOString()
+    },
+    { merge: true }
+  );
+  let uid;
+  try {
+    const existing = await admin2.auth().getUserByEmail(emailKey);
+    uid = existing.uid;
+    await admin2.auth().updateUser(uid, { password, emailVerified: true });
+  } catch (err) {
+    const code = err?.code;
+    if (code !== "auth/user-not-found") throw err;
+    const created = await admin2.auth().createUser({
+      email: emailKey,
+      password,
+      emailVerified: true
+    });
+    uid = created.uid;
+  }
+  await setUserCustomClaims(uid, claims);
+  return claims;
+}
+
 // src/server/registerApiRoutes.ts
 function registerApiRoutes(app2) {
+  async function readBearerToken(req) {
+    const header = req.headers.authorization || "";
+    if (!header.startsWith("Bearer ")) return null;
+    return header.slice(7).trim() || null;
+  }
+  app2.get("/api/auth/claims-status", (_req, res) => {
+    res.json({ adminConfigured: isFirebaseAdminConfigured() });
+  });
+  app2.post("/api/auth/founder-bootstrap", async (req, res) => {
+    if (!isFirebaseAdminConfigured()) {
+      return res.status(503).json({
+        error: "Sunucu yap\u0131land\u0131rmas\u0131 eksik (FIREBASE_SERVICE_ACCOUNT_JSON). Render ortam de\u011Fi\u015Fkenine service account JSON ekleyin."
+      });
+    }
+    try {
+      const email = String(req.body?.email || "").trim().toLowerCase();
+      const password = String(req.body?.password || "");
+      if (!email || !password) {
+        return res.status(400).json({ error: "email ve password zorunlu" });
+      }
+      const claims = await bootstrapFounderAccount(email, password);
+      return res.json({ success: true, claims });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Kurucu bootstrap ba\u015Far\u0131s\u0131z";
+      const status = message.includes("Ge\xE7ersiz kurucu") ? 403 : 500;
+      return res.status(status).json({ error: message });
+    }
+  });
+  app2.post("/api/auth/provision-user", async (req, res) => {
+    if (!isFirebaseAdminConfigured()) {
+      return res.status(503).json({ error: "Firebase Admin yap\u0131land\u0131r\u0131lmam\u0131\u015F" });
+    }
+    try {
+      const idToken = await readBearerToken(req);
+      if (!idToken) return res.status(401).json({ error: "Authorization Bearer token gerekli" });
+      const decoded = await verifyIdToken(idToken);
+      if (!callerIsYonetici(decoded)) {
+        return res.status(403).json({ error: "Yaln\u0131zca Y\xD6NET\u0130C\u0130 kullan\u0131c\u0131 olu\u015Fturabilir" });
+      }
+      const email = String(req.body?.email || "").trim().toLowerCase();
+      const password = String(req.body?.password || "");
+      if (!email || password.length < 6) {
+        return res.status(400).json({ error: "email ve password (min 6) zorunlu" });
+      }
+      const claims = await syncClaimsForEmail(email, password);
+      return res.json({ success: true, claims });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Kullan\u0131c\u0131 provision ba\u015Far\u0131s\u0131z";
+      return res.status(500).json({ error: message });
+    }
+  });
+  app2.post("/api/auth/sync-claims", async (req, res) => {
+    if (!isFirebaseAdminConfigured()) {
+      return res.status(503).json({
+        error: "Firebase Admin yap\u0131land\u0131r\u0131lmam\u0131\u015F. FIREBASE_SERVICE_ACCOUNT_JSON Render ortam de\u011Fi\u015Fkenine eklenmeli."
+      });
+    }
+    try {
+      const idToken = await readBearerToken(req);
+      if (!idToken) return res.status(401).json({ error: "Authorization Bearer token gerekli" });
+      const decoded = await verifyIdToken(idToken);
+      const callerEmail = String(decoded.email || "").trim().toLowerCase();
+      const targetEmail = String(req.body?.email || callerEmail).trim().toLowerCase();
+      if (!targetEmail) return res.status(400).json({ error: "E-posta bulunamad\u0131" });
+      if (targetEmail !== callerEmail && !callerIsYonetici(decoded)) {
+        return res.status(403).json({ error: "Ba\u015Fka kullan\u0131c\u0131 i\xE7in claim yaln\u0131zca Y\xD6NET\u0130C\u0130 yapabilir" });
+      }
+      const claims = await syncClaimsForEmail(targetEmail);
+      return res.json({ success: true, claims });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Claim senkronizasyonu ba\u015Far\u0131s\u0131z";
+      return res.status(500).json({ error: message });
+    }
+  });
+  app2.post("/api/auth/admin/bootstrap-all-claims", async (req, res) => {
+    if (!isFirebaseAdminConfigured()) {
+      return res.status(503).json({ error: "Firebase Admin yap\u0131land\u0131r\u0131lmam\u0131\u015F" });
+    }
+    try {
+      const idToken = await readBearerToken(req);
+      if (!idToken) return res.status(401).json({ error: "Authorization Bearer token gerekli" });
+      const decoded = await verifyIdToken(idToken);
+      if (!callerIsYonetici(decoded)) {
+        return res.status(403).json({ error: "Yaln\u0131zca Y\xD6NET\u0130C\u0130 t\xFCm claimleri senkronize edebilir" });
+      }
+      const admin2 = (await import("firebase-admin")).default;
+      const snap = await admin2.firestore().collection("kullanicilar").get();
+      const results = [];
+      for (const docSnap of snap.docs) {
+        const email = String(docSnap.data()?.email || docSnap.id).trim().toLowerCase();
+        if (!email) continue;
+        try {
+          await syncClaimsForEmail(email);
+          results.push({ email, ok: true });
+        } catch (e) {
+          results.push({
+            email,
+            ok: false,
+            error: e instanceof Error ? e.message : "hata"
+          });
+        }
+      }
+      return res.json({ success: true, count: results.length, results });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Toplu claim senkronizasyonu ba\u015Far\u0131s\u0131z";
+      return res.status(500).json({ error: message });
+    }
+  });
   app2.post("/api/pending-signup", (req, res) => {
     try {
       const { email, password, ad, soyad, tcNo } = req.body || {};

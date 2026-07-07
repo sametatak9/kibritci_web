@@ -1571,7 +1571,7 @@ export default function App() {
         <AlertCircle className="text-rose-400 mb-4" size={48} />
         <h1 className="text-lg font-bold mb-2">Veritabanı Bağlantı Hatası</h1>
         <p className="text-sm text-slate-400 text-center max-w-md mb-6">
-          {startupError?.message || 'Kayıtlı verileriniz Firestore&apos;da güvendedir. Bağlantı kurulamadı.'}
+          {startupError?.message || "Kayıtlı verileriniz Firestore'da güvendedir. Bağlantı kurulamadı."}
         </p>
         <div className="w-full max-w-xl bg-slate-800/70 border border-slate-700 rounded-xl p-4 mb-5 space-y-2 text-xs">
           <p className="text-slate-300">
