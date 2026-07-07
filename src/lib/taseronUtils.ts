@@ -1,4 +1,4 @@
-import { CariKart, OperatorFaaliyet, TaseronEnerjiKaydi, TaseronSayacOlcum, TaseronYemekKaydi } from '../types/erp';
+import { CariKart, KampKaydi, KampOdasi, OperatorFaaliyet, Personel, TaseronEnerjiKaydi, TaseronSayacOlcum, TaseronYemekKaydi } from '../types/erp';
 
 export function getTaseronCariKartlar(cariKartlar: CariKart[]): CariKart[] {
   return cariKartlar.filter((c) => c.kartTipi === 'TASERON' && c.durum !== 'PASIF');
@@ -111,4 +111,43 @@ export function makineEtiketi(f: OperatorFaaliyet): string {
 
 export function hesaplaKesintiTutari(toplamSaat: number, saatlikUcret: number): number {
   return Math.round(toplamSaat * saatlikUcret * 100) / 100;
+}
+
+function normalizePersonelName(value: string): string {
+  return value.trim().toLocaleLowerCase('tr-TR').replace(/\s+/g, ' ');
+}
+
+export function personelForTaseron(personeller: Personel[], taseron: CariKart): Personel[] {
+  return personeller
+    .filter((p) => {
+      if (p.firmaTipi === 'TASERON' && firmaEslesir(p.firmaAdi || '', taseron.unvan)) return true;
+      if (p.firmaTipi !== 'ANA_FIRMA' && p.firmaAdi && firmaEslesir(p.firmaAdi, taseron.unvan)) return true;
+      return false;
+    })
+    .sort((a, b) =>
+      `${a.ad} ${a.soyad}`.localeCompare(`${b.ad} ${b.soyad}`, 'tr', { sensitivity: 'base' })
+    );
+}
+
+export function formatPersonelKampYerlesim(
+  personel: Personel,
+  kampKayitlari: KampKaydi[],
+  kampOdalari: KampOdasi[]
+): string {
+  const fullName = `${personel.ad} ${personel.soyad}`.trim();
+  const activeStay = kampKayitlari.find(
+    (k) =>
+      k.durum === 'AKTIF' &&
+      ((personel.id && k.personelId === personel.id) ||
+        normalizePersonelName(k.personelIsim || '') === normalizePersonelName(fullName))
+  );
+  if (!activeStay) return '— Kamp ataması yok';
+
+  const room = kampOdalari.find(
+    (r) => r.id === activeStay.odaId || r.id === activeStay.roomId
+  );
+  const yerleske = room?.yerleskeAdi || activeStay.yerleskeAdi || 'Yerleşke';
+  const kat = room?.kogusNo || activeStay.katAdi || 'Kat';
+  const oda = room?.odaNo || activeStay.odaNo || '?';
+  return `${yerleske} · ${kat} · Oda ${oda}`;
 }

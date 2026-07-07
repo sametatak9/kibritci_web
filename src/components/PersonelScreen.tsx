@@ -1,16 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Users, UserPlus, Trash2, CreditCard as Edit3, Camera, Search, ShieldCheck, Mail, Phone, MapPin, DollarSign, UserX, FileText, CloudUpload as UploadCloud, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, Loader as Loader2, Building2, History, Download } from 'lucide-react';
-import { CariKart, Personel } from '../types/erp';
+import { CariKart, CariKartIslem, Personel } from '../types/erp';
 import { fetchApiJson } from '../lib/apiClient';
 import { compressImage } from '../lib/imageCompress';
 import { exportPersonelRows } from '../lib/reportExport';
 import { saveDocument } from '../lib/firebase';
 import { kibritciLogoHtml } from '../lib/kibritciBrand';
+import { findNearDuplicateCariNames, normalizeCardName } from '../lib/duplicateNameUtils';
 
 interface PersonelScreenProps {
   personeller: Personel[];
   setPersoneller: React.Dispatch<React.SetStateAction<Personel[]>>;
   cariKartlar?: CariKart[];
+  setCariKartlar?: React.Dispatch<React.SetStateAction<CariKart[]>>;
+  setCariIslemGecmisi?: React.Dispatch<React.SetStateAction<CariKartIslem[]>>;
 }
 
 const TASERON_MANUEL_KEY = '__MANUEL__';
@@ -36,10 +39,44 @@ function isTaseronCariKart(cari: CariKart): boolean {
   return tip === 'TASERON';
 }
 
+function createTaseronCariKart(unvan: string): CariKart {
+  return {
+    id: `ck_${Date.now()}`,
+    kartTipi: 'TASERON',
+    kod: `CAR-${Math.floor(100 + Math.random() * 900)}`,
+    unvan,
+    yetkili: 'Personel kaydından oluşturuldu',
+    telefon: '',
+    eposta: '',
+    vergiNo: '',
+    vergiDairesi: '',
+    adres: 'Personel kayıt ekranından otomatik oluşturuldu.',
+    iban: '',
+    durum: 'AKTIF',
+    notlar: 'Personel kaydından otomatik oluşturuldu.',
+  };
+}
+
+type PendingPersonelSave = {
+  normalizedPayload: Omit<Personel, 'id'> | Personel;
+  isEdit: boolean;
+};
+
+type TaseronResolveModalState =
+  | {
+      kind: 'create' | 'merge';
+      manualName: string;
+      matches?: CariKart[];
+      pending: PendingPersonelSave;
+    }
+  | null;
+
 export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   personeller,
   setPersoneller,
-  cariKartlar = []
+  cariKartlar = [],
+  setCariKartlar,
+  setCariIslemGecmisi,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPersonel, setSelectedPersonel] = useState<Personel | null>(null);
@@ -197,13 +234,18 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   const [formData, setFormData] = useState<Omit<Personel, 'id'> | Personel>(emptyForm);
   const [taseronKaynak, setTaseronKaynak] = useState('');
   const [manuelTaseronAdi, setManuelTaseronAdi] = useState('');
+  const [taseronResolveModal, setTaseronResolveModal] = useState<TaseronResolveModalState>(null);
 
   const taseronCariList = useMemo(
     () =>
       cariKartlar
         .filter(isTaseronCariKart)
-        .filter((c) => String(c.durum || 'AKTIF').toUpperCase() !== 'PASIF')
-        .sort((a, b) => a.unvan.localeCompare(b.unvan, 'tr')),
+        .sort((a, b) => {
+          const aPasif = String(a.durum || 'AKTIF').toUpperCase() === 'PASIF';
+          const bPasif = String(b.durum || 'AKTIF').toUpperCase() === 'PASIF';
+          if (aPasif !== bPasif) return aPasif ? 1 : -1;
+          return a.unvan.localeCompare(b.unvan, 'tr');
+        }),
     [cariKartlar]
   );
 
@@ -319,6 +361,143 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     );
   }, [personeller, setPersoneller]);
 
+  const appendTaseronCariHistory = (
+    cariKartId: string,
+    personel: Personel,
+    action: 'create' | 'edit',
+    note?: string
+  ) => {
+    if (!setCariIslemGecmisi) return;
+    const islem: CariKartIslem = {
+      id: `cari_islem_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      cariKartId,
+      islemTipi: 'DIGER',
+      islemId: personel.id,
+      islemBaslik: action === 'create' ? 'Taşeron Personel Kaydı' : 'Taşeron Personel Güncelleme',
+      islemDetay: `${personel.ad} ${personel.soyad} · ${personel.gorev || 'Görev yok'} · TC ${personel.tcNo}${note ? ` · ${note}` : ''}`,
+      tarih: new Date().toISOString().split('T')[0],
+    };
+    setCariIslemGecmisi((prev) => [islem, ...prev]);
+  };
+
+  const finalizePersonelSave = (
+    normalizedPayload: Omit<Personel, 'id'> | Personel,
+    isEdit: boolean,
+    taseronCariId?: string,
+    historyNote?: string
+  ) => {
+    let savedPersonel: Personel;
+    if (isEdit && 'id' in normalizedPayload) {
+      savedPersonel = normalizedPayload as Personel;
+      setPersoneller((prev) => prev.map((p) => (p.id === savedPersonel.id ? savedPersonel : p)));
+      void saveDocument('personeller', savedPersonel).catch((err) => {
+        console.error('Personel güncelleme Firestore kaydı başarısız:', err);
+      });
+      alert('Personel bilgileri başarıyla güncellendi.');
+    } else {
+      savedPersonel = {
+        ...(normalizedPayload as Omit<Personel, 'id'>),
+        id: `p_${Date.now()}`,
+      };
+      setPersoneller((prev) => [savedPersonel, ...prev]);
+      void saveDocument('personeller', savedPersonel).catch((err) => {
+        console.error('Yeni personel Firestore kaydı başarısız:', err);
+      });
+      alert('Yeni personel başarıyla kaydedildi.');
+    }
+
+    if (savedPersonel.firmaTipi === 'TASERON' && taseronCariId) {
+      appendTaseronCariHistory(taseronCariId, savedPersonel, isEdit ? 'edit' : 'create', historyNote);
+    }
+
+    setTaseronResolveModal(null);
+    handleClearForm();
+  };
+
+  const resolveTaseronCariOnSave = (
+    firmaAdi: string,
+    pending: PendingPersonelSave
+  ): boolean => {
+    if (taseronKaynak && taseronKaynak !== TASERON_MANUEL_KEY) {
+      const selected = taseronCariList.find((c) => c.id === taseronKaynak);
+      finalizePersonelSave(
+        { ...pending.normalizedPayload, firmaAdi: selected?.unvan || firmaAdi },
+        pending.isEdit,
+        taseronKaynak
+      );
+      return true;
+    }
+
+    const exact = taseronCariList.find(
+      (c) => normalizeCardName(c.unvan) === normalizeCardName(firmaAdi)
+    );
+    if (exact) {
+      finalizePersonelSave(
+        { ...pending.normalizedPayload, firmaAdi: exact.unvan },
+        pending.isEdit,
+        exact.id
+      );
+      return true;
+    }
+
+    const near = findNearDuplicateCariNames(taseronCariList, firmaAdi, 2);
+    if (near.length > 0) {
+      setTaseronResolveModal({
+        kind: 'merge',
+        manualName: firmaAdi,
+        matches: near,
+        pending,
+      });
+      return false;
+    }
+
+    setTaseronResolveModal({
+      kind: 'create',
+      manualName: firmaAdi,
+      pending,
+    });
+    return false;
+  };
+
+  const handleMergeTaseronCari = (selectedCari: CariKart) => {
+    if (!taseronResolveModal || taseronResolveModal.kind !== 'merge') return;
+    const { pending, manualName } = taseronResolveModal;
+    finalizePersonelSave(
+      { ...pending.normalizedPayload, firmaAdi: selectedCari.unvan },
+      pending.isEdit,
+      selectedCari.id,
+      `Manuel "${manualName}" → "${selectedCari.unvan}" ile birleştirildi`
+    );
+    setTaseronKaynak(selectedCari.id);
+    setManuelTaseronAdi('');
+  };
+
+  const handleCreateTaseronCari = () => {
+    if (!taseronResolveModal || taseronResolveModal.kind !== 'create') return;
+    const { pending, manualName } = taseronResolveModal;
+    if (!setCariKartlar) {
+      alert('Cari kart oluşturulamıyor. Personel yalnızca elle yazılan firma adıyla kaydedilecek.');
+      finalizePersonelSave({ ...pending.normalizedPayload, firmaAdi: manualName }, pending.isEdit);
+      return;
+    }
+    const newCari = createTaseronCariKart(manualName);
+    setCariKartlar((prev) => [newCari, ...prev]);
+    finalizePersonelSave(
+      { ...pending.normalizedPayload, firmaAdi: newCari.unvan },
+      pending.isEdit,
+      newCari.id,
+      'Yeni taşeron cari kartı açıldı'
+    );
+    setTaseronKaynak(newCari.id);
+    setManuelTaseronAdi('');
+  };
+
+  const handleSkipTaseronCariCreate = () => {
+    if (!taseronResolveModal) return;
+    const { pending, manualName } = taseronResolveModal;
+    finalizePersonelSave({ ...pending.normalizedPayload, firmaAdi: manualName }, pending.isEdit);
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.ad || !formData.soyad || !formData.tcNo) {
@@ -362,32 +541,16 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
       firmaAdi: firmaFields.firmaAdi,
     };
 
-    if ('id' in formData) {
-      // #region agent log
-      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-1',hypothesisId:'H1',location:'PersonelScreen.tsx:handleSave(edit)',message:'personel edit requested',data:{mode:'edit',hasExitDate:Boolean((normalizedPayload as Personel).istenCikisTarihi),durum:String((normalizedPayload as Personel).durum)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      // Edit mode
-      setPersoneller(prev => prev.map(p => p.id === formData.id ? (normalizedPayload as Personel) : p));
-      void saveDocument('personeller', normalizedPayload as Personel).catch((err) => {
-        console.error('Personel güncelleme Firestore kaydı başarısız:', err);
-      });
-      alert("Personel bilgileri başarıyla güncellendi.");
-    } else {
-      // Create mode
-      const newPersonel: Personel = {
-        ...(normalizedPayload as Omit<Personel, 'id'>),
-        id: `p_${Date.now()}`
-      };
-      // #region agent log
-      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-1',hypothesisId:'H1',location:'PersonelScreen.tsx:handleSave(create)',message:'personel create requested',data:{mode:'create',hasExitDate:Boolean(newPersonel.istenCikisTarihi),durum:String(newPersonel.durum)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      setPersoneller(prev => [newPersonel, ...prev]);
-      void saveDocument('personeller', newPersonel).catch((err) => {
-        console.error('Yeni personel Firestore kaydı başarısız:', err);
-      });
-      alert("Yeni personel başarıyla kaydedildi.");
+    const isEdit = 'id' in formData;
+    const pending: PendingPersonelSave = { normalizedPayload, isEdit };
+
+    if (firmaFields.firmaTipi === 'TASERON') {
+      const proceeded = resolveTaseronCariOnSave(firmaFields.firmaAdi, pending);
+      if (!proceeded) return;
+      return;
     }
-    handleClearForm();
+
+    finalizePersonelSave(normalizedPayload, isEdit);
   };
 
   const handleDelete = (id: string) => {
@@ -820,7 +983,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                       <option value="">Cari karttan taşeron seçin…</option>
                       {taseronCariList.map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.unvan} ({c.kod})
+                          {c.unvan} ({c.kod}){String(c.durum || 'AKTIF').toUpperCase() === 'PASIF' ? ' · Pasif' : ''}
                         </option>
                       ))}
                       <option value={TASERON_MANUEL_KEY}>Elle yaz (manuel)</option>
@@ -840,7 +1003,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                     )}
                     {taseronCariList.length === 0 && (
                       <p className="text-[9px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5">
-                        Cari kartlarda taşeron bulunamadı. İdari → Cari Kartlar’dan kart tipi Taşeron olan firma ekleyin veya elle yazın.
+                        Cari kartlarda taşeron bulunamadı. İdari → Cari Kartlar’dan kart tipi Taşeron olan firma ekleyin veya elle yazın — kayıt sırasında yeni cari açılması önerilir.
                       </p>
                     )}
                   </div>
@@ -1360,6 +1523,88 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                 Kapat
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {taseronResolveModal && (
+        <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md p-5 space-y-4 shadow-2xl">
+            {taseronResolveModal.kind === 'merge' ? (
+              <>
+                <div className="flex items-center gap-2 text-amber-700">
+                  <Building2 size={18} />
+                  <h3 className="font-display font-bold text-xs uppercase">Yakın İsimli Taşeron Kayıtları</h3>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Elle yazdığınız <strong>&quot;{taseronResolveModal.manualName}&quot;</strong> için veritabanında benzer taşeron cari kartları bulundu.
+                  Mevcut kayıtla birleştirmek ister misiniz?
+                </p>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {taseronResolveModal.matches?.map((cari) => (
+                    <button
+                      key={cari.id}
+                      type="button"
+                      onClick={() => handleMergeTaseronCari(cari)}
+                      className="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-amber-400 hover:bg-amber-50 transition"
+                    >
+                      <p className="text-xs font-bold text-slate-900">{cari.unvan}</p>
+                      <p className="text-[10px] text-slate-500">{cari.kod} · {cari.durum || 'AKTIF'}</p>
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setTaseronResolveModal({
+                      kind: 'create',
+                      manualName: taseronResolveModal.manualName,
+                      pending: taseronResolveModal.pending,
+                    })}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-xs"
+                  >
+                    Yeni Kart Aç
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTaseronResolveModal(null)}
+                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl text-xs"
+                  >
+                    Vazgeç
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 text-blue-700">
+                  <Building2 size={18} />
+                  <h3 className="font-display font-bold text-xs uppercase">Yeni Taşeron Cari Kartı</h3>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  <strong>&quot;{taseronResolveModal.manualName}&quot;</strong> veritabanında taşeron cari kartı olarak bulunamadı.
+                  Bu firmayı yeni bir taşeron cari kartı olarak açmak ister misiniz?
+                </p>
+                <p className="text-[10px] text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                  Evet derseniz yeni cari kartın geçmişine personel kaydı işlenir. Hayır derseniz personel yalnızca elle yazılan firma adıyla kaydedilir.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSkipTaseronCariCreate}
+                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl text-xs"
+                  >
+                    Hayır, Geç
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCreateTaseronCari}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-xs"
+                  >
+                    Evet, Kart Aç
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

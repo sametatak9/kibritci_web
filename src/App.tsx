@@ -2011,7 +2011,10 @@ export default function App() {
               {activeTab === "personel" && (
                 <PersonelScreen 
                   personeller={personeller} 
-                  setPersoneller={setPersonellerWithSync} 
+                  setPersoneller={setPersonellerWithSync}
+                  cariKartlar={cariKartlar}
+                  setCariKartlar={setCariKartlarWithSync}
+                  setCariIslemGecmisi={setCariIslemGecmisiWithSync}
                 />
               )}
 
@@ -2131,6 +2134,9 @@ export default function App() {
               {activeTab === "taseron_kesinti" && (
                 <TaseronKesintiScreen 
                   cariKartlar={cariKartlar}
+                  personeller={personeller}
+                  kampKayitlari={kampKayitlari}
+                  kampOdalari={kampOdalari}
                   operatorFaaliyetleri={operatorFaaliyetleri}
                   setOperatorFaaliyetleri={setOperatorFaaliyetleriWithSync}
                   hazirTutanaklar={hazirTutanaklar}

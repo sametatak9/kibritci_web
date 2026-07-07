@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Building2, HardHat, Zap, UtensilsCrossed, Archive, Mail, Printer,
-  Download, CheckCircle2, Plus,
+  Download, CheckCircle2, Plus, Users,
 } from 'lucide-react';
 import {
   CariKart,
+  KampKaydi,
+  KampOdasi,
   OperatorFaaliyet,
   HazirTutanak,
+  Personel,
   TaseronKesintiRaporu,
   TaseronEnerjiKaydi,
   TaseronYemekKaydi,
@@ -19,6 +22,8 @@ import {
   yemekAylikOzet,
   hesaplaKesintiTutari,
   ayAdi,
+  personelForTaseron,
+  formatPersonelKampYerlesim,
 } from '../lib/taseronUtils';
 import {
   buildEnerjiKesintiReportHtml,
@@ -29,10 +34,13 @@ import {
 } from '../lib/taseronReportUtils';
 import { downloadKibritciReportHtml } from '../lib/kibritciReportTemplate';
 
-type SubPage = 'makine' | 'enerji' | 'yemek' | 'arsiv';
+type SubPage = 'makine' | 'enerji' | 'yemek' | 'personel' | 'arsiv';
 
 interface TaseronKesintiScreenProps {
   cariKartlar: CariKart[];
+  personeller?: Personel[];
+  kampKayitlari?: KampKaydi[];
+  kampOdalari?: KampOdasi[];
   operatorFaaliyetleri: OperatorFaaliyet[];
   setOperatorFaaliyetleri?: React.Dispatch<React.SetStateAction<OperatorFaaliyet[]>>;
   hazirTutanaklar: HazirTutanak[];
@@ -48,6 +56,9 @@ interface TaseronKesintiScreenProps {
 
 export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
   cariKartlar,
+  personeller = [],
+  kampKayitlari = [],
+  kampOdalari = [],
   operatorFaaliyetleri,
   setOperatorFaaliyetleri,
   hazirTutanaklar,
@@ -293,6 +304,11 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
     );
   }, [taseronKesintiRaporlari, selectedTaseron]);
 
+  const taseronPersonelListesi = useMemo(() => {
+    if (!selectedTaseron) return [];
+    return personelForTaseron(personeller, selectedTaseron);
+  }, [personeller, selectedTaseron]);
+
   const cezaToplam = useMemo(() => {
     if (!selectedTaseron) return 0;
     return hazirTutanaklar
@@ -376,6 +392,7 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
             ['makine', 'İş Makinesi', HardHat],
             ['enerji', 'Elektrik / Su / Gaz', Zap],
             ['yemek', 'Yemek Sayımı', UtensilsCrossed],
+            ['personel', 'Seçili Taşeron Personel', Users],
             ['arsiv', 'Rapor Arşivi', Archive],
           ] as const
         ).map(([key, label, Icon]) => (
@@ -485,6 +502,76 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
                   );
                 })()}
               </div>
+            </div>
+          )}
+
+          {subPage === 'personel' && (
+            <div className="bg-white border rounded-2xl overflow-hidden">
+              <div className="p-4 border-b bg-slate-50 flex flex-wrap justify-between gap-3 items-center">
+                <div>
+                  <h3 className="text-xs font-black uppercase text-slate-800 flex items-center gap-2">
+                    <Users size={14} className="text-indigo-600" />
+                    {selectedTaseron.unvan} — Personel Listesi
+                  </h3>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Personel kayıtlarında <strong>firmaTipi: TASERON</strong> ve eşleşen firma adı. Yoklama listesine dahil edilmezler.
+                  </p>
+                </div>
+                <span className="text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-100 px-3 py-1 rounded-full">
+                  {taseronPersonelListesi.length} personel
+                </span>
+              </div>
+
+              {taseronPersonelListesi.length === 0 ? (
+                <div className="p-10 text-center text-slate-500 text-sm space-y-2">
+                  <p>Bu taşeron firmaya bağlı personel kaydı bulunamadı.</p>
+                  <p className="text-[10px] text-slate-400">
+                    Personel Kayıt ekranından firma tipi <strong>Taşeron</strong> seçip bu cari kartı veya firma adını atayın.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-[11px]">
+                    <thead className="bg-slate-100 text-slate-600 uppercase text-[9px] font-bold">
+                      <tr>
+                        <th className="p-3 border-b">Ad Soyad</th>
+                        <th className="p-3 border-b">Görev</th>
+                        <th className="p-3 border-b">TC No</th>
+                        <th className="p-3 border-b">Telefon</th>
+                        <th className="p-3 border-b">Kamp Yerleşimi</th>
+                        <th className="p-3 border-b text-center">Durum</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {taseronPersonelListesi.map((p) => {
+                        const aktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
+                        const kamp = formatPersonelKampYerlesim(p, kampKayitlari, kampOdalari);
+                        return (
+                          <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50/80">
+                            <td className="p-3 font-bold text-slate-900 whitespace-nowrap">
+                              {p.ad} {p.soyad}
+                            </td>
+                            <td className="p-3 text-slate-700">{p.gorev || '—'}</td>
+                            <td className="p-3 font-mono text-slate-600">{p.tcNo || '—'}</td>
+                            <td className="p-3 text-slate-600 whitespace-nowrap">{p.telefonNo || '—'}</td>
+                            <td className="p-3 text-slate-700 min-w-[180px]">
+                              <span className={`inline-flex items-center gap-1 ${kamp.startsWith('—') ? 'text-slate-400 italic' : 'text-emerald-800 font-semibold'}`}>
+                                {!kamp.startsWith('—') && <span>🏕️</span>}
+                                {kamp}
+                              </span>
+                            </td>
+                            <td className="p-3 text-center">
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${aktif ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                                {aktif ? 'Aktif' : 'Pasif'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 

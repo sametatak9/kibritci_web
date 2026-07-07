@@ -88,6 +88,29 @@ export function formatDuplicateStokWarning(matches: StokKart[]): string {
   return `Bu stok adı sistemde tekrar ediyor: ${list}. Lütfen ismi değiştirin veya mevcut kartı seçin.`;
 }
 
+export function findNearDuplicateCariNames(
+  cariKartlar: CariKart[],
+  name: string,
+  maxDistance = 2
+): CariKart[] {
+  const target = normalizeStockCompareName(name);
+  if (!target) return [];
+
+  const scored: Array<{ cari: CariKart; dist: number }> = [];
+  for (const cari of cariKartlar) {
+    const normalized = normalizeStockCompareName(cari.unvan);
+    if (!normalized) continue;
+    const dist = levenshteinDistance(target, normalized);
+    if (dist > 0 && dist <= maxDistance) {
+      scored.push({ cari, dist });
+    }
+  }
+
+  return scored
+    .sort((a, b) => a.dist - b.dist || a.cari.unvan.localeCompare(b.cari.unvan, 'tr'))
+    .map((row) => row.cari);
+}
+
 export function warnIfDuplicateCari(cariKartlar: CariKart[], name: string, excludeId?: string): boolean {
   const dup = findDuplicateCariNames(cariKartlar, name, excludeId);
   if (dup.length === 0) return false;
