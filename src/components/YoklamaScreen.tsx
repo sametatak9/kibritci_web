@@ -9,6 +9,12 @@ import { buildPersonelListForMonth, findPersonelByName, getYoklamaDay, isDayActi
 import { importAllLegacyExcelMonths, importLegacyExcelMonth, aiMonthlyDataToLegacyMonth, resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 import { LEGACY_EXCEL_MONTHS } from '../data/legacyExcelYoklama';
 import { fetchApiJson } from '../lib/apiClient';
+import {
+  listYoklamaArchives,
+  restoreYoklamaFromArchive,
+  YoklamaArchiveEntry,
+} from '../lib/yoklamaPersistence';
+import type { YoklamaSaveSource } from '../lib/yoklamaPersistence';
 
 const maskName = (name?: string): string => {
   return name || '';
@@ -19,6 +25,10 @@ interface YoklamaScreenProps {
   setPersoneller?: React.Dispatch<React.SetStateAction<Personel[]>>;
   yoklamalar: AylikYoklamaMap;
   setYoklamalar: React.Dispatch<React.SetStateAction<AylikYoklamaMap>>;
+  saveYoklamalarNow?: (
+    next: AylikYoklamaMap,
+    kaynak?: YoklamaSaveSource
+  ) => Promise<unknown>;
   addNotification?: (mesaj: string) => void;
   sahaFaaliyetleri?: SahaFaaliyeti[];
 }
@@ -28,6 +38,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   setPersoneller,
   yoklamalar, 
   setYoklamalar,
+  saveYoklamalarNow,
   addNotification,
   sahaFaaliyetleri = []
 }) => {
@@ -51,6 +62,10 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   const [aiSuccess, setAiSuccess] = useState(false);
   const [aiUnmatched, setAiUnmatched] = useState<string[]>([]);
   const [legacyImporting, setLegacyImporting] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [archives, setArchives] = useState<YoklamaArchiveEntry[]>([]);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [archiveRestoringId, setArchiveRestoringId] = useState<string | null>(null);
   const [draftYoklamalar, setDraftYoklamalar] = useState<AylikYoklamaMap>(yoklamalar);
   const [undoStack, setUndoStack] = useState<AylikYoklamaMap[]>([]);
   const [redoStack, setRedoStack] = useState<AylikYoklamaMap[]>([]);
@@ -127,19 +142,86 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     });
   };
 
-  const handleSaveYoklamaToDb = () => {
+  const handleSaveYoklamaToDb = async () => {
     if (!hasPendingChanges || savingDraft) return;
     setSavingDraft(true);
-    setYoklamalar(draftYoklamalar);
-    const now = new Date();
-    const savedLabel = now.toLocaleString('tr-TR');
-    setLastSavedAt(savedLabel);
-    setHasPendingChanges(false);
-    setUndoStack([]);
-    setRedoStack([]);
-    setTimeout(() => setSavingDraft(false), 300);
-    if (addNotification) {
-      addNotification(`${selectedMonth}. Ay ${selectedYear} yoklama/mesai değişiklikleri veritabanına kaydedildi.`);
+    try {
+      if (saveYoklamalarNow) {
+        await saveYoklamalarNow(draftYoklamalar, 'yoklama_screen');
+      } else {
+        setYoklamalar(draftYoklamalar);
+      }
+      const now = new Date();
+      const savedLabel = now.toLocaleString('tr-TR');
+      setLastSavedAt(savedLabel);
+      setHasPendingChanges(false);
+      setUndoStack([]);
+      setRedoStack([]);
+      if (addNotification) {
+        addNotification(`${selectedMonth}. Ay ${selectedYear} yoklama/mesai değişiklikleri güvenli kayıt ile veritabanına yazıldı.`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Yoklama kaydedilemedi';
+      alert(`Kayıt başarısız — veriler korundu:\n${msg}`);
+    } finally {
+      setTimeout(() => setSavingDraft(false), 300);
+    }
+  };
+
+  const loadArchiveList = async () => {
+    setArchiveLoading(true);
+    try {
+      const list = await listYoklamaArchives(30);
+      setArchives(list);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Arşiv listesi alınamadı';
+      alert(msg);
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
+
+  const handleToggleArchivePanel = () => {
+    const next = !archiveOpen;
+    setArchiveOpen(next);
+    if (next && archives.length === 0) {
+      void loadArchiveList();
+    }
+  };
+
+  const handleRestoreArchive = async (archiveId: string) => {
+    const entry = archives.find((a) => a.id === archiveId);
+    const label = entry
+      ? new Date(entry.olusturmaTarihi).toLocaleString('tr-TR')
+      : archiveId;
+    if (
+      !window.confirm(
+        `${label} tarihli yoklama yedeği geri yüklenecek.\nMevcut kayıt da otomatik yedeklenir.\nDevam?`
+      )
+    ) {
+      return;
+    }
+    setArchiveRestoringId(archiveId);
+    try {
+      const result = await restoreYoklamaFromArchive(archiveId);
+      if (!result.ok) {
+        throw new Error(result.error || 'Geri yükleme başarısız');
+      }
+      setHasPendingChanges(false);
+      setUndoStack([]);
+      setRedoStack([]);
+      if (addNotification) {
+        addNotification(
+          `Yoklama arşivi geri yüklendi (${result.filledDayCount ?? '?'} dolu gün, ${result.personCount ?? '?'} personel).`
+        );
+      }
+      alert('Arşiv başarıyla geri yüklendi. Ekran birkaç saniye içinde güncellenecek.');
+      void loadArchiveList();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Geri yükleme başarısız';
+      alert(msg);
+    } finally {
+      setArchiveRestoringId(null);
     }
   };
 
@@ -513,6 +595,15 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   };
 
   const handleBulkSetStatus = (status: YoklamaDurum) => {
+    if (status === 'Girilmedi') {
+      if (
+        !window.confirm(
+          'Seçili ayın TÜM aktif personel günleri sıfırlanacak (Girilmedi).\nBu işlem kayıt sırasında güvenlik kontrolünden geçer; büyük silmeler engellenebilir.\nDevam?'
+        )
+      ) {
+        return;
+      }
+    }
     const newYoklamalar = { ...draftYoklamalar };
     
     monthPersoneller.forEach(p => {
@@ -1133,6 +1224,14 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               <span>Taslağı Geri Al</span>
             </button>
             <button
+              onClick={handleToggleArchivePanel}
+              className="text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
+              title="Otomatik yoklama yedeklerini listeler ve geri yükler."
+            >
+              <Database size={13} />
+              <span>Yoklama Arşivi</span>
+            </button>
+            <button
               onClick={() => setPrintModal('GUNLUK_BOS')}
               className="text-[11px] bg-slate-800 hover:bg-slate-900 text-white border border-slate-700 rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
               title="Şantiyede günlük elle doldurmak için boş tek günlük puantaj cetveli şablonu yazdırır."
@@ -1208,6 +1307,67 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
           )}
         </div>
       </div>
+
+      {archiveOpen && (
+        <div className="bg-white border border-indigo-200 rounded-xl p-4 shadow-sm space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-indigo-900 flex items-center gap-2">
+                <Database size={16} />
+                Yoklama Arşivi (Otomatik Yedek)
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Her güvenli kayıt öncesi sunucudaki yoklama otomatik yedeklenir. Formen Mobil ve Puantaj sekmesi aynı veriyi paylaşır.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadArchiveList()}
+              disabled={archiveLoading}
+              className="text-[11px] bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg px-3 py-1.5 font-bold"
+            >
+              {archiveLoading ? 'Yükleniyor...' : 'Listeyi Yenile'}
+            </button>
+          </div>
+          {archives.length === 0 && !archiveLoading ? (
+            <p className="text-xs text-slate-500">Henüz arşiv kaydı yok veya liste yüklenmedi.</p>
+          ) : (
+            <div className="overflow-x-auto border border-slate-100 rounded-lg">
+              <table className="w-full text-[11px]">
+                <thead className="bg-slate-50 text-slate-600">
+                  <tr>
+                    <th className="text-left p-2">Tarih</th>
+                    <th className="text-left p-2">Kaynak</th>
+                    <th className="text-right p-2">Personel</th>
+                    <th className="text-right p-2">Dolu Gün</th>
+                    <th className="text-right p-2">İşlem</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {archives.map((a) => (
+                    <tr key={a.id} className="border-t border-slate-100">
+                      <td className="p-2">{new Date(a.olusturmaTarihi).toLocaleString('tr-TR')}</td>
+                      <td className="p-2">{a.kaynak}</td>
+                      <td className="p-2 text-right">{a.personelSayisi}</td>
+                      <td className="p-2 text-right">{a.doluGunSayisi}</td>
+                      <td className="p-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => void handleRestoreArchive(a.id)}
+                          disabled={archiveRestoringId === a.id}
+                          className="text-[10px] bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded px-2 py-1 font-bold"
+                        >
+                          {archiveRestoringId === a.id ? 'Yükleniyor...' : 'Geri Yükle'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* AI Daily Yoklama Upload and Verification Panel */}
       {showAiUpload && (

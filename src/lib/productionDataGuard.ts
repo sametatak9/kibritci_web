@@ -1,4 +1,5 @@
 import { AylikYoklamaMap } from '../types/erp';
+import { countYoklamaDayEntries } from './yoklamaGuard';
 
 /** Tarayıcıda canlı üretim modu işaretlendiğinde demo/legacy veri yazımı engellenir */
 export const PRODUCTION_LIVE_KEY = 'kibritci_production_live';
@@ -19,15 +20,7 @@ export function isProductionLive(): boolean {
   }
 }
 
-export function countYoklamaDayEntries(map: AylikYoklamaMap): number {
-  let total = 0;
-  for (const personMap of Object.values(map)) {
-    if (personMap && typeof personMap === 'object') {
-      total += Object.keys(personMap).length;
-    }
-  }
-  return total;
-}
+export { countYoklamaDayEntries } from './yoklamaGuard';
 
 /** Firestore'da anlamlı yoklama birikmiş mi */
 export function hasSubstantialYoklamaData(map: AylikYoklamaMap): boolean {

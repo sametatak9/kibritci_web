@@ -14,6 +14,8 @@ import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestoreDatabaseId, resolveFirebaseConfig } from './firebaseConfig';
 import { shouldBlockMassDelete } from './productionDataGuard';
 
+export { mergeYoklamaMaps } from './yoklamaGuard';
+
 const firebaseConfig = resolveFirebaseConfig();
 
 // Initialize Firebase
@@ -224,31 +226,12 @@ export async function fetchYoklamaDocument(): Promise<Record<string, unknown>> {
   return {};
 }
 
-/** Uzak kayıttaki personelleri korur; yerel güncellemeler üstüne yazılır */
-export function mergeYoklamaMaps(
-  remote: Record<string, unknown>,
-  local: Record<string, unknown>
-): Record<string, unknown> {
-  const result: Record<string, unknown> = { ...remote };
-  for (const [personId, days] of Object.entries(local || {})) {
-    const remoteDays = (result[personId] as Record<string, unknown>) || {};
-    result[personId] = { ...remoteDays, ...(days as Record<string, unknown>) };
-  }
-  return result;
-}
-
-export async function saveYoklamaDocument(yoklamaMap: Record<string, unknown>): Promise<void> {
-  const docRef = doc(db, 'yoklamalar', 'global_yoklama_map');
-  let payload = yoklamaMap;
-  try {
-    const remote = await fetchYoklamaDocument();
-    if (Object.keys(remote).length > 0) {
-      payload = mergeYoklamaMaps(remote, yoklamaMap);
-    }
-  } catch {
-    /* yerel kayıt */
-  }
-  await withTimeout(setDoc(docRef, cleanUndefined(buildYoklamaFirestorePayload(payload)), 45000));
+export async function saveYoklamaDocument(
+  yoklamaMap: Record<string, unknown>,
+  kaynak: import('./yoklamaPersistence').YoklamaSaveSource = 'sync'
+): Promise<import('./yoklamaPersistence').YoklamaSaveResult> {
+  const { enqueueYoklamaSave } = await import('./yoklamaPersistence');
+  return enqueueYoklamaSave(yoklamaMap as import('../types/erp').AylikYoklamaMap, kaynak);
 }
 
 /**

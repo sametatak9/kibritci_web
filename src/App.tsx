@@ -483,7 +483,11 @@ export default function App() {
           void (async () => {
             try {
               // Legacy birleştirme sonrası yoklama her durumda Firestore'a yazılsın.
-              await saveYoklamaDocument(mergedYoklama);
+              const legacyResult = await saveYoklamaDocument(mergedYoklama, 'legacy_bootstrap');
+              if (!legacyResult.ok) {
+                console.warn('Legacy yoklama arka plan kaydı engellendi:', legacyResult.error);
+                return;
+              }
               for (const p of mergedPersonel) {
                 if (!idsBefore.has(p.id)) {
                   await saveDocument('personeller', p);
@@ -1199,14 +1203,6 @@ export default function App() {
     });
   };
 
-  const setYoklamalarWithSync = (updater: AylikYoklamaMap | ((y: AylikYoklamaMap) => AylikYoklamaMap)) => {
-    setYoklamalar(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      setTimeout(() => saveYoklamaDocument(next), 0);
-      return next;
-    });
-  };
-
   const setSatinAlmaTalepleriWithSync = (updater: SatinAlmaTalebi[] | ((s: SatinAlmaTalebi[]) => SatinAlmaTalebi[])) => {
     setSatinAlmaTalepleri(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -1529,6 +1525,37 @@ export default function App() {
     }
   };
 
+  const notifyYoklamaSaveFailure = (message: string) => {
+    console.error('[yoklama]', message);
+    void addNotification(`⚠️ Yoklama kaydı korundu: ${message}`);
+  };
+
+  const saveYoklamalarNow = async (
+    next: AylikYoklamaMap,
+    kaynak: import('./lib/yoklamaPersistence').YoklamaSaveSource = 'formen_mobil'
+  ) => {
+    const result = await saveYoklamaDocument(next, kaynak);
+    if (!result.ok) {
+      notifyYoklamaSaveFailure(result.error || 'Bilinmeyen hata');
+      throw new Error(result.error || 'Yoklama kaydedilemedi');
+    }
+    setYoklamalar(next);
+    return result;
+  };
+
+  const setYoklamalarWithSync = (updater: AylikYoklamaMap | ((y: AylikYoklamaMap) => AylikYoklamaMap)) => {
+    setYoklamalar((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      void saveYoklamaDocument(next, 'sync').then((result) => {
+        if (!result.ok) {
+          setYoklamalar(prev);
+          notifyYoklamaSaveFailure(result.error || 'Yoklama kaydı sunucuya yazılamadı');
+        }
+      });
+      return next;
+    });
+  };
+
   const markAllNotificationsAsRead = async () => {
     try {
       const promises = bildirimler.map(n => {
@@ -1558,11 +1585,6 @@ export default function App() {
     fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'tab-layout-1',hypothesisId:'T2',location:'App.tsx:handleTabNavigation',message:'tab navigation requested',data:{fromTab:activeTab,toTab:targetTab},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     setActiveTab(targetTab);
-  };
-
-  const saveYoklamalarNow = async (next: AylikYoklamaMap) => {
-    setYoklamalar(next);
-    await saveYoklamaDocument(next);
   };
 
   const closePublicGiris = () => {
@@ -2091,6 +2113,7 @@ export default function App() {
                   setPersoneller={setPersonellerWithSync}
                   yoklamalar={yoklamalar}
                   setYoklamalar={setYoklamalarWithSync}
+                  saveYoklamalarNow={saveYoklamalarNow}
                   addNotification={addNotification}
                   sahaFaaliyetleri={sahaFaaliyetleri}
                 />
