@@ -11,6 +11,7 @@ import { isFirebaseAdminConfigured } from './firebaseAdmin';
 import {
   bootstrapFounderAccount,
   callerIsYonetici,
+  preparePasswordReset,
   syncClaimsForEmail,
   verifyIdToken,
 } from './authClaimsService';
@@ -46,6 +47,24 @@ app.post('/api/auth/founder-bootstrap', async (req, res) => {
     const message = err instanceof Error ? err.message : 'Kurucu bootstrap başarısız';
     const status = message.includes('Geçersiz kurucu') ? 403 : 500;
     return res.status(status).json({ error: message });
+  }
+});
+
+app.post('/api/auth/prepare-password-reset', async (req, res) => {
+  if (!isFirebaseAdminConfigured()) {
+    return res.status(503).json({
+      error:
+        'Şifre sıfırlama için sunucu yapılandırması eksik (FIREBASE_SERVICE_ACCOUNT_JSON). Render ortam değişkenine service account JSON ekleyin.',
+    });
+  }
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (!email) return res.status(400).json({ error: 'email zorunlu' });
+    const result = await preparePasswordReset(email);
+    return res.json({ success: true, ...result });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Şifre sıfırlama hazırlığı başarısız';
+    return res.status(500).json({ error: message });
   }
 });
 

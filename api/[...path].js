@@ -296,6 +296,9 @@ function getFirebaseAdmin() {
   return import_firebase_admin.default;
 }
 
+// src/server/authClaimsService.ts
+var import_crypto = require("crypto");
+
 // src/lib/roleClaims.ts
 var FOUNDER_EMAILS = ["sametatak9@gmail.com", "santiye@kibritci.com"];
 var FOUNDER_PASSWORDS = {
@@ -442,6 +445,50 @@ async function bootstrapFounderAccount(email, password) {
   await setUserCustomClaims(uid, claims);
   return claims;
 }
+async function emailMayResetPassword(emailKey) {
+  const admin2 = getFirebaseAdmin();
+  if (isFounderEmail(emailKey)) return true;
+  const [userSnap, portalSnap] = await Promise.all([
+    admin2.firestore().collection("kullanicilar").doc(emailKey).get(),
+    admin2.firestore().collection("portalKullanicilar").doc(emailKey).get()
+  ]);
+  return userSnap.exists || portalSnap.exists;
+}
+async function preparePasswordReset(email) {
+  const admin2 = getFirebaseAdmin();
+  const emailKey = email.trim().toLowerCase();
+  if (!emailKey) throw new Error("E-posta zorunlu");
+  const allowed = await emailMayResetPassword(emailKey);
+  if (!allowed) {
+    return { prepared: true, created: false };
+  }
+  try {
+    await admin2.auth().getUserByEmail(emailKey);
+    return { prepared: true, created: false };
+  } catch (err) {
+    const code = err?.code;
+    if (code !== "auth/user-not-found") throw err;
+  }
+  const tempPassword = (0, import_crypto.randomBytes)(24).toString("base64url");
+  const created = await admin2.auth().createUser({
+    email: emailKey,
+    password: tempPassword,
+    emailVerified: isFounderEmail(emailKey)
+  });
+  if (isFounderEmail(emailKey)) {
+    await setUserCustomClaims(created.uid, {
+      email: emailKey,
+      role: "Y\xD6NET\u0130C\u0130",
+      durum: "AKT\u0130F"
+    });
+  } else {
+    const claims = await readKullaniciClaimsSource(emailKey);
+    if (claims) {
+      await setUserCustomClaims(created.uid, claims);
+    }
+  }
+  return { prepared: true, created: true };
+}
 
 // src/server/registerApiRoutes.ts
 function registerApiRoutes(app2) {
@@ -471,6 +518,22 @@ function registerApiRoutes(app2) {
       const message = err instanceof Error ? err.message : "Kurucu bootstrap ba\u015Far\u0131s\u0131z";
       const status = message.includes("Ge\xE7ersiz kurucu") ? 403 : 500;
       return res.status(status).json({ error: message });
+    }
+  });
+  app2.post("/api/auth/prepare-password-reset", async (req, res) => {
+    if (!isFirebaseAdminConfigured()) {
+      return res.status(503).json({
+        error: "\u015Eifre s\u0131f\u0131rlama i\xE7in sunucu yap\u0131land\u0131rmas\u0131 eksik (FIREBASE_SERVICE_ACCOUNT_JSON). Render ortam de\u011Fi\u015Fkenine service account JSON ekleyin."
+      });
+    }
+    try {
+      const email = String(req.body?.email || "").trim().toLowerCase();
+      if (!email) return res.status(400).json({ error: "email zorunlu" });
+      const result = await preparePasswordReset(email);
+      return res.json({ success: true, ...result });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "\u015Eifre s\u0131f\u0131rlama haz\u0131rl\u0131\u011F\u0131 ba\u015Far\u0131s\u0131z";
+      return res.status(500).json({ error: message });
     }
   });
   app2.post("/api/auth/provision-user", async (req, res) => {

@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { getFirebaseAdmin } from './firebaseAdmin';
 import { AuthCustomClaims, buildAuthCustomClaims, isFounderEmail, normalizeClaimRole, verifyFounderCredentials } from '../lib/roleClaims';
 
@@ -120,4 +121,56 @@ export async function bootstrapFounderAccount(email: string, password: string): 
 
   await setUserCustomClaims(uid, claims);
   return claims;
+}
+
+async function emailMayResetPassword(emailKey: string): Promise<boolean> {
+  const admin = getFirebaseAdmin();
+  if (isFounderEmail(emailKey)) return true;
+  const [userSnap, portalSnap] = await Promise.all([
+    admin.firestore().collection('kullanicilar').doc(emailKey).get(),
+    admin.firestore().collection('portalKullanicilar').doc(emailKey).get(),
+  ]);
+  return userSnap.exists || portalSnap.exists;
+}
+
+/** Firebase Auth kaydı yoksa oluşturur; böylece sendPasswordResetEmail gerçekten e-posta gönderir */
+export async function preparePasswordReset(email: string): Promise<{ prepared: boolean; created: boolean }> {
+  const admin = getFirebaseAdmin();
+  const emailKey = email.trim().toLowerCase();
+  if (!emailKey) throw new Error('E-posta zorunlu');
+
+  const allowed = await emailMayResetPassword(emailKey);
+  if (!allowed) {
+    return { prepared: true, created: false };
+  }
+
+  try {
+    await admin.auth().getUserByEmail(emailKey);
+    return { prepared: true, created: false };
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code;
+    if (code !== 'auth/user-not-found') throw err;
+  }
+
+  const tempPassword = randomBytes(24).toString('base64url');
+  const created = await admin.auth().createUser({
+    email: emailKey,
+    password: tempPassword,
+    emailVerified: isFounderEmail(emailKey),
+  });
+
+  if (isFounderEmail(emailKey)) {
+    await setUserCustomClaims(created.uid, {
+      email: emailKey,
+      role: 'YÖNETİCİ',
+      durum: 'AKTİF',
+    });
+  } else {
+    const claims = await readKullaniciClaimsSource(emailKey);
+    if (claims) {
+      await setUserCustomClaims(created.uid, claims);
+    }
+  }
+
+  return { prepared: true, created: true };
 }

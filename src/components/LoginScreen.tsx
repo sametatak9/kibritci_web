@@ -100,22 +100,30 @@ async function completeFounderLogin(
   passTrim: string,
   onLoginSuccess: (user: { email?: string | null; uid: string }) => void
 ) {
-  try {
+  const hasMasterPassword = verifyFounderCredentials(emailLower, passTrim);
+
+  if (hasMasterPassword) {
+    await bootstrapFounderViaServer(emailLower, passTrim);
     await completeEmailLogin(emailLower, passTrim, onLoginSuccess);
     return;
-  } catch (signErr: unknown) {
-    const code = (signErr as { code?: string })?.code;
-    const retriable =
-      code === 'auth/wrong-password' ||
-      code === 'auth/invalid-credential' ||
-      code === 'auth/user-not-found';
-    if (!retriable || !verifyFounderCredentials(emailLower, passTrim)) {
-      throw signErr;
-    }
   }
 
-  await bootstrapFounderViaServer(emailLower, passTrim);
   await completeEmailLogin(emailLower, passTrim, onLoginSuccess);
+}
+
+async function preparePasswordResetViaServer(emailLower: string): Promise<void> {
+  const res = await fetch('/api/auth/prepare-password-reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: emailLower }),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(
+      data.error ||
+        'Şifre sıfırlama hazırlanamadı. Render FIREBASE_SERVICE_ACCOUNT_JSON kontrol edin.'
+    );
+  }
 }
 
 async function requestPasswordResetEmail(emailLower: string): Promise<void> {
@@ -291,9 +299,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     setResetLoading(true);
 
     try {
+      await preparePasswordResetViaServer(emailLower);
       await requestPasswordResetEmail(emailLower);
       setInfoMsg(
-        `${emailLower} adresine şifre sıfırlama bağlantısı gönderildi. E-postanızı (gereksiz/spam dahil) kontrol edin.`
+        `${emailLower} adresine şifre sıfırlama bağlantısı gönderildi. Gelen kutusu, spam ve gereksiz klasörünü kontrol edin. Birkaç dakika içinde gelmezse tekrar deneyin.`
       );
       setShowForgotPassword(false);
     } catch (err: unknown) {
@@ -525,8 +534,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     } catch (err: any) {
       console.error(err);
       let turkishError = err?.message || 'Giriş yapılamadı. Bilgilerinizi kontrol edip tekrar deneyin.';
-      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        turkishError = 'Hatalı şifre girdiniz.';
+      if (
+        err.code === 'auth/wrong-password' ||
+        err.code === 'auth/invalid-credential'
+      ) {
+        if (isFounderEmail(emailLower)) {
+          turkishError =
+            'Kurucu şifresi kabul edilmedi. Doğru şifre: 117270Sa (büyük S). Çalışmazsa «Şifremi Unuttum» ile sıfırlayın veya yöneticiye bildirin.';
+        } else {
+          turkishError = 'Hatalı şifre girdiniz.';
+        }
       } else if (err.code === 'auth/user-not-found') {
         turkishError = 'Bu e-posta adresine kayıtlı kullanıcı bulunamadı.';
       } else if (err.code === 'auth/email-already-in-use') {

@@ -30,3 +30,6 @@ services:
       # kibritci-erp (default) DB için boş bırakın veya tanımlamayın
       - key: VITE_FIREBASE_FIRESTORE_DATABASE_ID
         sync: false
+      # Firebase Admin — Authentication şifre sıfırlama ve kurucu bootstrap için zorunlu
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
