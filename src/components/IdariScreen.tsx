@@ -27,6 +27,7 @@ import {
   updateKampOdasi,
 } from '../lib/kampYapisi';
 import { assignKampResident, evictKampResident, suggestPersonelKaydi } from '../lib/kampPlacementUtils';
+import { exportKampYerlesimExcel } from '../lib/kampYerlesimExcelExport';
 import { compressImage } from '../lib/imageCompress';
 import { warnIfDuplicateCari, warnIfDuplicateStok } from '../lib/duplicateNameUtils';
 import { exportHistoryReport } from '../lib/reportExport';
@@ -115,6 +116,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [aracSubTab, setAracSubTab] = useState<'liste' | 'km_takip'>('liste');
   const [selectedAracForPdf, setSelectedAracForPdf] = useState<AracBakim | null>(null);
   const [showKampKrokiModal, setShowKampKrokiModal] = useState(false);
+  const [exportingKampExcel, setExportingKampExcel] = useState(false);
 
 
 
@@ -393,6 +395,28 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     } catch (err) {
       console.error(err);
       alert('Kamp verileri yenilenemedi.');
+    }
+  };
+
+  const handleExportKampYerlesimExcel = async () => {
+    if (kampOdalari.length === 0) {
+      alert('Excel raporu için önce en az bir oda tanımlanmalıdır.');
+      return;
+    }
+    setExportingKampExcel(true);
+    try {
+      await exportKampYerlesimExcel({
+        yerleskeler,
+        katlar,
+        kampOdalari,
+        kampKayitlari,
+        personeller,
+      });
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : 'Kamp yerleşim Excel raporu oluşturulamadı.');
+    } finally {
+      setExportingKampExcel(false);
     }
   };
 
@@ -2695,7 +2719,16 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   </strong>
                 </div>
 
-                <div className="pt-2 border-t mt-2">
+                <div className="pt-2 border-t mt-2 space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleExportKampYerlesimExcel()}
+                    disabled={exportingKampExcel || kampOdalari.length === 0}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-2 px-3 rounded-lg cursor-pointer transition flex items-center justify-center space-x-1"
+                  >
+                    <Download size={14} />
+                    <span>{exportingKampExcel ? 'Excel hazırlanıyor…' : 'Excel Yerleşim Planı (Logo)'}</span>
+                  </button>
                   <button
                     onClick={() => setShowKampKrokiModal(true)}
                     className="w-full bg-[#2563EB] hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-lg cursor-pointer transition flex items-center justify-center space-x-1"
