@@ -7,8 +7,113 @@ import {
   listPendingSignups,
   upsertPendingSignup,
 } from './pendingSignupsStore';
+import { isFirebaseAdminConfigured } from './firebaseAdmin';
+import {
+  callerIsYonetici,
+  syncClaimsForEmail,
+  verifyIdToken,
+} from './authClaimsService';
 
 export function registerApiRoutes(app: Express): void {
+
+async function readBearerToken(req: { headers: { authorization?: string } }): Promise<string | null> {
+  const header = req.headers.authorization || '';
+  if (!header.startsWith('Bearer ')) return null;
+  return header.slice(7).trim() || null;
+}
+
+app.get('/api/auth/claims-status', (_req, res) => {
+  res.json({ adminConfigured: isFirebaseAdminConfigured() });
+});
+
+app.post('/api/auth/provision-user', async (req, res) => {
+  if (!isFirebaseAdminConfigured()) {
+    return res.status(503).json({ error: 'Firebase Admin yapılandırılmamış' });
+  }
+  try {
+    const idToken = await readBearerToken(req);
+    if (!idToken) return res.status(401).json({ error: 'Authorization Bearer token gerekli' });
+    const decoded = await verifyIdToken(idToken);
+    if (!callerIsYonetici(decoded)) {
+      return res.status(403).json({ error: 'Yalnızca YÖNETİCİ kullanıcı oluşturabilir' });
+    }
+
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
+    if (!email || password.length < 6) {
+      return res.status(400).json({ error: 'email ve password (min 6) zorunlu' });
+    }
+
+    const claims = await syncClaimsForEmail(email, password);
+    return res.json({ success: true, claims });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Kullanıcı provision başarısız';
+    return res.status(500).json({ error: message });
+  }
+});
+
+app.post('/api/auth/sync-claims', async (req, res) => {
+  if (!isFirebaseAdminConfigured()) {
+    return res.status(503).json({
+      error: 'Firebase Admin yapılandırılmamış. FIREBASE_SERVICE_ACCOUNT_JSON Render ortam değişkenine eklenmeli.',
+    });
+  }
+  try {
+    const idToken = await readBearerToken(req);
+    if (!idToken) return res.status(401).json({ error: 'Authorization Bearer token gerekli' });
+
+    const decoded = await verifyIdToken(idToken);
+    const callerEmail = String(decoded.email || '').trim().toLowerCase();
+    const targetEmail = String(req.body?.email || callerEmail).trim().toLowerCase();
+
+    if (!targetEmail) return res.status(400).json({ error: 'E-posta bulunamadı' });
+    if (targetEmail !== callerEmail && !callerIsYonetici(decoded)) {
+      return res.status(403).json({ error: 'Başka kullanıcı için claim yalnızca YÖNETİCİ yapabilir' });
+    }
+
+    const claims = await syncClaimsForEmail(targetEmail);
+    return res.json({ success: true, claims });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Claim senkronizasyonu başarısız';
+    return res.status(500).json({ error: message });
+  }
+});
+
+app.post('/api/auth/admin/bootstrap-all-claims', async (req, res) => {
+  if (!isFirebaseAdminConfigured()) {
+    return res.status(503).json({ error: 'Firebase Admin yapılandırılmamış' });
+  }
+  try {
+    const idToken = await readBearerToken(req);
+    if (!idToken) return res.status(401).json({ error: 'Authorization Bearer token gerekli' });
+    const decoded = await verifyIdToken(idToken);
+    if (!callerIsYonetici(decoded)) {
+      return res.status(403).json({ error: 'Yalnızca YÖNETİCİ tüm claimleri senkronize edebilir' });
+    }
+
+    const admin = (await import('firebase-admin')).default;
+    const snap = await admin.firestore().collection('kullanicilar').get();
+    const results: Array<{ email: string; ok: boolean; error?: string }> = [];
+    for (const docSnap of snap.docs) {
+      const email = String(docSnap.data()?.email || docSnap.id).trim().toLowerCase();
+      if (!email) continue;
+      try {
+        await syncClaimsForEmail(email);
+        results.push({ email, ok: true });
+      } catch (e: unknown) {
+        results.push({
+          email,
+          ok: false,
+          error: e instanceof Error ? e.message : 'hata',
+        });
+      }
+    }
+    return res.json({ success: true, count: results.length, results });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Toplu claim senkronizasyonu başarısız';
+    return res.status(500).json({ error: message });
+  }
+});
 
 app.post("/api/pending-signup", (req, res) => {
   try {

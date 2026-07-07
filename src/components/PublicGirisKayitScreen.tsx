@@ -7,7 +7,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { Personel } from '../types/erp';
-import { fetchCollection, saveDocument } from '../lib/firebase';
+import { fetchCollection, saveDocument, ensureFirestoreAuth } from '../lib/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { fetchApiJson } from '../lib/apiClient';
@@ -237,6 +237,7 @@ const PublicGirisKayitForm: React.FC<PublicGirisKayitScreenProps> = ({
 
     setSaving(true);
     try {
+      await ensureFirestoreAuth();
       const newPersonel: Personel = {
         ...form,
         id: `p_${Date.now()}`,

@@ -10,7 +10,7 @@ import {
   writeBatch,
   query
 } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
+import { getAuth, signInAnonymously } from 'firebase/auth';
 import { getFirestoreDatabaseId, resolveFirebaseConfig } from './firebaseConfig';
 import { shouldBlockMassDelete } from './productionDataGuard';
 
@@ -21,6 +21,18 @@ const app = initializeApp(firebaseConfig);
 const firestoreDbId = getFirestoreDatabaseId(firebaseConfig);
 export const db = firestoreDbId ? getFirestore(app, firestoreDbId) : getFirestore(app);
 export const auth = getAuth(app);
+
+/** Firestore güvenlik kuralları oturum gerektirir; giriş öncesi anonim oturum açar. */
+export async function ensureFirestoreAuth(): Promise<boolean> {
+  if (auth.currentUser) return true;
+  try {
+    await signInAnonymously(auth);
+    return true;
+  } catch (err) {
+    console.warn('Anonim Firestore oturumu açılamadı:', err);
+    return false;
+  }
+}
 
 /** Hangi Firebase projesine bağlı olduğumuzu konsolda görmek için */
 if (typeof window !== 'undefined') {

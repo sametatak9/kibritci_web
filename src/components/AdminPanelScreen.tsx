@@ -19,6 +19,7 @@ import { AdminYetkiSablonTab } from './AdminYetkiSablonTab';
 import { isFirestoreWriteFailure } from '../lib/bekleyenUyelik';
 import { fetchCollection, removeDocument, saveDocument } from '../lib/firebase';
 import { getMobileRoleDisplayName, isMobileRole } from '../lib/yetkiUtils';
+import { provisionAuthUser, syncAuthClaimsFromServer } from '../lib/authClaimsClient';
 
 export interface Kullanici {
   id: string; // auth uid
@@ -172,6 +173,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
         prev.map(u => u.email?.toLowerCase() === target.email.toLowerCase() ? { ...u, ...updated } : u)
       ));
       alert(`Kullanıcı (${target.email}) hesabı "${nextDurum}" durumuna getirildi.`);
+      await syncAuthClaimsFromServer(target.email).catch(() => undefined);
       if (addNotification) {
         addNotification(`${target.email} kullanıcısının hesabı "${nextDurum}" durumuna getirildi.`);
       }
@@ -219,6 +221,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
       if (addNotification) {
         addNotification(`${email} kullanıcısının rolü "${newYetki}" olarak kaydedildi.`);
       }
+      await syncAuthClaimsFromServer(email).catch(() => undefined);
     } catch (err) {
       console.error(err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -244,6 +247,10 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
         ])
       );
       await loadApiPending();
+      const provisioned = await provisionAuthUser(record.email, record.password);
+      if (!provisioned) {
+        console.warn('Auth provision atlandı — FIREBASE_SERVICE_ACCOUNT_JSON kontrol edin');
+      }
       alert(`✅ ${record.email} onaylandı ve "${yetki}" rolüyle oluşturuldu.`);
       if (addNotification) {
         addNotification(`${record.email} bekleyen kayıttan onaylandı (${yetki}).`);

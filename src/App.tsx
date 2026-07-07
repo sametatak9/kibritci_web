@@ -63,6 +63,7 @@ import {
   syncArrayToFirestore,
   saveDocument,
   fetchCollection,
+  ensureFirestoreAuth,
 } from './lib/firebase';
 import { loadKampStateSnapshot, ensureYapıFromOdalari } from './lib/kampYapisi';
 import { probeGeminiApi } from './lib/apiClient';
@@ -89,6 +90,7 @@ import {
 } from './lib/kullaniciUtils';
 import { collection, onSnapshot, doc, getDoc, query, orderBy, limit } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { syncAuthClaimsFromServer } from './lib/authClaimsClient';
 import { LoginScreen } from './components/LoginScreen';
 import { YetkiVermeScreen } from './components/YetkiVermeScreen';
 import { OperatorScreen } from './components/OperatorScreen';
@@ -255,6 +257,7 @@ export default function App() {
   ]);
   const [assistantLoading, setAssistantLoading] = useState(false);
   const roleHomeRoutedRef = useRef(false);
+  const claimsSyncedRef = useRef(false);
   const kampRepairInFlightRef = useRef(false);
   const mainScrollRef = useRef<HTMLElement | null>(null);
 
@@ -338,23 +341,27 @@ export default function App() {
     const viewGirisId = urlParams.get('view_giris');
     if (viewGirisId) {
       setPublicLoading(true);
-      getDoc(doc(db, 'personelGirisTalepleri', viewGirisId)).then((snap) => {
-        if (snap.exists()) {
-          setPublicViewGiris({ id: snap.id, ...snap.data() });
-        } else {
-          setPublicViewGiris({
-            id: viewGirisId,
-            _notFound: true,
-            ad: '',
-            soyad: '',
-            gorev: '',
-          });
+      void (async () => {
+        await ensureFirestoreAuth();
+        try {
+          const snap = await getDoc(doc(db, 'personelGirisTalepleri', viewGirisId));
+          if (snap.exists()) {
+            setPublicViewGiris({ id: snap.id, ...snap.data() });
+          } else {
+            setPublicViewGiris({
+              id: viewGirisId,
+              _notFound: true,
+              ad: '',
+              soyad: '',
+              gorev: '',
+            });
+          }
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setPublicLoading(false);
         }
-        setPublicLoading(false);
-      }).catch((err) => {
-        console.error(err);
-        setPublicLoading(false);
-      });
+      })();
     }
   }, []);
 
@@ -382,6 +389,19 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Giriş sonrası rol claim'lerini sunucudan senkronize et
+  useEffect(() => {
+    if (authLoading || !currentUser?.email || claimsSyncedRef.current) return;
+    const firebaseUser = auth.currentUser;
+    if (!firebaseUser || firebaseUser.isAnonymous) return;
+
+    claimsSyncedRef.current = true;
+    void syncAuthClaimsFromServer(currentUser.email.toLowerCase()).catch((err) => {
+      console.warn('Claim senkronizasyonu atlandı:', err);
+      claimsSyncedRef.current = false;
+    });
+  }, [authLoading, currentUser?.email, currentUser?.uid]);
+
   // 1. Core Synchronization Sync Loader
   useEffect(() => {
     if (authLoading || !currentUser) return;
@@ -391,6 +411,15 @@ export default function App() {
         setDbStatus('loading');
         setStartupError(null);
         setLoadingMsg('Güvenli veritabanı oturumu kontrol ediliyor...');
+
+        const authed = await ensureFirestoreAuth();
+        if (!authed) {
+          setStartupError(
+            'Veritabanı güvenlik oturumu açılamadı. Firebase Console > Authentication > Sign-in method > Anonymous etkin olmalı.'
+          );
+          setDbStatus('error');
+          return;
+        }
         
         setLoadingMsg('Şantiye personel kadrosu eşitleniyor...');
         const allowDemoSeed = initialSeedAllowed();
@@ -1098,6 +1127,7 @@ export default function App() {
   const handleSignOut = async () => {
     try {
       roleHomeRoutedRef.current = false;
+      claimsSyncedRef.current = false;
       localStorage.removeItem('kibritci_portal_session');
       await signOut(auth);
       setCurrentUser(null);

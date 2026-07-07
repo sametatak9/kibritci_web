@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   auth,
-  db
+  db,
+  ensureFirestoreAuth,
 } from '../lib/firebase';
 import { 
   signInWithEmailAndPassword,
@@ -16,6 +17,7 @@ import {
   queueSignupFallback,
 } from '../lib/bekleyenUyelik';
 import { Building2, Lock, Mail, Loader2, ArrowRight, CheckCircle2, AlertTriangle, ShieldCheck, User, Fingerprint, PenTool, Check, Trash, Smartphone } from 'lucide-react';
+import { syncAuthClaimsFromServer } from '../lib/authClaimsClient';
 import { KibritciLogo } from './KibritciLogo';
 
 function withReadTimeout<T>(promise: Promise<T>, ms = 8000): Promise<T> {
@@ -39,10 +41,39 @@ function withAuthTimeout<T>(promise: Promise<T>, ms = 6000): Promise<T> {
 function finishPortalLogin(
   emailLower: string,
   uid: string,
-  onLoginSuccess: (user: any) => void
+  onLoginSuccess: (user: { email?: string | null; uid: string }) => void
 ) {
-  localStorage.setItem('kibritci_portal_session', JSON.stringify({ email: emailLower, uid }));
-  onLoginSuccess({ email: emailLower, uid, isMock: true });
+  localStorage.setItem(
+    'kibritci_portal_session',
+    JSON.stringify({ email: emailLower, uid, isMock: false })
+  );
+  onLoginSuccess({ email: emailLower, uid });
+}
+
+async function completeEmailLogin(
+  emailLower: string,
+  passTrim: string,
+  onLoginSuccess: (user: { email?: string | null; uid: string }) => void
+) {
+  let cred;
+  try {
+    cred = await withAuthTimeout(signInWithEmailAndPassword(auth, emailLower, passTrim), 8000);
+  } catch (signErr: unknown) {
+    const code = (signErr as { code?: string })?.code;
+    if (code === 'auth/user-not-found') {
+      cred = await withAuthTimeout(
+        createUserWithEmailAndPassword(auth, emailLower, passTrim),
+        10000
+      );
+    } else if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') {
+      throw signErr;
+    } else {
+      throw signErr;
+    }
+  }
+
+  await syncAuthClaimsFromServer(emailLower);
+  finishPortalLogin(emailLower, cred.user.uid, onLoginSuccess);
 }
 
 function seedFounderRecords(emailLower: string, passTrim: string) {
@@ -205,6 +236,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
     const emailLower = email.trim().toLowerCase();
     const passTrim = password.trim();
+
+    if (isSignUp) {
+      await ensureFirestoreAuth();
+    }
 
     try {
       if (isSignUp) {
@@ -369,77 +404,28 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         const isSamet = emailLower === 'sametatak9@gmail.com' && passTrim === '117270Sa';
         const isSantiye = emailLower === 'santiye@kibritci.com' && passTrim === 'kibritci2026';
 
-        // 1. Kurucu / şantiye yönetici — Firestore beklemeden anında giriş
         if (isSamet || isSantiye) {
           seedFounderRecords(emailLower, passTrim);
-
-          let anonUid = isSamet ? 'samet_atak_uid' : 'santiye_kibritci_uid';
-          try {
-            const res = await withAuthTimeout(signInAnonymously(auth), 4000);
-            anonUid = res.user.uid;
-          } catch (anonErr) {
-            console.warn('Anonim oturum atlandı, yerel oturum kullanılıyor:', anonErr);
-          }
-
-          finishPortalLogin(emailLower, anonUid, onLoginSuccess);
+          await completeEmailLogin(emailLower, passTrim, onLoginSuccess);
           return;
         }
 
-        // 2. portalKullanicilar yedek girişi
         try {
-          const userDocRef = doc(db, 'portalKullanicilar', emailLower);
-          const userDocSnap = await withReadTimeout(getDoc(userDocRef), 6000);
-
-          if (userDocSnap.exists()) {
-            const data = userDocSnap.data();
-            if (data.password === passTrim) {
-              let anonUid = `u_${Date.now()}`;
-              try {
-                const res = await withAuthTimeout(signInAnonymously(auth), 4000);
-                anonUid = res.user.uid;
-              } catch (anonErr) {
-                console.warn('Anonim oturum atlandı:', anonErr);
-              }
-
-              finishPortalLogin(emailLower, anonUid, onLoginSuccess);
-              return;
-            }
-
-            setErrorMsg('Hatalı şifre girdiniz.');
-            return;
-          }
-        } catch (dbErr: any) {
-          if (dbErr?.message === 'FIRESTORE_TIMEOUT') {
-            setErrorMsg('Veritabanı yanıt vermedi. Bağlantınızı kontrol edip tekrar deneyin.');
-            return;
-          }
-          console.warn('Firestore user fallback lookup failed:', dbErr);
-        }
-
-        // 3. Standart Firebase Auth
-        try {
-          const userCredential = await withAuthTimeout(
-            signInWithEmailAndPassword(auth, emailLower, passTrim),
-            8000
-          );
-          localStorage.setItem(
-            'kibritci_portal_session',
-            JSON.stringify({ email: emailLower, uid: userCredential.user.uid })
-          );
-          onLoginSuccess(userCredential.user);
-        } catch (fbErr: any) {
-          console.error('Firebase regular auth failed:', fbErr);
+          await completeEmailLogin(emailLower, passTrim, onLoginSuccess);
+        } catch (fbErr: unknown) {
+          console.error('Firebase giriş hatası:', fbErr);
+          const err = fbErr as { code?: string; message?: string };
           let turkishError = 'Giriş yapılamadı. Bilgilerinizi kontrol edip tekrar deneyin.';
 
-          if (fbErr?.message === 'AUTH_TIMEOUT') {
+          if (err?.message === 'AUTH_TIMEOUT') {
             turkishError = 'Giriş isteği zaman aşımına uğradı. İnternet bağlantınızı kontrol edip tekrar deneyin.';
-          } else if (fbErr.code === 'auth/wrong-password' || fbErr.code === 'auth/invalid-credential') {
+          } else if (err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
             turkishError = 'Hatalı şifre girdiniz.';
-          } else if (fbErr.code === 'auth/user-not-found') {
+          } else if (err?.code === 'auth/user-not-found') {
             turkishError = 'Bu e-posta adresine kayıtlı kullanıcı bulunamadı.';
-          } else if (fbErr.code === 'auth/invalid-email') {
+          } else if (err?.code === 'auth/invalid-email') {
             turkishError = 'Geçersiz e-posta formatı girdiniz.';
-          } else if (fbErr.code === 'auth/operation-not-allowed') {
+          } else if (err?.code === 'auth/operation-not-allowed') {
             turkishError = 'Firebase E-posta/Şifre girişi kapalı. Yöneticiye bildirin.';
             setShowOfflineBypass(true);
           }

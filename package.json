@@ -22,7 +22,11 @@
     "migrate:full": "node scripts/run-full-migration.mjs",
     "evrak:split-pdf": "node scripts/split-pdf-pages.mjs",
     "evrak:import-pdf:dry-run": "node scripts/import-legacy-evrak-pdf.mjs --dry-run",
-    "evrak:import-pdf": "node scripts/import-legacy-evrak-pdf.mjs --execute"
+    "evrak:import-pdf": "node scripts/import-legacy-evrak-pdf.mjs --execute",
+    "backup:firestore": "node scripts/firestore-backup-local.mjs",
+    "backup:verify": "node scripts/firestore-backup-verify.mjs",
+    "backup:audit": "node scripts/migrate-firestore.mjs --audit-only",
+    "auth:sync-claims": "node scripts/sync-auth-claims.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.10.0",
@@ -32,6 +36,7 @@
     "exceljs": "^4.4.0",
     "express": "^4.21.2",
     "firebase": "^12.15.0",
+    "firebase-admin": "^13.10.0",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
