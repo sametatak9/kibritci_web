@@ -258,6 +258,7 @@ export default function App() {
   const [assistantLoading, setAssistantLoading] = useState(false);
   const roleHomeRoutedRef = useRef(false);
   const claimsSyncedRef = useRef(false);
+  const bootstrapDoneRef = useRef(false);
   const kampRepairInFlightRef = useRef(false);
   const mainScrollRef = useRef<HTMLElement | null>(null);
 
@@ -367,16 +368,43 @@ export default function App() {
 
   // Monitor Authentication State Changes
   useEffect(() => {
+    let authRestoreTimer: ReturnType<typeof setTimeout> | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       const savedSession = localStorage.getItem('kibritci_portal_session');
       if (savedSession) {
         try {
-          const parsed = JSON.parse(savedSession);
+          const parsed = JSON.parse(savedSession) as {
+            email?: string;
+            uid?: string;
+            isMock?: boolean;
+          };
+          const isMockSession = parsed.isMock === true;
+
+          // E-posta oturumu: Firebase Auth geri yüklenmeden DB bootstrap başlamasın
+          if (!user && !isMockSession) {
+            setAuthLoading(true);
+            if (!authRestoreTimer) {
+              authRestoreTimer = setTimeout(() => {
+                console.warn('Firebase oturum geri yüklenemedi — yeniden giriş gerekli');
+                localStorage.removeItem('kibritci_portal_session');
+                setCurrentUser(null);
+                setAuthLoading(false);
+              }, 12000);
+            }
+            return;
+          }
+
+          if (authRestoreTimer) {
+            clearTimeout(authRestoreTimer);
+            authRestoreTimer = null;
+          }
+
           setCurrentUser({
             ...(user || {}),
             email: parsed.email || user?.email,
             uid: user?.uid || parsed.uid || `u_${Date.now()}`,
-            isMock: !user || parsed.isMock,
+            isMock: isMockSession,
           });
         } catch {
           setCurrentUser(user);
@@ -386,7 +414,11 @@ export default function App() {
       }
       setAuthLoading(false);
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribe();
+      if (authRestoreTimer) clearTimeout(authRestoreTimer);
+    };
   }, []);
 
   // Giriş sonrası rol claim'lerini sunucudan senkronize et
@@ -404,9 +436,9 @@ export default function App() {
 
   // 1. Core Synchronization Sync Loader
   useEffect(() => {
-    if (authLoading || !currentUser) return;
+    if (authLoading || !currentUser || bootstrapDoneRef.current) return;
 
-    async function setupCloudDatabase() {
+    async function setupCloudDatabase(attempt = 1) {
       try {
         setDbStatus('loading');
         setStartupError(null);
@@ -414,9 +446,12 @@ export default function App() {
 
         const authed = await ensureFirestoreAuth();
         if (!authed) {
-          setStartupError(
-            'Veritabanı güvenlik oturumu açılamadı. Firebase Console > Authentication > Sign-in method > Anonymous etkin olmalı.'
-          );
+          setStartupError({
+            message:
+              'Veritabanı güvenlik oturumu açılamadı. Firebase Console > Authentication > Sign-in method bölümünde Anonymous ve Email/Password etkin olmalı.',
+            step: 'Güvenli veritabanı oturumu kontrol ediliyor',
+            technical: 'ensureFirestoreAuth returned false',
+          });
           setDbStatus('error');
           return;
         }
@@ -614,6 +649,7 @@ export default function App() {
         setStokIslemGecmisi(loadedStokIslem);
 
         setDbStatus('synced');
+        bootstrapDoneRef.current = true;
       } catch (err) {
         console.error('Firebase synchronisation error: ', err);
         const errText =
@@ -622,9 +658,17 @@ export default function App() {
             : typeof err === 'string'
               ? err
               : 'Bilinmeyen bağlantı hatası';
+
+        if (attempt < 2 && /FIRESTORE_TIMEOUT|network|offline|unavailable/i.test(errText)) {
+          console.warn(`Başlangıç yeniden deneniyor (${attempt + 1}/2)...`);
+          setLoadingMsg('Bağlantı yavaş — yeniden deneniyor...');
+          await new Promise((r) => setTimeout(r, 2000));
+          return setupCloudDatabase(attempt + 1);
+        }
+
         setStartupError({
           message: 'Veritabanı bağlantısı kurulamadı. Lütfen internet bağlantınızı kontrol edin.',
-          step: loadingMsg,
+          step: loadingMsg || 'Veritabanı senkronizasyonu',
           technical: errText,
         });
         setDbStatus('error');
@@ -1128,6 +1172,7 @@ export default function App() {
     try {
       roleHomeRoutedRef.current = false;
       claimsSyncedRef.current = false;
+      bootstrapDoneRef.current = false;
       localStorage.removeItem('kibritci_portal_session');
       await signOut(auth);
       setCurrentUser(null);
@@ -1566,31 +1611,53 @@ export default function App() {
 
   // Full screen high fidelity, stylized loader screen during first startup
   if (dbStatus === 'error') {
+    const errorMessage =
+      typeof startupError === 'string'
+        ? startupError
+        : startupError?.message || "Kayıtlı verileriniz Firestore'da güvendedir. Bağlantı kurulamadı.";
+    const errorStep =
+      typeof startupError === 'string'
+        ? 'Güvenlik oturumu'
+        : startupError?.step || 'Bilinmiyor';
+    const errorTechnical =
+      typeof startupError === 'string' ? startupError : startupError?.technical;
+
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-white p-8">
         <AlertCircle className="text-rose-400 mb-4" size={48} />
         <h1 className="text-lg font-bold mb-2">Veritabanı Bağlantı Hatası</h1>
-        <p className="text-sm text-slate-400 text-center max-w-md mb-6">
-          {startupError?.message || "Kayıtlı verileriniz Firestore'da güvendedir. Bağlantı kurulamadı."}
-        </p>
+        <p className="text-sm text-slate-400 text-center max-w-md mb-6">{errorMessage}</p>
         <div className="w-full max-w-xl bg-slate-800/70 border border-slate-700 rounded-xl p-4 mb-5 space-y-2 text-xs">
           <p className="text-slate-300">
-            <span className="font-bold text-amber-400">Sorun Adımı:</span> {startupError?.step || 'Bilinmiyor'}
+            <span className="font-bold text-amber-400">Sorun Adımı:</span> {errorStep}
           </p>
-          {startupError?.technical && (
+          {errorTechnical && (
             <p className="text-slate-400 break-all">
-              <span className="font-bold text-rose-300">Teknik Detay:</span> {startupError.technical}
+              <span className="font-bold text-rose-300">Teknik Detay:</span> {errorTechnical}
             </p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold px-6 py-3 rounded-xl"
-        >
-          <RefreshCw size={16} />
-          Sayfayı Yenile
-        </button>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold px-6 py-3 rounded-xl"
+          >
+            <RefreshCw size={16} />
+            Sayfayı Yenile
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              bootstrapDoneRef.current = true;
+              setStartupError(null);
+              setDbStatus('synced');
+            }}
+            className="flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white font-bold px-6 py-3 rounded-xl"
+          >
+            Yine de Devam Et
+          </button>
+        </div>
       </div>
     );
   }

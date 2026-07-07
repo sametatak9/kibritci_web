@@ -10,7 +10,7 @@ import {
   writeBatch,
   query
 } from 'firebase/firestore';
-import { getAuth, signInAnonymously } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestoreDatabaseId, resolveFirebaseConfig } from './firebaseConfig';
 import { shouldBlockMassDelete } from './productionDataGuard';
 
@@ -23,8 +23,23 @@ export const db = firestoreDbId ? getFirestore(app, firestoreDbId) : getFirestor
 export const auth = getAuth(app);
 
 /** Firestore güvenlik kuralları oturum gerektirir; giriş öncesi anonim oturum açar. */
+async function waitForAuthUser(maxMs = 8000) {
+  if (auth.currentUser) return auth.currentUser;
+  return new Promise<typeof auth.currentUser>((resolve) => {
+    const started = Date.now();
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user || Date.now() - started >= maxMs) {
+        unsub();
+        resolve(user);
+      }
+    });
+  });
+}
+
 export async function ensureFirestoreAuth(): Promise<boolean> {
-  if (auth.currentUser) return true;
+  const existing = await waitForAuthUser(6000);
+  if (existing) return true;
+
   try {
     await signInAnonymously(auth);
     return true;
@@ -45,7 +60,7 @@ if (typeof window !== 'undefined') {
 /**
  * Helper to wrap any promise with a timeout
  */
-export async function withTimeout<T>(promise: Promise<T>, ms = 12000): Promise<T> {
+export async function withTimeout<T>(promise: Promise<T>, ms = 18000): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout>;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
