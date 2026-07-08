@@ -10,28 +10,69 @@ import {
   writeBatch,
   query
 } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getFirestoreDatabaseId, resolveFirebaseConfig } from './firebaseConfig';
+import { shouldBlockMassDelete } from './productionDataGuard';
+
+export { mergeYoklamaMaps } from './yoklamaGuard';
+
+const firebaseConfig = resolveFirebaseConfig();
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+const firestoreDbId = getFirestoreDatabaseId(firebaseConfig);
+export const db = firestoreDbId ? getFirestore(app, firestoreDbId) : getFirestore(app);
 export const auth = getAuth(app);
+
+/** Firestore güvenlik kuralları oturum gerektirir; giriş öncesi anonim oturum açar. */
+async function waitForAuthUser(maxMs = 8000) {
+  if (auth.currentUser) return auth.currentUser;
+  return new Promise<typeof auth.currentUser>((resolve) => {
+    const started = Date.now();
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user || Date.now() - started >= maxMs) {
+        unsub();
+        resolve(user);
+      }
+    });
+  });
+}
+
+export async function ensureFirestoreAuth(): Promise<boolean> {
+  const existing = await waitForAuthUser(6000);
+  if (existing) return true;
+
+  try {
+    await signInAnonymously(auth);
+    return true;
+  } catch (err) {
+    console.warn('Anonim Firestore oturumu açılamadı:', err);
+    return false;
+  }
+}
+
+/** Hangi Firebase projesine bağlı olduğumuzu konsolda görmek için */
+if (typeof window !== 'undefined') {
+  console.info(
+    `[Firebase] projectId=${firebaseConfig.projectId}` +
+      (firestoreDbId ? ` firestoreDb=${firestoreDbId}` : ' firestoreDb=(default)')
+  );
+}
 
 /**
  * Helper to wrap any promise with a timeout
  */
-async function withTimeout<T>(promise: Promise<T>, ms = 12000): Promise<T> {
-  let timeoutId: any;
+export async function withTimeout<T>(promise: Promise<T>, ms = 18000): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout>;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
-      reject(new Error("Firebase işlem zaman aşımına uğradı (Timeout)"));
+      reject(new Error('FIRESTORE_TIMEOUT'));
     }, ms);
   });
   try {
     return await Promise.race([promise, timeoutPromise]);
   } finally {
-    clearTimeout(timeoutId);
+    clearTimeout(timeoutId!);
   }
 }
 
@@ -48,7 +89,7 @@ export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
  * Recursively cleans an object by replacing undefined values with null
  * to prevent Firestore synchronization crashes.
  */
-function cleanUndefined(obj: any): any {
+export function cleanUndefined(obj: any): any {
   if (obj === undefined) return null;
   if (obj === null) return null;
 
@@ -78,7 +119,26 @@ function cleanUndefined(obj: any): any {
  */
 export async function saveDocument<T extends { id: string }>(collectionName: string, item: T): Promise<void> {
   const docRef = doc(db, collectionName, item.id);
-  await setDoc(docRef, cleanUndefined(item), { merge: true });
+  await withTimeout(setDoc(docRef, cleanUndefined(item), { merge: true }), 15000);
+}
+
+/** Yeni üyelik — portal + kullanıcı kayıtlarını paralel yazar */
+export async function saveSignupDocuments(
+  emailKey: string,
+  portalData: Record<string, unknown>,
+  kullaniciData: Record<string, unknown>
+): Promise<void> {
+  const portalRef = doc(db, 'portalKullanicilar', emailKey);
+  const kullaniciRef = doc(db, 'kullanicilar', emailKey);
+  const payload = cleanUndefined({ ...kullaniciData, id: emailKey, email: emailKey });
+
+  await withTimeout(
+    Promise.all([
+      setDoc(portalRef, cleanUndefined(portalData), { merge: true }),
+      setDoc(kullaniciRef, payload, { merge: true }),
+    ]),
+    30000
+  );
 }
 
 /**
@@ -86,7 +146,7 @@ export async function saveDocument<T extends { id: string }>(collectionName: str
  */
 export async function removeDocument(collectionName: string, id: string): Promise<void> {
   const docRef = doc(db, collectionName, id);
-  await deleteDoc(docRef);
+  await withTimeout(deleteDoc(docRef), 15000);
 }
 
 /**
@@ -100,6 +160,9 @@ export async function seedCollectionIfEmpty<T extends { id: string }>(
   const snapshot = await withTimeout(getDocs(colRef));
   
   if (snapshot.empty) {
+    if (initialItems.length === 0) {
+      return [];
+    }
     console.log(`Seeding initial data for ${collectionName}...`);
     const batch = writeBatch(db);
     
@@ -115,6 +178,24 @@ export async function seedCollectionIfEmpty<T extends { id: string }>(
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as unknown as T);
 }
 
+export function parseYoklamaSnapshotData(
+  raw: Record<string, unknown> | undefined
+): Record<string, unknown> {
+  if (!raw) return {};
+  if (typeof raw.dataJson === 'string') {
+    try {
+      return JSON.parse(raw.dataJson) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  }
+  return (raw.data as Record<string, unknown>) || {};
+}
+
+function buildYoklamaFirestorePayload(map: Record<string, unknown>): { dataJson: string } {
+  return { dataJson: JSON.stringify(map) };
+}
+
 /**
  * Specifically seed yoklamalar because its keys are dynamic and the root is a nested map
  * Let's store yoklama in a single document 'all_yoklama' under collection 'yoklamalar' 
@@ -126,21 +207,31 @@ export async function seedYoklamaIfEmpty(initialYoklama: any): Promise<any> {
   
   if (snapshot.empty) {
     console.log(`Seeding dynamic yoklama map...`);
-    await withTimeout(setDoc(docRef, cleanUndefined({ data: initialYoklama })));
+    await withTimeout(setDoc(docRef, cleanUndefined(buildYoklamaFirestorePayload(initialYoklama))));
     return initialYoklama;
   }
   
   // Find 'global_yoklama_map' document
   const globalDoc = snapshot.docs.find(d => d.id === 'global_yoklama_map');
   if (globalDoc) {
-    return (globalDoc.data() as any).data || {};
+    return parseYoklamaSnapshotData(globalDoc.data() as Record<string, unknown>);
   }
   return {};
 }
 
-export async function saveYoklamaDocument(yoklamaMap: any): Promise<void> {
-  const docRef = doc(db, 'yoklamalar', 'global_yoklama_map');
-  await setDoc(docRef, cleanUndefined({ data: yoklamaMap }));
+export async function fetchYoklamaDocument(): Promise<Record<string, unknown>> {
+  const snapshot = await withTimeout(getDocs(collection(db, 'yoklamalar')));
+  const globalDoc = snapshot.docs.find((d) => d.id === 'global_yoklama_map');
+  if (globalDoc) return parseYoklamaSnapshotData(globalDoc.data() as Record<string, unknown>);
+  return {};
+}
+
+export async function saveYoklamaDocument(
+  yoklamaMap: Record<string, unknown>,
+  kaynak: import('./yoklamaPersistence').YoklamaSaveSource = 'sync'
+): Promise<import('./yoklamaPersistence').YoklamaSaveResult> {
+  const { enqueueYoklamaSave } = await import('./yoklamaPersistence');
+  return enqueueYoklamaSave(yoklamaMap as import('../types/erp').AylikYoklamaMap, kaynak);
 }
 
 /**
@@ -152,6 +243,25 @@ export async function syncArrayToFirestore<T extends { id: string }>(
   newArray: T[]
 ): Promise<void> {
   try {
+    if (collectionName === 'sahaFaaliyetleri') {
+      const { syncSahaFaaliyetleriArray } = await import('./sahaFaaliyetPersistence');
+      const result = await syncSahaFaaliyetleriArray(
+        oldArray as import('../types/erp').SahaFaaliyeti[],
+        newArray as import('../types/erp').SahaFaaliyeti[]
+      );
+      if (!result.ok) {
+        throw new Error(result.error || 'Saha faaliyet senkronizasyonu başarısız');
+      }
+      return;
+    }
+
+    const massDeleteBlocked = shouldBlockMassDelete(collectionName, oldArray.length, newArray.length);
+    if (massDeleteBlocked) {
+      throw new Error(
+        `[${collectionName}] Şüpheli toplu silme engellendi (${oldArray.length} → ${newArray.length}).`
+      );
+    }
+
     const oldMap = new Map(oldArray.map(item => [item.id, item]));
     const newMap = new Map(newArray.map(item => [item.id, item]));
 
@@ -172,9 +282,11 @@ export async function syncArrayToFirestore<T extends { id: string }>(
       }
     }
 
+    // #endregion
     await Promise.all(promises);
   } catch (error) {
     console.error(`Error syncing array for collection ${collectionName}:`, error);
+    throw error instanceof Error ? error : new Error(String(error));
   }
 }
 

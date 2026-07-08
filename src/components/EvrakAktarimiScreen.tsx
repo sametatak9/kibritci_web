@@ -3,12 +3,28 @@ import {
   FileText, Upload, Check, RefreshCw, AlertCircle, Calendar, 
   ArrowRight, Landmark, FileSpreadsheet, Layers, ShoppingBag, DollarSign, Users, ClipboardCheck
 } from 'lucide-react';
-import { saveDocument } from '../lib/firebase';
-import { CariKart, StokKart, Personel, AylikYoklamaMap, SahaFaaliyeti } from '../types/erp';
+import { CariKart, CariKartIslem, StokKart, Personel, AylikYoklamaMap, SahaFaaliyeti, Fatura } from '../types/erp';
+import { findPersonelByName, setYoklamaDay } from '../lib/yoklamaUtils';
+import { fetchApiJson } from '../lib/apiClient';
+import {
+  splitPdfFileToPageBase64,
+  autoEnsureCari,
+  autoEnsureStok,
+  findCariMatch,
+  findStokMatch,
+  normalizeMatchText,
+  resolveCariForBatchImport,
+  buildCariFaturaHistory,
+  BatchImportRow,
+} from '../lib/evrakBatchImportUtils';
 
 interface EvrakAktarimiScreenProps {
   cariKartlar: CariKart[];
+  setCariKartlar?: React.Dispatch<React.SetStateAction<CariKart[]>>;
   stokKartlar: StokKart[];
+  setStokKartlar?: React.Dispatch<React.SetStateAction<StokKart[]>>;
+  setCariIslemGecmisi?: React.Dispatch<React.SetStateAction<CariKartIslem[]>>;
+  faturalar?: Fatura[];
   currentUser: any;
   setFaturalar: React.Dispatch<React.SetStateAction<any[]>>;
   setIrsaliyeler: React.Dispatch<React.SetStateAction<any[]>>;
@@ -18,11 +34,23 @@ interface EvrakAktarimiScreenProps {
   sahaFaaliyetleri: SahaFaaliyeti[];
   setSahaFaaliyetleri: (updater: SahaFaaliyeti[] | ((s: SahaFaaliyeti[]) => SahaFaaliyeti[])) => void;
   personeller: Personel[];
+  saveYoklamalarNow?: (
+    next: AylikYoklamaMap,
+    kaynak?: import('../lib/yoklamaPersistence').YoklamaSaveSource
+  ) => Promise<unknown>;
+  saveSahaFaaliyetNow?: (
+    record: SahaFaaliyeti,
+    kaynak?: import('../lib/sahaFaaliyetPersistence').SahaFaaliyetSaveSource
+  ) => Promise<unknown>;
 }
 
 export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
   cariKartlar,
+  setCariKartlar,
   stokKartlar,
+  setStokKartlar,
+  setCariIslemGecmisi,
+  faturalar = [],
   currentUser,
   setFaturalar,
   setIrsaliyeler,
@@ -31,7 +59,9 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
   setYoklamalar,
   sahaFaaliyetleri,
   setSahaFaaliyetleri,
-  personeller
+  personeller,
+  saveYoklamalarNow,
+  saveSahaFaaliyetNow,
 }) => {
   const [docType, setDocType] = useState<'fatura' | 'irsaliye' | 'makbuz' | 'hakedis' | 'yoklama' | 'saha_faaliyet' | 'auto'>('auto');
   const [dragActive, setDragActive] = useState(false);
@@ -42,6 +72,11 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
   const [status, setStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [loadingStep, setLoadingStep] = useState('');
   const [detectedTypeMsg, setDetectedTypeMsg] = useState<string | null>(null);
+
+  const [batchFile, setBatchFile] = useState<File | null>(null);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchRows, setBatchRows] = useState<BatchImportRow[]>([]);
+  const [batchProgress, setBatchProgress] = useState('');
 
   const getDonemFromDate = (dateStr: string) => {
     try {
@@ -219,49 +254,47 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
       const fileBase64 = await fileToBase64(selectedFile);
       setLoadingStep('Yapay zeka dökümanı inceliyor (Gemini 2.5 Flash)...');
       
-      const response = await fetch('/api/parse-legacy-document', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileBase64,
-          mimeType: selectedFile.type || 'application/pdf',
-          docType
-        })
-      });
+      const result = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
+        '/api/parse-legacy-document',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileBase64,
+            mimeType: selectedFile.type || 'application/pdf',
+            docType
+          })
+        }
+      );
 
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Döküman yapay zeka tarafından ayrıştırılamadı.');
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Döküman yapay zeka tarafından ayrıştırılamadı.');
       }
 
-      const result = await response.json();
-      if (result.success && result.data) {
-        if (docType === 'auto') {
-          const type = result.data.detectedType;
-          if (type) {
-            setDocType(type);
-            setParsedData(result.data);
-            const typeLabels: Record<string, string> = {
-              fatura: 'Fatura (Invoice)',
-              irsaliye: 'Sevk İrsaliyesi (Waybill)',
-              makbuz: 'Makbuz / Dekont',
-              hakedis: 'Taşeron Hakediş Kapağı',
-              yoklama: 'Puantaj & Yoklama Çizelgesi',
-              saha_faaliyet: 'Saha Günlük Faaliyet Raporu'
-            };
-            setDetectedTypeMsg(`🤖 Yapay zeka bu evrakın bir "${typeLabels[type] || type.toUpperCase()}" olduğunu akıllıca tespit etti ve doğrulama formunu adapte etti!`);
-            showStatus('success', 'Yapay zeka evrak türünü algıladı ve başarıyla ayrıştırdı!');
-          } else {
-            setParsedData(result.data);
-            setDocType('fatura'); // Fallback
-            showStatus('success', 'Belge çözümlendi.');
-          }
+      const data = result.data;
+      if (docType === 'auto') {
+        const type = data.detectedType;
+        if (type) {
+          setDocType(type);
+          setParsedData(data);
+          const typeLabels: Record<string, string> = {
+            fatura: 'Fatura (Invoice)',
+            irsaliye: 'Sevk İrsaliyesi (Waybill)',
+            makbuz: 'Makbuz / Dekont',
+            hakedis: 'Taşeron Hakediş Kapağı',
+            yoklama: 'Puantaj & Yoklama Çizelgesi',
+            saha_faaliyet: 'Saha Günlük Faaliyet Raporu'
+          };
+          setDetectedTypeMsg(`🤖 Yapay zeka bu evrakın bir "${typeLabels[type] || type.toUpperCase()}" olduğunu akıllıca tespit etti ve doğrulama formunu adapte etti!`);
+          showStatus('success', 'Yapay zeka evrak türünü algıladı ve başarıyla ayrıştırdı!');
         } else {
-          setParsedData(result.data);
-          showStatus('success', 'Döküman başarıyla ayrıştırıldı! Lütfen alanları gözden geçirin.');
+          setParsedData(data);
+          setDocType('fatura');
+          showStatus('success', 'Belge çözümlendi.');
         }
       } else {
-        throw new Error('Geçersiz veri formatı döndü.');
+        setParsedData(data);
+        showStatus('success', 'Döküman başarıyla ayrıştırıldı! Lütfen alanları gözden geçirin.');
       }
     } catch (err: any) {
       console.error(err);
@@ -272,12 +305,313 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
     }
   };
 
+  const ensureCariAndStokFromImport = (supplierName: string, items: { urunAdi: string, birim?: string }[]) => {
+    if (!supplierName) return;
+    
+    // 1. Ensure Cari Kart
+    const normalizedSupplier = supplierName.trim();
+    const existingCari = (cariKartlar || []).find(
+      c => c.unvan && c.unvan.toLowerCase().trim() === normalizedSupplier.toLowerCase()
+    );
+
+    let updatedCariKartlar = [...(cariKartlar || [])];
+    if (!existingCari) {
+      const confirmCreate = window.confirm(`AI tarafından çözümlenen "${supplierName}" firması sistemde kayıtlı değildir. Bu firma için yeni bir Cari Kartı (Tedarikçi) oluşturmak ister misiniz?`);
+      if (confirmCreate) {
+        const newCariId = `ck_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+        const randomCode = `CAR-${Math.floor(100 + Math.random() * 905)}`;
+        const newCari = {
+          id: newCariId,
+          kartTipi: 'TEDARIKCI' as const,
+          kod: randomCode,
+          unvan: normalizedSupplier,
+          yetkili: "Evrak Aktarımı",
+          telefon: "",
+          eposta: "",
+          vergiNo: "",
+          vergiDairesi: "",
+          adres: "AI evrak aktarımından otomatik oluşturuldu.",
+          iban: "",
+          durum: 'AKTIF' as const,
+          notlar: "AI evrak aktarımından otomatik oluşturuldu."
+        };
+        updatedCariKartlar = [newCari, ...updatedCariKartlar];
+        if (setCariKartlar) {
+          setCariKartlar(updatedCariKartlar);
+        }
+      }
+    }
+
+    // 2. Ensure Stok Kartlar
+    let updatedStokKartlar = [...(stokKartlar || [])];
+    let addedAnyStok = false;
+
+    items.forEach((item, idx) => {
+      const normalizedProduct = item.urunAdi.trim();
+      const existingStok = (stokKartlar || []).find(
+        s => (s.stokAdi && s.stokAdi.toLowerCase().trim() === normalizedProduct.toLowerCase()) || 
+             (s.urunAdi && s.urunAdi.toLowerCase().trim() === normalizedProduct.toLowerCase())
+      );
+
+      if (!existingStok) {
+        const confirmCreate = window.confirm(`AI tarafından çözümlenen "${item.urunAdi}" malzemesi sistemde kayıtlı değildir. Bu malzeme için yeni bir Stok Kartı oluşturmak ister misiniz?`);
+        if (confirmCreate) {
+          const newStokId = `sk_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 4)}`;
+          const randomCode = `STK-${Math.floor(1000 + Math.random() * 9000)}`;
+          const newStok = {
+            id: newStokId,
+            stokKodu: randomCode,
+            stokAdi: normalizedProduct,
+            kategori: "İnşaat Malzemesi",
+            birim: item.birim || "ADET",
+            kritikSeviye: 5,
+            durum: 'AKTIF' as const,
+            aciklama: "AI evrak aktarımından otomatik oluşturuldu."
+          };
+          updatedStokKartlar = [newStok, ...updatedStokKartlar];
+          addedAnyStok = true;
+        }
+      }
+    });
+
+    if (addedAnyStok && setStokKartlar) {
+      setStokKartlar(updatedStokKartlar);
+    }
+  };
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  const importParsedPage = async (
+    data: any,
+    pageNo: number,
+    sourceTag: string,
+    workingCari: CariKart[],
+    workingStok: StokKart[],
+    createDecisions: Map<string, boolean>
+  ): Promise<{ evrakNo: string; firma: string; type: string; cariler: CariKart[]; stoklar: StokKart[]; reusedCari: boolean }> => {
+    let cariler = [...workingCari];
+    let stoklar = [...workingStok];
+    const type = String(data.detectedType || 'fatura').toLowerCase() as typeof docType;
+    const firma = String(data.cariUnvan || data.firma || '').trim();
+    const kalemler = Array.isArray(data.kalemler) ? data.kalemler : [];
+    let matchedCari: CariKart | null = null;
+    let createdCari = false;
+
+    if (firma) {
+      const resolved = resolveCariForBatchImport(firma, cariler, sourceTag, createDecisions);
+      cariler = resolved.cariler;
+      matchedCari = resolved.cari;
+      createdCari = resolved.created;
+    }
+
+    for (const k of kalemler) {
+      const ensured = autoEnsureStok(k.urunAdi || '', k.birim || 'ADET', stoklar, sourceTag);
+      stoklar = ensured.stoklar;
+    }
+
+    if (setCariKartlar) setCariKartlar(cariler);
+    if (setStokKartlar) setStokKartlar(stoklar);
+
+    const systemId = `BATCH-${type}-${Date.now()}-P${pageNo}`;
+    const tarih = data.tarih || new Date().toISOString().slice(0, 10);
+    const cariUnvan = matchedCari?.unvan || firma || 'Bilinmeyen Cari';
+
+    if (type === 'irsaliye') {
+      const doc = {
+        id: systemId,
+        irsaliyeId: `IR-${Date.now().toString().slice(-4)}`,
+        irsaliyeNo: data.irsaliyeNo || `IR-P${pageNo}`,
+        firma: firma || 'Bilinmeyen Firma',
+        tarih,
+        onayDurumu: '2. ONAY TAMAMLANDI' as const,
+        kalemler: kalemler.map((k: any, idx: number) => ({
+          id: `k_${pageNo}_${idx}`,
+          urunAdi: k.urunAdi || 'Malzeme',
+          miktar: Number(k.miktar) || 0,
+          birim: k.birim || 'ADET',
+          stokKartId: findStokMatch(k.urunAdi || '', stoklar)?.id,
+        })),
+        eImzalar: [],
+        notlar: sourceTag,
+      };
+      setIrsaliyeler((prev) => [doc, ...prev]);
+      return { evrakNo: doc.irsaliyeNo, firma: doc.firma, type: 'irsaliye', cariler, stoklar, reusedCari: Boolean(matchedCari) };
+    }
+
+    const faturaDoc = {
+      id: systemId,
+      faturaNo: data.faturaNo || data.irsaliyeNo || `FT-P${pageNo}`,
+      tarih,
+      cariKartId: matchedCari?.id || '',
+      cariUnvan,
+      toplamTutar: Number(data.toplamTutar) || Number(data.genelToplam) || 0,
+      kdvTutar: Number(data.kdvTutar) || 0,
+      genelToplam: Number(data.genelToplam || data.toplamTutar || data.tutar) || 0,
+      durum: 'ONAYLANDI' as const,
+      bagliIrsaliyeler: [],
+      notlar: `Toplu PDF aktarım ${sourceTag}`,
+      kalemler: (kalemler.length ? kalemler : [{ urunAdi: data.aciklama || 'Evrak kalemi', miktar: 1, birim: 'ADET', birimFiyat: 0, kdvOran: 20, toplam: 0 }]).map(
+        (k: any, idx: number) => ({
+          id: `k_${pageNo}_${idx}`,
+          urunAdi: k.urunAdi || 'Ürün',
+          miktar: Number(k.miktar) || 1,
+          birim: k.birim || 'ADET',
+          birimFiyat: Number(k.birimFiyat) || 0,
+          kdvOran: Number(k.kdvOran) || 20,
+          toplam: Number(k.toplam) || 0,
+          stokKartId: findStokMatch(k.urunAdi || '', stoklar)?.id,
+        })
+      ),
+    };
+    setFaturalar((prev) => [faturaDoc, ...prev]);
+
+    if (matchedCari?.id && setCariIslemGecmisi) {
+      const history = buildCariFaturaHistory(
+        matchedCari.id,
+        faturaDoc.id,
+        faturaDoc.faturaNo,
+        cariUnvan,
+        tarih,
+        sourceTag,
+        createdCari
+      );
+      setCariIslemGecmisi((prev) => [history, ...prev]);
+    }
+
+    return {
+      evrakNo: faturaDoc.faturaNo,
+      firma: faturaDoc.cariUnvan,
+      type: type === 'hakedis' ? 'hakedis' : 'fatura',
+      cariler,
+      stoklar,
+      reusedCari: Boolean(matchedCari) && !createdCari,
+    };
+  };
+
+  const handleBatchPdfImport = async () => {
+    if (!batchFile || batchRunning) return;
+    if (!batchFile.type.includes('pdf')) {
+      showStatus('error', 'Toplu aktarım için PDF dosyası seçin.');
+      return;
+    }
+    setBatchRunning(true);
+    setBatchRows([]);
+    setBatchProgress('PDF sayfalara ayrılıyor...');
+
+    try {
+      const pages = await splitPdfFileToPageBase64(batchFile);
+      const rows: BatchImportRow[] = pages.map((_, i) => ({ pageNo: i + 1, status: 'pending' }));
+      setBatchRows(rows);
+
+      let workingCari = [...(cariKartlar || [])];
+      let workingStok = [...(stokKartlar || [])];
+      const sourceBase = batchFile.name;
+      const createDecisions = new Map<string, boolean>();
+      const existingTags = new Set(
+        (faturalar || [])
+          .map((f) => String(f.notlar || ''))
+          .flatMap((note) => {
+            const matches = note.match(/\[BatchPDF:[^\]]+\]/g);
+            return matches || [];
+          })
+      );
+
+      for (let i = 0; i < pages.length; i++) {
+        const pageNo = i + 1;
+        const sourceTag = `[BatchPDF:${sourceBase}#P${pageNo}]`;
+        if (existingTags.has(sourceTag)) {
+          setBatchRows((prev) =>
+            prev.map((r) =>
+              r.pageNo === pageNo
+                ? { ...r, status: 'skipped', message: 'Daha önce aktarılmış' }
+                : r
+            )
+          );
+          continue;
+        }
+
+        setBatchProgress(`Sayfa ${pageNo}/${pages.length} yapay zeka ile okunuyor...`);
+        setBatchRows((prev) =>
+          prev.map((r) => (r.pageNo === pageNo ? { ...r, status: 'parsing' } : r))
+        );
+
+        let parsed: any = null;
+        for (let attempt = 1; attempt <= 4; attempt++) {
+          try {
+            const result = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
+              '/api/parse-legacy-document',
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  fileBase64: pages[i],
+                  mimeType: 'application/pdf',
+                  docType: 'auto',
+                }),
+              }
+            );
+            if (!result.success || !result.data) throw new Error(result.error || 'Parse hatası');
+            parsed = result.data;
+            break;
+          } catch (err: any) {
+            const is429 = /429|quota|RESOURCE_EXHAUSTED/i.test(String(err?.message || err));
+            if (attempt === 4 || !is429) throw err;
+            setBatchProgress(`Sayfa ${pageNo}: kota limiti, ${50 * attempt} sn bekleniyor...`);
+            await sleep(50000 * attempt);
+          }
+        }
+
+        const imported = await importParsedPage(parsed, pageNo, sourceTag, workingCari, workingStok, createDecisions);
+        workingCari = imported.cariler;
+        workingStok = imported.stoklar;
+
+        setBatchRows((prev) =>
+          prev.map((r) =>
+            r.pageNo === pageNo
+              ? {
+                  ...r,
+                  status: 'ok',
+                  detectedType: imported.type,
+                  evrakNo: imported.evrakNo,
+                  firma: `${imported.firma}${imported.reusedCari ? ' (mevcut cari)' : ''}`,
+                }
+              : r
+          )
+        );
+
+        if (i < pages.length - 1) await sleep(3000);
+      }
+
+      setBatchProgress('');
+      showStatus('success', `Toplu aktarım tamamlandı: ${pages.length} sayfa işlendi.`);
+    } catch (err: any) {
+      console.error(err);
+      setBatchProgress('');
+      showStatus('error', `Toplu aktarım hatası: ${err.message || 'Bilinmeyen hata'}`);
+      setBatchRows((prev) =>
+        prev.map((r) => (r.status === 'parsing' ? { ...r, status: 'error', message: err.message } : r))
+      );
+    } finally {
+      setBatchRunning(false);
+    }
+  };
+
   // Import parsed data to Firestore and state
   const handleImportToSystem = async () => {
     if (!parsedData) return;
     setImporting(true);
 
     try {
+      // Prompt user to verify and create Cari / Stok cards before importing
+      if (docType === 'fatura') {
+        ensureCariAndStokFromImport(parsedData.cariUnvan || '', parsedData.kalemler || []);
+      } else if (docType === 'irsaliye') {
+        ensureCariAndStokFromImport(parsedData.firma || '', parsedData.kalemler || []);
+      } else if (docType === 'hakedis') {
+        ensureCariAndStokFromImport(parsedData.cariUnvan || '', []);
+      } else if (docType === 'makbuz') {
+        ensureCariAndStokFromImport(parsedData.firma || '', []);
+      }
       const systemId = `${docType.toUpperCase()}-${Date.now()}`;
       
       if (docType === 'fatura') {
@@ -309,7 +643,6 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           }))
         };
 
-        await saveDocument('faturalar', newFatura);
         setFaturalar(prev => [newFatura, ...prev]);
         showStatus('success', `🎉 ${newFatura.faturaNo} fatura belgesi başarıyla sisteme aktarıldı!`);
 
@@ -329,7 +662,6 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           }))
         };
 
-        await saveDocument('irsaliyeler', newIrsaliye);
         setIrsaliyeler(prev => [newIrsaliye, ...prev]);
         showStatus('success', `🎉 ${newIrsaliye.irsaliyeNo} irsaliye belgesi başarıyla sisteme aktarıldı!`);
 
@@ -344,7 +676,6 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           referansId: parsedData.referansId || `REF-${Date.now()}`
         };
 
-        await saveDocument('kasaHareketleri', newKasaHareketi);
         setKasaHareketleri(prev => [newKasaHareketi, ...prev]);
         showStatus('success', `🎉 ₺${newKasaHareketi.tutar} tutarındaki makbuz hareketi kasa defterine işlendi!`);
 
@@ -378,45 +709,64 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           ]
         };
 
-        await saveDocument('faturalar', newHakedisFatura);
         setFaturalar(prev => [newHakedisFatura, ...prev]);
         showStatus('success', `🎉 ${parsedData.donem} dönemli hakediş faturası başarıyla şantiye hakediş defterine kaydedildi!`);
       
       } else if (docType === 'yoklama') {
         const newYoklamalar = { ...yoklamalar };
         let matchedCount = 0;
+        const unmatched: string[] = [];
+
+        let importYear = new Date().getFullYear();
+        let importMonth = new Date().getMonth() + 1;
+        if (parsedData.tarih) {
+          const parts = parsedData.tarih.split('-');
+          if (parts.length >= 2) {
+            importYear = Number(parts[0]) || importYear;
+            importMonth = Number(parts[1]) || importMonth;
+          } else {
+            const monthNames = ['ocak', 'şubat', 'subat', 'mart', 'nisan', 'mayıs', 'mayis', 'haziran', 'temmuz', 'ağustos', 'agustos', 'eylül', 'eylul', 'ekim', 'kasım', 'kasim', 'aralık', 'aralik'];
+            const lower = parsedData.tarih.toLowerCase();
+            monthNames.forEach((name, idx) => {
+              if (lower.includes(name)) importMonth = (idx % 12) + 1;
+            });
+            const yearMatch = parsedData.tarih.match(/20\d{2}/);
+            if (yearMatch) importYear = Number(yearMatch[0]);
+          }
+        }
 
         (parsedData.yoklamaKayitlari || []).forEach((item: any) => {
-          const matchedPerson = personeller.find(p => 
-            `${p.ad} ${p.soyad}`.toLowerCase().trim() === item.adSoyad.toLowerCase().trim() ||
-            item.adSoyad.toLowerCase().trim().includes(`${p.ad} ${p.soyad}`.toLowerCase().trim()) ||
-            `${p.ad} ${p.soyad}`.toLowerCase().trim().includes(item.adSoyad.toLowerCase().trim())
-          );
-
-          if (matchedPerson) {
-            let dayNo = Number(item.gunNo);
-            if (!dayNo && parsedData.tarih) {
-              const parts = parsedData.tarih.split('-');
-              if (parts.length === 3) {
-                dayNo = Number(parts[2]);
-              }
-            }
-            if (!dayNo) dayNo = new Date().getDate(); // Fallback to current day
-
-            if (!newYoklamalar[matchedPerson.id]) {
-              newYoklamalar[matchedPerson.id] = {};
-            }
-            newYoklamalar[matchedPerson.id][dayNo] = {
-              durum: (item.durum || 'Geldi') as any,
-              mesaiSaati: Number(item.mesaiSaati) || 0
-            };
-            matchedCount++;
+          const matchedPerson = findPersonelByName(personeller, item.adSoyad || '');
+          if (!matchedPerson) {
+            unmatched.push(item.adSoyad || 'Bilinmeyen');
+            return;
           }
+
+          let dayNo = Number(item.gunNo);
+          if (!dayNo && parsedData.tarih) {
+            const parts = parsedData.tarih.split('-');
+            if (parts.length === 3) dayNo = Number(parts[2]);
+          }
+          if (!dayNo) dayNo = new Date().getDate();
+
+          const validDurum = ['Geldi', 'Yok', 'İzinli', 'Raporlu', 'Pazar', 'Tatil'].includes(item.durum)
+            ? item.durum
+            : 'Geldi';
+
+          newYoklamalar[matchedPerson.id] = setYoklamaDay(newYoklamalar[matchedPerson.id], importYear, importMonth, dayNo, {
+            durum: validDurum as any,
+            mesaiSaati: Number(item.mesaiSaati) || 0
+          });
+          matchedCount++;
         });
 
-        // Save entire map to Firestore using specific sync function passed down
-        setYoklamalar(newYoklamalar);
-        showStatus('success', `🎉 Toplam ${matchedCount} personelin yoklama/puantaj verisi canlı sisteme akıtıldı ve kaydedildi!`);
+        if (saveYoklamalarNow) {
+          await saveYoklamalarNow(newYoklamalar, 'evrak');
+        } else {
+          setYoklamalar(newYoklamalar);
+        }
+        const unmatchedMsg = unmatched.length > 0 ? ` Eşleşmeyen: ${unmatched.join(', ')}` : '';
+        showStatus('success', `🎉 Toplam ${matchedCount} personelin yoklama/puantaj verisi (${importMonth}/${importYear}) sisteme aktarıldı!${unmatchedMsg}`);
 
       } else if (docType === 'saha_faaliyet') {
         const mappedList = (parsedData.aktifPersonelListesi || []).map((name: string) => {
@@ -435,8 +785,11 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           aktifPersonelListesi: mappedList
         };
 
-        await saveDocument('sahaFaaliyetleri', newSahaFaaliyet);
-        setSahaFaaliyetleri(prev => [newSahaFaaliyet, ...prev]);
+        if (saveSahaFaaliyetNow) {
+          await saveSahaFaaliyetNow(newSahaFaaliyet, 'evrak');
+        } else {
+          setSahaFaaliyetleri(prev => [newSahaFaaliyet, ...prev]);
+        }
         showStatus('success', `🎉 Günlük Saha Faaliyet Raporu başarıyla İdari İşler / Günlük Loglar sekmesine kaydedildi!`);
       }
 
@@ -471,6 +824,65 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           </div>
         </div>
 
+        {/* Toplu PDF aktarım */}
+        <div className="bg-white border border-amber-200 rounded-3xl p-6 space-y-4 shadow-sm">
+          <span className="text-[10px] font-black tracking-widest text-amber-700 uppercase block">TOPLU PDF AKTARIM (12 SAYFA GİBİ)</span>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Çok sayfalı taranmış PDF&apos;yi sayfa sayfa ayırır; her sayfayı ayrı fatura evrakı olarak okur. Kayıtlı cari varsa aynı kartın altına devam eder; yoksa bir kez sorar. Stok kartları da eşleştirilir.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+            <label className="flex-1 text-xs border border-dashed border-slate-300 rounded-xl p-3 cursor-pointer hover:bg-slate-50">
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                className="hidden"
+                disabled={batchRunning}
+                onChange={(e) => {
+                  setBatchFile(e.target.files?.[0] || null);
+                  setBatchRows([]);
+                }}
+              />
+              {batchFile ? batchFile.name : 'PDF seçin (örn. 157-46 dograma hesap)'}
+            </label>
+            <button
+              type="button"
+              disabled={!batchFile || batchRunning}
+              onClick={handleBatchPdfImport}
+              className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-3 rounded-xl cursor-pointer flex items-center justify-center gap-2 shrink-0"
+            >
+              {batchRunning ? <RefreshCw size={14} className="animate-spin" /> : <Layers size={14} />}
+              Tüm Sayfaları Tara ve Aktar
+            </button>
+          </div>
+          {batchProgress && (
+            <p className="text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">{batchProgress}</p>
+          )}
+          {batchRows.length > 0 && (
+            <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-xl text-[10px]">
+              <table className="w-full">
+                <thead className="bg-slate-50 sticky top-0">
+                  <tr>
+                    <th className="text-left p-2">Sayfa</th>
+                    <th className="text-left p-2">Durum</th>
+                    <th className="text-left p-2">Tür</th>
+                    <th className="text-left p-2">Firma / No</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {batchRows.map((r) => (
+                    <tr key={r.pageNo} className="border-t border-slate-100">
+                      <td className="p-2 font-mono">{r.pageNo}</td>
+                      <td className="p-2">{r.status}</td>
+                      <td className="p-2">{r.detectedType || '—'}</td>
+                      <td className="p-2 truncate max-w-[200px]">{r.firma || r.evrakNo || r.message || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
         {/* Form elements */}
         {status && (
           <div className={`p-4 rounded-xl text-xs font-bold tracking-wide flex items-center gap-3 border ${
@@ -488,123 +900,133 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="space-y-6">
           
-          {/* Controls Left panel */}
-          <div className="md:col-span-1 space-y-5">
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-4 shadow-sm">
-              <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase block">1. EVRAK TÜRÜ SEÇ</span>
-              
-              <div className="flex flex-col gap-2">
-                {[
-                  { key: 'auto', label: '🤖 OTOMATİK TESPİT (AI)', icon: Layers, desc: 'Yapay zeka belgeyi inceler ve türünü kendi algılar' },
-                  { key: 'fatura', label: 'FATURA (Invoice)', icon: Landmark, desc: 'Satıcı faturaları ve gider dökümleri' },
-                  { key: 'irsaliye', label: 'İRSALİYE (Waybill)', icon: ShoppingBag, desc: 'Malzeme giriş sevk evrakları' },
-                  { key: 'makbuz', label: 'MAKBUZ / DEKONT', icon: DollarSign, desc: 'Ödeme makbuzları, banka tediye fişleri' },
-                  { key: 'hakedis', label: 'HAKEDİŞ RAPORU', icon: FileSpreadsheet, desc: 'Yüklenici ve taşeron hakediş kapakları' },
-                  { key: 'yoklama', label: 'PUANTAJ / YOKLAMA', icon: Users, desc: 'Puantaj listeleri, yoklama çizelgeleri' },
-                  { key: 'saha_faaliyet', label: 'SAHA FAALİYET RAPORU', icon: ClipboardCheck, desc: 'Saha günlük faaliyet raporları ve logları' }
-                ].map(type => {
-                  const Icon = type.icon;
-                  return (
-                    <button
-                      key={type.key}
-                      onClick={() => {
-                        setDocType(type.key as any);
-                        setParsedData(null);
-                        setDetectedTypeMsg(null);
-                      }}
-                      className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex gap-3 items-start ${
-                        docType === type.key 
-                          ? 'bg-blue-50 border-blue-400 text-blue-700 font-semibold shadow-xs' 
-                          : 'bg-slate-50 border-slate-200 hover:border-slate-350 text-slate-600'
-                      }`}
-                    >
-                      <Icon size={16} className={`shrink-0 mt-0.5 ${docType === type.key ? 'text-blue-550' : 'text-slate-450'}`} />
-                      <div>
-                        <h4 className="text-xs font-bold leading-none">{type.label}</h4>
-                        <p className="text-[9px] text-slate-500 mt-1">{type.desc}</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-              <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase block mb-2">DOSYA DESTEĞİ</span>
-              <p className="text-[10px] text-slate-500 leading-relaxed font-sans">
-                Tüm taranmış dökümanları, PDF dosyalarını ve faturanın/yoklamanın cep telefonuyla çekilmiş net fotoğraflarını yükleyebilirsiniz. Gemini AI dökümanı inceler, doğrular ve saniyeler içinde sisteme adapte eder.
-              </p>
-            </div>
-          </div>
-
-          {/* Upload and Parsing zone Right panel */}
-          <div className="md:col-span-2 space-y-6">
-            
-            {/* Upload Area */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
-              <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase block">2. EVRAK DOSYASI YÜKLE</span>
+          {/* Step 1: Evrak Dosyası Yükleme Alanı */}
+          {!parsedData && !parsing ? (
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-4 shadow-sm">
+              <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase block">1. EVRAK DOSYASI YÜKLE</span>
               
               <div 
                 onDragEnter={handleDrag}
                 onDragOver={handleDrag}
                 onDragLeave={handleDrag}
                 onDrop={handleDrop}
-                className={`border-2 border-dashed rounded-2xl p-8 text-center flex flex-col items-center justify-center gap-3 transition ${
+                className={`border-2 border-dashed rounded-2xl p-10 text-center flex flex-col items-center justify-center gap-3 transition ${
                   dragActive ? 'border-blue-500 bg-blue-500/5' : 'border-slate-200 hover:border-slate-400 bg-slate-50'
                 }`}
               >
-                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-slate-400 border border-slate-200">
-                  <Upload size={20} />
+                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-slate-450 border border-slate-150 shadow-2xs">
+                  <Upload size={24} />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold text-slate-700">
-                    Sürükleyip Bırakın veya <label className="text-blue-600 hover:text-blue-500 cursor-pointer underline">Göz Atın<input type="file" onChange={handleFileChange} accept=".pdf,.png,.jpg,.jpeg" className="hidden" /></label>
+                  <h4 className="text-sm font-bold text-slate-705">
+                    Sürükleyip Bırakın veya <label className="text-blue-600 hover:text-blue-550 cursor-pointer underline">Göz Atın<input type="file" onChange={handleFileChange} accept=".pdf,.png,.jpg,.jpeg" className="hidden" /></label>
                   </h4>
-                  <p className="text-[9px] text-slate-500 mt-1">PDF, PNG, JPG, JPEG (Maks. 10MB)</p>
+                  <p className="text-xs text-slate-500 mt-1">PDF, PNG, JPG, JPEG (Maks. 10MB)</p>
                 </div>
               </div>
-
-              {selectedFile && (
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex justify-between items-center text-xs">
-                  <div className="flex items-center space-x-3 min-w-0">
-                    <FileText size={16} className="text-blue-500 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="font-bold text-slate-750 truncate">{selectedFile.name}</p>
-                      <p className="text-[10px] text-slate-555 font-mono mt-0.5">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                    </div>
-                  </div>
-                  
-                  <button
-                    disabled={parsing}
-                    onClick={handleStartParsing}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800/40 text-white font-black text-[10px] px-3.5 py-2 rounded-lg transition tracking-wide flex items-center space-x-1.5 shrink-0 cursor-pointer"
-                  >
-                    {parsing ? <RefreshCw size={11} className="animate-spin" /> : <Layers size={11} />}
-                    <span>YAPAY ZEKA İLE AYRIŞTIR</span>
-                  </button>
-                </div>
-              )}
-
-              {parsing && (
-                <div className="bg-blue-50/45 border border-blue-100 p-4 rounded-xl text-center space-y-2.5 animate-pulse">
-                  <div className="flex justify-center text-blue-500">
-                    <RefreshCw size={18} className="animate-spin" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs font-bold text-blue-600">Belge Analiz Ediliyor...</p>
-                    <p className="text-[10px] text-slate-555 italic">"{loadingStep}"</p>
-                  </div>
-                </div>
-              )}
             </div>
+          ) : (
+            selectedFile && (
+              <div className="bg-white border border-slate-200 rounded-3xl p-5 flex justify-between items-center text-xs shadow-sm">
+                <div className="flex items-center space-x-3 min-w-0">
+                  <div className="w-10 h-10 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-center text-blue-500 shrink-0">
+                    <FileText size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-800 truncate">{selectedFile.name}</p>
+                    <p className="text-[10px] text-slate-500 font-mono mt-0.5">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                  </div>
+                </div>
+                {!parsing && (
+                  <button
+                    onClick={() => {
+                      setSelectedFile(null);
+                      setParsedData(null);
+                      setDetectedTypeMsg(null);
+                      setDocType('auto');
+                    }}
+                    className="text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-4 py-2 rounded-xl font-bold transition duration-150 cursor-pointer"
+                  >
+                    Dosyayı Değiştir / Temizle
+                  </button>
+                )}
+              </div>
+            )
+          )}
+
+          {/* Step 2: Hangi Evrak Olduğunu Sorma ve Format Seçimi */}
+          {selectedFile && !parsedData && !parsing && (
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-5 shadow-sm animate-fade-in">
+              <div className="space-y-1">
+                <span className="text-[10px] font-black tracking-widest text-blue-600 uppercase block">2. EVRAK TÜRÜ VE FORMAT SEÇİMİ</span>
+                <h3 className="text-sm font-extrabold text-slate-800">Bu evrak hangi şantiye kategorisine aittir?</h3>
+                <p className="text-xs text-slate-500">Yapay zekanın evrakı doğru kurallarla çözmesi için formatı seçin.</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {[
+                  { key: 'auto', label: '🤖 OTOMATİK TESPİT (AI)', icon: Layers, desc: 'Dosyayı inceleyip kategoriyi kendi algılar' },
+                  { key: 'fatura', label: 'FATURA (Invoice)', icon: Landmark, desc: 'Malzeme satıcı faturaları ve nakit fişleri' },
+                  { key: 'irsaliye', label: 'İRSALİYE (Waybill)', icon: ShoppingBag, desc: 'Şantiyeye giren malzeme sevk fişleri' },
+                  { key: 'makbuz', label: 'MAKBUZ / DEKONT', icon: DollarSign, desc: 'Banka transfer dekontları, tediye makbuzları' },
+                  { key: 'hakedis', label: 'HAKEDİŞ RAPORU', icon: FileSpreadsheet, desc: 'Taşeron hakediş kapak dökümleri' },
+                  { key: 'yoklama', label: 'PUANTAJ / YOKLAMA', icon: Users, desc: 'Günlük veya aylık personel puantajları' },
+                  { key: 'saha_faaliyet', label: 'SAHA FAALİYET RAPORU', icon: ClipboardCheck, desc: 'Günlük saha imalat raporu logları' }
+                ].map(type => {
+                  const Icon = type.icon;
+                  const isSelected = docType === type.key;
+                  return (
+                    <button
+                      key={type.key}
+                      onClick={() => setDocType(type.key as any)}
+                      className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer flex gap-3 items-start ${
+                        isSelected 
+                          ? 'bg-blue-50 border-blue-500 text-blue-700 ring-2 ring-blue-500/10 font-bold shadow-xs' 
+                          : 'bg-slate-50 border-slate-200 hover:border-slate-350 text-slate-650'
+                      }`}
+                    >
+                      <Icon size={18} className={`shrink-0 mt-0.5 ${isSelected ? 'text-blue-600' : 'text-slate-500'}`} />
+                      <div>
+                        <h4 className="text-xs font-bold leading-none">{type.label}</h4>
+                        <p className="text-[9px] text-slate-500 mt-1 leading-tight">{type.desc}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  onClick={handleStartParsing}
+                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-slate-800 font-black text-xs px-6 py-3.5 rounded-2xl transition tracking-wide flex items-center justify-center space-x-2 shadow-sm cursor-pointer"
+                >
+                  <RefreshCw size={12} className="animate-spin-slow" />
+                  <span>YAPAY ZEKA İLE AYRIŞTIRMAYA BAŞLA</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Çözümleme Loading Animasyonu */}
+          {parsing && (
+            <div className="bg-white border border-slate-200 rounded-3xl p-8 text-center space-y-4 shadow-sm">
+              <div className="flex justify-center text-blue-550">
+                <RefreshCw size={26} className="animate-spin" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-blue-600">Yapay Zeka Evrakı Çözümlüyor...</p>
+                <p className="text-xs text-slate-500 font-mono italic">"{loadingStep}"</p>
+              </div>
+            </div>
+          )}
 
             {/* AI Review Form */}
             {parsedData && (
               <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
                 <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-                  <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase block">3. YAPAY ZEKA DOĞRULAMA FORMU</span>
+                  <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase block">3. YAPAY ZEKA DOĞRULAMA FORMU</span>
                   <span className="bg-blue-50 text-blue-700 font-bold font-mono text-[9px] px-2 py-0.5 rounded border border-blue-100">GEMINI OKUMA SONUCU</span>
                 </div>
 
@@ -990,7 +1412,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
                           className="w-full bg-slate-50 border border-slate-200 p-2 text-xs rounded-xl text-slate-800 outline-none"
                         />
                       </div>
-                      <div className="flex items-end text-[10px] text-slate-400 italic">
+                      <div className="flex items-end text-[10px] text-slate-500 italic">
                         * Tespit edilen isimler sistemdeki personellerle eşleştirilir.
                       </div>
                     </div>
@@ -1129,15 +1551,13 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
                 <button
                   disabled={importing}
                   onClick={handleImportToSystem}
-                  className="w-full mt-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-blue-800/40 text-white font-black text-xs py-3.5 rounded-xl transition tracking-wide flex items-center justify-center space-x-2 shadow-lg shadow-blue-500/10 cursor-pointer"
+                  className="w-full mt-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-blue-800/40 text-slate-800 font-black text-xs py-3.5 rounded-xl transition tracking-wide flex items-center justify-center space-x-2 shadow-lg shadow-blue-500/10 cursor-pointer"
                 >
                   {importing ? <RefreshCw size={13} className="animate-spin" /> : <Check size={14} />}
                   <span>DOĞRULANAN VERİLERİ ŞANTİYE SİSTEMİNE AKTAR</span>
                 </button>
               </div>
             )}
-
-          </div>
 
         </div>
 

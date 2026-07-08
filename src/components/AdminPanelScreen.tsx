@@ -1,10 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { persistKullaniciRole, dedupeKullanicilarByEmail, saveKullanici, deleteKullaniciByEmail, findKullaniciByEmail } from '../lib/kullaniciUtils';
+import {
+  approveBekleyenSignup,
+  BekleyenUyelik,
+  createManualUser,
+  fetchApiPendingSignups,
+  mergePendingLists,
+  readLocalPendingQueue,
+  rejectBekleyenSignup,
+  subscribeBekleyenUyelikler,
+} from '../lib/bekleyenUyelik';
 import { 
   Users, KeySquare, ShieldAlert, Trash2, CheckCircle, 
   XOctagon, UserCheck, AlertCircle, RefreshCw, Key,
-  Eye, Check, Clipboard, CheckSquare
+  Eye, Check, Clipboard, CheckSquare, Save, Loader2, UserPlus, Clock, Database
 } from 'lucide-react';
+import { AdminYetkiSablonTab } from './AdminYetkiSablonTab';
+import { isFirestoreWriteFailure } from '../lib/bekleyenUyelik';
 import { fetchCollection, removeDocument, saveDocument } from '../lib/firebase';
+import { getMobileRoleDisplayName, isMobileRole } from '../lib/yetkiUtils';
+import { provisionAuthUser, syncAuthClaimsFromServer } from '../lib/authClaimsClient';
+import {
+  createProgramVeriYedegi,
+  fetchVeriKorumaOzeti,
+  listProgramVeriYedekleri,
+  ProgramVeriYedegi,
+} from '../lib/veriKoruma';
+import { AylikYoklamaMap, SahaFaaliyeti, KampKaydi, Fatura } from '../types/erp';
 
 export interface Kullanici {
   id: string; // auth uid
@@ -27,6 +49,7 @@ export interface Kullanici {
     | 'KAMPÇI'
     | 'GÜVENLİK'
     | 'LOJİSTİK'
+    | 'DEPOCU'
     | 'MİSAFİR';
   durum: 'AKTİF' | 'KISITLI' | 'ONAY BEKLİYOR';
   kayitTarihi: string;
@@ -38,6 +61,7 @@ export interface Kullanici {
   imzaCanvas?: string;
   matchedPersonelId?: string;
   kisitliSayfalar?: string[];
+  saltOkunurSayfalar?: string[];
 }
 
 export interface HataRaporu {
@@ -57,6 +81,10 @@ interface AdminPanelScreenProps {
   currentUser: any;
   personeller?: any[];
   addNotification?: (mesaj: string) => void;
+  yoklamalar?: AylikYoklamaMap;
+  sahaFaaliyetleri?: SahaFaaliyeti[];
+  kampKayitlari?: KampKaydi[];
+  faturalar?: Fatura[];
 }
 
 export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
@@ -64,13 +92,63 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
   setKullanicilar,
   currentUser,
   personeller = [],
-  addNotification
+  addNotification,
+  yoklamalar = {},
+  sahaFaaliyetleri = [],
+  kampKayitlari = [],
+  faturalar = [],
 }) => {
-  const [activeTab, setActiveTab] = useState<'users' | 'errors'>('users');
+  const visibleKullanicilar = dedupeKullanicilarByEmail(kullanicilar);
+  const [activeTab, setActiveTab] = useState<'users' | 'permissions' | 'pending' | 'create' | 'errors' | 'backup'>('users');
   const [hataRaporlari, setHataRaporlari] = useState<HataRaporu[]>([]);
   const [loadingErrors, setLoadingErrors] = useState(false);
   const [selectedError, setSelectedError] = useState<HataRaporu | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [pendingRoles, setPendingRoles] = useState<Record<string, string>>({});
+  const [savingRoleEmail, setSavingRoleEmail] = useState<string | null>(null);
+
+  const [firestorePending, setFirestorePending] = useState<BekleyenUyelik[]>([]);
+  const [apiPending, setApiPending] = useState<BekleyenUyelik[]>([]);
+  const [loadingPending, setLoadingPending] = useState(false);
+  const [pendingApproveRoles, setPendingApproveRoles] = useState<Record<string, string>>({});
+  const [approvingEmail, setApprovingEmail] = useState<string | null>(null);
+
+  const [createEmail, setCreateEmail] = useState('');
+  const [createPassword, setCreatePassword] = useState('');
+  const [createAd, setCreateAd] = useState('');
+  const [createSoyad, setCreateSoyad] = useState('');
+  const [createTcNo, setCreateTcNo] = useState('');
+  const [createYetki, setCreateYetki] = useState<string>('KAMPÇI');
+  const [creatingUser, setCreatingUser] = useState(false);
+
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [backupOzeti, setBackupOzeti] = useState<Awaited<ReturnType<typeof fetchVeriKorumaOzeti>> | null>(null);
+  const [programYedekleri, setProgramYedekleri] = useState<ProgramVeriYedegi[]>([]);
+
+  const mergedPending = mergePendingLists(
+    firestorePending,
+    apiPending,
+    readLocalPendingQueue()
+  );
+
+  const loadApiPending = useCallback(async () => {
+    setLoadingPending(true);
+    try {
+      const items = await fetchApiPendingSignups();
+      setApiPending(items);
+    } finally {
+      setLoadingPending(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'pending') return;
+    loadApiPending();
+    const unsub = subscribeBekleyenUyelikler(setFirestorePending, (err) =>
+      console.warn('bekleyenUyelikler dinleyici hatası:', err)
+    );
+    return () => unsub();
+  }, [activeTab, loadApiPending]);
 
   // Load error reports
   const loadErrorReports = async () => {
@@ -95,60 +173,261 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
     }
   }, [activeTab]);
 
-  const handleToggleStatus = (id: string) => {
-    const target = kullanicilar.find(u => u.id === id);
+  const loadBackupPanel = useCallback(async () => {
+    setBackupLoading(true);
+    try {
+      const [ozet, yedekler] = await Promise.all([
+        fetchVeriKorumaOzeti(),
+        listProgramVeriYedekleri(15),
+      ]);
+      setBackupOzeti(ozet);
+      setProgramYedekleri(yedekler);
+    } catch (err) {
+      console.error('Yedek paneli yüklenemedi:', err);
+    } finally {
+      setBackupLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'backup') {
+      void loadBackupPanel();
+    }
+  }, [activeTab, loadBackupPanel]);
+
+  const handleCreateProgramBackup = async () => {
+    if (!window.confirm('Mevcut program verisinin anlık yedeği alınsın mı?\n(Yoklama arşivine tam kopya + özet manifest kaydedilir)')) {
+      return;
+    }
+    setBackupLoading(true);
+    try {
+      const ozet = {
+        personel: personeller.length,
+        yoklamaKisi: Object.keys(yoklamalar).length,
+        sahaFaaliyet: sahaFaaliyetleri.length,
+        kampKayit: kampKayitlari.length,
+        fatura: faturalar.length,
+      };
+      const yedek = await createProgramVeriYedegi(
+        yoklamalar,
+        ozet,
+        currentUser?.email || 'admin',
+        'Admin panel — manuel anlık yedek'
+      );
+      if (addNotification) {
+        addNotification(`✅ Program yedeği alındı (${new Date(yedek.olusturmaTarihi).toLocaleString('tr-TR')})`);
+      }
+      alert(`✅ Yedek alındı.\nYoklama arşiv ID: ${yedek.yoklamaArsivId || '—'}`);
+      await loadBackupPanel();
+    } catch (err) {
+      console.error(err);
+      alert(`Yedek alınamadı: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleToggleStatus = async (id: string) => {
+    const target = findKullaniciByEmail(kullanicilar, id) || kullanicilar.find(u => u.id === id);
     if (target?.email === currentUser?.email) {
       alert("Hata: Kendi hesabınızın durumunu kısıtlayamazsınız!");
       return;
     }
+    if (!target) return;
 
-    setKullanicilar(prev => prev.map(u => {
-      if (u.id === id) {
-        let nextDurum: 'AKTİF' | 'KISITLI' | 'ONAY BEKLİYOR' = 'AKTİF';
-        if (u.durum === 'AKTİF') nextDurum = 'KISITLI';
-        else if (u.durum === 'KISITLI') nextDurum = 'ONAY BEKLİYOR';
-        else nextDurum = 'AKTİF';
-        
-        alert(`Kullanıcı (${u.email}) hesabı "${nextDurum}" durumuna getirildi.`);
-        if (addNotification) {
-          addNotification(`${u.email} kullanıcısının hesabı "${nextDurum}" durumuna getirildi.`);
-        }
-        return {
-          ...u,
-          durum: nextDurum
-        };
+    let nextDurum: 'AKTİF' | 'KISITLI' | 'ONAY BEKLİYOR' = 'AKTİF';
+    if (target.durum === 'AKTİF') nextDurum = 'KISITLI';
+    else if (target.durum === 'KISITLI') nextDurum = 'ONAY BEKLİYOR';
+    else nextDurum = 'AKTİF';
+
+    try {
+      const updated = await saveKullanici({ ...target, durum: nextDurum });
+      setKullanicilar(prev => dedupeKullanicilarByEmail(
+        prev.map(u => u.email?.toLowerCase() === target.email.toLowerCase() ? { ...u, ...updated } : u)
+      ));
+      alert(`Kullanıcı (${target.email}) hesabı "${nextDurum}" durumuna getirildi.`);
+      await syncAuthClaimsFromServer(target.email).catch(() => undefined);
+      if (addNotification) {
+        addNotification(`${target.email} kullanıcısının hesabı "${nextDurum}" durumuna getirildi.`);
       }
-      return u;
-    }));
+    } catch {
+      alert('Durum güncellenemedi.');
+    }
   };
 
-  const handleChangeRole = (id: string, newYetki: any) => {
-    setKullanicilar(prev => prev.map(u => {
-      if (u.id === id) {
-        alert(`Kullanıcı (${u.email}) yetki seviyesi "${newYetki}" olarak değiştirildi.`);
-        if (addNotification) {
-          addNotification(`${u.email} kullanıcısının rolü "${newYetki}" olarak güncellendi.`);
-        }
-        return {
-          ...u,
-          yetki: newYetki
-        };
+  const handleSaveRole = async (email: string) => {
+    const newYetki = pendingRoles[email];
+    const target = findKullaniciByEmail(kullanicilar, email);
+    if (!target || !newYetki) return;
+    if (newYetki === target.yetki) {
+      setPendingRoles((prev) => {
+        const next = { ...prev };
+        delete next[email];
+        return next;
+      });
+      return;
+    }
+
+    setSavingRoleEmail(email);
+    try {
+      const updated = await persistKullaniciRole(kullanicilar, target.id, newYetki);
+      setKullanicilar((prev) =>
+        dedupeKullanicilarByEmail(
+          prev.map((u) =>
+            u.email?.trim().toLowerCase() === email.trim().toLowerCase()
+              ? { ...u, ...updated }
+              : u
+          )
+        )
+      );
+      setPendingRoles((prev) => {
+        const next = { ...prev };
+        delete next[email];
+        return next;
+      });
+      alert(
+        `✅ ${email} — "${newYetki}" rolü kaydedildi.\n` +
+          (isMobileRole(newYetki)
+            ? `Erişim: ${getMobileRoleDisplayName(newYetki)} (aynı rolde sınırsız kullanıcı açılabilir).`
+            : 'Masaüstü rol şablonu uygulandı.')
+      );
+      if (addNotification) {
+        addNotification(`${email} kullanıcısının rolü "${newYetki}" olarak kaydedildi.`);
       }
-      return u;
-    }));
+      await syncAuthClaimsFromServer(email).catch(() => undefined);
+    } catch (err) {
+      console.error(err);
+      const msg = err instanceof Error ? err.message : String(err);
+      alert(
+        isFirestoreWriteFailure(err) || msg.includes('FIRESTORE_TIMEOUT')
+          ? 'Firebase kotası veya bağlantı sorunu. Değişiklik kaydedilemedi — birkaç dakika sonra tekrar deneyin.'
+          : 'Rol kaydedilemedi. Lütfen tekrar deneyin.'
+      );
+    } finally {
+      setSavingRoleEmail(null);
+    }
   };
 
-  const handleDeleteUser = (id: string, email: string) => {
+  const handleApprovePending = async (record: BekleyenUyelik) => {
+    const yetki = pendingApproveRoles[record.email] || 'MİSAFİR';
+    setApprovingEmail(record.email);
+    try {
+      const created = await approveBekleyenSignup(record, yetki);
+      setKullanicilar((prev) =>
+        dedupeKullanicilarByEmail([
+          ...prev.filter((u) => u.email?.toLowerCase() !== record.email.toLowerCase()),
+          created as Kullanici,
+        ])
+      );
+      await loadApiPending();
+      const provisioned = await provisionAuthUser(record.email, record.password);
+      if (!provisioned) {
+        console.warn('Auth provision atlandı — FIREBASE_SERVICE_ACCOUNT_JSON kontrol edin');
+      }
+      alert(`✅ ${record.email} onaylandı ve "${yetki}" rolüyle oluşturuldu.`);
+      if (addNotification) {
+        addNotification(`${record.email} bekleyen kayıttan onaylandı (${yetki}).`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Onay başarısız. Firebase kotası dolu olabilir — yarın tekrar deneyin.');
+    } finally {
+      setApprovingEmail(null);
+    }
+  };
+
+  const handleRejectPending = async (record: BekleyenUyelik) => {
+    if (!confirm(`"${record.email}" bekleyen kaydını reddetmek istiyor musunuz?`)) return;
+    try {
+      await rejectBekleyenSignup(record);
+      await loadApiPending();
+      alert('Kayıt reddedildi.');
+    } catch {
+      alert('Kayıt reddedilemedi.');
+    }
+  };
+
+  const handleCreateManualUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createEmail.trim() || !createPassword.trim() || !createAd.trim() || !createSoyad.trim()) {
+      alert('E-posta, şifre, ad ve soyad zorunludur.');
+      return;
+    }
+    if (createPassword.trim().length < 6) {
+      alert('Şifre en az 6 karakter olmalıdır.');
+      return;
+    }
+    if (findKullaniciByEmail(kullanicilar, createEmail.trim())) {
+      alert('Bu e-posta zaten kayıtlı.');
+      return;
+    }
+
+    setCreatingUser(true);
+    try {
+      const { user, queued } = await createManualUser({
+        email: createEmail.trim(),
+        password: createPassword.trim(),
+        ad: createAd.trim(),
+        soyad: createSoyad.trim(),
+        tcNo: createTcNo.trim() || undefined,
+        yetki: createYetki,
+      });
+
+      if (queued) {
+        alert('Firebase kotası dolu. Kullanıcı bekleyen kayıtlar sekmesine alındı — oradan onaylayın.');
+        setActiveTab('pending');
+        await loadApiPending();
+      } else {
+        setKullanicilar((prev) => dedupeKullanicilarByEmail([...prev, user as Kullanici]));
+        alert(`✅ ${user.email} oluşturuldu (${createYetki}).`);
+        if (addNotification) {
+          addNotification(`Admin manuel kullanıcı oluşturdu: ${user.email} (${createYetki})`);
+        }
+        setCreateEmail('');
+        setCreatePassword('');
+        setCreateAd('');
+        setCreateSoyad('');
+        setCreateTcNo('');
+      }
+    } catch (err) {
+      console.error(err);
+      const msg = err instanceof Error ? err.message : String(err);
+      alert(
+        isFirestoreWriteFailure(err) || msg.includes('FIRESTORE_TIMEOUT')
+          ? 'Firebase kotası dolu veya bağlantı zaman aşımı. Kullanıcı "Bekleyen Kayıtlar" sekmesine alındı — oradan onaylayın.'
+          : `Kullanıcı oluşturulamadı: ${msg}`
+      );
+      if (isFirestoreWriteFailure(err)) {
+        setActiveTab('pending');
+        await loadApiPending();
+      }
+    } finally {
+      setCreatingUser(false);
+    }
+  };
+
+  const handleDeleteUser = async (id: string, email: string) => {
     if (email === currentUser?.email) {
       alert("Hata: Kendi hesabınızı silemezsiniz!");
       return;
     }
 
-    if (confirm(`"${email}" kullanıcısını sistemden ve üyelik listesinden tamamen silmek istediğinize emin misiniz?`)) {
-      setKullanicilar(prev => prev.filter(u => u.id !== id));
-      alert("Kullanıcı kaydı başarıyla silindi.");
-      if (addNotification) {
-        addNotification(`${email} kullanıcısı admin tarafından sistemden silindi.`);
+    if (confirm(`"${email}" kullanıcısını sistemden tamamen silmek istediğinize emin misiniz?`)) {
+      try {
+        await deleteKullaniciByEmail(email);
+        setKullanicilar(prev => prev.filter(u => u.email?.toLowerCase() !== email.toLowerCase()));
+        alert("Kullanıcı kaydı Firebase'den kalıcı olarak silindi.");
+        if (addNotification) {
+          addNotification(`${email} kullanıcısı admin tarafından sistemden silindi.`);
+        }
+      } catch (err) {
+        console.error(err);
+        const msg = err instanceof Error ? err.message : String(err);
+        alert(
+          isFirestoreWriteFailure(err) || msg.includes('FIRESTORE_TIMEOUT')
+            ? 'Firebase kotası veya bağlantı sorunu — silme işlemi tamamlanamadı.'
+            : 'Kullanıcı silinemedi.'
+        );
       }
     }
   };
@@ -236,7 +515,40 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
               }`}
             >
               <Users size={14} />
-              <span>ÜYE YETKİLENDİRME VE ROLLER ({kullanicilar.length})</span>
+              <span>ÜYE YETKİLENDİRME ({visibleKullanicilar.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('permissions')}
+              className={`px-4 py-3 text-xs font-extrabold flex items-center gap-2 transition-all outline-none cursor-pointer border-b-2 ${
+                activeTab === 'permissions'
+                  ? 'border-amber-500 text-slate-900 font-black'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Key size={14} />
+              <span>ROL YETKİ ŞABLONLARI</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('pending')}
+              className={`px-4 py-3 text-xs font-extrabold flex items-center gap-2 transition-all outline-none cursor-pointer border-b-2 ${
+                activeTab === 'pending'
+                  ? 'border-amber-500 text-slate-900 font-black'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Clock size={14} className={mergedPending.length > 0 ? 'text-amber-500 animate-pulse' : ''} />
+              <span>BEKLEYEN KAYITLAR ({mergedPending.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('create')}
+              className={`px-4 py-3 text-xs font-extrabold flex items-center gap-2 transition-all outline-none cursor-pointer border-b-2 ${
+                activeTab === 'create'
+                  ? 'border-amber-500 text-slate-900 font-black'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <UserPlus size={14} />
+              <span>MANUEL KULLANICI OLUŞTUR</span>
             </button>
             <button
               onClick={() => setActiveTab('errors')}
@@ -247,9 +559,31 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
               }`}
             >
               <ShieldAlert size={14} className={hataRaporlari.some(h => h.status === 'YENİ') ? 'text-rose-500 animate-pulse' : ''} />
-              <span>SİSTEM HATA RAPORLARI ({hataRaporlari.length})</span>
+              <span>HATA RAPORLARI ({hataRaporlari.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('backup')}
+              className={`px-4 py-3 text-xs font-extrabold flex items-center gap-2 transition-all outline-none cursor-pointer border-b-2 ${
+                activeTab === 'backup'
+                  ? 'border-amber-500 text-slate-900 font-black'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Database size={14} />
+              <span>VERİ KORUMA</span>
             </button>
           </div>
+
+          {activeTab === 'pending' && (
+            <button
+              onClick={loadApiPending}
+              disabled={loadingPending}
+              className="text-slate-500 hover:text-slate-800 p-1.5 hover:bg-slate-200 rounded transition outline-none cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+            >
+              <RefreshCw size={11} className={loadingPending ? 'animate-spin' : ''} />
+              <span>Yenile</span>
+            </button>
+          )}
 
           {activeTab === 'errors' && (
             <button
@@ -261,6 +595,17 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
               <span>Yenile</span>
             </button>
           )}
+
+          {activeTab === 'backup' && (
+            <button
+              onClick={() => void loadBackupPanel()}
+              disabled={backupLoading}
+              className="text-slate-500 hover:text-slate-800 p-1.5 hover:bg-slate-200 rounded transition outline-none cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+            >
+              <RefreshCw size={11} className={backupLoading ? 'animate-spin' : ''} />
+              <span>Yenile</span>
+            </button>
+          )}
         </div>
 
         {/* Tab content wrapper */}
@@ -269,7 +614,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
           {/* TAB 1: USERS */}
           {activeTab === 'users' && (
             <div className="space-y-3">
-              {kullanicilar.length === 0 ? (
+              {visibleKullanicilar.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400 py-16 space-y-2">
                   <AlertCircle size={32} />
                   <p className="text-xs font-semibold">Kayıtlı kullanıcı hesabı bulunamadı.</p>
@@ -287,7 +632,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y text-slate-600">
-                      {kullanicilar.map(user => {
+                      {visibleKullanicilar.map(user => {
                         const isSelf = user.email === currentUser?.email;
                         return (
                           <tr key={user.id} className={`hover:bg-slate-50/55 transition ${isSelf ? 'bg-amber-50/30 font-semibold' : ''}`}>
@@ -342,30 +687,57 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                             </td>
                             <td className="p-3 font-mono text-slate-400">{user.kayitTarihi || new Date().toISOString().split('T')[0]}</td>
                             <td className="p-3">
-                              <select 
-                                className={`p-1.5 text-[11px] font-bold rounded-lg border bg-slate-50 outline-none cursor-pointer text-slate-855 focus:border-blue-500`}
-                                value={user.yetki}
-                                onChange={(e) => handleChangeRole(user.id, e.target.value as any)}
-                              >
-                                <option value="YÖNETİCİ">👑 Sistem Yöneticisi / Müdür</option>
-                                <option value="MUHASEBE">💰 Muhasebe (Finans)</option>
-                                <option value="İDARİ_İŞLER">🏡 İdari İşler (İK)</option>
-                                <option value="SATIN_ALMA">🛒 Satın Alma Şefi</option>
-                                <option value="ŞANTİYE_ŞEFİ">🚧 Şantiye Şefi</option>
-                                <option value="PROJE_MÜDÜRÜ">📋 Proje Müdürü</option>
-                                <option value="ELEKTRİK_ŞEFİ">⚡ Elektrik Şefi</option>
-                                <option value="TESİSAT_ŞEFİ">🔧 Tesisat Şefi</option>
-                                <option value="MEKANİK_ŞEFİ">⚙️ Mekanik Şefi</option>
-                                <option value="İNCE_İŞLER_ŞEFİ">🪜 İnce İşler Şefi</option>
-                                <option value="KABA_İŞLER_ŞEFİ">🧱 Kaba İşler Şefi</option>
-                                <option value="DİZAYN_ŞEFİ">📐 Dizayn Şefi</option>
-                                <option value="PARSEL_ŞEFİ">🗺️ Parsel Şefi</option>
-                                <option value="FORMEN">👷 FORMEN (Saha Mobil)</option>
-                                <option value="KAMPÇI">⛺ KAMPÇI (Kamp Amiri)</option>
-                                <option value="GÜVENLİK">👮 GÜVENLİK (Kapı Kontrol)</option>
-                                <option value="LOJİSTİK">🚚 LOJİSTİK (Malzeme ve Sevkiyat)</option>
-                                <option value="MİSAFİR">⏳ MİSAFİR (Erişimsiz)</option>
-                              </select>
+                              <div className="flex flex-col gap-1.5">
+                                <select 
+                                  className={`p-1.5 text-[11px] font-bold rounded-lg border bg-slate-50 outline-none cursor-pointer text-slate-855 focus:border-blue-500 ${
+                                    pendingRoles[user.email] && pendingRoles[user.email] !== user.yetki
+                                      ? 'border-amber-400 ring-1 ring-amber-300'
+                                      : ''
+                                  }`}
+                                  value={pendingRoles[user.email] ?? user.yetki}
+                                  onChange={(e) =>
+                                    setPendingRoles((prev) => ({
+                                      ...prev,
+                                      [user.email]: e.target.value,
+                                    }))
+                                  }
+                                >
+                                  <option value="YÖNETİCİ">👑 Sistem Yöneticisi / Müdür</option>
+                                  <option value="MUHASEBE">💰 Muhasebe (Finans)</option>
+                                  <option value="İDARİ_İŞLER">🏡 İdari İşler (İK)</option>
+                                  <option value="SATIN_ALMA">🛒 Satın Alma Şefi</option>
+                                  <option value="ŞANTİYE_ŞEFİ">🚧 Şantiye Şefi</option>
+                                  <option value="PROJE_MÜDÜRÜ">📋 Proje Müdürü</option>
+                                  <option value="ELEKTRİK_ŞEFİ">⚡ Elektrik Şefi</option>
+                                  <option value="TESİSAT_ŞEFİ">🔧 Tesisat Şefi</option>
+                                  <option value="MEKANİK_ŞEFİ">⚙️ Mekanik Şefi</option>
+                                  <option value="İNCE_İŞLER_ŞEFİ">🪜 İnce İşler Şefi</option>
+                                  <option value="KABA_İŞLER_ŞEFİ">🧱 Kaba İşler Şefi</option>
+                                  <option value="DİZAYN_ŞEFİ">📐 Dizayn Şefi</option>
+                                  <option value="PARSEL_ŞEFİ">🗺️ Parsel Şefi</option>
+                                  <option value="FORMEN">👷 FORMEN — Mobil Panel + Personel Yönetimi</option>
+                                  <option value="KAMPÇI">⛺ KAMPÇI — Yalnızca Kampçı Mobil</option>
+                                  <option value="GÜVENLİK">👮 GÜVENLİK — Yalnızca Güvenlik Mobil</option>
+                                  <option value="LOJİSTİK">🚚 ŞOFÖR / LOJİSTİK — Yalnızca Şoför Mobil</option>
+                                  <option value="DEPOCU">📦 DEPOCU — Yalnızca Depocu Mobil</option>
+                                  <option value="MİSAFİR">⏳ MİSAFİR (Erişimsiz)</option>
+                                </select>
+                                {(pendingRoles[user.email] ?? user.yetki) !== user.yetki && (
+                                  <button
+                                    type="button"
+                                    disabled={savingRoleEmail === user.email}
+                                    onClick={() => handleSaveRole(user.email)}
+                                    className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-[10px] font-black rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white transition active:scale-95 disabled:opacity-60 cursor-pointer"
+                                  >
+                                    {savingRoleEmail === user.email ? (
+                                      <Loader2 size={12} className="animate-spin" />
+                                    ) : (
+                                      <Save size={12} />
+                                    )}
+                                    <span>YETKİYİ KAYDET</span>
+                                  </button>
+                                )}
+                              </div>
                             </td>
                             <td className="p-3 text-center">
                               <button
@@ -404,6 +776,181 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                 </div>
               )}
             </div>
+          )}
+
+          {/* TAB: ROL YETKİ ŞABLONLARI */}
+          {activeTab === 'permissions' && (
+            <AdminYetkiSablonTab
+              kullanicilar={kullanicilar}
+              setKullanicilar={setKullanicilar}
+              addNotification={addNotification}
+            />
+          )}
+
+          {/* TAB: BEKLEYEN KAYITLAR */}
+          {activeTab === 'pending' && (
+            <div className="space-y-3 max-w-5xl mx-auto w-full">
+              <p className="text-[10px] text-slate-500 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                Firebase kotası dolduğunda kayıt formundan gelen üyelikler buraya düşer. Rol seçip <strong>ONAYLA</strong> dediğinizde hesap oluşturulur.
+              </p>
+              {mergedPending.length === 0 ? (
+                <div className="py-16 text-center text-slate-400 flex flex-col items-center gap-2">
+                  <CheckCircle size={32} className="text-emerald-400" />
+                  <p className="text-xs font-semibold">Bekleyen kayıt yok.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {mergedPending.map((record) => (
+                    <div
+                      key={record.email}
+                      className="border border-slate-200 rounded-2xl p-4 bg-white flex flex-col md:flex-row md:items-center gap-4"
+                    >
+                      <div className="flex-grow min-w-0 space-y-1">
+                        <p className="font-bold text-slate-900 truncate">{record.email}</p>
+                        <p className="text-[11px] text-slate-600">
+                          {record.ad} {record.soyad} · TC: {record.tcNo}
+                        </p>
+                        <p className="text-[9px] text-slate-400 font-mono">
+                          {new Date(record.olusturulma).toLocaleString('tr-TR')} · {record.kaynak}
+                          {record.hataSebebi ? ` · ${record.hataSebebi}` : ''}
+                          {record.apiYedek ? ' · API yedek' : ''}
+                        </p>
+                      </div>
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+                        <select
+                          className="p-2 text-[11px] font-bold rounded-lg border bg-slate-50"
+                          value={pendingApproveRoles[record.email] ?? 'MİSAFİR'}
+                          onChange={(e) =>
+                            setPendingApproveRoles((prev) => ({
+                              ...prev,
+                              [record.email]: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="MİSAFİR">MİSAFİR</option>
+                          <option value="KAMPÇI">KAMPÇI</option>
+                          <option value="FORMEN">FORMEN</option>
+                          <option value="GÜVENLİK">GÜVENLİK</option>
+                          <option value="LOJİSTİK">LOJİSTİK</option>
+                          <option value="DEPOCU">DEPOCU</option>
+                          <option value="MUHASEBE">MUHASEBE</option>
+                          <option value="YÖNETİCİ">YÖNETİCİ</option>
+                        </select>
+                        <button
+                          type="button"
+                          disabled={approvingEmail === record.email}
+                          onClick={() => handleApprovePending(record)}
+                          className="flex items-center justify-center gap-1 px-3 py-2 text-[10px] font-black rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white cursor-pointer disabled:opacity-60"
+                        >
+                          {approvingEmail === record.email ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            <Check size={12} />
+                          )}
+                          ONAYLA
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRejectPending(record)}
+                          className="flex items-center justify-center gap-1 px-3 py-2 text-[10px] font-black rounded-lg bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 cursor-pointer"
+                        >
+                          <XOctagon size={12} />
+                          REDDET
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB: MANUEL KULLANICI */}
+          {activeTab === 'create' && (
+            <form
+              onSubmit={handleCreateManualUser}
+              className="max-w-lg mx-auto w-full space-y-4 bg-white border border-slate-200 rounded-2xl p-5"
+            >
+              <p className="text-[10px] text-slate-500">
+                Firebase kotası uygunsa kullanıcı anında oluşturulur. Kota doluysa bekleyen kayıtlara düşer.
+              </p>
+              <div>
+                <label className="text-[9px] font-bold text-slate-500 uppercase">E-posta *</label>
+                <input
+                  type="email"
+                  required
+                  value={createEmail}
+                  onChange={(e) => setCreateEmail(e.target.value)}
+                  className="w-full mt-1 p-2.5 text-xs border rounded-xl"
+                  placeholder="ornek@firma.com"
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-slate-500 uppercase">Şifre * (min 6)</label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={createPassword}
+                  onChange={(e) => setCreatePassword(e.target.value)}
+                  className="w-full mt-1 p-2.5 text-xs border rounded-xl"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[9px] font-bold text-slate-500 uppercase">Ad *</label>
+                  <input
+                    required
+                    value={createAd}
+                    onChange={(e) => setCreateAd(e.target.value)}
+                    className="w-full mt-1 p-2.5 text-xs border rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-slate-500 uppercase">Soyad *</label>
+                  <input
+                    required
+                    value={createSoyad}
+                    onChange={(e) => setCreateSoyad(e.target.value)}
+                    className="w-full mt-1 p-2.5 text-xs border rounded-xl"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-slate-500 uppercase">TC No (opsiyonel)</label>
+                <input
+                  value={createTcNo}
+                  onChange={(e) => setCreateTcNo(e.target.value)}
+                  className="w-full mt-1 p-2.5 text-xs border rounded-xl"
+                  maxLength={11}
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-slate-500 uppercase">Rol *</label>
+                <select
+                  value={createYetki}
+                  onChange={(e) => setCreateYetki(e.target.value)}
+                  className="w-full mt-1 p-2.5 text-xs font-bold border rounded-xl bg-slate-50"
+                >
+                  <option value="KAMPÇI">KAMPÇI</option>
+                  <option value="FORMEN">FORMEN</option>
+                  <option value="GÜVENLİK">GÜVENLİK</option>
+                  <option value="LOJİSTİK">LOJİSTİK</option>
+                  <option value="DEPOCU">DEPOCU</option>
+                  <option value="MUHASEBE">MUHASEBE</option>
+                  <option value="YÖNETİCİ">YÖNETİCİ</option>
+                  <option value="MİSAFİR">MİSAFİR</option>
+                </select>
+              </div>
+              <button
+                type="submit"
+                disabled={creatingUser}
+                className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs py-3 rounded-xl cursor-pointer disabled:opacity-60"
+              >
+                {creatingUser ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+                KULLANICI OLUŞTUR
+              </button>
+            </form>
           )}
 
           {/* TAB 2: SYSTEM ERRORS */}
@@ -586,6 +1133,87 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                   </div>
 
                 </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'backup' && (
+            <div className="space-y-5 max-w-4xl mx-auto">
+              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-100 rounded-2xl p-5 space-y-3">
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                  <Database size={16} className="text-emerald-600" />
+                  Program Veri Koruma Merkezi
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Yoklama ve saha faaliyetleri her kayıtta otomatik arşivlenir. Buradan ek olarak tüm programın anlık özet yedeğini alabilirsiniz.
+                  Tam sunucu yedeği için bilgisayarınızda <code className="bg-white px-1 rounded text-[10px]">npm run backup:firestore</code> komutunu çalıştırın (gece 02:00 otomatik görev önerilir).
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void handleCreateProgramBackup()}
+                  disabled={backupLoading}
+                  className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-4 py-2.5 rounded-xl disabled:opacity-60"
+                >
+                  {backupLoading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                  ANLIK PROGRAM YEDEĞİ AL
+                </button>
+              </div>
+
+              {backupLoading && !backupOzeti ? (
+                <div className="py-12 text-center text-slate-500 flex flex-col items-center gap-2">
+                  <Loader2 className="animate-spin text-emerald-500" size={22} />
+                  <span className="text-xs font-bold">Yedek bilgileri yükleniyor...</span>
+                </div>
+              ) : (
+                <>
+                  {backupOzeti && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {[
+                        { label: 'Yoklama arşivi', value: backupOzeti.yoklamaArsivSayisi },
+                        { label: 'Saha arşivi', value: backupOzeti.sahaArsivSayisi },
+                        { label: 'Program yedeği', value: backupOzeti.programYedekSayisi },
+                        { label: 'Personel (şimdi)', value: personeller.length },
+                      ].map((item) => (
+                        <div key={item.label} className="bg-white border rounded-xl p-3 text-center">
+                          <p className="text-[9px] font-black text-slate-400 uppercase">{item.label}</p>
+                          <p className="text-xl font-black text-slate-900">{item.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="bg-white border rounded-2xl overflow-hidden">
+                    <div className="bg-slate-50 px-4 py-2 border-b text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                      Son program yedekleri
+                    </div>
+                    {programYedekleri.length === 0 ? (
+                      <p className="p-6 text-xs text-slate-400 text-center">Henüz manuel program yedeği alınmamış.</p>
+                    ) : (
+                      <div className="divide-y">
+                        {programYedekleri.map((y) => (
+                          <div key={y.id} className="px-4 py-3 text-xs flex flex-wrap justify-between gap-2">
+                            <div>
+                              <p className="font-bold text-slate-800">
+                                {new Date(y.olusturmaTarihi).toLocaleString('tr-TR')}
+                              </p>
+                              <p className="text-[10px] text-slate-500">{y.kullanici} · {y.not || '—'}</p>
+                            </div>
+                            <div className="text-[10px] text-slate-600 font-mono">
+                              P:{y.ozet?.personel ?? '—'} Y:{y.ozet?.yoklamaKisi ?? '—'} S:{y.ozet?.sahaFaaliyet ?? '—'} K:{y.ozet?.kampKayit ?? '—'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="text-[10px] text-slate-500 bg-slate-50 border rounded-xl p-4 space-y-1">
+                    <p className="font-bold text-slate-700">Sekme bazlı geri yükleme</p>
+                    <p>• Yoklama / Puantaj → Arşiv panelinden günlük yedekleri geri yükleyin</p>
+                    <p>• Saha Faaliyetleri → İdari İşler sekmesindeki Faaliyet Arşivi</p>
+                    <p>• Tam Firestore yedeği → <code>npm run restore:yoklama:dry-run</code> (sadece yoklama, kamp/saha dokunulmaz)</p>
+                  </div>
+                </>
               )}
             </div>
           )}

@@ -3,6 +3,7 @@ import {
   FileText, Plus, Trash2, CheckCircle2, AlertTriangle, Eye, Printer, Download, Search, Edit3, Landmark, UserCheck, ShieldAlert, BadgeInfo
 } from 'lucide-react';
 import { db } from '../lib/firebase';
+import { KibritciLogo } from './KibritciLogo';
 import { collection, query, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 interface IzinFormu {
@@ -24,8 +25,9 @@ interface IzinFormu {
 
 interface Personel {
   id: string;
-  adSoyad: string;
-  unvan: string;
+  ad: string;
+  soyad: string;
+  gorev: string;
 }
 
 interface PersonelIzinScreenProps {
@@ -86,8 +88,8 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({ personel
             id: 'sample_1',
             tarih: '2026-06-18',
             personelId: personeller[0]?.id || 'p_1',
-            personelIsim: personeller[0]?.adSoyad || 'Ayhan Yılmaz',
-            unvan: personeller[0]?.unvan || 'Kule Vinç Operatörü',
+            personelIsim: personeller[0] ? `${personeller[0].ad} ${personeller[0].soyad}` : 'Ayhan Yılmaz',
+            unvan: personeller[0]?.gorev || 'Kule Vinç Operatörü',
             izinTipi: 'YILLIK_IZIN',
             baslangicTarihi: '2026-07-01',
             bitisTarihi: '2026-07-07',
@@ -108,8 +110,8 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({ personel
             id: 'sample_1',
             tarih: '2026-06-18',
             personelId: personeller[0]?.id || 'p_1',
-            personelIsim: personeller[0]?.adSoyad || 'Ayhan Yılmaz',
-            unvan: personeller[0]?.unvan || 'Kule Vinç Operatörü',
+            personelIsim: personeller[0] ? `${personeller[0].ad} ${personeller[0].soyad}` : 'Ayhan Yılmaz',
+            unvan: personeller[0]?.gorev || 'Kule Vinç Operatörü',
             izinTipi: 'YILLIK_IZIN',
             baslangicTarihi: '2026-07-01',
             bitisTarihi: '2026-07-07',
@@ -151,8 +153,8 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({ personel
     } else {
       const matchedPers = personeller.find(p => p.id === selectedPersonelId);
       if (!matchedPers) return;
-      pName = matchedPers.adSoyad;
-      pUnvan = matchedPers.unvan;
+      pName = `${matchedPers.ad} ${matchedPers.soyad}`;
+      pUnvan = matchedPers.gorev;
     }
 
     const todayStr = new Date().toISOString().split('T')[0];
@@ -296,7 +298,7 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({ personel
                 >
                   <option value="">Lütfen listeden çalışan seçin</option>
                   {personeller.map(p => (
-                    <option key={p.id} value={p.id}>{p.adSoyad} ({p.unvan})</option>
+                    <option key={p.id} value={p.id}>{p.ad} {p.soyad} ({p.gorev})</option>
                   ))}
                 </select>
               ) : (
@@ -529,23 +531,8 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({ personel
                 {/* Kibritçi Header Logo */}
                 <div className="flex justify-between items-center border-b pb-4">
                   <div className="flex items-center space-x-3">
-                    {/* Elegant Architectural K-shaped SVG Logo */}
-                    <div className="flex items-center space-x-2 shrink-0 h-12">
-                      <svg viewBox="0 0 140 120" className="h-full w-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="5" y="5" width="112" height="112" rx="10" stroke="#1E4E78" strokeWidth="4" />
-                        <path d="M15 115 V75 L35 50 V115" fill="#8B1E1E" />
-                        <path d="M35 115 V52 L58 30 V115" fill="#B91C1C" />
-                        <path d="M58 52 L95 90 H72 L45 61 Z" fill="#8B1E1E" />
-                        <path d="M58 85 L95 115 H72 L58 100 Z" fill="#1E4E78" />
-                        <line x1="15" y1="115" x2="115" y2="115" stroke="#1E4E78" strokeWidth="4" />
-                      </svg>
-                      <div className="flex flex-col leading-none font-bold">
-                        <span className="text-[#1E4E78] tracking-wider text-xs uppercase font-extrabold">KİBRİTÇİ</span>
-                        <span className="text-[#8B1E1E] tracking-widest text-[8px] mt-0.5">İNŞAAT A.Ş.</span>
-                      </div>
-                    </div>
-                    <div className="pl-3">
-                      <h2 className="text-xs font-black text-slate-900 tracking-wider">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h2>
+                    <KibritciLogo size="md" className="h-12" />
+                    <div className="pl-1">
                       <span className="text-[9px] text-slate-500 font-bold block uppercase tracking-widest mt-0.5">RESMİ PERSONEL İZİN TALEP VE ONAY FORMU</span>
                     </div>
                   </div>

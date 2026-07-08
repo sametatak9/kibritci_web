@@ -1,0 +1,372 @@
+import { AylikYoklamaMap, GunlukYoklama, Personel, YoklamaDurum } from '../types/erp';
+
+export interface YoklamaGunKaydi {
+  durum: YoklamaDurum;
+  mesaiSaati: number;
+  gonderen?: string;
+}
+
+type PersonelYoklamaMap = GunlukYoklama | Record<string, YoklamaGunKaydi>;
+
+/** GunlukYoklama → iterateMonthYoklama uyumlu kayıt haritası */
+export function asYoklamaGunMap(
+  personMap: PersonelYoklamaMap | undefined
+): Record<string, YoklamaGunKaydi> | undefined {
+  if (!personMap) return undefined;
+  return personMap as unknown as Record<string, YoklamaGunKaydi>;
+}
+
+export function yoklamaDateKey(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+export function parseYoklamaDateKey(key: string): { year: number; month: number; day: number } | null {
+  const parts = key.split('-');
+  if (parts.length !== 3) return null;
+  const year = Number(parts[0]);
+  const month = Number(parts[1]);
+  const day = Number(parts[2]);
+  if (!year || !month || !day) return null;
+  return { year, month, day };
+}
+
+function isLegacyPersonelMap(personMap: Record<string, YoklamaGunKaydi>): boolean {
+  return Object.keys(personMap).length > 0 && Object.keys(personMap).every(k => /^\d{1,2}$/.test(k));
+}
+
+export function getYoklamaDay(
+  personMap: PersonelYoklamaMap | undefined,
+  year: number,
+  month: number,
+  day: number
+): YoklamaGunKaydi | undefined {
+  const map = asYoklamaGunMap(personMap);
+  if (!map) return undefined;
+  const dateKey = yoklamaDateKey(year, month, day);
+  return map[dateKey];
+}
+
+export function setYoklamaDay(
+  personMap: PersonelYoklamaMap | undefined,
+  year: number,
+  month: number,
+  day: number,
+  data: YoklamaGunKaydi
+): Record<string, YoklamaGunKaydi> {
+  const map = asYoklamaGunMap(personMap);
+  const dateKey = yoklamaDateKey(year, month, day);
+  return { ...(map || {}), [dateKey]: data };
+}
+
+/** Formen sıfırlama: o günün Geldi/Yok kaydını kaldırır */
+export function clearYoklamaDay(
+  personMap: PersonelYoklamaMap | undefined,
+  year: number,
+  month: number,
+  day: number
+): Record<string, YoklamaGunKaydi> | undefined {
+  const map = asYoklamaGunMap(personMap);
+  if (!map) return undefined;
+  const dateKey = yoklamaDateKey(year, month, day);
+  const legacyKey = String(day);
+  const next = { ...map };
+  delete next[dateKey];
+  if (legacyKey !== dateKey) delete next[legacyKey];
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+export function personHasYoklamaInMonth(
+  personMap: PersonelYoklamaMap | undefined,
+  year: number,
+  month: number
+): boolean {
+  let found = false;
+  iterateMonthYoklama(personMap, year, month, (_day, data) => {
+    if (data?.durum && data.durum !== 'Girilmedi') found = true;
+  });
+  return found;
+}
+
+export function personHasGeldiInMonth(
+  personMap: PersonelYoklamaMap | undefined,
+  year: number,
+  month: number
+): boolean {
+  let found = false;
+  iterateMonthYoklama(personMap, year, month, (_day, data) => {
+    if (data?.durum === 'Geldi') found = true;
+  });
+  return found;
+}
+
+function parseFlexibleDateParts(
+  raw?: string
+): { year: number; month: number; day: number } | null {
+  if (!raw) return null;
+  const v = raw.trim();
+  if (!v) return null;
+
+  // yyyy-mm-dd / yyyy/mm/dd
+  const ymd = v.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (ymd) {
+    const year = Number(ymd[1]);
+    const month = Number(ymd[2]);
+    const day = Number(ymd[3]);
+    if (year >= 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return { year, month, day };
+    }
+  }
+
+  // dd-mm-yyyy / dd.mm.yyyy / dd/mm/yyyy
+  const dmy = v.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (dmy) {
+    const day = Number(dmy[1]);
+    const month = Number(dmy[2]);
+    const year = Number(dmy[3]);
+    if (year >= 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return { year, month, day };
+    }
+  }
+
+  return null;
+}
+
+/** Yoklama kaydı varsa işe giriş/çıkış filtresini uygulama */
+export function isPersonelVisibleInMonth(
+  p: Personel,
+  year: number,
+  month: number,
+  personMap?: PersonelYoklamaMap
+): boolean {
+  const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
+  const hire = parseFlexibleDateParts(p.iseGirisTarihi);
+  if (hire) {
+    const hireY = hire.year;
+    const hireM = hire.month;
+    if (hireY > year || (hireY === year && hireM > month)) return false;
+  }
+  const exit = parseFlexibleDateParts(p.istenCikisTarihi);
+  if (exit) {
+    const exitY = exit.year;
+    const exitM = exit.month;
+    if (exitY < year || (exitY === year && exitM < month)) return false;
+  } else if (!isAktif && !p.istenCikisTarihi) {
+    return false;
+  }
+  if (personMap && personHasYoklamaInMonth(personMap, year, month)) return true;
+  return true;
+}
+
+/** Kayıtlı yoklama varsa hücreyi her zaman göster (harfiyen) */
+export function isDayActiveForPersonel(
+  p: Personel,
+  year: number,
+  month: number,
+  day: number,
+  personMap?: PersonelYoklamaMap
+): boolean {
+  const hire = parseFlexibleDateParts(p.iseGirisTarihi);
+  if (hire) {
+    const hireY = hire.year;
+    const hireM = hire.month;
+    const hireD = hire.day;
+    const currentDateVal = year * 10000 + month * 100 + day;
+    const hireDateVal = hireY * 10000 + hireM * 100 + hireD;
+    if (currentDateVal < hireDateVal) return false;
+  }
+  const exit = parseFlexibleDateParts(p.istenCikisTarihi);
+  if (exit) {
+    const exitY = exit.year;
+    const exitM = exit.month;
+    const exitD = exit.day;
+    const currentDateVal = year * 10000 + month * 100 + day;
+    const exitDateVal = exitY * 10000 + exitM * 100 + exitD;
+    if (currentDateVal > exitDateVal) return false;
+  }
+
+  const dayData = personMap ? getYoklamaDay(personMap, year, month, day) : undefined;
+  if (dayData?.durum && dayData.durum !== 'Girilmedi') return true;
+  return true;
+}
+
+export function iterateMonthYoklama(
+  personMap: PersonelYoklamaMap | undefined,
+  year: number,
+  month: number,
+  callback: (day: number, data: YoklamaGunKaydi) => void
+): void {
+  const map = asYoklamaGunMap(personMap);
+  if (!map) return;
+  const prefix = `${year}-${String(month).padStart(2, '0')}-`;
+
+  Object.entries(map).forEach(([key, data]) => {
+    if (key.startsWith(prefix)) {
+      const day = Number(key.slice(prefix.length));
+      if (day >= 1 && day <= 31) callback(day, data);
+    }
+  });
+}
+
+export function migrateLegacyYoklamaMap(
+  map: AylikYoklamaMap,
+  defaultYear = 2026,
+  defaultMonth = 6
+): AylikYoklamaMap {
+  const migrated: AylikYoklamaMap = {};
+  Object.entries(map).forEach(([personelId, personMap]) => {
+    if (!personMap || typeof personMap !== 'object') return;
+    if (!isLegacyPersonelMap(personMap as Record<string, YoklamaGunKaydi>)) {
+      migrated[personelId] = personMap;
+      return;
+    }
+    const nextMap: Record<string, YoklamaGunKaydi> = {};
+    Object.entries(personMap as Record<string, YoklamaGunKaydi>).forEach(([dayKey, data]) => {
+      const day = Number(dayKey);
+      if (day >= 1 && day <= 31) {
+        nextMap[yoklamaDateKey(defaultYear, defaultMonth, day)] = data;
+      }
+    });
+    migrated[personelId] = nextMap;
+  });
+  return migrated;
+}
+
+export function normalizeTurkishName(name: string): string {
+  return name
+    .trim()
+    .toLocaleUpperCase('tr-TR')
+    .replace(/\s+/g, ' ')
+    .replace(/İ/g, 'I')
+    .replace(/Ş/g, 'S')
+    .replace(/Ğ/g, 'G')
+    .replace(/Ü/g, 'U')
+    .replace(/Ö/g, 'O')
+    .replace(/Ç/g, 'C')
+    .replace(/\s/g, '');
+}
+
+function normalizeCompanyName(name: string): string {
+  return String(name || '')
+    .toLocaleUpperCase('tr-TR')
+    .replace(/İ/g, 'I')
+    .replace(/Ş/g, 'S')
+    .replace(/Ğ/g, 'G')
+    .replace(/Ü/g, 'U')
+    .replace(/Ö/g, 'O')
+    .replace(/Ç/g, 'C')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isKibritciCompany(name: string): boolean {
+  const n = normalizeCompanyName(name);
+  return !n || n.includes('KIBRITCI');
+}
+
+export function isTaseronPersonel(p?: Personel): boolean {
+  if (!p) return false;
+  if (p.firmaTipi === 'TASERON') return true;
+  const firmaAdi = String(p.firmaAdi || '').trim();
+  if (!firmaAdi) return false;
+  return !isKibritciCompany(firmaAdi);
+}
+
+export function findPersonelByName(personeller: Personel[], adSoyad: string): Personel | undefined {
+  const target = normalizeTurkishName(adSoyad);
+  if (!target) return undefined;
+
+  return personeller.find(p => {
+    const full = normalizeTurkishName(`${p.ad} ${p.soyad}`);
+    return full === target || full.includes(target) || target.includes(full);
+  });
+}
+
+export function createMinimalPersonel(ad: string, soyad: string, opts?: {
+  gorev?: string;
+  maas?: number;
+  iseGirisTarihi?: string;
+  istenCikisTarihi?: string;
+  legacyExcelId?: number;
+}): Personel {
+  const stamp = Date.now().toString().slice(-4);
+  return {
+    id: opts?.legacyExcelId != null ? `PRS-LEGACY-L${opts.legacyExcelId}` : `PRS-LEGACY-${stamp}`,
+    tcNo: '',
+    ad: ad.trim().toUpperCase(),
+    soyad: soyad.trim().toUpperCase(),
+    babaAdi: '',
+    dogumTarihi: '1990-01-01',
+    telefonNo: '',
+    eposta: '',
+    adres: 'Yüksekova Konut Şantiyesi Kampı',
+    il: '',
+    ilce: '',
+    departman: 'Şantiye',
+    gorev: opts?.gorev || 'DÜZ İŞÇİ',
+    iseGirisTarihi: opts?.iseGirisTarihi || '2026-02-01',
+    istenCikisTarihi: opts?.istenCikisTarihi,
+    cinsiyet: 'Erkek',
+    maas: opts?.maas ?? 30000,
+    ucretTipi: 'Aylık',
+    sgkDurumu: 'Sigortasız',
+    bankaAdi: '',
+    subeAdi: '',
+    ibanNo: '',
+    durum: !opts?.istenCikisTarihi,
+  };
+}
+
+export function buildPersonelListForMonth(
+  personeller: Personel[],
+  yoklamalar: AylikYoklamaMap,
+  year: number,
+  month: number,
+  resolveStub?: (personelId: string) => Personel | undefined
+): Personel[] {
+  const byId = new Map(personeller.map(p => [p.id, p]));
+  const ids = new Set<string>();
+
+  personeller.forEach(p => {
+    // Taşeron personeller kamp/personel kart akışında tutulur; yoklama listesine girmez.
+    if (isTaseronPersonel(p)) return;
+    if (isPersonelVisibleInMonth(p, year, month, asYoklamaGunMap(yoklamalar[p.id]))) ids.add(p.id);
+  });
+  Object.entries(yoklamalar).forEach(([id, map]) => {
+    // Güvenlik: Personel yönetiminde olmayan (orphan / legacy-stub) ID'leri yoklama listesine taşımayız.
+    // Bu, "kayıtlı olmayan personel yoklamada görünüyor" ve mükerrer satır riskini azaltır.
+    const existing = byId.get(id);
+    if (!existing) return;
+    if (isTaseronPersonel(existing)) return;
+    const personMap = asYoklamaGunMap(map);
+    if (!personHasYoklamaInMonth(personMap, year, month)) return;
+    if (!isPersonelVisibleInMonth(existing, year, month, personMap)) return;
+    ids.add(id);
+  });
+
+  const list = Array.from(ids)
+    .map(id => byId.get(id) ?? resolveStub?.(id))
+    .filter((p): p is Personel => !!p)
+    .sort((a, b) => `${a.ad} ${a.soyad}`.localeCompare(`${b.ad} ${b.soyad}`, 'tr'));
+
+  // Aynı kişinin (özellikle legacy/stub ID kaynaklı) birden fazla satır görünmesini engelle.
+  const deduped = new Map<string, Personel>();
+  const score = (p: Personel): number => {
+    let s = 0;
+    if ((p.tcNo || '').trim()) s += 100;
+    if (!p.id.startsWith('PRS-LEGACY')) s += 50;
+    if (p.durum === true || String(p.durum).toLowerCase() === 'true') s += 10;
+    return s;
+  };
+
+  for (const p of list) {
+    const key = (p.tcNo || '').trim() || normalizeTurkishName(`${p.ad} ${p.soyad}`);
+    const existing = deduped.get(key);
+    if (!existing || score(p) > score(existing)) {
+      deduped.set(key, p);
+    }
+  }
+
+  return Array.from(deduped.values()).sort((a, b) =>
+    `${a.ad} ${a.soyad}`.localeCompare(`${b.ad} ${b.soyad}`, 'tr')
+  );
+}

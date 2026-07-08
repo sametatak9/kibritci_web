@@ -5,9 +5,18 @@ import {
   FileUp, ExternalLink, MessageSquare, AlertTriangle, Sparkles, Package, Tent, X
 } from 'lucide-react';
 import { SatinAlmaTalebi, Irsaliye, Fatura } from '../types/erp';
-import { db } from '../lib/firebase';
+import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { collection, doc, setDoc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
+import {
+  buildSingleApprovalUpdate,
+  buildWhatsAppUrl,
+  canApproveMobilDocuments,
+  isMobilDocPending,
+  normalizeKampFaaliyetForDisplay,
+  normalizeKampSayimForDisplay,
+} from '../lib/mobilOnayUtils';
+import { kibritciLogoHtml } from '../lib/kibritciBrand';
 
 interface OnayIslemleriScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
@@ -36,7 +45,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   signatureStyle,
   addNotification
 }) => {
-  const [activeTab, setActiveTab] = useState<'satin_alma' | 'guvenlik_belgeleri' | 'kampci_belgeleri' | 'formen_belgeleri' | 'sofor_talepleri' | 'gecmis' | 'imzalar'>('satin_alma');
+  const [activeTab, setActiveTab] = useState<'satin_alma' | 'guvenlik_belgeleri' | 'kampci_belgeleri' | 'formen_belgeleri' | 'gunluk_loglar' | 'sofor_talepleri' | 'depocu_talepleri' | 'gecmis' | 'imzalar'>('satin_alma');
   const [selectedYoneticiEmail, setSelectedYoneticiEmail] = useState<string>('');
   const [stampText, setStampText] = useState<string>('🔵 ŞİRKET GENEL MÜDÜRÜ (E-İMZA)');
   const [customStamp, setCustomStamp] = useState<string>('');
@@ -55,9 +64,43 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
   const [kampSayimlar, setKampSayimlar] = useState<any[]>([]);
   const [kampFaaliyetler, setKampFaaliyetler] = useState<any[]>([]);
+  const [gunlukAkisRaporlari, setGunlukAkisRaporlari] = useState<any[]>([]);
 
   const [aracOnayTalepleri, setAracOnayTalepleri] = useState<any[]>([]);
   const [yolHarcamalari, setYolHarcamalari] = useState<any[]>([]);
+
+  const [stokKartTalepleri, setStokKartTalepleri] = useState<any[]>([]);
+  const [depoSayimTalepleri, setDepoSayimTalepleri] = useState<any[]>([]);
+
+  // Load and subscribe to Depocu collections from Firestore
+  useEffect(() => {
+    const unsubStok = onSnapshot(collection(db, 'stokKartlar'), (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.durum === 'ONAY BEKLİYOR') {
+          list.push({ id: doc.id, ...data });
+        }
+      });
+      setStokKartTalepleri(list);
+    });
+
+    const unsubSayim = onSnapshot(collection(db, 'depoSayimlari'), (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.durum === 'ONAY BEKLİYOR') {
+          list.push({ id: doc.id, ...data });
+        }
+      });
+      setDepoSayimTalepleri(list);
+    });
+
+    return () => {
+      unsubStok();
+      unsubSayim();
+    };
+  }, []);
 
   // Load and subscribe to Chauffeur collections from Firestore
   useEffect(() => {
@@ -175,6 +218,79 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
     }
   };
 
+  const handleApproveStokKart = async (item: any) => {
+    if (!window.confirm(`"${item.stokAdi}" (${item.stokKodu}) stok kartını onaylıyor musunuz?`)) return;
+    try {
+      await updateDoc(doc(db, 'stokKartlar', item.id), {
+        durum: 'AKTIF',
+        onaylayanYonetici: currentUser?.email || 'Sistem Yöneticisi',
+        onayTarihi: new Date().toISOString().split('T')[0]
+      });
+      alert("🎉 Stok kartı onaylandı ve 'AKTIF' olarak kaydedildi!");
+    } catch (err) {
+      console.error(err);
+      alert("Onaylama sırasında bir hata oluştu.");
+    }
+  };
+
+  const handleRejectStokKart = async (item: any) => {
+    if (!window.confirm(`"${item.stokAdi}" stok kartını reddetmek istiyor musunuz?`)) return;
+    try {
+      await updateDoc(doc(db, 'stokKartlar', item.id), {
+        durum: 'REDDEDILDI',
+        onaylayanYonetici: currentUser?.email || 'Sistem Yöneticisi',
+        onayTarihi: new Date().toISOString().split('T')[0],
+        redNedeni: 'Yönetici tarafından reddedildi',
+      });
+      alert('🛑 Stok kartı talebi reddedildi (kayıt korunarak arşivlendi).');
+    } catch (err) {
+      console.error(err);
+      alert("Reddetme işlemi başarısız.");
+    }
+  };
+
+  const handleApproveDepoSayim = async (item: any) => {
+    if (!window.confirm(`Hafta ${item.haftaNo} depo sayımını onaylıyor musunuz? Bu işlem depodaki stok miktarlarını sayım miktarlarıyla güncelleyecektir.`)) return;
+    try {
+      // 1. Update sayim status to ONAYLANDI
+      await updateDoc(doc(db, 'depoSayimlari', item.id), {
+        durum: 'ONAYLANDI',
+        onaylayanYonetici: currentUser?.email || 'Sistem Yöneticisi',
+        onayTarihi: new Date().toISOString().split('T')[0]
+      });
+
+      // 2. Update stock card quantities with count physical quantities
+      if (item.kalemler && Array.isArray(item.kalemler)) {
+        for (const k of item.kalemler) {
+          if (k.stockId) {
+            const stockRef = doc(db, 'stokKartlar', k.stockId);
+            await updateDoc(stockRef, { miktar: k.physicalQty });
+          }
+        }
+      }
+
+      alert("🎉 Depo sayımı onaylandı ve tüm stoklar fiziksel miktarlarıyla güncellendi!");
+    } catch (err) {
+      console.error(err);
+      alert("Onaylama işlemi sırasında bir hata oluştu.");
+    }
+  };
+
+  const handleRejectDepoSayim = async (item: any) => {
+    if (!window.confirm(`Hafta ${item.haftaNo} depo sayımını reddetmek istiyor musunuz?`)) return;
+    try {
+      await updateDoc(doc(db, 'depoSayimlari', item.id), {
+        durum: 'REDDEDİLDİ',
+        onaylayanYonetici: currentUser?.email || 'Sistem Yöneticisi',
+        onayTarihi: new Date().toISOString().split('T')[0]
+      });
+      alert("🛑 Depo sayımı reddedildi.");
+    } catch (err) {
+      console.error(err);
+      alert("Reddetme işlemi başarısız.");
+    }
+  };
+
   // Load and subscribe to personelGirisTalepleri from Firestore
   useEffect(() => {
     const coll = collection(db, 'personelGirisTalepleri');
@@ -241,37 +357,65 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
     };
   }, []);
 
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'mobilGunlukAkisRaporlari'), (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((d) => list.push({ id: d.id, ...d.data() }));
+      setGunlukAkisRaporlari(
+        list.sort(
+          (a, b) =>
+            new Date(b.olusturulma || 0).getTime() - new Date(a.olusturulma || 0).getTime()
+        )
+      );
+    });
+    return () => unsub();
+  }, []);
+
   const handleApproveKampItem = async (type: 'sayim' | 'faaliyet', id: string) => {
     try {
       const matchedUser = kullanicilar.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
       const role = matchedUser?.yetki || 'YÖNETİCİ';
-      
+      if (!canApproveMobilDocuments(role, currentUser?.email)) {
+        alert('Bu belgeyi onaylama yetkiniz bulunmuyor.');
+        return;
+      }
+
       const docRef = doc(db, type === 'sayim' ? 'kampDepoSayimlari' : 'kampGunlukFaaliyetleri', id);
-      const updateData: any = {};
-      
-      if (role === 'İDARİ_İŞLER') {
-        updateData.onaylayanIdariIsler = currentUser?.email || 'idari_isler@kibritci.com';
-      } else if (role === 'MUHASEBE') {
-        updateData.onaylayanMuhasebe = currentUser?.email || 'muhasebe@kibritci.com';
-      } else {
-        updateData.onaylayanIdariIsler = currentUser?.email || 'yonetici@kibritci.com';
-        updateData.onaylayanMuhasebe = currentUser?.email || 'yonetici@kibritci.com';
-      }
-      
-      const currentDoc = (type === 'sayim' ? kampSayimlar : kampFaaliyetler).find(x => x.id === id);
-      if (currentDoc) {
-        const hasIdari = updateData.onaylayanIdariIsler || currentDoc.onaylayanIdariIsler;
-        const hasMuhasebe = updateData.onaylayanMuhasebe || currentDoc.onaylayanMuhasebe;
-        if (hasIdari && hasMuhasebe) {
-          updateData.durum = 'ONAYLANDI';
-        }
-      }
-      
+      const updateData = buildSingleApprovalUpdate(currentUser?.email || 'yonetici@kibritci.com', role);
+
       await updateDoc(docRef, updateData);
-      alert(`Kamp ${type === 'sayim' ? 'depo sayımı' : 'günlük faaliyeti'} başarıyla onaylandı.`);
+      alert(`Kamp ${type === 'sayim' ? 'depo sayımı' : 'günlük faaliyeti'} onaylandı ve ana programa aktarıldı.`);
     } catch (err) {
       console.error(err);
       alert("Onaylama işlemi sırasında bir hata oluştu.");
+    }
+  };
+
+  const handleApproveGunlukAkis = async (id: string) => {
+    try {
+      const matchedUser = kullanicilar.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
+      const role = matchedUser?.yetki || 'YÖNETİCİ';
+      if (!canApproveMobilDocuments(role, currentUser?.email)) {
+        alert('Onay yetkiniz bulunmuyor.');
+        return;
+      }
+      await updateDoc(
+        doc(db, 'mobilGunlukAkisRaporlari', id),
+        buildSingleApprovalUpdate(currentUser?.email || 'yonetici@kibritci.com', role)
+      );
+      alert('Günlük akış raporu onaylandı.');
+    } catch (err) {
+      console.error(err);
+      alert('Onay başarısız.');
+    }
+  };
+
+  const handleRejectGunlukAkis = async (id: string) => {
+    if (!window.confirm('Bu günlük raporu reddetmek istiyor musunuz?')) return;
+    try {
+      await updateDoc(doc(db, 'mobilGunlukAkisRaporlari', id), { durum: 'REDDEDİLDİ' });
+    } catch (err) {
+      alert('Reddetme başarısız.');
     }
   };
 
@@ -335,15 +479,26 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
         onayTarihi: new Date().toISOString()
       });
 
-      // 2. Update actual personnel details
-      await updateDoc(doc(db, 'personeller', item.personelId), {
+      // 2. Update actual personnel details (blank IBAN must not erase existing data)
+      const nextIban = String(item?.yeniBilgiler?.ibanNo || '')
+        .replace(/\s+/g, '')
+        .toUpperCase()
+        .trim();
+      const updatePayload: Record<string, unknown> = {
         ad: item.yeniBilgiler.ad,
         soyad: item.yeniBilgiler.soyad,
         gorev: item.yeniBilgiler.gorev,
-        telefon: item.yeniBilgiler.telefon,
-        ibanNo: item.yeniBilgiler.ibanNo,
-        bankaAdi: item.yeniBilgiler.bankaAdi
-      });
+      };
+      if (item?.yeniBilgiler?.telefon) {
+        updatePayload.telefonNo = item.yeniBilgiler.telefon;
+      }
+      if (nextIban && nextIban !== 'TR') {
+        updatePayload.ibanNo = nextIban;
+      }
+      if (item?.yeniBilgiler?.bankaAdi) {
+        updatePayload.bankaAdi = item.yeniBilgiler.bankaAdi;
+      }
+      await updateDoc(doc(db, 'personeller', item.personelId), updatePayload);
 
       alert(`🎉 Personel bilgileri başarıyla güncellendi!`);
     } catch (err) {
@@ -764,8 +919,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
         <table class="header-table">
           <tr>
             <td class="header-left" style="border:none; padding:0;">
-              <h2 class="logo-text-title">KİBRİTÇİ</h2>
-              <h3 class="logo-text-sub">İNŞAAT</h3>
+              ${kibritciLogoHtml(52)}
             </td>
             <td class="header-right" style="border:none; padding:0; text-align:right;">
               <div class="doc-title-badge">DİJİTAL GÜVENLİK HAVUZU RAPORU</div>
@@ -888,27 +1042,31 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   const matchedUserObj = kullanicilar.find(u => u.email?.toLowerCase() === currentUser?.email?.toLowerCase());
   const currentUserRole = matchedUserObj?.yetki || 'YÖNETİCİ';
 
-  const pendingKampSayimlar = kampSayimlar.filter(doc => {
-    if (doc.durum === 'REDDEDİLDİ' || doc.durum === 'ONAYLANDI' || (doc.onaylayanIdariIsler && doc.onaylayanMuhasebe)) return false;
-    if (currentUserRole === 'İDARİ_İŞLER' && !doc.onaylayanIdariIsler) return true;
-    if (currentUserRole === 'MUHASEBE' && !doc.onaylayanMuhasebe) return true;
-    if (currentUserRole === 'YÖNETİCİ' && (!doc.onaylayanIdariIsler || !doc.onaylayanMuhasebe)) return true;
-    return false;
+  const pendingKampSayimlar = kampSayimlar.filter((doc) => {
+    if (!isMobilDocPending(doc)) return false;
+    return canApproveMobilDocuments(currentUserRole, currentUser?.email);
   });
 
-  const pendingKampFaaliyetler = kampFaaliyetler.filter(doc => {
-    if (doc.durum === 'REDDEDİLDİ' || doc.durum === 'ONAYLANDI' || (doc.onaylayanIdariIsler && doc.onaylayanMuhasebe)) return false;
-    if (currentUserRole === 'İDARİ_İŞLER' && !doc.onaylayanIdariIsler) return true;
-    if (currentUserRole === 'MUHASEBE' && !doc.onaylayanMuhasebe) return true;
-    if (currentUserRole === 'YÖNETİCİ' && (!doc.onaylayanIdariIsler || !doc.onaylayanMuhasebe)) return true;
-    return false;
+  const pendingKampFaaliyetler = kampFaaliyetler.filter((doc) => {
+    if (!isMobilDocPending(doc)) return false;
+    return canApproveMobilDocuments(currentUserRole, currentUser?.email);
   });
+
+  const pendingGunlukAkis = gunlukAkisRaporlari.filter(
+    (doc) =>
+      isMobilDocPending(doc) &&
+      canApproveMobilDocuments(currentUserRole, currentUser?.email)
+  );
 
   const pendingAracTalepleri = aracOnayTalepleri.filter(x => x.durum === 'ONAY BEKLİYOR');
   const pendingYolHarcamalari = yolHarcamalari.filter(x => x.durum === 'ONAY BEKLİYOR');
   const pendingSoforCount = pendingAracTalepleri.length + pendingYolHarcamalari.length;
 
-  const totalPendingCount = pendingRequests.length + pendingWaybills.length + pendingInvoices.length + pendingPersonelCount + pendingKampSayimlar.length + pendingKampFaaliyetler.length + pendingSoforCount;
+  const pendingStokCount = stokKartTalepleri.length;
+  const pendingSayimCount = depoSayimTalepleri.length;
+  const pendingDepocuCount = pendingStokCount + pendingSayimCount;
+
+  const totalPendingCount = pendingRequests.length + pendingWaybills.length + pendingInvoices.length + pendingPersonelCount + pendingKampSayimlar.length + pendingKampFaaliyetler.length + pendingGunlukAkis.length + pendingSoforCount + pendingDepocuCount;
 
   // Gecmis onaylar list (approved or updated documents)
   const approvedRequests = satinAlmaTalepleri.filter(doc => doc.onayDurumu.includes('TAMAMLANDI') || doc.onayDurumu === 'ONAYLANDI' || doc.onayDurumu === 'DİJİTAL ONAYLANDI');
@@ -1067,11 +1225,18 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           </div>
         </div>
 
-        <div className="bg-slate-50 border border-slate-250 rounded-xl p-2 px-4 flex items-center space-x-3 border-slate-200">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Kullanıcı Rolünüz:</span>
-          <span className="bg-blue-100 text-blue-800 text-[9px] font-mono font-black py-1 px-2 rounded-lg uppercase tracking-widest">
-            {currentUser?.email === 'sametatak9@gmail.com' ? '👑 PROJE MÜDÜRÜ / YÖNETİCİ' : '👥 ŞANTİYE YETKİLİSİ'}
-          </span>
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-2 px-4 flex items-center space-x-4">
+          <div className="text-right">
+            <span className="text-[9px] text-slate-405 font-bold uppercase tracking-wider block">Aktif Kullanıcı</span>
+            <strong className="text-[11px] text-slate-800 font-bold">{currentUser?.name || currentUser?.displayName || currentUser?.email || 'Bilinmeyen Kullanıcı'}</strong>
+          </div>
+          <div className="h-6 w-px bg-slate-200" />
+          <div>
+            <span className="text-[9px] text-slate-405 font-bold uppercase tracking-wider block">Kullanıcı Rolü</span>
+            <span className="bg-blue-100 text-blue-800 text-[9px] font-mono font-black py-0.5 px-2 rounded-lg uppercase tracking-widest block mt-0.5">
+              {currentUser?.email === 'sametatak9@gmail.com' ? '👑 PROJE MÜDÜRÜ / YÖNETİCİ' : '👥 ŞANTİYE YETKİLİSİ'}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -1116,6 +1281,10 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                 <span className="flex items-center space-x-1.5"><Truck size={11} className="text-sky-500" /> <span>Şöför Talepleri</span></span>
                 <span className="font-mono text-slate-800 text-[10px] font-bold">{pendingSoforCount}</span>
               </div>
+              <div className="flex justify-between p-1.5 bg-slate-50 rounded border border-slate-250/60">
+                <span className="flex items-center space-x-1.5"><Package size={11} className="text-indigo-500" /> <span>Depocu Talepleri</span></span>
+                <span className="font-mono text-slate-800 text-[10px] font-bold">{pendingDepocuCount}</span>
+              </div>
             </div>
           </div>
 
@@ -1155,11 +1324,27 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
             </button>
 
             <button 
+              onClick={() => setActiveTab('gunluk_loglar')}
+              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'gunluk_loglar' ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+              <span className="flex items-center space-x-2"><FileText size={13} className={activeTab === 'gunluk_loglar' ? 'text-white' : 'text-amber-500'} /> <span>Günlük Loglar</span></span>
+              {pendingGunlukAkis.length > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'gunluk_loglar' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'}`}>{pendingGunlukAkis.length}</span>}
+            </button>
+
+            <button 
               onClick={() => setActiveTab('sofor_talepleri')}
               className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'sofor_talepleri' ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <span className="flex items-center space-x-2"><Truck size={13} className={activeTab === 'sofor_talepleri' ? 'text-white' : 'text-sky-500'} /> <span>Şöför Talepleri</span></span>
               {pendingSoforCount > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'sofor_talepleri' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800'}`}>{pendingSoforCount}</span>}
+            </button>
+
+            <button 
+              onClick={() => setActiveTab('depocu_talepleri')}
+              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'depocu_talepleri' ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+              <span className="flex items-center space-x-2"><Package size={13} className={activeTab === 'depocu_talepleri' ? 'text-white' : 'text-indigo-500'} /> <span>Depocu Talepleri</span></span>
+              {pendingDepocuCount > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'depocu_talepleri' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-800'}`}>{pendingDepocuCount}</span>}
             </button>
 
             <button 
@@ -1413,7 +1598,9 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                       </h3>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {pendingKampSayimlar.map(doc => (
+                        {pendingKampSayimlar.map(doc => {
+                          const view = normalizeKampSayimForDisplay(doc);
+                          return (
                           <div key={doc.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition space-y-3">
                             <div>
                               <div className="flex justify-between items-start">
@@ -1422,29 +1609,21 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                                 </span>
                                 <span className="text-[10px] text-slate-500 font-mono font-bold">{doc.tarih}</span>
                               </div>
-                              <p className="text-xs text-slate-200 font-bold mt-2.5">Kamp Alanı: {doc.kampAdi || 'Ana Kamp'}</p>
-                              <p className="text-[10.5px] text-slate-400 mt-1">Sayan Personel: {doc.sayanPersonel || 'Kamp Amiri'}</p>
+                              <p className="text-xs text-slate-200 font-bold mt-2.5">Kamp Alanı: {view.kampAdi}</p>
+                              <p className="text-[10.5px] text-slate-400 mt-1">Sayan: {view.sayanPersonel}</p>
+                              <p className="text-[10px] text-amber-400/80 mt-0.5">Gönderen: {view.kaydeden}</p>
                               
                               <div className="mt-2.5 p-2 bg-slate-900 rounded border border-slate-800 space-y-1.5">
                                 <div className="text-[10px] font-bold text-slate-400 border-b border-slate-800 pb-1 flex justify-between">
                                   <span>Malzeme / Stok</span>
                                   <span>Miktar</span>
                                 </div>
-                                {doc.sayimlar && Object.entries(doc.sayimlar).map(([malzeme, miktar]: any) => (
+                                {Object.entries(view.sayimlar).map(([malzeme, miktar]) => (
                                   <div key={malzeme} className="text-[10px] font-mono text-slate-300 flex justify-between">
                                     <span>{malzeme}</span>
-                                    <span className="font-bold text-white">{miktar} Adet</span>
+                                    <span className="font-bold text-white">{miktar}</span>
                                   </div>
                                 ))}
-                              </div>
-
-                              <div className="mt-2 text-[10px] flex gap-2">
-                                <span className={`px-2 py-0.5 rounded font-bold ${doc.onaylayanIdariIsler ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-900 text-slate-500'}`}>
-                                  İdari İşler: {doc.onaylayanIdariIsler ? '✅ ONAYLADI' : '⏳ BEKLİYOR'}
-                                </span>
-                                <span className={`px-2 py-0.5 rounded font-bold ${doc.onaylayanMuhasebe ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-900 text-slate-500'}`}>
-                                  Muhasebe: {doc.onaylayanMuhasebe ? '✅ ONAYLADI' : '⏳ BEKLİYOR'}
-                                </span>
                               </div>
                             </div>
 
@@ -1461,11 +1640,12 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                                 className="flex-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1"
                               >
                                 <Check size={11} />
-                                <span>Onayla ({currentUserRole === 'İDARİ_İŞLER' ? 'İdari' : currentUserRole === 'MUHASEBE' ? 'Muhasebe' : 'Tümü'})</span>
+                                <span>Onayla</span>
                               </button>
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -1479,7 +1659,9 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                       </h3>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {pendingKampFaaliyetler.map(doc => (
+                        {pendingKampFaaliyetler.map(doc => {
+                          const view = normalizeKampFaaliyetForDisplay(doc);
+                          return (
                           <div key={doc.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition space-y-3">
                             <div>
                               <div className="flex justify-between items-start">
@@ -1488,28 +1670,21 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                                 </span>
                                 <span className="text-[10px] text-slate-500 font-mono font-bold">{doc.tarih}</span>
                               </div>
-                              <p className="text-xs text-slate-200 font-bold mt-2.5">Kategori: {doc.kategori || 'Genel Rutin'}</p>
-                              <p className="text-[10.5px] text-slate-400 mt-1">Açıklama: {doc.aciklama}</p>
+                              <p className="text-xs text-slate-200 font-bold mt-2.5">Kategori: {view.kategori}</p>
+                              <p className="text-[10.5px] text-slate-400 mt-1">Yerleşke: {view.yerleske || '—'}</p>
+                              <p className="text-[10.5px] text-slate-400 mt-1">Açıklama: {view.aciklama}</p>
+                              <p className="text-[10px] text-amber-400/80 mt-0.5">Gönderen: {view.kaydeden}</p>
 
-                              {doc.photo && (
+                              {view.photo && (
                                 <div className="mt-2.5 rounded-xl overflow-hidden border border-slate-800 aspect-video bg-slate-900 flex items-center justify-center relative group">
                                   <img 
-                                    src={doc.photo} 
+                                    src={view.photo} 
                                     alt="Faaliyet" 
                                     className="w-full h-full object-cover group-hover:scale-105 transition duration-300" 
                                     referrerPolicy="no-referrer"
                                   />
                                 </div>
                               )}
-
-                              <div className="mt-2 text-[10px] flex gap-2">
-                                <span className={`px-2 py-0.5 rounded font-bold ${doc.onaylayanIdariIsler ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-900 text-slate-500'}`}>
-                                  İdari İşler: {doc.onaylayanIdariIsler ? '✅ ONAYLADI' : '⏳ BEKLİYOR'}
-                                </span>
-                                <span className={`px-2 py-0.5 rounded font-bold ${doc.onaylayanMuhasebe ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-900 text-slate-500'}`}>
-                                  Muhasebe: {doc.onaylayanMuhasebe ? '✅ ONAYLADI' : '⏳ BEKLİYOR'}
-                                </span>
-                              </div>
                             </div>
 
                             <div className="flex gap-2 pt-2.5 border-t border-slate-900">
@@ -1525,11 +1700,12 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                                 className="flex-1 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1"
                               >
                                 <Check size={11} />
-                                <span>Onayla ({currentUserRole === 'İDARİ_İŞLER' ? 'İdari' : currentUserRole === 'MUHASEBE' ? 'Muhasebe' : 'Tümü'})</span>
+                                <span>Onayla</span>
                               </button>
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -1610,7 +1786,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                       </div>
 
                       {/* Control buttons */}
-                      <div className="flex items-center gap-2 flex-wrap md:flex-nowrap">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <button
                           onClick={() => handleGenerateSignedPdf('request', doc)}
                           className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1"
@@ -1691,7 +1867,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                       </div>
 
                       {/* Control buttons */}
-                      <div className="flex items-center gap-2 flex-wrap md:flex-nowrap">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <button
                           onClick={() => handleGenerateSignedPdf('waybill', doc)}
                           className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1"
@@ -1772,7 +1948,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                       </div>
 
                       {/* Control buttons */}
-                      <div className="flex items-center gap-2 flex-wrap md:flex-nowrap">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <button
                           onClick={() => handleGenerateSignedPdf('invoice', doc)}
                           className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1"
@@ -1805,6 +1981,71 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                 {filteredApprovedRequests.length === 0 && filteredApprovedWaybills.length === 0 && filteredApprovedInvoices.length === 0 && (
                   <div className="text-center p-10 text-slate-500 font-bold italic">Aranan kriterlere uygun onaylanmış belge kaydı bulunamadı.</div>
                 )}
+
+                {/* 📋 UNIFIED İŞLEM KAYITLARI AUDIT LOG */}
+                <div className="mt-8 bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 text-xs text-slate-350">
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                    <span className="font-display font-black text-xs text-white uppercase tracking-widest block">📋 Tesis Onaylı İşlem Kayıtları (Audit Log)</span>
+                    <span className="bg-slate-800 text-slate-400 font-mono text-[9px] px-2 py-0.5 rounded">SİSTEM DENETİMİ</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Sistemde onaylanan evrakların mali ve idari işlem kayıtları (Audit Trail):
+                  </p>
+                  
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-slate-300">
+                      <thead>
+                        <tr className="border-b border-slate-800 text-left font-bold text-slate-500">
+                          <th className="py-2 pr-4">Tarih</th>
+                          <th className="py-2 pr-4">Belge Tipi</th>
+                          <th className="py-2 pr-4">Belge Referansı</th>
+                          <th className="py-2 pr-4">Cari / Sorumlu</th>
+                          <th className="py-2 pr-4">Kaşe / İmza</th>
+                          <th className="py-2 text-right">Tutar/Miktar</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/50 font-mono text-[11px]">
+                        {satinAlmaTalepleri.filter(doc => doc.onayDurumu === 'ONAYLANDI' || doc.onayDurumu === '2. ONAY TAMAMLANDI').map(doc => (
+                          <tr key={doc.id} className="hover:bg-slate-800/25 transition">
+                            <td className="py-2 pr-4">{doc.tarih}</td>
+                            <td className="py-2 pr-4 text-amber-400 font-bold">PO (Satın Alma)</td>
+                            <td className="py-2 pr-4">{doc.saId}</td>
+                            <td className="py-2 pr-4 text-slate-400 truncate max-w-[120px]">{doc.cariFirma}</td>
+                            <td className="py-2 pr-4 text-emerald-400">{doc.onayStamp || 'Islak İmzalı / E-İmzalı'}</td>
+                            <td className="py-2 text-right text-slate-400">{doc.kalemler?.length || 0} Kalem</td>
+                          </tr>
+                        ))}
+                        {irsaliyeler.filter(doc => doc.onayDurumu === 'ONAYLANDI' || doc.onayDurumu.includes('TAMAMLANDI')).map(doc => (
+                          <tr key={doc.id} className="hover:bg-slate-800/25 transition">
+                            <td className="py-2 pr-4">{doc.tarih}</td>
+                            <td className="py-2 pr-4 text-emerald-400 font-bold">İRSALİYE</td>
+                            <td className="py-2 pr-4">{doc.irsaliyeNo}</td>
+                            <td className="py-2 pr-4 text-slate-400 truncate max-w-[120px]">{doc.firma}</td>
+                            <td className="py-2 pr-4 text-emerald-400">{doc.onayStamp || 'Müdür Onaylı'}</td>
+                            <td className="py-2 text-right text-slate-400">{doc.kalemler?.length || 0} Kalem</td>
+                          </tr>
+                        ))}
+                        {faturalar.filter(doc => doc.durum === 'ONAYLANDI' || doc.durum === 'UYUMLU').map(doc => (
+                          <tr key={doc.id} className="hover:bg-slate-800/25 transition">
+                            <td className="py-2 pr-4">{doc.tarih}</td>
+                            <td className="py-2 pr-4 text-purple-400 font-bold">FATURA</td>
+                            <td className="py-2 pr-4">{doc.faturaNo}</td>
+                            <td className="py-2 pr-4 text-slate-400 truncate max-w-[120px]">{doc.cariUnvan}</td>
+                            <td className="py-2 pr-4 text-emerald-400">{doc.onayStamp || doc.eImzalar?.[0] || 'Kaşeli Onay'}</td>
+                            <td className="py-2 text-right text-purple-300 font-bold">₺{doc.genelToplam?.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                        {satinAlmaTalepleri.filter(doc => doc.onayDurumu === 'ONAYLANDI' || doc.onayDurumu === '2. ONAY TAMAMLANDI').length === 0 && 
+                         irsaliyeler.filter(doc => doc.onayDurumu === 'ONAYLANDI' || doc.onayDurumu.includes('TAMAMLANDI')).length === 0 && 
+                         faturalar.filter(doc => doc.durum === 'ONAYLANDI' || doc.durum === 'UYUMLU').length === 0 && (
+                          <tr>
+                            <td colSpan={6} className="py-4 text-center text-slate-500 italic">Henüz onaylanmış herhangi bir işlem kaydı loglanmadı.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -1836,6 +2077,64 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'gunluk_loglar' && (
+            <div className="space-y-6">
+              <div className="border bg-slate-950 p-4.5 rounded-2xl border-slate-800/80 text-xs">
+                <span className="text-amber-400 font-bold block text-[11px] tracking-widest uppercase">📋 FORMEN & KAMPÇI GÜNLÜK AKIŞ RAPORLARI</span>
+                <p className="text-slate-400 mt-1 text-[11px]">
+                  Saha formenleri ve kampçıların gün sonu gönderdiği özet raporlar. İdari İşler, Muhasebe, Şantiye Şefi, Proje Müdürü veya Kurucu onayı ile arşive alınır.
+                </p>
+              </div>
+
+              {pendingGunlukAkis.length === 0 ? (
+                <div className="bg-slate-950 rounded-3xl p-12 text-center border border-slate-800">
+                  <p className="text-sm text-slate-300 font-bold">Onay bekleyen günlük rapor yok.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {pendingGunlukAkis.map((rapor) => (
+                    <div key={rapor.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-3">
+                      <div className="flex justify-between items-start">
+                        <span className="text-[10px] font-black text-amber-400 uppercase">{rapor.tip} · {rapor.tarih}</span>
+                        <span className="text-[9px] text-slate-500">{new Date(rapor.olusturulma).toLocaleString('tr-TR')}</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400">Gönderen: <strong className="text-slate-200">{rapor.gonderenEmail}</strong></p>
+                      <pre className="text-[9px] text-slate-300 whitespace-pre-wrap bg-slate-900 p-3 rounded-xl border border-slate-800 max-h-48 overflow-y-auto font-mono leading-relaxed">
+                        {rapor.ozetMetin}
+                      </pre>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleRejectGunlukAkis(rapor.id)}
+                          className="flex-1 bg-red-950 text-red-300 py-1.5 rounded-lg text-[10px] font-bold"
+                        >
+                          Reddet
+                        </button>
+                        <button
+                          onClick={() => handleApproveGunlukAkis(rapor.id)}
+                          className="flex-1 bg-emerald-600 text-white py-1.5 rounded-lg text-[10px] font-bold"
+                        >
+                          Onayla & Arşivle
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {gunlukAkisRaporlari.filter((r) => r.durum === 'ONAYLANDI').length > 0 && (
+                <div className="space-y-2 pt-4 border-t border-slate-200">
+                  <h3 className="text-xs font-black text-slate-600 uppercase">Onaylanmış Arşiv</h3>
+                  {gunlukAkisRaporlari.filter((r) => r.durum === 'ONAYLANDI').slice(0, 10).map((rapor) => (
+                    <div key={rapor.id} className="bg-white border p-3 rounded-xl text-[10px] flex justify-between">
+                      <span>{rapor.tip} · {rapor.tarih} · {rapor.gonderenEmail}</span>
+                      <span className="text-emerald-600 font-bold">✓ {rapor.onaylayanYetki}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -1961,18 +2260,27 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                             <button
                               onClick={async () => {
                                 const publicUrl = `${window.location.protocol}//${window.location.host}/?view_giris=${item.id}`;
-                                const waMsg = `*KİBRİTÇİ İNŞAAT - PERSONEL ŞANTİYE GİRİŞ ONAY TALEBİ*%0A%0A*Personel Bilgileri:*%0A👤 Adı Soyadı: ${item.ad} ${item.soyad}%0A💼 Görevi/Branşı: ${item.gorev}%0A👷 Gönderen Formen: ${item.gonderenFormen || 'Bilinmeyen'}%0A📅 Tarih: ${new Date(item.tarih).toLocaleString('tr-TR')}%0A%0A🪪 *Kimlik Görseli ve Personel Kartı (Sorgula):*%0A${publicUrl}%0A%0ASaha Girişi için evrak onayı bekleniyor. Lütfen onay paneline girip bu personelin İşe Giriş Bildirgesini yükleyerek kaydı tamamlayın.`;
-                                const waUrl = `https://wa.me/?text=${waMsg}`;
-                                
-                                // Set state to WP_GÖNDERİLDİ in database
+                                const waText = [
+                                  '*KİBRİTÇİ İNŞAAT - PERSONEL ŞANTİYE GİRİŞ ONAY TALEBİ*',
+                                  '',
+                                  `👤 Adı Soyadı: ${item.ad} ${item.soyad}`,
+                                  `💼 Görevi/Branşı: ${item.gorev}`,
+                                  `👷 Gönderen Formen: ${item.gonderenFormen || 'Bilinmeyen'}`,
+                                  `📅 Tarih: ${new Date(item.tarih).toLocaleString('tr-TR')}`,
+                                  '',
+                                  '🪪 Kimlik Görseli ve Personel Kartı (Sorgula):',
+                                  publicUrl,
+                                  '',
+                                  'Saha girişi için evrak onayı bekleniyor.',
+                                ].join('\n');
                                 try {
                                   await updateDoc(doc(db, 'personelGirisTalepleri', item.id), {
-                                    durum: 'WP_GÖNDERİLDİ'
+                                    durum: 'WP_GÖNDERİLDİ',
                                   });
-                                  window.open(waUrl, '_blank');
+                                  window.open(buildWhatsAppUrl(waText), '_blank');
                                 } catch (e) {
                                   console.error(e);
-                                  window.open(waUrl, '_blank');
+                                  window.open(buildWhatsAppUrl(waText), '_blank');
                                 }
                               }}
                               className="bg-blue-600 hover:bg-blue-750 active:scale-95 text-white font-extrabold text-[9px] py-1.5 px-3 rounded-xl flex items-center space-x-1.5 cursor-pointer border-b-2 border-blue-800 transition"
@@ -1987,9 +2295,18 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                             <button
                               onClick={() => {
                                 const publicUrl = `${window.location.protocol}//${window.location.host}/?view_giris=${item.id}`;
-                                const waMsg = `*KİBRİTÇİ İNŞAAT - GİRİŞ İZNİ ONAYLANDI*%0A%0A*Şantiye Giriş Kapısı / Güvenlik Nöbetçi Personeline:*%0A👤 *Personel:* ${item.ad} ${item.soyad}%0A💼 *Görevi:* ${item.gorev}%0A✅ *Bu personelin İşe Giriş Bildirgesi onaylanmıştır. Şantiyeye girişine izin verilmiştir.*%0A%0A🪪 *Kimlik Görseli ve Detaylar:*%0A${publicUrl}`;
-                                const waUrl = `https://wa.me/?text=${waMsg}`;
-                                window.open(waUrl, '_blank');
+                                const waText = [
+                                  '*KİBRİTÇİ İNŞAAT - GİRİŞ İZNİ ONAYLANDI*',
+                                  '',
+                                  'Şantiye Giriş Kapısı / Güvenlik Nöbetçi Personeline:',
+                                  `👤 Personel: ${item.ad} ${item.soyad}`,
+                                  `💼 Görevi: ${item.gorev}`,
+                                  '✅ İşe Giriş Bildirgesi onaylanmıştır. Şantiyeye girişine izin verilmiştir.',
+                                  '',
+                                  '🪪 Kimlik Görseli ve Detaylar:',
+                                  publicUrl,
+                                ].join('\n');
+                                window.open(buildWhatsAppUrl(waText), '_blank');
                               }}
                               className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-[9px] py-1.5 px-3 rounded-xl flex items-center space-x-1.5 cursor-pointer border-b-2 border-emerald-800 transition"
                             >
@@ -2041,9 +2358,23 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                                           return;
                                         }
                                         try {
+                                          const personelId = `p_${Date.now()}`;
+                                          await saveDocument('personeller', {
+                                            id: personelId,
+                                            ad: item.ad,
+                                            soyad: item.soyad,
+                                            gorev: item.gorev || 'İŞÇİ',
+                                            iseGirisTarihi: (item.tarih || new Date().toISOString()).slice(0, 10),
+                                            durum: true,
+                                            tcNo: item.tcNo || '',
+                                            netMaas: 0,
+                                          });
                                           await updateDoc(doc(db, 'personelGirisTalepleri', item.id), {
                                             durum: 'ONAYLANDI',
-                                            girisEvrakPdfUrl: uploadedPdfBase64
+                                            girisEvrakPdfUrl: uploadedPdfBase64,
+                                            personelId,
+                                            onaylayan: currentUser?.email,
+                                            onayTarihi: new Date().toISOString(),
                                           });
                                           setActivePdfUploadId(null);
                                           setUploadedPdfBase64(null);
@@ -2517,13 +2848,141 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
             </div>
           )}
 
+          {activeTab === 'depocu_talepleri' && (
+            <div className="space-y-6">
+              <div className="border bg-slate-900 p-4.5 rounded-2xl border-slate-800 flex justify-between items-center text-xs text-white">
+                <div className="space-y-1">
+                  <span className="text-indigo-400 font-bold block text-[11px] tracking-widest uppercase">📦 DEPOCU TALEPLERİ (STOK KARTLARI &amp; HAFTALIK SAYIMLAR)</span>
+                  <p className="text-slate-400 leading-relaxed text-[11px]">
+                    Depo sorumlusundan gelen onay bekleyen yeni stok kartı açma taleplerini ve haftalık depo fiziksel sayım tutanaklarını buradan inceleyip onaylayabilirsiniz.
+                  </p>
+                </div>
+              </div>
+
+              {/* A. Pending Stock Cards */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-2">
+                  <Package size={14} className="text-indigo-500" />
+                  <span>Yeni Stok Kartı Açma Talepleri ({stokKartTalepleri.length})</span>
+                </h3>
+
+                {stokKartTalepleri.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic bg-white border p-4 rounded-xl">Onay bekleyen yeni stok kartı talebi bulunmuyor.</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {stokKartTalepleri.map(item => (
+                      <div key={item.id} className="bg-white border rounded-2xl p-4 flex flex-col justify-between hover:border-indigo-300 transition space-y-3 shadow-xs">
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between items-start">
+                            <span className="font-mono bg-indigo-50 text-indigo-700 border border-indigo-100 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                              {item.stokKodu}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono font-bold">{item.tarih}</span>
+                          </div>
+                          <h4 className="font-bold text-slate-800 text-xs mt-1">{item.stokAdi}</h4>
+                          <div className="grid grid-cols-2 gap-2 text-[10.5px] text-slate-650">
+                            <div>Kategori: <strong className="text-slate-800 font-semibold">{item.kategori}</strong></div>
+                            <div>Ölçü Birimi: <strong className="text-slate-800 font-semibold">{item.birim}</strong></div>
+                            <div>Giriş Miktar: <strong className="text-blue-600 font-black">{item.miktar} {item.birim}</strong></div>
+                            <div>Kritik Limit: <strong className="text-rose-650 font-bold">{item.kritikSeviye || 5}</strong></div>
+                          </div>
+                          {item.aciklama && <p className="text-[10px] text-slate-500 italic mt-1">Not: {item.aciklama}</p>}
+                        </div>
+
+                        <div className="flex gap-2 pt-2.5 border-t border-slate-100">
+                          <button 
+                            onClick={() => handleRejectStokKart(item)}
+                            className="flex-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-150 py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1"
+                          >
+                            <X size={11} />
+                            <span>Reddet / Sil</span>
+                          </button>
+                          <button 
+                            onClick={() => handleApproveStokKart(item)}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1 border-b-2 border-emerald-800"
+                          >
+                            <Check size={11} />
+                            <span>Kartı Onayla</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* B. Pending Sayım Counts */}
+              <div className="space-y-3 pt-6 border-t">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-2">
+                  <FileText size={14} className="text-indigo-500" />
+                  <span>Depo Fiziksel Sayım Tutanakları ({depoSayimTalepleri.length})</span>
+                </h3>
+
+                {depoSayimTalepleri.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic bg-white border p-4 rounded-xl">Onay bekleyen depo fiziksel sayım belgesi bulunmuyor.</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {depoSayimTalepleri.map(item => (
+                      <div key={item.id} className="bg-white border rounded-2xl p-4 flex flex-col justify-between hover:border-indigo-300 transition space-y-3 shadow-xs">
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-start">
+                            <span className="font-mono bg-indigo-50 text-indigo-700 border border-indigo-100 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                              Hafta {item.haftaNo || '1'} Sayımı
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono font-bold">{item.tarih}</span>
+                          </div>
+                          <p className="text-[10.5px] text-slate-650 font-medium">Sayım Yapan: <strong className="text-slate-800">{item.sayimYapan}</strong></p>
+                          {item.notlar && <p className="text-[10.5px] bg-slate-50 p-2 rounded-xl text-slate-600 border italic">" {item.notlar} "</p>}
+                          
+                          <div className="pt-2">
+                            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Tespit Edilen Farklar</span>
+                            <div className="space-y-1 text-[10px] font-mono text-slate-650 max-h-32 overflow-y-auto pr-1">
+                              {item.kalemler?.map((k: any, idx: number) => (
+                                <div key={idx} className="flex justify-between p-1 bg-slate-50 border rounded mt-0.5">
+                                  <span>{k.urunAdi} ({k.kod})</span>
+                                  <span className="font-bold flex items-center space-x-1">
+                                    <span className="text-slate-400">{k.systemQty} ➔ {k.physicalQty}</span>
+                                    <span className={k.diff < 0 ? 'text-rose-650' : k.diff > 0 ? 'text-emerald-600' : 'text-slate-500'}>
+                                      ({k.diff > 0 ? `+${k.diff}` : k.diff} {k.birim})
+                                    </span>
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 pt-2.5 border-t border-slate-105">
+                          <button 
+                            onClick={() => handleRejectDepoSayim(item)}
+                            className="flex-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-150 py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1"
+                          >
+                            <X size={11} />
+                            <span>Sayımı İptal Et / Reddet</span>
+                          </button>
+                          <button 
+                            onClick={() => handleApproveDepoSayim(item)}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1 border-b-2 border-emerald-800"
+                          >
+                            <Check size={11} />
+                            <span>Sayımı Onayla &amp; Güncelle</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
 
       {/* Detail Modal */}
       {activeDocForDetail && (
         <div className="fixed inset-0 bg-slate-950/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-[600px] overflow-hidden shadow-2xl animate-in scale-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-[600px] overflow-hidden shadow-2xl animate-in scale-in duration-200">
             
             <div className="bg-slate-950 p-4 flex justify-between items-center border-b border-slate-800">
               <h4 className="font-display font-medium text-xs text-white uppercase tracking-wider">📋 Detaylı Belge İncelemesi</h4>

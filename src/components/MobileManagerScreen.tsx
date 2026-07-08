@@ -5,7 +5,9 @@ import {
   Send, AlertTriangle, CheckCircle, XCircle, FileText, BadgeInfo, Clock, Calendar, Check, Ban, ArrowLeft
 } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { collection, onSnapshot, doc, updateDoc, query, orderBy, limit, addDoc, setDoc } from 'firebase/firestore';
+import { saveKullanici, findKullaniciByEmail } from '../lib/kullaniciUtils';
+import { collection, onSnapshot, doc, updateDoc, query, orderBy, limit, addDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { KibritciLogo } from './KibritciLogo';
 
 // Sub-screens for Manager preview
 import { FormenScreen } from './FormenScreen';
@@ -142,6 +144,9 @@ export const MobileManagerScreen: React.FC<MobileManagerScreenProps> = ({
   const [izinFormlari, setIzinFormlari] = useState<IzinFormu[]>([]);
   const [loadingLeaves, setLoadingLeaves] = useState(false);
 
+  // Depo Sayımları state
+  const [depoSayimlar, setDepoSayimlar] = useState<any[]>([]);
+
   // Subscribe to real-time chat messages
   useEffect(() => {
     const q = query(
@@ -200,6 +205,18 @@ export const MobileManagerScreen: React.FC<MobileManagerScreenProps> = ({
     return () => unsubscribe();
   }, []);
 
+  // Fetch depo sayimlari for real-time approval
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'depoSayimlari'), (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() });
+      });
+      setDepoSayimlar(list);
+    });
+    return () => unsubscribe();
+  }, []);
+
   // Scroll to bottom of chat
   useEffect(() => {
     if (activeTab === 'sohbet') {
@@ -225,7 +242,9 @@ export const MobileManagerScreen: React.FC<MobileManagerScreenProps> = ({
   const pendingUsers = kullanicilar.filter(u => u.durum === 'ONAY BEKLİYOR');
   const pendingPurchases = satinAlmaTalepleri.filter(s => s.onayDurumu === 'ONAY BEKLİYOR');
   const pendingLeaves = izinFormlari.filter(i => i.onayDurumu === 'ONAY BEKLİYOR');
-  const totalPendingApprovals = pendingUsers.length + pendingPurchases.length + pendingLeaves.length;
+  const pendingStokKartlar = stokKartlar.filter(s => s.durum === 'ONAY BEKLİYOR');
+  const pendingSayimlar = depoSayimlar.filter(s => s.durum === 'ONAY BEKLİYOR');
+  const totalPendingApprovals = pendingUsers.length + pendingPurchases.length + pendingLeaves.length + pendingStokKartlar.length + pendingSayimlar.length;
 
   // Handle send chat message
   const handleSendChat = async (e: React.FormEvent) => {
@@ -298,24 +317,37 @@ export const MobileManagerScreen: React.FC<MobileManagerScreenProps> = ({
   const feedItems = getCombinedFeed();
 
   // Approval Handlers
-  const handleApproveUser = (userId: string) => {
-    setKullanicilar((prev: Kullanici[]) => prev.map(u => {
-      if (u.id === userId) {
-        return { ...u, durum: 'AKTİF', yetki: u.yetki === 'MİSAFİR' ? 'YÖNETİCİ' : u.yetki };
-      }
-      return u;
-    }));
-    alert("Kullanıcı hesabı onaylandı ve 'AKTİF' statüsüne getirildi.");
+  const handleApproveUser = async (userId: string) => {
+    const target = findKullaniciByEmail(kullanicilar, userId) || kullanicilar.find(u => u.id === userId);
+    if (!target) return;
+    const updated = {
+      ...target,
+      durum: 'AKTİF' as const,
+      yetki: target.yetki === 'MİSAFİR' ? 'YÖNETİCİ' : target.yetki,
+    };
+    try {
+      const saved = await saveKullanici(updated);
+      setKullanicilar((prev: Kullanici[]) =>
+        prev.map(u => (u.email?.toLowerCase() === target.email.toLowerCase() ? { ...u, ...saved } : u))
+      );
+      alert("Kullanıcı hesabı onaylandı ve 'AKTİF' statüsüne getirildi.");
+    } catch {
+      alert('Onay kaydedilemedi. Lütfen tekrar deneyin.');
+    }
   };
 
-  const handleRestrictUser = (userId: string) => {
-    setKullanicilar((prev: Kullanici[]) => prev.map(u => {
-      if (u.id === userId) {
-        return { ...u, durum: 'KISITLI' };
-      }
-      return u;
-    }));
-    alert("Kullanıcı hesabı kısıtlandı.");
+  const handleRestrictUser = async (userId: string) => {
+    const target = findKullaniciByEmail(kullanicilar, userId) || kullanicilar.find(u => u.id === userId);
+    if (!target) return;
+    try {
+      const saved = await saveKullanici({ ...target, durum: 'KISITLI' });
+      setKullanicilar((prev: Kullanici[]) =>
+        prev.map(u => (u.email?.toLowerCase() === target.email.toLowerCase() ? { ...u, ...saved } : u))
+      );
+      alert("Kullanıcı hesabı kısıtlandı.");
+    } catch {
+      alert('Kısıtlama kaydedilemedi.');
+    }
   };
 
   const handleApprovePurchase = (purchaseId: string) => {
@@ -363,6 +395,63 @@ export const MobileManagerScreen: React.FC<MobileManagerScreenProps> = ({
       alert("İzin talebi reddedildi.");
     } catch (err) {
       console.error("Izin reddedilirken hata oluştu:", err);
+    }
+  };
+
+  const handleApproveStokKart = async (itemId: string) => {
+    try {
+      await updateDoc(doc(db, 'stokKartlar', itemId), {
+        durum: 'AKTIF',
+        onaylayanYonetici: currentUser?.email || 'Yönetici',
+        onayTarihi: new Date().toISOString().split('T')[0]
+      });
+      alert("Stok kartı onaylandı!");
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleRejectStokKart = async (itemId: string) => {
+    try {
+      const docRef = doc(db, 'stokKartlar', itemId);
+      await deleteDoc(docRef);
+      alert("Stok kartı talebi reddedildi ve silindi.");
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleApproveDepoSayim = async (item: any) => {
+    try {
+      await updateDoc(doc(db, 'depoSayimlari', item.id), {
+        durum: 'ONAYLANDI',
+        onaylayanYonetici: currentUser?.email || 'Yönetici',
+        onayTarihi: new Date().toISOString().split('T')[0]
+      });
+
+      if (item.kalemler && Array.isArray(item.kalemler)) {
+        for (const k of item.kalemler) {
+          if (k.stockId) {
+            await updateDoc(doc(db, 'stokKartlar', k.stockId), { miktar: k.physicalQty });
+          }
+        }
+      }
+      alert("Depo sayımı onaylandı ve stoklar güncellendi!");
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleRejectDepoSayim = async (sayimId: string) => {
+    try {
+      await updateDoc(doc(db, 'depoSayimlari', sayimId), {
+        durum: 'REDDEDİLDİ',
+        onaylayanYonetici: currentUser?.email || 'Yönetici',
+        onayTarihi: new Date().toISOString().split('T')[0]
+      });
+      alert("Depo sayımı reddedildi.");
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -471,11 +560,8 @@ export const MobileManagerScreen: React.FC<MobileManagerScreenProps> = ({
             {/* Premium App Bar Header */}
             <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shrink-0 z-10">
               <div className="flex items-center space-x-2.5">
-                <div className="w-9 h-9 bg-amber-500 rounded-xl flex items-center justify-center text-slate-950 font-black shadow-lg shadow-amber-500/10">
-                  <Smartphone size={18} />
-                </div>
+                <KibritciLogo size="sm" className="h-8" />
                 <div>
-                  <h2 className="text-xs font-black tracking-widest text-amber-600 leading-none">KİBRİTÇİ MOBİL</h2>
                   <span className="text-[9px] text-slate-500 font-medium">{currentUser?.email || 'Yönetici'}</span>
                 </div>
               </div>
@@ -902,6 +988,94 @@ export const MobileManagerScreen: React.FC<MobileManagerScreenProps> = ({
                         >
                           <Check size={11} />
                           <span>İzni Onayla</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Section D: Pending Stock Cards */}
+              <div className="space-y-2.5 pt-2 border-t border-slate-900">
+                <h4 className="text-[10px] font-black tracking-wider text-slate-500 uppercase">📦 YENİ STOK KARTLARI ({pendingStokKartlar.length})</h4>
+                {pendingStokKartlar.length === 0 ? (
+                  <p className="text-[10px] text-slate-500 italic px-1">Onay bekleyen yeni stok kartı açma talebi yok.</p>
+                ) : (
+                  pendingStokKartlar.map(card => (
+                    <div key={card.id} className="bg-slate-900 border border-slate-850 p-3 rounded-2xl space-y-2 text-xs">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="font-mono bg-indigo-500/10 text-indigo-400 text-[9px] font-bold px-1.5 py-0.2 rounded border border-indigo-500/20">{card.stokKodu}</span>
+                          <span className="text-white font-bold block mt-1">{card.stokAdi}</span>
+                          <span className="text-[9px] text-slate-500 block">Kategori: {card.kategori} | Giriş: {card.miktar} {card.birim}</span>
+                        </div>
+                      </div>
+                      <div className="flex space-x-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleRejectStokKart(card.id)}
+                          className="flex-1 py-1.5 bg-slate-850 hover:bg-slate-800 border border-slate-750 text-slate-400 text-[10px] font-bold rounded-lg transition cursor-pointer flex items-center justify-center space-x-1"
+                        >
+                          <XCircle size={10} />
+                          <span>Sil / Reddet</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApproveStokKart(card.id)}
+                          className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black rounded-lg transition cursor-pointer flex items-center justify-center space-x-1 shadow-md"
+                        >
+                          <Check size={11} />
+                          <span>Kartı Onayla</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Section E: Pending Depo Sayımları */}
+              <div className="space-y-2.5 pt-2 border-t border-slate-900">
+                <h4 className="text-[10px] font-black tracking-wider text-slate-500 uppercase">📊 DEPO SAYIM ONAYLARI ({pendingSayimlar.length})</h4>
+                {pendingSayimlar.length === 0 ? (
+                  <p className="text-[10px] text-slate-500 italic px-1">Onay bekleyen haftalık depo sayım belgesi yok.</p>
+                ) : (
+                  pendingSayimlar.map(say => (
+                    <div key={say.id} className="bg-slate-900 border border-slate-850 p-3 rounded-2xl space-y-2 text-xs">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="font-mono bg-indigo-500/10 text-indigo-400 text-[9px] font-bold px-1.5 py-0.2 rounded border border-indigo-500/20">Hafta {say.haftaNo} Sayımı</span>
+                          <span className="text-white font-bold block mt-1">Yapan: {say.sayimYapan}</span>
+                          {say.notlar && <p className="text-[9.5px] text-slate-400 italic">" {say.notlar} "</p>}
+                        </div>
+                        <span className="text-[9px] text-slate-500 font-mono shrink-0">{say.tarih}</span>
+                      </div>
+                      <div className="text-[9px] font-mono text-slate-400 space-y-0.5 bg-slate-950 p-2 rounded-xl border border-slate-900">
+                        {say.kalemler?.slice(0, 3).map((k: any, idx: number) => (
+                          <div key={idx} className="flex justify-between">
+                            <span className="truncate max-w-[120px]">{k.urunAdi}</span>
+                            <span className={k.diff < 0 ? 'text-rose-400 font-bold' : k.diff > 0 ? 'text-emerald-400 font-bold' : 'text-slate-400'}>
+                              {k.systemQty}➔{k.physicalQty} ({k.diff > 0 ? `+${k.diff}` : k.diff})
+                            </span>
+                          </div>
+                        ))}
+                        {say.kalemler?.length > 3 && <div className="text-[8px] text-slate-500">+ {say.kalemler.length - 3} kalem daha</div>}
+                      </div>
+                      <div className="flex space-x-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleRejectDepoSayim(say.id)}
+                          className="flex-1 py-1.5 bg-slate-850 hover:bg-slate-800 border border-slate-750 text-slate-400 text-[10px] font-bold rounded-lg transition cursor-pointer flex items-center justify-center space-x-1"
+                        >
+                          <XCircle size={10} />
+                          <span>İptal / Reddet</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApproveDepoSayim(say)}
+                          className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black rounded-lg transition cursor-pointer flex items-center justify-center space-x-1 shadow-md"
+                        >
+                          <Check size={11} />
+                          <span>Sayımı Onayla</span>
                         </button>
                       </div>
                     </div>

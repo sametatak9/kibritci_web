@@ -180,44 +180,10 @@ export const INITIAL_ARAC: AracBakim[] = [
   }
 ];
 
-const generateKampRooms = (): KampOdasi[] => {
-  const rooms: KampOdasi[] = [];
-  const blocks = ["A Yerleşkesi", "B Yerleşkesi", "C Yerleşkesi", "D Yerleşkesi"];
-  const floors = ["1. Kat", "2. Kat", "3. Kat"];
-  
-  let idCounter = 1;
-  blocks.forEach(block => {
-    floors.forEach((floor, fIdx) => {
-      const floorNum = fIdx + 1; // 1, 2, 3
-      for (let roomNum = 1; roomNum <= 15; roomNum++) {
-        const roomStr = `${block[0]}-${floorNum}${roomNum < 10 ? '0' : ''}${roomNum}`; // A-101, B-204 etc.
-        rooms.push({
-          id: `ko_room_${idCounter++}`,
-          yerleskeAdi: block,
-          kogusNo: floor,
-          odaNo: roomStr,
-          kapasite: 6, // 6 beds standard capacity
-          firmaTipi: "ANA_FIRMA",
-          durum: "BOŞ"
-        });
-      }
-    });
-  });
-  return rooms;
-};
+/** Kamp odaları boş başlar — kullanıcı yerleşke/kat/oda oluşturur */
+export const INITIAL_KAMP: KampOdasi[] = [];
 
-export const INITIAL_KAMP: KampOdasi[] = generateKampRooms();
-
-export const INITIAL_KAMP_KAYDI: KampKaydi[] = [
-  {
-    id: "kk1",
-    personelIsim: "Görkem Çiftçi",
-    personelId: "p1",
-    odaId: "ko_room_1",
-    girisTarihi: "2026-05-10",
-    durum: "AKTIF"
-  }
-];
+export const INITIAL_KAMP_KAYDI: KampKaydi[] = [];
 
 export const INITIAL_KAMP_SARF: KampSarf[] = [
   {
@@ -269,3 +235,62 @@ export const INITIAL_EPOSTA: EpostaGonderim[] = [
     tarih: "2026-06-18"
   }
 ];
+
+import { OperatorFaaliyet, TaseronKesintiRaporu, TaseronEnerjiKaydi, TaseronYemekKaydi, MaaşOdeme, PersonelIslemGecmisi, CariKartIslem, StokKartIslem, IzinDilekcesi, IhbarTutanagi } from '../types/erp';
+
+export const INITIAL_OPERATOR_FAALIYET: OperatorFaaliyet[] = [
+  {
+    id: "of_1",
+    aracId: "a2",
+    aracPlaka: "EXC-CAT-320",
+    operatorPersonelId: "p1",
+    operatorIsim: "Ahmet Yılmaz",
+    operatorTipi: "JCB",
+    tarih: "2026-06-20",
+    baslangicSaat: "08:00",
+    bitisSaat: "17:00",
+    calismaSuresi: 9,
+    yapilanIs: "Parsel B zemin kazma ve hafriyat",
+    firmaAdi: "Yıldız Elektrik Tesisat",
+    firmaId: "c2",
+    onayDurumu: "ONAYLANDI",
+    kaydedenKullanici: "santiye@kibritci.com",
+    kayitTarihi: "2026-06-20T17:30:00"
+  },
+  {
+    id: "of_2",
+    aracId: "a2",
+    aracPlaka: "EXC-CAT-320",
+    operatorPersonelId: "p1",
+    operatorIsim: "Ahmet Yılmaz",
+    operatorTipi: "JCB",
+    tarih: "2026-06-21",
+    baslangicSaat: "08:00",
+    bitisSaat: "16:00",
+    calismaSuresi: 8,
+    yapilanIs: "Parsel B temel kazısı",
+    firmaAdi: "Demir A.Ş.",
+    firmaId: "c1",
+    onayDurumu: "ONAYLANDI",
+    kaydedenKullanici: "santiye@kibritci.com",
+    kayitTarihi: "2026-06-21T16:30:00"
+  }
+];
+
+export const INITIAL_TASERON_KESINTI: TaseronKesintiRaporu[] = [];
+
+export const INITIAL_TASERON_ENERJI: TaseronEnerjiKaydi[] = [];
+
+export const INITIAL_TASERON_YEMEK: TaseronYemekKaydi[] = [];
+
+export const INITIAL_MAAS_ODEME: MaaşOdeme[] = [];
+
+export const INITIAL_PERSONEL_ISLEM: PersonelIslemGecmisi[] = [];
+
+export const INITIAL_CARI_ISLEM: CariKartIslem[] = [];
+
+export const INITIAL_STOK_ISLEM: StokKartIslem[] = [];
+
+export const INITIAL_IZIN_DILEKCE: IzinDilekcesi[] = [];
+
+export const INITIAL_IHBAR_TUTANAK: IhbarTutanagi[] = [];

@@ -1,22 +1,47 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, CheckCircle, XCircle, Users, ClipboardCheck, 
   MapPin, Camera, Sparkles, Undo2, ChevronRight, User, 
   Info, Smartphone, Monitor, Search, PlusCircle, Trash2, 
   FileSignature, Briefcase, RefreshCw, Send, Image as ImageIcon,
-  Check, X, FileText, UserPlus, Upload, ShieldCheck, Edit2, ArrowLeft
+  Check, X, FileText, UserPlus, Upload, ShieldCheck, Edit2, ArrowLeft, Eye
 } from 'lucide-react';
-import { Personel, AylikYoklamaMap, YoklamaDurum, SahaFaaliyeti as SahaFaaliyetiType } from '../types/erp';
-import { db } from '../lib/firebase';
+import { Personel, AylikYoklamaMap, YoklamaDurum, SahaFaaliyeti as SahaFaaliyetiType, SahaFaaliyetTipi } from '../types/erp';
+import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
-import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { buildPersonelListForMonth, getYoklamaDay, isDayActiveForPersonel, isTaseronPersonel, setYoklamaDay } from '../lib/yoklamaUtils';
+import { buildFormenGunlukOzet } from '../lib/gunlukAkisUtils';
+import { buildWhatsAppUrl, isLegacySahaRecord } from '../lib/mobilOnayUtils';
+import {
+  applySahaMesaiToYoklama,
+  filterFormenDayFaaliyetleri,
+  formatMesaiFaaliyetLabel,
+  isMesaiSahaFaaliyet,
+  normalizeMesaiHours as normalizeSahaMesaiHours,
+  getFaaliyetFoto,
+  getFaaliyetFotolar,
+  MAX_SAHA_FOTO_COUNT,
+} from '../lib/sahaFaaliyetUtils';
+import { PARSEL_BLOK_MAP, PARSEL_LIST, defaultBlokForParsel } from '../data/parselBlokMap';
+import { normalizeDateKey, formatDateLabelTr, todayDateKey } from '../lib/dateKeyUtils';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { downloadCsv } from '../lib/reportExport';
+import { KibritciLogo } from './KibritciLogo';
+import { kibritciLogoHtml } from '../lib/kibritciBrand';
+import type { SahaFaaliyetSaveSource } from '../lib/sahaFaaliyetPersistence';
 
 interface FormenScreenProps {
   personeller: Personel[];
   yoklamalar: AylikYoklamaMap;
   setYoklamalar: React.Dispatch<React.SetStateAction<AylikYoklamaMap>>;
+  saveYoklamalarNow?: (next: AylikYoklamaMap) => Promise<void>;
   sahaFaaliyetleri: SahaFaaliyetiType[];
   setSahaFaaliyetleri: (updater: SahaFaaliyetiType[] | ((s: SahaFaaliyetiType[]) => SahaFaaliyetiType[])) => void;
+  saveSahaFaaliyetNow?: (
+    record: SahaFaaliyetiType,
+    kaynak?: SahaFaaliyetSaveSource
+  ) => Promise<unknown>;
+  removeSahaFaaliyetNow?: (record: SahaFaaliyetiType) => Promise<unknown>;
   currentUser: any;
   onSignOut?: () => void;
   isStandalone?: boolean;
@@ -27,8 +52,11 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   personeller,
   yoklamalar,
   setYoklamalar,
+  saveYoklamalarNow,
   sahaFaaliyetleri,
   setSahaFaaliyetleri,
+  saveSahaFaaliyetNow,
+  removeSahaFaaliyetNow,
   currentUser,
   onSignOut,
   isStandalone,
@@ -49,17 +77,9 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     return () => window.removeEventListener('resize', checkMobile);
   }, [isStandalone]);
 
-  // Active Tab: 'yoklama' | 'saha_faaliyet' | 'faaliyet_gecmis' | 'personel_giris' | 'personel_listesi' | 'toplu_puantaj'
-  const [activeTab, setActiveTab] = useState<'yoklama' | 'saha_faaliyet' | 'faaliyet_gecmis' | 'personel_giris' | 'personel_listesi' | 'toplu_puantaj'>('yoklama');
-
-  // Selected cell state for bulk weekly puantaj
-  const [selectedCell, setSelectedCell] = useState<{
-    personelId: string;
-    personelName: string;
-    date: Date;
-    currentDurum: YoklamaDurum;
-    currentMesai: number;
-  } | null>(null);
+  // Active Tab: 'yoklama' | 'saha_faaliyet' | 'personel_giris' | 'personel_listesi'
+  const [activeTab, setActiveTab] = useState<'yoklama' | 'saha_faaliyet' | 'personel_giris' | 'personel_listesi' | 'gunluk_akis' | 'aylik_puantaj'>('yoklama');
+  const [sendingGunlukAkis, setSendingGunlukAkis] = useState(false);
 
   // Helper to match current user to a personnel record
   const matchUserToPersonel = () => {
@@ -82,32 +102,34 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const logActionToPersonelHistory = async (islem: string, detay: string) => {
     const p = matchUserToPersonel();
     if (!p) return;
-    
-    const updatedGecmis = p.gecmis ? [...p.gecmis] : [];
-    updatedGecmis.unshift({
-      id: `log_${Date.now()}`,
-      tarih: new Date().toISOString().split('T')[0] + ' ' + new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
-      islem,
-      detay
-    });
-    
-    if (updatedGecmis.length > 50) updatedGecmis.pop();
-    
+
     try {
       const docRef = doc(db, 'personeller', p.id);
-      await setDoc(docRef, { ...p, gecmis: updatedGecmis });
+      await updateDoc(docRef, {
+        gecmis: arrayUnion({
+          id: `log_${Date.now()}`,
+          tarih: `${new Date().toISOString().split('T')[0]} ${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`,
+          islem,
+          detay,
+        }),
+      });
     } catch (error) {
       console.error('Error logging to personnel history:', error);
     }
   };
 
   // Selected Date - Defaults to today's date in Turkey time
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const today = new Date();
-    const offset = today.getTimezoneOffset();
-    const localToday = new Date(today.getTime() - (offset * 60 * 1000));
-    return localToday.toISOString().split('T')[0];
-  });
+  const [selectedDate, setSelectedDate] = useState(todayDateKey);
+
+  const formenEmail = currentUser?.email?.trim().toLowerCase() || '';
+  const formenUid = currentUser?.uid || '';
+
+  const selectedDateFaaliyetleri = useMemo(
+    () => filterFormenDayFaaliyetleri(sahaFaaliyetleri, selectedDate, formenEmail, formenUid, isLegacySahaRecord),
+    [sahaFaaliyetleri, selectedDate, formenEmail, formenUid]
+  );
+
+  const daySahaFaaliyetleri = selectedDateFaaliyetleri;
 
   // Parsed date components
   const [year, month, day] = selectedDate.split('-').map(Number);
@@ -121,15 +143,22 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const [presentIds, setPresentIds] = useState<string[]>([]);
   const [absentIds, setAbsentIds] = useState<string[]>([]);
   const [mesaiSaatleri, setMesaiSaatleri] = useState<Record<string, number>>({});
+  const [hasLocalAttendanceDraft, setHasLocalAttendanceDraft] = useState(false);
   const [spotlightMesai, setSpotlightMesai] = useState<string>('0');
+  const [lastAttendanceSaveAt, setLastAttendanceSaveAt] = useState<string | null>(null);
 
   // 2. SAHA FAALİYETİ STATE
   const [isNiteligi, setIsNiteligi] = useState('');
   const [parsel, setParsel] = useState('Parsel Bölge 157/46');
   const [blok, setBlok] = useState('GENEL SAHA');
   const [aciklama, setAciklama] = useState('');
-  const [fotoUrl, setFotoUrl] = useState<string | null>(null);
+  const [fotoUrls, setFotoUrls] = useState<string[]>([]);
   const [faaliyetPersonelIds, setFaaliyetPersonelIds] = useState<string[]>([]);
+  const [faaliyetPersonelSearch, setFaaliyetPersonelSearch] = useState('');
+  const [sahaUstaSayisi, setSahaUstaSayisi] = useState<number>(0);
+  const [sahaIsciSayisi, setSahaIsciSayisi] = useState<number>(0);
+  const [faaliyetTipi, setFaaliyetTipi] = useState<SahaFaaliyetTipi>('NORMAL');
+  const [personelMesaiSaatleri, setPersonelMesaiSaatleri] = useState<Record<string, number>>({});
 
   // 3. PERSONEL GİRİŞE YOLLA STATE
   const [yeniAd, setYeniAd] = useState('');
@@ -138,16 +167,14 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const [yeniKimlikFoto, setYeniKimlikFoto] = useState<string | null>(null);
   const [personelGirisListesi, setPersonelGirisListesi] = useState<any[]>([]);
 
-  // 4. FAALİYET EDİT & SEARCH STATES
-  const [faaliyetSearchKeyword, setFaaliyetSearchKeyword] = useState('');
-  const [editingFaaliyet, setEditingFaaliyet] = useState<SahaFaaliyetiType | null>(null);
+  // 4. FAALİYET EDİT STATES
+  const [editingFaaliyetId, setEditingFaaliyetId] = useState<string | null>(null);
   const [lastDeletedFaaliyet, setLastDeletedFaaliyet] = useState<SahaFaaliyetiType | null>(null);
 
   // 5. FİİLİ GÜNLÜK RAPOR STATES
   const [havaDurumu, setHavaDurumu] = useState('Güneşli');
   const [genelNotlar, setGenelNotlar] = useState('');
   const [showPdfPreview, setShowPdfPreview] = useState(false);
-  const [gunlukRaporlar, setGunlukRaporlar] = useState<Record<string, any>>({});
 
   // Status message
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -170,7 +197,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const [guncellemeNedeni, setGuncellemeNedeni] = useState('');
   const [isCikisTalepleriList, setIsCikisTalepleriList] = useState<any[]>([]);
   const [isGuncellemeTalepleriList, setIsGuncellemeTalepleriList] = useState<any[]>([]);
-  const [isGunuTamamlandi, setIsGunuTamamlandi] = useState(false);
+  const [savingAttendance, setSavingAttendance] = useState(false);
 
   // Quick select lists
   const isNitelikleriList = [
@@ -186,77 +213,54 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     'Hafriyat ve Çevre Düzenleme'
   ];
 
-  const PARSEL_BLOK_MAP: Record<string, string[]> = {
-    "GENEL SAHA": [],
-    "Parsel Bölge 157/46": ["GENEL SAHA", "A1", "A2", "B1", "B2", "C1", "C2", "D1", "D2", "E1", "E2", "F1", "F2", "G", "H", "I"],
-    "Parsel Bölge 157/51": ["GENEL SAHA", "A1", "A2", "A3", "B1", "B2", "C1", "C2", "C3", "C4"],
-    "Parsel Bölge 160/2":  ["GENEL SAHA", "A1A", "A1B", "A2A", "A2B", "B1", "B2", "C1", "C2", "C3", "C4", "B3"]
-  };
+  const parsellerList = PARSEL_LIST;
 
-  const parsellerList = Object.keys(PARSEL_BLOK_MAP);
-
-  // Automatically filter personnel active on selectedDate
-  const getActivePersonnelForDate = () => {
-    return personeller.filter(p => {
-      const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
-      if (p.iseGirisTarihi) {
-        if (p.iseGirisTarihi > selectedDate) return false;
-      }
-      if (p.istenCikisTarihi) {
-        if (p.istenCikisTarihi < selectedDate) return false;
-      } else if (!isAktif) {
-        return false;
-      }
-      return true;
+  const monthPersonelList = buildPersonelListForMonth(personeller, yoklamalar, year, month);
+  const activeStaff = monthPersonelList.filter((p) => {
+    if (isTaseronPersonel(p)) return false;
+    const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
+    if (!isAktif && !p.istenCikisTarihi) return false;
+    return isDayActiveForPersonel(p, year, month, day, yoklamalar[p.id] as any);
+  });
+  const assignedPersonelOnSelectedDate = useMemo(() => {
+    const ids = new Set<string>();
+    selectedDateFaaliyetleri.forEach((f) => {
+      if (editingFaaliyetId === f.id) return;
+      (f.aktifPersonelListesi || []).forEach((id) => ids.add(id));
     });
+    return ids;
+  }, [selectedDateFaaliyetleri, editingFaaliyetId]);
+
+  const faaliyetPersonelPoolBase = activeStaff.filter(
+    (p) => presentIds.includes(p.id) && !assignedPersonelOnSelectedDate.has(p.id)
+  );
+  const filteredFaaliyetPersonelPool = faaliyetPersonelPoolBase.filter((p) => {
+    const q = faaliyetPersonelSearch.trim().toLocaleLowerCase('tr-TR');
+    if (!q) return true;
+    return (
+      `${p.ad} ${p.soyad}`.toLocaleLowerCase('tr-TR').includes(q) ||
+      String(p.gorev || '').toLocaleLowerCase('tr-TR').includes(q)
+    );
+  });
+
+  const parseDateParts = (dateStr: string) => {
+    const [y, m, d] = String(dateStr || '').split('-').map(Number);
+    return { y, m, d };
   };
-
-  const activeStaff = getActivePersonnelForDate();
-
-  // Get start of the week (Monday) based on selectedDate
-  const getDaysOfWeek = () => {
-    const current = new Date(selectedDate);
-    const dayOfWeek = current.getDay(); // 0 is Sunday, 1 is Monday...
-    const diff = current.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // adjust when day is sunday
-    const startOfWeek = new Date(current.setDate(diff));
-    
-    const days = [];
-    for (let i = 0; i < 7; i++) {
-      const nextDay = new Date(startOfWeek);
-      nextDay.setDate(startOfWeek.getDate() + i);
-      days.push(nextDay);
-    }
-    return days;
+  const getAttendanceSummaryForDate = (dateStr: string) => {
+    const { y, m, d } = parseDateParts(dateStr);
+    if (!y || !m || !d) return { gelenCount: 0, gelenIds: [] as string[] };
+    const gelenIds = activeStaff
+      .filter((p) => {
+        const dayData = getYoklamaDay(yoklamalar[p.id], y, m, d);
+        return dayData?.durum === 'Geldi';
+      })
+      .map((p) => p.id);
+    return { gelenCount: gelenIds.length, gelenIds };
   };
+  const selectedDateAttendance = getAttendanceSummaryForDate(selectedDate);
 
-  // Handlers for Personel Listesi, Günü Tamamla & Onay Talepleri
-  const handleGunuTamamla = async () => {
-    if (isGunuTamamlandi) {
-      alert("Bugün zaten tamamlanmış olarak işaretlendi.");
-      return;
-    }
-
-    if (!window.confirm(`${selectedDate.split('-').reverse().join('.')} tarihli iş gününü tamamlamak ve tüm raporların, puantaj kontrollerinin yapıldığını ana programa bildirmek istediğinize emin misiniz?`)) {
-      return;
-    }
-
-    try {
-      const docId = `RAPOR-TAMAM-${selectedDate}-${currentUser?.email?.replace(/[@.]/g, '-')}`;
-      await setDoc(doc(db, 'formenGunlukRaporlar', docId), {
-        tarih: selectedDate,
-        formen: currentUser?.email || 'Bilinmeyen Formen',
-        tamamlamaTarihi: new Date().toISOString(),
-        durum: 'TAMAMLANDI',
-        notlar: "Formen günü tamamladı, puantaj ve saha raporları onaylandı.",
-        hazirlayan: currentUser?.displayName || 'Sahadaki Formen'
-      });
-      await logActionToPersonelHistory('Günü Tamamladı', `${selectedDate.split('-').reverse().join('.')} tarihli iş gününü başarıyla tamamladı ve onay için ana programa bildirdi.`);
-      alert("🎉 Şantiye iş günü başarıyla tamamlandı ve ana programa bildirildi!");
-    } catch (err) {
-      console.error(err);
-      alert("Günü tamamlama kaydı oluşturulurken bir hata oluştu.");
-    }
-  };
+  // Handlers for personel action requests
 
   const handleSaveCikisTalebi = async () => {
     if (!cikisNedeni.trim()) {
@@ -345,13 +349,13 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
 
   // Load saved attendance for the selected date on load or date change
   useEffect(() => {
+    if (hasLocalAttendanceDraft) return;
     const present: string[] = [];
     const absent: string[] = [];
     const localMesai: Record<string, number> = {};
 
     activeStaff.forEach(p => {
-      const pMap = yoklamalar[p.id] || {};
-      const dayData = pMap[day];
+      const dayData = getYoklamaDay(yoklamalar[p.id], year, month, day);
       if (dayData) {
         if (dayData.durum === 'Geldi') {
           present.push(p.id);
@@ -367,10 +371,12 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     setPresentIds(present);
     setAbsentIds(absent);
     setMesaiSaatleri(localMesai);
-    
-    // Automatically pre-fill active activities staff with currently marked present staff
-    setFaaliyetPersonelIds(present);
-  }, [selectedDate, yoklamalar, personeller]);
+    setFaaliyetPersonelIds([]);
+  }, [selectedDate, yoklamalar, personeller, hasLocalAttendanceDraft]);
+
+  useEffect(() => {
+    setHasLocalAttendanceDraft(false);
+  }, [selectedDate]);
 
   // Load and subscribe to Personnel entry requests from Firestore
   useEffect(() => {
@@ -415,22 +421,6 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     return () => unsubscribe();
   }, []);
 
-  // Check if day is marked completed
-  useEffect(() => {
-    const coll = collection(db, 'formenGunlukRaporlar');
-    const unsubscribe = onSnapshot(coll, (snapshot) => {
-      let completed = false;
-      snapshot.forEach((doc) => {
-        const d = doc.data();
-        if (d.tarih === selectedDate && d.formen?.toLowerCase() === currentUser?.email?.toLowerCase() && d.durum === 'TAMAMLANDI') {
-          completed = true;
-        }
-      });
-      setIsGunuTamamlandi(completed);
-    });
-    return () => unsubscribe();
-  }, [selectedDate, currentUser]);
-
   // Load and subscribe to Daily Field Reports
   useEffect(() => {
     const coll = collection(db, 'gunlukSahaRaporlari');
@@ -439,8 +429,6 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
       snapshot.forEach((doc) => {
         reports[doc.id] = doc.data();
       });
-      setGunlukRaporlar(reports);
-      
       const existing = reports[`report_${selectedDate}`];
       if (existing) {
         setHavaDurumu(existing.havaDurumu || 'Güneşli');
@@ -454,29 +442,46 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   }, [selectedDate]);
 
   // Derived sets
+  const getInitials = (ad?: string, soyad?: string): string => {
+    const a = (ad || '?').trim();
+    const s = (soyad || '').trim();
+    return `${a.charAt(0) || '?'}${s.charAt(0) || ''}`;
+  };
+  const getDisplayName = (ad?: string, soyad?: string): string =>
+    `${ad || '-'} ${soyad || ''}`.trim();
+
   const remainingStaff = activeStaff.filter(p => !presentIds.includes(p.id) && !absentIds.includes(p.id));
   const filteredRemaining = remainingStaff.filter(p => 
     `${p.ad} ${p.soyad}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.gorev.toLowerCase().includes(searchQuery.toLowerCase())
+    (p.gorev || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Spotlight staff (the first unmarked employee in the pile)
   const spotlightStaff = filteredRemaining[0] || null;
 
+  const setMesaiWithDraft = (id: string, value: number) => {
+    setHasLocalAttendanceDraft(true);
+    const safe = Number.isFinite(value) ? Math.max(0, Math.min(24, value)) : 0;
+    setMesaiSaatleri(prev => ({ ...prev, [id]: safe }));
+  };
+
   // Actions
   const handleMarkPresent = (id: string, mesai: number = 0) => {
+    setHasLocalAttendanceDraft(true);
     setPresentIds(prev => [...prev.filter(x => x !== id), id]);
     setAbsentIds(prev => prev.filter(x => x !== id));
-    setMesaiSaatleri(prev => ({ ...prev, [id]: mesai }));
+    setMesaiSaatleri(prev => ({ ...prev, [id]: Math.max(0, Math.min(24, mesai)) }));
   };
 
   const handleMarkAbsent = (id: string) => {
+    setHasLocalAttendanceDraft(true);
     setAbsentIds(prev => [...prev.filter(x => x !== id), id]);
     setPresentIds(prev => prev.filter(x => x !== id));
     setMesaiSaatleri(prev => ({ ...prev, [id]: 0 }));
   };
 
   const handleResetMark = (id: string) => {
+    setHasLocalAttendanceDraft(true);
     setPresentIds(prev => prev.filter(x => x !== id));
     setAbsentIds(prev => prev.filter(x => x !== id));
     setMesaiSaatleri(prev => {
@@ -487,8 +492,9 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   };
 
   const handleMarkAllPresent = () => {
+    setHasLocalAttendanceDraft(true);
     const unmarkedIds = remainingStaff.map(p => p.id);
-    setPresentIds(prev => [...prev, ...unmarkedIds]);
+    setPresentIds(prev => Array.from(new Set([...prev, ...unmarkedIds])));
     setAbsentIds(prev => prev.filter(id => !unmarkedIds.includes(id)));
     const copy = { ...mesaiSaatleri };
     unmarkedIds.forEach(id => {
@@ -498,31 +504,161 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   };
 
   // Digital Signature Save
-  const handleSaveYoklama = () => {
-    // Save to the main yoklamalar map
-    setYoklamalar(prev => {
-      const next = { ...prev };
-      const gonderenYazar = currentUser?.displayName || (currentUser?.ad ? `${currentUser.ad} ${currentUser.soyad || ''}` : '') || 'FORMEN';
-      
+  const handleSaveYoklama = async () => {
+    if (savingAttendance) return;
+    setSavingAttendance(true);
+    try {
+      const next = { ...yoklamalar };
+
       activeStaff.forEach(p => {
-        const pMap = next[p.id] ? { ...next[p.id] } : {};
-        const dayData = pMap[day] || { durum: 'Girilmedi', mesaiSaati: 0 };
+        const dayData = getYoklamaDay(next[p.id], year, month, day);
 
         if (presentIds.includes(p.id)) {
-          pMap[day] = { ...dayData, durum: 'Geldi', mesaiSaati: mesaiSaatleri[p.id] || 0, gonderen: gonderenYazar };
+          next[p.id] = setYoklamaDay(next[p.id], year, month, day, {
+            ...(dayData || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 }),
+            durum: 'Geldi',
+            mesaiSaati: mesaiSaatleri[p.id] || 0,
+            gonderen: currentUser?.email || 'formen',
+          });
         } else if (absentIds.includes(p.id)) {
-          pMap[day] = { ...dayData, durum: 'Yok', mesaiSaati: 0, gonderen: gonderenYazar };
+          next[p.id] = setYoklamaDay(next[p.id], year, month, day, {
+            ...(dayData || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 }),
+            durum: 'Yok',
+            mesaiSaati: 0,
+            gonderen: currentUser?.email || 'formen',
+          });
         } else {
-          pMap[day] = { ...dayData, durum: 'Girilmedi', mesaiSaati: 0 };
+          // Sıfırlanan / işaretsiz personel — Geldi/Yok kaydını temizle
+          next[p.id] = setYoklamaDay(next[p.id], year, month, day, {
+            durum: 'Girilmedi',
+            mesaiSaati: 0,
+            gonderen: currentUser?.email || 'formen',
+          });
         }
-
-        next[p.id] = pMap;
       });
 
-      return next;
+      if (saveYoklamalarNow) {
+        await saveYoklamalarNow(next);
+      } else {
+        setYoklamalar(next);
+      }
+
+      setHasLocalAttendanceDraft(false);
+      setLastAttendanceSaveAt(new Date().toLocaleString('tr-TR'));
+      showStatus('success', `📅 ${selectedDate} Tarihli Yoklama ve Mesai Saatleri, Formen imzasıyla başarıyla sisteme kaydedildi ve ana programa gönderildi!`);
+    } catch (err: any) {
+      showStatus('error', `Yoklama kaydedilemedi: ${err?.message || 'Bilinmeyen hata'}`);
+    } finally {
+      setSavingAttendance(false);
+    }
+  };
+
+  const escapeHtml = (value: string): string =>
+    String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+  const buildGunlukCalisanListesi = () => {
+    const dateLabel = selectedDate.split('-').reverse().join('.');
+    const presentStaff = activeStaff.filter((p) => presentIds.includes(p.id));
+    const satirlar = presentStaff.map((p, index) => {
+      const personAssignments = daySahaFaaliyetleri
+        .filter((f) => Array.isArray((f as any).aktifPersonelListesi) && (f as any).aktifPersonelListesi.includes(p.id))
+        .map((f) => `${f.parsel} / ${f.blok || 'GENEL SAHA'}`);
+      const assignmentText = personAssignments.length > 0 ? personAssignments.join(', ') : 'GENEL SAHA / Planlama Bekleniyor';
+      return {
+        sira: index + 1,
+        adSoyad: `${p.ad} ${p.soyad}`,
+        gorev: p.gorev || '-',
+        mesai: Number(mesaiSaatleri[p.id] || 0),
+        yer: assignmentText,
+      };
+    });
+    return { dateLabel, satirlar };
+  };
+
+  const handleShareGunlukCalisanWhatsApp = () => {
+    const { dateLabel, satirlar } = buildGunlukCalisanListesi();
+    if (satirlar.length === 0) {
+      showStatus('error', 'Önce günlük yoklamada gelen personelleri kaydedin.');
+      return;
+    }
+    const metin = [
+      `KIBRITCI INSAAT - GUNLUK CALISAN LISTESI`,
+      `Tarih: ${dateLabel}`,
+      `Formen: ${currentUser?.displayName || currentUser?.email || '-'}`,
+      `Toplam Calisan: ${satirlar.length}`,
+      '----------------------------------------',
+      ...satirlar.map((s) => `${s.sira}. ${s.adSoyad} | ${s.gorev} | Gorev Yeri: ${s.yer} | Mesai: +${s.mesai} saat`),
+    ].join('\n');
+    window.open(buildWhatsAppUrl(metin), '_blank');
+  };
+
+  const handlePrintGunlukCalisanPdf = () => {
+    const { dateLabel, satirlar } = buildGunlukCalisanListesi();
+    if (satirlar.length === 0) {
+      showStatus('error', 'PDF için günlük çalışan listesi bulunamadı.');
+      return;
+    }
+    const html = `<!doctype html>
+<html><head><meta charset="utf-8" /><title>Gunluk Calisan Listesi</title>
+<style>
+body{font-family:Arial,sans-serif;padding:20px;color:#0f172a}
+h1{font-size:16px;margin:0 0 4px 0} .meta{font-size:12px;color:#475569;margin-bottom:12px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{border:1px solid #cbd5e1;padding:6px;text-align:left;vertical-align:top}
+th{background:#f1f5f9}
+</style></head><body>
+<h1>KIBRITCI INSAAT - GUNLUK CALISAN LISTESI</h1>
+<div class="meta">Tarih: ${escapeHtml(dateLabel)} | Formen: ${escapeHtml(currentUser?.displayName || currentUser?.email || '-')} | Toplam: ${satirlar.length}</div>
+<table>
+<thead><tr><th>#</th><th>Ad Soyad</th><th>Gorev</th><th>Gorev Yeri</th><th>Mesai (+saat)</th></tr></thead>
+<tbody>
+${satirlar
+  .map(
+    (s) =>
+      `<tr><td>${s.sira}</td><td>${escapeHtml(s.adSoyad)}</td><td>${escapeHtml(s.gorev)}</td><td>${escapeHtml(s.yer)}</td><td>${s.mesai}</td></tr>`
+  )
+  .join('')}
+</tbody></table>
+</body></html>`;
+    const printWin = window.open('', '_blank');
+    if (!printWin) return;
+    printWin.document.write(html);
+    printWin.document.close();
+    printWin.focus();
+    setTimeout(() => printWin.print(), 250);
+  };
+
+  const handleExportAylikPuantajCsv = () => {
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    const rows: string[][] = [
+      ['Personel', 'Gorev', ...days.map((d) => String(d)), 'Gelen Gun', 'Toplam Mesai (saat)'],
+    ];
+
+    monthPersonelList.forEach((p) => {
+      const map = yoklamalar[p.id] as any;
+      let geldi = 0;
+      let toplamMesai = 0;
+      const dayCells = days.map((d) => {
+        if (!isDayActiveForPersonel(p, year, month, d, map)) return 'C';
+        const dayData = getYoklamaDay(map, year, month, d);
+        const durum = dayData?.durum || 'Girilmedi';
+        const mesai = Number(dayData?.mesaiSaati || 0);
+        if (durum === 'Geldi') geldi += 1;
+        toplamMesai += mesai;
+        return mesai > 0 ? `${durum} (+${mesai})` : durum;
+      });
+      rows.push([`${p.ad} ${p.soyad}`, p.gorev || '-', ...dayCells, String(geldi), toplamMesai.toFixed(2)]);
     });
 
-    showStatus('success', `📅 ${selectedDate} Tarihli Yoklama ve Mesai Saatleri, Formen imzasıyla başarıyla sisteme kaydedildi ve ana programa gönderildi!`);
+    const periodLabel = `${year}-${String(month).padStart(2, '0')}`;
+    downloadCsv(rows, `Formen_Aylik_Puantaj_${periodLabel}.csv`);
+    showStatus('success', 'Aylik puantaj CSV raporu indirildi.');
   };
 
   // Quick status helper
@@ -542,57 +678,299 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     setSelectedDate(localD.toISOString().split('T')[0]);
   };
 
-  // Image capture simulation
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        if (event.target?.result) {
-          const rawBase64 = event.target.result as string;
-          const compressed = await compressImage(rawBase64);
-          setFotoUrl(compressed);
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+
+    const remaining = MAX_SAHA_FOTO_COUNT - fotoUrls.length;
+    if (remaining <= 0) {
+      showStatus('error', `En fazla ${MAX_SAHA_FOTO_COUNT} fotoğraf eklenebilir.`);
+      e.target.value = '';
+      return;
+    }
+
+    const toProcess = Array.from(files).slice(0, remaining);
+    if (files.length > remaining) {
+      showStatus('error', `En fazla ${MAX_SAHA_FOTO_COUNT} fotoğraf — ${remaining} adet eklendi.`);
+    }
+
+    try {
+      const added: string[] = [];
+      for (const file of toProcess) {
+        const rawBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (event) => resolve(String(event.target?.result || ''));
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        try {
+          added.push(await compressImage(rawBase64));
+        } catch {
+          added.push(rawBase64);
         }
-      };
-      reader.readAsDataURL(file);
+      }
+      setFotoUrls((prev) => [...prev, ...added].slice(0, MAX_SAHA_FOTO_COUNT));
+      if (files.length <= remaining) {
+        showStatus('success', `${added.length} fotoğraf eklendi (${Math.min(fotoUrls.length + added.length, MAX_SAHA_FOTO_COUNT)}/${MAX_SAHA_FOTO_COUNT}).`);
+      }
+    } catch {
+      showStatus('error', 'Fotoğraf yüklenemedi, tekrar deneyin.');
+    } finally {
+      e.target.value = '';
     }
   };
 
+  const handleRemoveFoto = (index: number) => {
+    setFotoUrls((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleFillWorkerCountsFromSelection = () => {
+    if (!faaliyetPersonelIds.length) {
+      setSahaUstaSayisi(0);
+      setSahaIsciSayisi(0);
+      showStatus('error', 'Önce listeden personel seçin.');
+      return;
+    }
+    let usta = 0;
+    let isci = 0;
+    faaliyetPersonelIds.forEach((pid) => {
+      const p = personeller.find((x) => x.id === pid);
+      const gorev = String(p?.gorev || '').toLocaleLowerCase('tr-TR');
+      if (gorev.includes('usta')) {
+        usta += 1;
+      } else {
+        isci += 1;
+      }
+    });
+    setSahaUstaSayisi(usta);
+    setSahaIsciSayisi(isci);
+    showStatus('success', `Seçimden sayı dolduruldu: ${usta} usta, ${isci} düz işçi.`);
+  };
+
+  const logAssignedPersonelHistory = async (faaliyet: SahaFaaliyetiType) => {
+    if (!Array.isArray(faaliyet.aktifPersonelListesi) || faaliyet.aktifPersonelListesi.length === 0) return;
+    const faaliyetOzeti = `${faaliyet.tarih} tarihinde "${faaliyet.isNiteligi}" işi için ${faaliyet.parsel} / ${faaliyet.blok} sahasında görevlendirildi.`;
+    await Promise.all(
+      faaliyet.aktifPersonelListesi.map(async (pid) => {
+        try {
+          const personelRef = doc(db, 'personeller', pid);
+          await updateDoc(personelRef, {
+            gecmis: arrayUnion({
+              id: `saha_gorev_${faaliyet.id}_${pid}`,
+              tarih: `${faaliyet.tarih} ${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`,
+              islem: 'Saha Görevlendirme',
+              detay: faaliyetOzeti,
+              kaynak: 'FORMEN_MOBIL',
+            }),
+          });
+        } catch (error) {
+          console.error('Personel görev geçmişi güncellenemedi:', pid, error);
+        }
+      })
+    );
+  };
+
   // Submit Saha Faaliyeti
-  const handleSaveFaaliyet = (e: React.FormEvent) => {
+  const resetFaaliyetForm = () => {
+    setIsNiteligi('');
+    setAciklama('');
+    setFotoUrls([]);
+    setSahaUstaSayisi(0);
+    setSahaIsciSayisi(0);
+    setFaaliyetPersonelIds([]);
+    setFaaliyetPersonelSearch('');
+    setFaaliyetTipi('NORMAL');
+    setPersonelMesaiSaatleri({});
+    setEditingFaaliyetId(null);
+  };
+
+  const loadFaaliyetIntoForm = (sf: SahaFaaliyetiType) => {
+    setEditingFaaliyetId(sf.id);
+    setSelectedDate(normalizeDateKey(sf.tarih) || selectedDate);
+    setIsNiteligi(sf.isNiteligi);
+    setParsel(sf.parsel);
+    setBlok(sf.blok);
+    setAciklama(sf.aciklama || '');
+    setFotoUrls(getFaaliyetFotolar(sf));
+    setFaaliyetPersonelIds(Array.isArray(sf.aktifPersonelListesi) ? [...sf.aktifPersonelListesi] : []);
+    setSahaUstaSayisi(sf.ustaSayisi || 0);
+    setSahaIsciSayisi(sf.isciSayisi || 0);
+    setFaaliyetTipi(sf.faaliyetTipi || 'NORMAL');
+    setPersonelMesaiSaatleri({ ...(sf.personelMesaiSaatleri || {}) });
+    setFaaliyetPersonelSearch('');
+  };
+
+  const syncMesaiFromFaaliyet = async (
+    tarih: string,
+    mesaiMap: Record<string, number> | undefined,
+    previousMesaiMap?: Record<string, number>
+  ) => {
+    const hasNew = mesaiMap && Object.values(mesaiMap).some((h) => Number(h) > 0);
+    const hasPrev = previousMesaiMap && Object.values(previousMesaiMap).some((h) => Number(h) > 0);
+    if (!hasNew && !hasPrev) return;
+
+    let next = { ...yoklamalar };
+    const gonderen = formenEmail || 'FORMEN_MOBIL';
+    if (hasPrev) {
+      next = applySahaMesaiToYoklama(next, tarih, previousMesaiMap, gonderen, 'subtract');
+    }
+    if (hasNew) {
+      next = applySahaMesaiToYoklama(next, tarih, mesaiMap, gonderen, 'add');
+    }
+    if (saveYoklamalarNow) {
+      await saveYoklamalarNow(next);
+    } else {
+      setYoklamalar(next);
+    }
+  };
+
+  const handleSaveFaaliyet = async (e: React.SyntheticEvent) => {
     e.preventDefault();
     if (!isNiteligi) {
       showStatus('error', 'Lütfen iş niteliğini giriniz veya şablondan seçiniz!');
       return;
     }
 
-    const newFaaliyet: SahaFaaliyetiType = {
-      id: `sf_${Date.now()}`,
-      personelId: currentUser?.uid || 'formen_uid', // Logged in foreman
-      tarih: selectedDate,
+    if (faaliyetTipi === 'MESAI_SAHA') {
+      const hasMesai = faaliyetPersonelIds.some((id) => Number(personelMesaiSaatleri[id] || 0) > 0);
+      if (!hasMesai) {
+        showStatus('error', 'Mesai Saha Faaliyeti için en az bir personele mesai saati girin.');
+        return;
+      }
+    }
+
+    const previousRecord = editingFaaliyetId
+      ? sahaFaaliyetleri.find((f) => f.id === editingFaaliyetId)
+      : undefined;
+
+    const faaliyetPayload: SahaFaaliyetiType & { kaydedenFormen?: string } = {
+      id: editingFaaliyetId || `sf_${Date.now()}`,
+      personelId: previousRecord?.personelId || currentUser?.uid || 'formen_uid',
+      tarih: normalizeDateKey(selectedDate),
       isNiteligi,
       parsel,
       blok,
       aciklama,
-      fotoUrl: fotoUrl || undefined,
-      aktifPersonelListesi: faaliyetPersonelIds
+      fotoUrls: fotoUrls.length ? fotoUrls : undefined,
+      fotoUrl: fotoUrls[0] || undefined,
+      aktifPersonelListesi: faaliyetPersonelIds,
+      ustaSayisi: sahaUstaSayisi,
+      isciSayisi: sahaIsciSayisi,
+      faaliyetTipi,
+      personelMesaiSaatleri:
+        faaliyetTipi === 'MESAI_SAHA'
+          ? Object.fromEntries(
+              faaliyetPersonelIds
+                .map((id) => [id, normalizeSahaMesaiHours(Number(personelMesaiSaatleri[id] || 0))])
+                .filter(([, h]) => Number(h) > 0)
+            )
+          : undefined,
+      kaydedenFormen: previousRecord?.kaydedenFormen || formenEmail,
+      kaydeden: previousRecord?.kaydeden || currentUser?.displayName || currentUser?.email || 'FORMEN',
+      kaydedenUid: previousRecord?.kaydedenUid || currentUser?.uid || '',
+      kaynakEkran: previousRecord?.kaynakEkran || 'FORMEN_MOBIL',
+      programaGonderildi: true,
+      programaGonderimTarihi: previousRecord?.programaGonderimTarihi || new Date().toISOString(),
+      iceriAktarimDurumu: previousRecord?.iceriAktarimDurumu || 'BEKLIYOR',
     };
 
-    setSahaFaaliyetleri(prev => [newFaaliyet, ...prev]);
-    logActionToPersonelHistory('Saha Faaliyeti Ekledi', `"${isNiteligi}" iş niteliğiyle, ${parsel} / ${blok} bölgesinde yeni saha imalat faaliyeti kaydetti.`);
-    showStatus('success', '🧱 Saha faaliyeti başarıyla kaydedildi ve şantiye günlük raporuna eklendi!');
-    
-    // Reset form fields
-    setIsNiteligi('');
-    setAciklama('');
-    setFotoUrl(null);
+    try {
+      await saveSahaFaaliyetNow!(faaliyetPayload, 'formen_mobil');
+      if (!editingFaaliyetId) {
+        await logAssignedPersonelHistory(faaliyetPayload);
+      }
+      if (faaliyetTipi === 'MESAI_SAHA' || isMesaiSahaFaaliyet(previousRecord)) {
+        await syncMesaiFromFaaliyet(
+          selectedDate,
+          faaliyetTipi === 'MESAI_SAHA' ? faaliyetPayload.personelMesaiSaatleri : undefined,
+          isMesaiSahaFaaliyet(previousRecord) ? previousRecord?.personelMesaiSaatleri : undefined
+        );
+      }
+    } catch (err: any) {
+      showStatus('error', `Faaliyet gönderilemedi: ${err?.message || 'Bağlantı hatası'}`);
+      return;
+    }
+
+    if (editingFaaliyetId) {
+      logActionToPersonelHistory('Saha Faaliyeti Güncelledi', `"${isNiteligi}" faaliyet kaydı düzenlendi (${parsel} / ${blok}).`);
+      showStatus('success', '✏️ Faaliyet kaydı güncellendi.');
+    } else {
+      logActionToPersonelHistory('Saha Faaliyeti Ekledi', `"${isNiteligi}" iş niteliğiyle, ${parsel} / ${blok} bölgesinde yeni saha imalat faaliyeti kaydetti.`);
+      showStatus(
+        'success',
+        faaliyetTipi === 'MESAI_SAHA'
+          ? '🧱 Mesai saha faaliyeti kaydedildi; mesai saatleri puantaja işlendi.'
+          : '🧱 Faaliyet kaydedildi ve ana programa gönderildi.'
+      );
+    }
+
+    resetFaaliyetForm();
+  };
+
+  const handleDeleteFaaliyet = async (faaliyet: SahaFaaliyetiType) => {
+    if (!window.confirm('Bu saha raporunu silmek istediğinize emin misiniz?')) return;
+    try {
+      if (isMesaiSahaFaaliyet(faaliyet)) {
+        await syncMesaiFromFaaliyet(faaliyet.tarih, undefined, faaliyet.personelMesaiSaatleri);
+      }
+      await removeSahaFaaliyetNow!(faaliyet);
+      setLastDeletedFaaliyet(faaliyet);
+      if (editingFaaliyetId === faaliyet.id) resetFaaliyetForm();
+      showStatus('success', 'Rapor silindi veya arşivlendi. Gerekirse geri alabilirsiniz.');
+    } catch (err: any) {
+      showStatus('error', err?.message || 'Silme işlemi başarısız');
+    }
+  };
+
+  const handleSendGunlukAkis = async () => {
+    if (!window.confirm(`${selectedDate} tarihli günlük akış raporunu yönetime göndermek istiyor musunuz?`)) return;
+    setSendingGunlukAkis(true);
+    try {
+      const gelenIsimler = activeStaff
+        .filter((p) => presentIds.includes(p.id))
+        .map((p) => `${p.ad} ${p.soyad}`);
+      const ozetMetin = buildFormenGunlukOzet({
+        tarih: selectedDate,
+        email: formenEmail,
+        gelen: presentIds.length,
+        gelmeyen: Math.max(0, activeStaff.length - presentIds.length),
+        toplam: activeStaff.length,
+        gelenIsimler,
+        sahaCount: daySahaFaaliyetleri.length,
+        girisCount: personelGirisListesi.filter((g) => g.tarih?.startsWith(selectedDate)).length,
+        cikisCount: isCikisTalepleriList.filter((c) => c.tarih?.startsWith(selectedDate)).length,
+      });
+      const raporId = `formen_akis_${selectedDate}_${formenEmail.replace(/[@.]/g, '-')}`;
+      await saveDocument('mobilGunlukAkisRaporlari', {
+        id: raporId,
+        tip: 'FORMEN',
+        tarih: selectedDate,
+        gonderenEmail: formenEmail,
+        ozetMetin,
+        yoklamaOzet: {
+          gelen: presentIds.length,
+          gelmeyen: Math.max(0, activeStaff.length - presentIds.length),
+          toplam: activeStaff.length,
+          isimler: gelenIsimler,
+        },
+        sahaFaaliyetSayisi: daySahaFaaliyetleri.length,
+        durum: 'ONAY BEKLİYOR',
+        olusturulma: new Date().toISOString(),
+      });
+      showStatus('success', 'Günlük akış raporu yönetim onayına gönderildi!');
+    } catch (err) {
+      console.error(err);
+      showStatus('error', 'Rapor gönderilemedi.');
+    } finally {
+      setSendingGunlukAkis(false);
+    }
   };
 
   const handleSaveGunlukRapor = async () => {
     const reportId = `report_${selectedDate}`;
-    const dayActivities = sahaFaaliyetleri.filter(f => f.tarih === selectedDate);
+    const dayActivities = selectedDateFaaliyetleri;
     const presentStaffNames = activeStaff
-      .filter(p => presentIds.includes(p.id))
+      .filter(p => selectedDateAttendance.gelenIds.includes(p.id))
       .map(p => `${p.ad} ${p.soyad} (${p.gorev})`);
 
     const reportData = {
@@ -601,7 +979,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
       havaDurumu,
       genelNotlar,
       gonderen: currentUser?.displayName || (currentUser?.ad ? `${currentUser.ad} ${currentUser.soyad || ''}` : '') || 'FORMEN',
-      toplamEkip: presentIds.length,
+      toplamEkip: selectedDateAttendance.gelenCount,
       faaliyetler: dayActivities,
       yoklama: presentStaffNames,
       onayDurumu: 'BEKLİYOR',
@@ -610,7 +988,26 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
 
     try {
       await setDoc(doc(db, 'gunlukSahaRaporlari', reportId), reportData);
-      showStatus('success', '📄 Fiili Günlük Rapor başarıyla kaydedildi ve ana programa gönderildi!');
+      const rows = dayActivities
+        .map(
+          (sf, idx) =>
+            `<tr><td>${idx + 1}</td><td>${escapeHtml(sf.tarih)}</td><td>${escapeHtml(sf.isNiteligi)}</td><td>${escapeHtml(sf.parsel)} / ${escapeHtml(sf.blok)}</td><td>${escapeHtml(sf.aciklama || '-')}</td></tr>`
+        )
+        .join('');
+      const html = `<!doctype html><html><head><meta charset="utf-8"/><title>Formen Raporu ${selectedDate}</title>
+      <style>body{font-family:Arial,sans-serif;padding:20px;color:#0f172a}h1{font-size:16px;margin-bottom:10px}.meta{font-size:12px;color:#475569;margin-bottom:12px}
+      table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #cbd5e1;padding:6px;text-align:left;vertical-align:top}th{background:#f1f5f9}</style>
+      </head><body><div style="margin-bottom:10px;">${kibritciLogoHtml(40)}</div><h1 style="font-size:14px;margin:0 0 10px;">FORMEN GÜNLÜK SAHA RAPORU</h1>
+      <div class="meta">Tarih: ${escapeHtml(selectedDate)} | Gelen personel: ${selectedDateAttendance.gelenCount}</div>
+      <table><thead><tr><th>#</th><th>Tarih</th><th>İş Niteliği</th><th>Lokasyon</th><th>Açıklama</th></tr></thead><tbody>${rows || '<tr><td colspan="5">Kayıt yok</td></tr>'}</tbody></table>
+      <script>window.onload=()=>window.print()</script></body></html>`;
+      const popup = window.open('', '_blank', 'width=1000,height=700');
+      if (popup) {
+        popup.document.open();
+        popup.document.write(html);
+        popup.document.close();
+      }
+      showStatus('success', '📄 Günlük rapor kaydedildi. PDF penceresi açıldı.');
       setShowPdfPreview(false);
     } catch (err: any) {
       showStatus('error', 'Rapor kaydedilirken hata oluştu: ' + err.message);
@@ -702,11 +1099,8 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
             <div className="bg-slate-900 text-white p-4 pt-5 pb-4 space-y-3 shrink-0 shadow-sm">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <div className="w-7 h-7 bg-amber-500 rounded-lg flex items-center justify-center text-slate-900 font-bold text-xs">
-                    K
-                  </div>
+                  <KibritciLogo size="sm" className="h-7" />
                   <div>
-                    <h3 className="text-xs font-black tracking-wide font-display text-amber-400">KİBRİTÇİ SAHA</h3>
                     <p className="text-[8px] text-slate-400 font-mono tracking-tighter uppercase">Kullanıcı: FORMEN</p>
                   </div>
                 </div>
@@ -754,14 +1148,14 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                 <input 
                   type="date"
                   value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="bg-slate-800 text-white border-0 py-0.5 px-1 rounded-lg text-[10px] font-bold focus:ring-1 focus:ring-amber-500 outline-none max-w-[28px] cursor-pointer"
+                  onChange={(e) => setSelectedDate(normalizeDateKey(e.target.value))}
+                  className="bg-slate-800 text-white border border-slate-700 py-1 px-1.5 rounded-lg text-[10px] font-bold focus:ring-1 focus:ring-amber-500 outline-none min-w-[7.5rem] cursor-pointer"
                   title="Başka Tarih Seç"
                 />
               </div>
 
               {/* Segmented control tabs */}
-              <div className="grid grid-cols-6 gap-0.5 bg-slate-950 p-1 rounded-xl">
+              <div className="flex flex-wrap gap-1 bg-slate-950 p-1 rounded-xl">
                 <button
                   onClick={() => setActiveTab('yoklama')}
                   className={`py-1.5 rounded-lg text-[8px] font-extrabold flex flex-col items-center justify-center transition duration-150 cursor-pointer ${
@@ -772,13 +1166,13 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                   <span>Yoklama Al</span>
                 </button>
                 <button
-                  onClick={() => setActiveTab('toplu_puantaj')}
+                  onClick={() => setActiveTab('aylik_puantaj')}
                   className={`py-1.5 rounded-lg text-[8px] font-extrabold flex flex-col items-center justify-center transition duration-150 cursor-pointer ${
-                    activeTab === 'toplu_puantaj' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
+                    activeTab === 'aylik_puantaj' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  <Calendar size={11} className="mb-0.5" />
-                  <span>Toplu Puantaj</span>
+                  <FileText size={11} className="mb-0.5" />
+                  <span>Aylık Puantaj</span>
                 </button>
                 <button
                   onClick={() => setActiveTab('saha_faaliyet')}
@@ -788,15 +1182,6 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                 >
                   <MapPin size={11} className="mb-0.5" />
                   <span>Saha Raporu</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('faaliyet_gecmis')}
-                  className={`py-1.5 rounded-lg text-[8px] font-extrabold flex flex-col items-center justify-center transition duration-150 cursor-pointer ${
-                    activeTab === 'faaliyet_gecmis' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <FileText size={11} className="mb-0.5" />
-                  <span>Rapor Arşivi</span>
                 </button>
                 <button
                   onClick={() => setActiveTab('personel_giris')}
@@ -814,7 +1199,16 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                   }`}
                 >
                   <Users size={11} className="mb-0.5" />
-                  <span>Personeller</span>
+                  <span>Personel</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('gunluk_akis')}
+                  className={`flex-1 min-w-[4.5rem] py-1.5 rounded-lg text-[8px] font-extrabold flex flex-col items-center justify-center transition duration-150 cursor-pointer ${
+                    activeTab === 'gunluk_akis' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Send size={11} className="mb-0.5" />
+                  <span>Günlük Akış</span>
                 </button>
               </div>
             </div>
@@ -853,11 +1247,11 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
 
                       <div className="flex items-center space-x-3 pt-1">
                         <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center font-bold text-amber-400 text-lg uppercase shadow-inner shrink-0">
-                          {spotlightStaff.ad.substring(0, 1)}{spotlightStaff.soyad.substring(0, 1)}
+                          {getInitials(spotlightStaff.ad, spotlightStaff.soyad)}
                         </div>
                         <div className="min-w-0">
                           <h4 className="font-bold text-xs tracking-wide text-gray-100 truncate">
-                            {spotlightStaff.ad} {spotlightStaff.soyad}
+                            {getDisplayName(spotlightStaff.ad, spotlightStaff.soyad)}
                           </h4>
                           <p className="text-[9px] text-slate-400 font-mono font-medium tracking-tight mt-0.5">
                             💼 {spotlightStaff.departman} / {spotlightStaff.gorev}
@@ -1058,10 +1452,54 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
 
                     <button
                       onClick={handleSaveYoklama}
-                      className="w-full bg-slate-900 hover:bg-slate-950 text-white font-extrabold text-[10px] py-2.5 px-4 rounded-xl transition duration-150 shadow-md flex items-center justify-center space-x-1.5 cursor-pointer"
+                      className="w-full bg-slate-900 hover:bg-slate-950 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-extrabold text-[10px] py-2.5 px-4 rounded-xl transition duration-150 shadow-md flex items-center justify-center space-x-1.5 cursor-pointer"
+                      disabled={!hasLocalAttendanceDraft || savingAttendance}
                     >
-                      <span>✍️ YOKLAMAYI İMZALA VE KAYDET</span>
+                      <span>{savingAttendance ? '⏳ KAYDEDİLİYOR...' : hasLocalAttendanceDraft ? '✍️ YOKLAMAYI İMZALA VE KAYDET' : '✅ YOKLAMA KAYITLI'}</span>
                     </button>
+                    {hasLocalAttendanceDraft && (
+                      <p className="text-[9px] text-amber-700 font-bold text-center bg-amber-50 border border-amber-200 rounded-lg py-1.5">
+                        Kaydedilmemiş yoklama/mesai değişikliği var.
+                      </p>
+                    )}
+                    {lastAttendanceSaveAt && (
+                      <p className="text-[9px] text-slate-600 font-bold text-center bg-slate-100 border border-slate-200 rounded-lg py-1.5">
+                        Son kayıt: {lastAttendanceSaveAt}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-white rounded-3xl border p-4 shadow-xs space-y-3">
+                    <div className="flex items-center space-x-2 text-slate-900">
+                      <FileText size={14} className="text-amber-500" />
+                      <span className="font-bold text-[10px] uppercase tracking-wider">FORMEN RAPORLARI</span>
+                    </div>
+                    <p className="text-[9px] text-slate-500 leading-snug">
+                      Günlük çalışan listesi (görev yeri + mesai) raporunu WhatsApp metni veya PDF olarak paylaşın. Aylık puantajı da CSV olarak dışa aktarabilirsiniz.
+                    </p>
+                    <div className="grid grid-cols-1 gap-2">
+                      <button
+                        type="button"
+                        onClick={handleShareGunlukCalisanWhatsApp}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] py-2.5 rounded-xl transition"
+                      >
+                        WhatsApp: Günlük Çalışan Listesi
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handlePrintGunlukCalisanPdf}
+                        className="w-full bg-slate-900 hover:bg-slate-950 text-white font-black text-[10px] py-2.5 rounded-xl transition"
+                      >
+                        PDF: Günlük Çalışan Listesi
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('aylik_puantaj')}
+                        className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] py-2.5 rounded-xl transition"
+                      >
+                        Aylık Puantaj Tablosunu Aç
+                      </button>
+                    </div>
                   </div>
 
                   {/* 4. MARKED HISTORY & UNDO OVERVIEW */}
@@ -1071,6 +1509,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                         <span className="font-bold text-[10px] text-slate-400 uppercase tracking-wider block">Mevcut İşaretliler ({presentIds.length + absentIds.length})</span>
                         <button
                           onClick={() => {
+                            setHasLocalAttendanceDraft(true);
                             setPresentIds([]);
                             setAbsentIds([]);
                             setMesaiSaatleri({});
@@ -1096,14 +1535,14 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                               <div className="flex items-center space-x-1.5 shrink-0">
                                 <div className="flex items-center bg-slate-100 rounded-lg px-1 py-0.5">
                                   <button
-                                    onClick={() => setMesaiSaatleri(prev => ({ ...prev, [id]: Math.max(0, (prev[id] || 0) - 1) }))}
+                                    onClick={() => setMesaiWithDraft(id, Math.max(0, (mesaiSaatleri[id] || 0) - 1))}
                                     className="w-4 h-4 bg-white text-slate-800 rounded font-black text-[9px] hover:bg-slate-200"
                                   >
                                     -
                                   </button>
                                   <span className="text-[9px] font-black mx-1.5 min-w-[8px] text-center text-slate-700">{hrs}</span>
                                   <button
-                                    onClick={() => setMesaiSaatleri(prev => ({ ...prev, [id]: Math.min(12, (prev[id] || 0) + 1) }))}
+                                    onClick={() => setMesaiWithDraft(id, Math.min(12, (mesaiSaatleri[id] || 0) + 1))}
                                     className="w-4 h-4 bg-white text-slate-800 rounded font-black text-[9px] hover:bg-slate-200"
                                   >
                                     +
@@ -1146,6 +1585,41 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
               {/* TAB 2: SAHA FAALİYETİ RAPORLAMA FORM */}
               {activeTab === 'saha_faaliyet' && (
                 <>
+                  {lastDeletedFaaliyet && (
+                    <div className="bg-amber-50 border border-amber-300 p-2.5 rounded-2xl flex items-center justify-between text-[9px] font-bold text-amber-900 shadow-sm mb-3">
+                      <span>🗑️ Faaliyet silindi. Geri almak ister misiniz?</span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!lastDeletedFaaliyet) return;
+                          try {
+                            await saveSahaFaaliyetNow!(lastDeletedFaaliyet, 'restore');
+                            setLastDeletedFaaliyet(null);
+                            showStatus('success', 'Silme işlemi geri alındı, faaliyet başarıyla kurtarıldı!');
+                          } catch (err: any) {
+                            showStatus('error', err?.message || 'Geri alma başarısız');
+                          }
+                        }}
+                        className="bg-amber-600 text-white px-2 py-1 rounded-lg text-[8px] uppercase tracking-wider hover:bg-amber-700"
+                      >
+                        Geri Al
+                      </button>
+                    </div>
+                  )}
+
+                  {editingFaaliyetId && (
+                    <div className="bg-blue-50 border border-blue-200 p-2.5 rounded-2xl flex items-center justify-between text-[9px] font-bold text-blue-900 shadow-sm mb-3">
+                      <span>✏️ Kayıt düzenleniyor — değişiklikleri kaydetmek için formu kullanın.</span>
+                      <button
+                        type="button"
+                        onClick={resetFaaliyetForm}
+                        className="bg-white border border-blue-200 text-blue-700 px-2 py-1 rounded-lg text-[8px] uppercase"
+                      >
+                        İptal
+                      </button>
+                    </div>
+                  )}
+
                   <form onSubmit={handleSaveFaaliyet} className="space-y-3.5 animate-in fade-in duration-150">
                   
                   <div className="bg-white rounded-3xl border p-4 shadow-xs space-y-3">
@@ -1153,8 +1627,41 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                     {/* Header */}
                     <div className="flex items-center space-x-2 text-slate-950">
                       <Briefcase size={14} className="text-amber-500" />
-                      <span className="font-bold text-[10px] uppercase tracking-wider">GÜNLÜK SAHA FAALİYET GİRİŞİ</span>
+                      <span className="font-bold text-[10px] uppercase tracking-wider">
+                        {editingFaaliyetId ? 'SAHA FAALİYET DÜZENLE' : 'GÜNLÜK SAHA FAALİYET GİRİŞİ'}
+                      </span>
                     </div>
+
+                    {/* Faaliyet tipi */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setFaaliyetTipi('NORMAL')}
+                        className={`py-2 px-2 rounded-xl text-[9px] font-black border transition ${
+                          faaliyetTipi === 'NORMAL'
+                            ? 'bg-slate-900 text-white border-slate-900'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        Normal Saha Faaliyeti
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFaaliyetTipi('MESAI_SAHA')}
+                        className={`py-2 px-2 rounded-xl text-[9px] font-black border transition ${
+                          faaliyetTipi === 'MESAI_SAHA'
+                            ? 'bg-amber-500 text-slate-950 border-amber-600'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-amber-50'
+                        }`}
+                      >
+                        Mesai Saha Faaliyeti
+                      </button>
+                    </div>
+                    {faaliyetTipi === 'MESAI_SAHA' && (
+                      <p className="text-[8px] text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5 leading-snug">
+                        Seçilen personellere girilen mesai saatleri otomatik olarak Yoklama ve Puantaj sekmesine işlenir.
+                      </p>
+                    )}
 
                     {/* İş Niteliği */}
                     <div className="space-y-1.5">
@@ -1225,6 +1732,16 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                       </div>
                     </div>
 
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">Faaliyet Tarihi</label>
+                      <input
+                        type="date"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(normalizeDateKey(e.target.value))}
+                        className="w-full bg-slate-50 border border-slate-200 py-2 px-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-[10px] font-semibold text-slate-800"
+                      />
+                    </div>
+
                     {/* Açıklama */}
                     <div className="space-y-1">
                       <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">Faaliyet Detay / Açıklama</label>
@@ -1237,88 +1754,194 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                       />
                     </div>
 
-                    {/* Photo upload / camera */}
+                    <div className="space-y-1.5 border border-slate-200 rounded-2xl p-3 bg-slate-50/60">
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="font-bold text-slate-600 uppercase text-[8px] tracking-wider block">DB Personel Görevlendirme (Yeni Metod)</label>
+                        <button
+                          type="button"
+                          onClick={handleFillWorkerCountsFromSelection}
+                          className="text-[8px] bg-blue-600 hover:bg-blue-700 text-white font-bold px-2 py-1 rounded-lg"
+                        >
+                          Seçimden Sayıyı Doldur
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={faaliyetPersonelSearch}
+                        onChange={(e) => setFaaliyetPersonelSearch(e.target.value)}
+                        placeholder="Personel ad/görev ara..."
+                        className="w-full bg-white border border-slate-200 py-1.5 px-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 text-[10px] font-medium text-slate-800"
+                      />
+                      <div className="max-h-36 overflow-y-auto space-y-1 pr-0.5">
+                        {filteredFaaliyetPersonelPool.length === 0 && (
+                          <div className="text-[10px] text-slate-400 border border-dashed border-slate-200 rounded-xl py-2 px-2">
+                            Seçili tarihte yoklamada &quot;Geldi&quot; işaretli ve başka faaliyete atanmamış personel bulunamadı.
+                          </div>
+                        )}
+                        {filteredFaaliyetPersonelPool.map((p) => {
+                          const selected = faaliyetPersonelIds.includes(p.id);
+                          return (
+                            <button
+                              type="button"
+                              key={p.id}
+                              onClick={() =>
+                                setFaaliyetPersonelIds((prev) =>
+                                  prev.includes(p.id) ? prev.filter((id) => id !== p.id) : [...prev, p.id]
+                                )
+                              }
+                              className={`w-full text-left border rounded-xl px-2.5 py-1.5 text-[10px] font-bold transition ${
+                                selected
+                                  ? 'bg-blue-50 border-blue-300 text-blue-900'
+                                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                              }`}
+                            >
+                              {p.ad} {p.soyad} · {p.gorev || 'Görev yok'}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="text-[10px] text-slate-700 font-semibold">
+                        Seçili Personel: {faaliyetPersonelIds.length}
+                      </div>
+                      {faaliyetTipi === 'MESAI_SAHA' && faaliyetPersonelIds.length > 0 && (
+                        <div className="space-y-1.5 border border-amber-200 bg-amber-50/40 rounded-xl p-2">
+                          <div className="text-[8px] font-black text-amber-800 uppercase">Personel Mesai Saatleri</div>
+                          {faaliyetPersonelIds.map((pid) => {
+                            const p = personeller.find((x) => x.id === pid);
+                            if (!p) return null;
+                            return (
+                              <div key={pid} className="flex items-center justify-between gap-2 bg-white border border-amber-100 rounded-lg px-2 py-1">
+                                <span className="text-[9px] font-bold text-slate-800 truncate">{p.ad} {p.soyad}</span>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={14}
+                                    step={0.5}
+                                    value={personelMesaiSaatleri[pid] ?? 0}
+                                    onChange={(e) =>
+                                      setPersonelMesaiSaatleri((prev) => ({
+                                        ...prev,
+                                        [pid]: normalizeSahaMesaiHours(parseFloat(e.target.value) || 0),
+                                      }))
+                                    }
+                                    className="w-14 text-center bg-slate-50 border border-slate-200 rounded-lg py-0.5 text-[9px] font-mono font-bold"
+                                  />
+                                  <span className="text-[8px] text-slate-500">sa</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Photo upload / camera — max 5 */}
                     <div className="space-y-1.5">
-                      <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">Saha Fotoğrafı (Anlık Çekim / Yükleme)</label>
-                      
-                      <div className="flex items-center space-x-3">
-                        <label className="bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition w-24 h-20 shrink-0 text-slate-500 hover:text-slate-800">
-                          <Camera size={20} />
-                          <span className="text-[8px] font-bold mt-1 text-center leading-none">Fotoğraf Ekle</span>
-                          <input 
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">
+                          Saha Fotoğrafları (Kamera / Galeri)
+                        </label>
+                        <span className="text-[8px] font-black text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                          {fotoUrls.length}/{MAX_SAHA_FOTO_COUNT}
+                        </span>
+                      </div>
+
+                      <div className="flex items-start gap-2">
+                        <label
+                          className={`bg-slate-100 border-2 border-dashed border-slate-300 rounded-2xl p-3 flex flex-col items-center justify-center transition w-20 h-16 shrink-0 text-slate-500 ${
+                            fotoUrls.length >= MAX_SAHA_FOTO_COUNT
+                              ? 'opacity-40 pointer-events-none'
+                              : 'hover:bg-slate-200 hover:text-slate-800 cursor-pointer'
+                          }`}
+                        >
+                          <Camera size={18} />
+                          <span className="text-[7px] font-bold mt-0.5 text-center leading-none">Kameradan</span>
+                          <input
                             type="file"
                             accept="image/*"
                             capture="environment"
                             onChange={handleImageChange}
                             className="hidden"
+                            disabled={fotoUrls.length >= MAX_SAHA_FOTO_COUNT}
                           />
                         </label>
 
-                        {/* Photo Preview */}
-                        <div className="flex-1 bg-slate-50 border rounded-2xl h-20 overflow-hidden flex items-center justify-center relative">
-                          {fotoUrl ? (
-                            <>
-                              <img src={fotoUrl} alt="Saha Görseli" className="w-full h-full object-cover" />
-                              <button
-                                type="button"
-                                onClick={() => setFotoUrl(null)}
-                                className="absolute top-1 right-1 bg-red-650 hover:bg-red-700 text-white rounded-full p-1 shadow-md text-[8px] font-bold"
-                              >
-                                ✕
-                              </button>
-                            </>
+                        <label
+                          className={`bg-slate-100 border-2 border-dashed border-slate-300 rounded-2xl p-3 flex flex-col items-center justify-center transition w-20 h-16 shrink-0 text-slate-500 ${
+                            fotoUrls.length >= MAX_SAHA_FOTO_COUNT
+                              ? 'opacity-40 pointer-events-none'
+                              : 'hover:bg-slate-200 hover:text-slate-800 cursor-pointer'
+                          }`}
+                        >
+                          <ImageIcon size={18} />
+                          <span className="text-[7px] font-bold mt-0.5 text-center leading-none">Galeriden</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={handleImageChange}
+                            className="hidden"
+                            disabled={fotoUrls.length >= MAX_SAHA_FOTO_COUNT}
+                          />
+                        </label>
+
+                        <div className="flex-1 min-w-0">
+                          {fotoUrls.length === 0 ? (
+                            <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl h-16 flex items-center justify-center text-slate-400">
+                              <div className="text-center p-2">
+                                <ImageIcon size={14} className="mx-auto text-slate-300 mb-0.5" />
+                                <span className="text-[7px] block leading-none">En fazla 5 fotoğraf</span>
+                              </div>
+                            </div>
                           ) : (
-                            <div className="text-center p-3 text-slate-400">
-                              <ImageIcon size={16} className="mx-auto text-slate-300 mb-1" />
-                              <span className="text-[7px] block leading-none">Fotoğraf Seçilmedi</span>
+                            <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+                              {fotoUrls.map((url, idx) => (
+                                <div
+                                  key={`${idx}-${url.slice(0, 24)}`}
+                                  className="relative w-16 h-16 shrink-0 bg-slate-50 border border-slate-200 rounded-xl overflow-hidden"
+                                >
+                                  <img src={url} alt={`Saha ${idx + 1}`} className="w-full h-full object-cover" />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveFoto(idx)}
+                                    className="absolute top-0.5 right-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-[8px] font-bold shadow"
+                                    aria-label="Fotoğrafı kaldır"
+                                  >
+                                    ✕
+                                  </button>
+                                  <span className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[6px] font-bold text-center py-0.5">
+                                    {idx + 1}
+                                  </span>
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>
                       </div>
                     </div>
 
-                    {/* Sahada çalışan ekip selection list */}
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between items-center">
-                        <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">Bu İmalatta Çalışan Ekip ({faaliyetPersonelIds.length} Personel)</label>
-                        <button
-                          type="button"
-                          onClick={() => setFaaliyetPersonelIds(presentIds)}
-                          className="text-amber-600 hover:text-amber-700 font-extrabold text-[8px] uppercase tracking-wider"
-                        >
-                          ✓ Gelenleri Al
-                        </button>
+                    {/* WORKER COUNT INPUTS */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">Çalışan Usta Sayısı</label>
+                        <input 
+                          type="number" 
+                          min={0}
+                          className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-[10px] font-bold text-slate-800 mt-1"
+                          value={sahaUstaSayisi}
+                          onChange={(e) => setSahaUstaSayisi(parseInt(e.target.value) || 0)}
+                        />
                       </div>
-
-                      <div className="border rounded-2xl p-2 max-h-32 overflow-y-auto space-y-1 bg-slate-50">
-                        {activeStaff.length === 0 ? (
-                          <p className="text-[8px] text-slate-400 italic text-center py-2">Aktif personel bulunmuyor.</p>
-                        ) : (
-                          activeStaff.map(p => {
-                            const isSelected = faaliyetPersonelIds.includes(p.id);
-                            return (
-                              <button
-                                type="button"
-                                key={p.id}
-                                onClick={() => {
-                                  if (isSelected) {
-                                    setFaaliyetPersonelIds(prev => prev.filter(x => x !== p.id));
-                                  } else {
-                                    setFaaliyetPersonelIds(prev => [...prev, p.id]);
-                                  }
-                                }}
-                                className={`w-full flex items-center justify-between p-1.5 rounded-lg text-[9px] font-bold transition ${
-                                  isSelected 
-                                    ? 'bg-amber-100/60 border border-amber-300/40 text-slate-900' 
-                                    : 'hover:bg-slate-100 text-slate-600'
-                                }`}
-                              >
-                                <span className="truncate">{p.ad} {p.soyad} ({p.gorev})</span>
-                                <span className="text-[9px]">{isSelected ? '✓' : '+'}</span>
-                              </button>
-                            );
-                          })
-                        )}
+                      <div>
+                        <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">Çalışan Düz İşçi Sayısı</label>
+                        <input 
+                          type="number" 
+                          min={0}
+                          className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-[10px] font-bold text-slate-800 mt-1"
+                          value={sahaIsciSayisi}
+                          onChange={(e) => setSahaIsciSayisi(parseInt(e.target.value) || 0)}
+                        />
                       </div>
                     </div>
 
@@ -1328,7 +1951,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                       className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] py-2.5 px-4 rounded-xl transition duration-150 shadow-md flex items-center justify-center space-x-1.5 cursor-pointer border-b-4 border-amber-700"
                     >
                       <Send size={12} />
-                      <span>KAYDET &amp; ŞANTİYEYE BİLDİR</span>
+                      <span>{editingFaaliyetId ? 'GÜNCELLE' : 'KAYDET'}</span>
                     </button>
 
                   </div>
@@ -1336,279 +1959,98 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
                 </form>
 
                 <div className="bg-white rounded-3xl border p-4 shadow-xs space-y-3 mt-3">
-                  <div className="flex items-center space-x-2 text-slate-950">
-                    <FileText size={14} className="text-amber-500" />
-                    <span className="font-bold text-[10px] uppercase tracking-wider">FİİLİ GÜNLÜK RAPOR PARAMETRELERİ</span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">🌦️ Hava Durumu</label>
-                      <select
-                        value={havaDurumu}
-                        onChange={(e) => setHavaDurumu(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 p-1.5 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-[10px] font-bold text-slate-800"
-                      >
-                        <option value="Güneşli">☀️ Güneşli</option>
-                        <option value="Bulutlu">☁️ Bulutlu</option>
-                        <option value="Yağmurlu">🌧️ Yağmurlu</option>
-                        <option value="Karlı">❄️ Karlı</option>
-                        <option value="Rüzgarlı">💨 Rüzgarlı</option>
-                      </select>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2 text-slate-950">
+                      <FileText size={14} className="text-amber-500" />
+                      <span className="font-bold text-[10px] uppercase tracking-wider">SEÇİLEN GÜN SAHA KAYITLARI</span>
                     </div>
-
-                    <div className="space-y-1">
-                      <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">👥 Toplam Ekip</label>
-                      <div className="w-full bg-slate-100 border border-slate-200 p-1.5 rounded-xl text-[10px] font-extrabold text-slate-800 text-center">
-                        {presentIds.length} Personel Sahada
-                      </div>
-                    </div>
+                    <span className="text-[9px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
+                      Gelen: {selectedDateAttendance.gelenCount}
+                    </span>
                   </div>
-
-                  <div className="space-y-1">
-                    <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">📝 Genel Şantiye Notları</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(normalizeDateKey(e.target.value))}
+                      className="text-xs border border-slate-250 rounded-lg px-2 py-1.5"
+                    />
                     <textarea
-                      rows={2}
-                      placeholder="Şantiyeye dair genel notlar, malzeme teslimatları veya aksaklıkları buraya yazabilirsiniz..."
+                      rows={1}
+                      placeholder="Genel şantiye notu (opsiyonel)"
                       value={genelNotlar}
                       onChange={(e) => setGenelNotlar(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 py-1.5 px-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-[10px] font-semibold text-slate-800 leading-snug"
+                      className="sm:col-span-2 w-full bg-slate-50 border border-slate-200 py-1.5 px-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-[10px] font-semibold text-slate-800 leading-snug"
                     />
                   </div>
-
-                  <div className="bg-amber-50/60 border border-amber-200 p-3 rounded-2xl space-y-2">
-                    <p className="text-[8.5px] font-bold text-amber-900 leading-normal">
-                      Bugün için girilen <strong>{sahaFaaliyetleri.filter(f => f.tarih === selectedDate).length} adet</strong> faaliyeti ve yoklama durumlarını tek bir resmi raporda birleştirip onaylayın.
-                    </p>
-                    
-                    <button
-                      type="button"
-                      onClick={() => setShowPdfPreview(true)}
-                      className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] py-2.5 px-3 rounded-xl transition flex items-center justify-center space-x-1 cursor-pointer shadow-sm border border-amber-600"
-                    >
-                      <FileText size={12} />
-                      <span>📄 FİİLİ RAPORU OLUŞTUR &amp; PDF ÖNİZLE</span>
-                    </button>
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {selectedDateFaaliyetleri.length === 0 && (
+                      <div className="border border-dashed border-slate-250 rounded-xl p-3 text-xs text-slate-500">
+                        Seçilen tarihte faaliyet kaydı bulunamadı.
+                      </div>
+                    )}
+                    {selectedDateFaaliyetleri.map((sf) => (
+                      <div key={sf.id} className="border border-slate-200 rounded-xl p-2.5 text-[10px] space-y-1.5">
+                        <div className="flex justify-between gap-2">
+                          <div className="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                            {sf.isNiteligi}
+                            {isMesaiSahaFaaliyet(sf) && (
+                              <span className="text-[7px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded">
+                                Mesai Faaliyet
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[8px] text-slate-500 font-mono">{formatDateLabelTr(sf.tarih)}</span>
+                        </div>
+                        <div className="text-[9px] text-slate-500">{sf.parsel} / {sf.blok}</div>
+                        {isMesaiSahaFaaliyet(sf) && (
+                          <div className="text-[8px] text-amber-800 font-semibold">
+                            Mesai: {formatMesaiFaaliyetLabel(sf, personeller) || '—'}
+                          </div>
+                        )}
+                        {!!sf.aciklama && <div className="text-[9px] text-slate-700 line-clamp-2">{sf.aciklama}</div>}
+                        <div className="flex flex-wrap gap-2 justify-end pt-1 border-t border-slate-100">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedDate(normalizeDateKey(sf.tarih));
+                              setShowPdfPreview(true);
+                            }}
+                            className="text-[9px] bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-250 px-2 py-1 rounded-lg font-bold flex items-center gap-1"
+                          >
+                            <Eye size={11} />
+                            Önizleme
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedDate(normalizeDateKey(sf.tarih));
+                              setShowPdfPreview(true);
+                            }}
+                            className="text-[9px] bg-amber-500 hover:bg-amber-600 text-slate-950 border border-amber-600 px-2 py-1 rounded-lg font-black"
+                          >
+                            PDF Gönder
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => loadFaaliyetIntoForm(sf)}
+                            className="text-[9px] bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-1 rounded-lg font-bold"
+                          >
+                            Düzelt
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteFaaliyet(sf)}
+                            className="text-[9px] bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1 rounded-lg font-bold"
+                          >
+                            Sil
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
                 </>
-              )}
-
-              {/* TAB 3: SAHA FAALİYETLERİ ARŞİV GEÇMİŞİ */}
-              {activeTab === 'faaliyet_gecmis' && (
-                <div className="space-y-3.5 animate-in fade-in duration-150">
-                  
-                  {/* Undo Deleted Alert Banner */}
-                  {lastDeletedFaaliyet && (
-                    <div className="bg-amber-50 border border-amber-300 p-2.5 rounded-2xl flex items-center justify-between text-[9px] font-bold text-amber-900 shadow-sm">
-                      <span>🗑️ Faaliyet silindi. Geri almak ister misiniz?</span>
-                      <button
-                        onClick={() => {
-                          setSahaFaaliyetleri(prev => [lastDeletedFaaliyet, ...prev]);
-                          setLastDeletedFaaliyet(null);
-                          showStatus('success', 'Silme işlemi geri alındı, faaliyet başarıyla kurtarıldı!');
-                        }}
-                        className="bg-amber-600 text-white px-2 py-1 rounded-lg text-[8px] uppercase tracking-wider hover:bg-amber-700"
-                      >
-                        Geri Al
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Edit Form Modal/Inline Drawer */}
-                  {editingFaaliyet && (
-                    <div className="bg-amber-50/70 border border-amber-200 p-3 rounded-3xl space-y-2.5 shadow-inner">
-                      <div className="flex justify-between items-center">
-                        <span className="font-black text-[9px] text-amber-800 uppercase tracking-widest">Faaliyeti Düzenle</span>
-                        <button
-                          onClick={() => setEditingFaaliyet(null)}
-                          className="text-slate-400 hover:text-slate-600 font-bold text-[10px]"
-                        >
-                          ✕ Kapat
-                        </button>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div>
-                          <label className="text-[8px] font-bold text-slate-500 uppercase">İş Niteliği</label>
-                          <input
-                            type="text"
-                            value={editingFaaliyet.isNiteligi}
-                            onChange={(e) => setEditingFaaliyet({ ...editingFaaliyet, isNiteligi: e.target.value })}
-                            className="w-full bg-white border border-slate-200 py-1.5 px-2 rounded-xl text-[9px] font-bold text-slate-800"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[8px] font-bold text-slate-500 uppercase">Parsel</label>
-                            <select
-                              value={editingFaaliyet.parsel}
-                              onChange={(e) => setEditingFaaliyet({ ...editingFaaliyet, parsel: e.target.value })}
-                              className="w-full bg-white border border-slate-200 p-1 rounded-xl text-[9px] font-bold text-slate-850"
-                            >
-                              {parsellerList.map(p => (
-                                <option key={p} value={p}>{p}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="text-[8px] font-bold text-slate-500 uppercase">Blok</label>
-                            <select
-                              value={editingFaaliyet.blok}
-                              onChange={(e) => setEditingFaaliyet({ ...editingFaaliyet, blok: e.target.value })}
-                              className="w-full bg-white border border-slate-200 p-1 rounded-xl text-[9px] font-bold text-slate-850"
-                            >
-                              {(PARSEL_BLOK_MAP[editingFaaliyet.parsel] || ['GENEL SAHA']).map(b => (
-                                <option key={b} value={b}>{b}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="text-[8px] font-bold text-slate-500 uppercase">Açıklama</label>
-                          <textarea
-                            rows={2}
-                            value={editingFaaliyet.aciklama || ''}
-                            onChange={(e) => setEditingFaaliyet({ ...editingFaaliyet, aciklama: e.target.value })}
-                            className="w-full bg-white border border-slate-200 py-1 px-2 rounded-xl text-[9px] font-semibold text-slate-850 leading-tight"
-                          />
-                        </div>
-
-                        <button
-                          onClick={() => {
-                            setSahaFaaliyetleri(prev => prev.map(f => f.id === editingFaaliyet.id ? editingFaaliyet : f));
-                            setEditingFaaliyet(null);
-                            showStatus('success', 'Saha faaliyeti başarıyla güncellendi!');
-                          }}
-                          className="w-full bg-slate-900 text-white font-extrabold text-[9px] py-2 rounded-xl uppercase hover:bg-slate-950"
-                        >
-                          Değişiklikleri Kaydet
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="bg-white rounded-3xl border p-4 shadow-xs space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2 text-slate-950">
-                        <Users size={14} className="text-amber-500" />
-                        <span className="font-bold text-[10px] uppercase tracking-wider">SAHA FAALİYETLERİ ARŞİVİ</span>
-                      </div>
-                      <span className="text-[8px] font-mono text-slate-400 font-bold">Toplam: {sahaFaaliyetleri.length}</span>
-                    </div>
-
-                    {/* Search Field */}
-                    <div className="relative">
-                      <Search size={11} className="absolute left-2.5 top-2.5 text-slate-400" />
-                      <input
-                        type="text"
-                        placeholder="Raporlarda ara (Nitelik, parsel, açıklama)..."
-                        value={faaliyetSearchKeyword}
-                        onChange={(e) => setFaaliyetSearchKeyword(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-250 py-1.5 pl-8 pr-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-[9px] font-semibold text-slate-700"
-                      />
-                    </div>
-
-                    <div className="space-y-3.5 divide-y divide-slate-100 max-h-96 overflow-y-auto pr-1">
-                      {sahaFaaliyetleri.filter(f => 
-                        f.isNiteligi.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase()) ||
-                        f.parsel.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase()) ||
-                        (f.blok && f.blok.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase())) ||
-                        (f.aciklama && f.aciklama.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase()))
-                      ).length === 0 ? (
-                        <p className="text-[9px] text-slate-400 italic text-center py-8">Aranan kriterlere uygun faaliyet bulunamadı.</p>
-                      ) : (
-                        sahaFaaliyetleri
-                          .filter(f => 
-                            f.isNiteligi.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase()) ||
-                            f.parsel.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase()) ||
-                            (f.blok && f.blok.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase())) ||
-                            (f.aciklama && f.aciklama.toLowerCase().includes(faaliyetSearchKeyword.toLowerCase()))
-                          )
-                          .map((sf, idx) => {
-                            return (
-                              <div key={sf.id} className={`pt-3.5 ${idx === 0 ? 'pt-0' : ''} space-y-1.5 text-[9px]`}>
-                                <div className="flex justify-between items-start">
-                                  <div>
-                                    <h5 className="font-bold text-xs text-slate-900 leading-tight">{sf.isNiteligi}</h5>
-                                    <span className="text-[8px] text-slate-400 font-bold block mt-0.5">Kimlik: {sf.id}</span>
-                                  </div>
-                                  <span className="text-[8px] font-mono font-extrabold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-lg shrink-0">
-                                    {sf.tarih.split('-').reverse().join('.')}
-                                  </span>
-                                </div>
-
-                                <div className="flex items-center space-x-1.5 text-[8px] text-slate-500">
-                                  <span className="bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded">
-                                    📍 {sf.parsel} / {sf.blok}
-                                  </span>
-                                </div>
-
-                                {sf.aciklama && (
-                                  <p className="text-slate-650 leading-relaxed font-medium bg-slate-50 p-2 rounded-xl border border-slate-150/40">
-                                    {sf.aciklama}
-                                  </p>
-                                )}
-
-                                {/* Photo image attachment if present */}
-                                {sf.fotoUrl && (
-                                  <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-32">
-                                    <img src={sf.fotoUrl} alt="Saha İlerleme Görseli" className="w-full h-full object-cover" />
-                                  </div>
-                                )}
-
-                                {/* Workers count if any */}
-                                {sf.aktifPersonelListesi && sf.aktifPersonelListesi.length > 0 && (
-                                  <div className="flex flex-wrap gap-1 items-center">
-                                    <span className="text-[8px] font-bold text-slate-400">Çalışanlar ({sf.aktifPersonelListesi.length}):</span>
-                                    {sf.aktifPersonelListesi.map((pId) => {
-                                      const p = personeller.find(emp => emp.id === pId);
-                                      if (!p) return null;
-                                      return (
-                                        <span key={pId} className="bg-slate-100 text-slate-600 text-[8px] font-medium px-1 rounded">
-                                          {p.ad} {p.soyad.substring(0, 1)}.
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-
-                                {/* Edit & Delete Controls (Değiştir ve Sil) */}
-                                <div className="flex items-center justify-end space-x-2 pt-1">
-                                  <button
-                                    onClick={() => setEditingFaaliyet(sf)}
-                                    className="text-amber-700 hover:text-amber-800 font-extrabold text-[8.5px] uppercase tracking-wider flex items-center space-x-0.5"
-                                  >
-                                    <Edit2 size={10} />
-                                    <span>Değiştir</span>
-                                  </button>
-                                  <span className="text-slate-200">|</span>
-                                  <button
-                                    onClick={() => {
-                                      if (window.confirm("Bu saha raporunu silmek istediğinize emin misiniz?")) {
-                                        setLastDeletedFaaliyet(sf);
-                                        setSahaFaaliyetleri(prev => prev.filter(item => item.id !== sf.id));
-                                        showStatus('success', 'Rapor silindi. Ekranın üstünden geri alabilirsiniz.');
-                                      }
-                                    }}
-                                    className="text-rose-600 hover:text-rose-700 font-extrabold text-[8.5px] uppercase tracking-wider flex items-center space-x-0.5"
-                                  >
-                                    <Trash2 size={10} />
-                                    <span>Sil</span>
-                                  </button>
-                                </div>
-
-                              </div>
-                            );
-                          })
-                      )}
-                    </div>
-
-                  </div>
-
-                </div>
               )}
 
               {/* TAB 4: PERSONEL GİRİŞE YOLLA */}
@@ -1790,11 +2232,22 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
 _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                         </div>
                         <a
-                          href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
-                            `*KİBRİTÇİ ERP - YENİ PERSONEL İŞE GİRİŞ BİLDİRİMİ*\n----------------------------------------\n*Ad Soyad:* ${sonGirisTalebi.ad} ${sonGirisTalebi.soyad}\n*Görev/Branş:* ${sonGirisTalebi.gorev}\n*Tarih:* ${new Date().toLocaleDateString('tr-TR')}\n*Gönderen:* ${currentUser?.email || 'Bilinmeyen'}\n----------------------------------------\n_Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`
-                          )}`}
+                          href={buildWhatsAppUrl(
+                            `*KİBRİTÇİ ERP - YENİ PERSONEL İŞE GİRİŞ BİLDİRİMİ*\n----------------------------------------\n*Ad Soyad:* ${sonGirisTalebi.ad} ${sonGirisTalebi.soyad}\n*Görev/Branş:* ${sonGirisTalebi.gorev}\n*Tarih:* ${new Date().toLocaleDateString('tr-TR')}\n*Gönderen:* ${currentUser?.email || 'Bilinmeyen Formen'}\n*Kayıt Linki:* ${window.location.origin}/?view_giris=${sonGirisTalebi.id}\n----------------------------------------\n_Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`
+                          )}
                           target="_blank"
                           rel="noopener noreferrer"
+                          onClick={async () => {
+                            try {
+                              await setDoc(
+                                doc(db, 'personelGirisTalepleri', sonGirisTalebi.id),
+                                { durum: 'WP_GÖNDERİLDİ' },
+                                { merge: true }
+                              );
+                            } catch (e) {
+                              console.warn(e);
+                            }
+                          }}
                           className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[9px] py-2 rounded-lg flex items-center justify-center space-x-1 shadow-sm transition active:scale-95"
                         >
                           <span>💬 WhatsApp'tan Gönder</span>
@@ -1870,34 +2323,21 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
               {activeTab === 'personel_listesi' && (
                 <div className="space-y-3.5 animate-in fade-in duration-150">
                   
-                  {/* 1. Günü Tamamla Control Card */}
+                  {/* 1. Direct sync info card */}
                   <div className="bg-white rounded-3xl border p-4 shadow-xs space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
-                        <CheckCircle size={14} className={isGunuTamamlandi ? "text-emerald-500" : "text-amber-500"} />
-                        <span className="font-bold text-[10px] uppercase tracking-wider">GÜNÜ TAMAMLA KONTROLÜ</span>
+                        <CheckCircle size={14} className="text-emerald-500" />
+                        <span className="font-bold text-[10px] uppercase tracking-wider">DOĞRUDAN YOKLAMA SENKRONU</span>
                       </div>
-                      <span className={`text-[8px] font-bold px-2 py-0.5 rounded ${isGunuTamamlandi ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
-                        {isGunuTamamlandi ? "GÜN TAMAMLANDI" : "İŞLEM BEKLİYOR"}
+                      <span className="text-[8px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                        ONAYSIZ GÜNCELLEME AKTİF
                       </span>
                     </div>
                     <p className="text-[9px] text-slate-500 leading-snug">
-                      Puantaj kontrolleri ve saha imalat raporlarını tamamladıktan sonra <strong>"Günü Tamamla"</strong> butonuna basarak iş gününü yöneticilerin onayına kapatın.
+                      Formen yoklama ekranındaki <strong>“Yoklamayı İmzala ve Kaydet”</strong> işlemi artık doğrudan ana
+                      <strong> Yoklama ve Puantaj</strong> verisini günceller. Ekstra “Günü Tamamla” adımı gerekmiyor.
                     </p>
-                    
-                    <button
-                      type="button"
-                      onClick={handleGunuTamamla}
-                      disabled={isGunuTamamlandi}
-                      className={`w-full text-white font-black text-[10px] py-3 px-4 rounded-xl transition duration-150 shadow-md flex items-center justify-center space-x-1.5 cursor-pointer border-b-4 ${
-                        isGunuTamamlandi 
-                          ? "bg-slate-400 border-slate-500 cursor-not-allowed" 
-                          : "bg-amber-600 hover:bg-amber-700 border-amber-800"
-                      }`}
-                    >
-                      <CheckCircle size={12} />
-                      <span>{isGunuTamamlandi ? "İŞ GÜNÜ BAŞARIYLA TAMAMLANDI" : "GÜNÜ TAMAMLA VE ANA PROGRAMA BİLDİR"}</span>
-                    </button>
                   </div>
 
                   {/* 2. Active Personnel Directory */}
@@ -1905,7 +2345,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                     <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                       <div className="flex items-center space-x-2 text-slate-950">
                         <Users size={14} className="text-amber-500" />
-                        <span className="font-bold text-[10px] uppercase tracking-wider">ŞANTİYE PERSONEL LİSTESİ ({personeller.filter(p => p.durum === true || String(p.durum).toLowerCase() === 'true').length})</span>
+                        <span className="font-bold text-[10px] uppercase tracking-wider">ŞANTİYE PERSONEL LİSTESİ ({personeller.filter(p => (p.durum === true || String(p.durum).toLowerCase() === 'true') && !isTaseronPersonel(p)).length})</span>
                       </div>
                       
                       {/* Search Personnel */}
@@ -1923,7 +2363,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
 
                     <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                       {personeller
-                        .filter(p => p.durum === true || String(p.durum).toLowerCase() === 'true')
+                        .filter(p => (p.durum === true || String(p.durum).toLowerCase() === 'true') && !isTaseronPersonel(p))
                         .filter(p => {
                           const q = personelSearchKeyword.toLowerCase().trim();
                           if (!q) return true;
@@ -2054,6 +2494,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                           <button
                             type="button"
                             onClick={() => {
+                              setCikisTarihi(selectedDate);
                               setShowCikisForm(true);
                               setShowGuncellemeForm(false);
                             }}
@@ -2093,6 +2534,22 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                                   onChange={(e) => setCikisTarihi(e.target.value)}
                                   className="w-full bg-white border rounded-lg p-1.5 text-[9px] font-bold"
                                 />
+                                <div className="mt-1 flex gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setCikisTarihi(selectedDate)}
+                                    className="text-[8px] font-bold px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700"
+                                  >
+                                    Seçili Gün
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setCikisTarihi(new Date().toISOString().slice(0, 10))}
+                                    className="text-[8px] font-bold px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700"
+                                  >
+                                    Bugün
+                                  </button>
+                                </div>
                               </div>
                               
                               <div>
@@ -2224,104 +2681,118 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                 </div>
               )}
 
-              {activeTab === 'toplu_puantaj' && (
+              {activeTab === 'gunluk_akis' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
+                    <h3 className="text-xs font-black text-slate-900">📋 Günlük Akış Özeti — {selectedDate.split('-').reverse().join('.')}</h3>
+                    <p className="text-[10px] text-slate-500">Formen: <strong>{formenEmail}</strong></p>
+                    <ul className="text-[10px] text-slate-700 space-y-1">
+                      <li>✓ Yoklama: {presentIds.length} geldi / {activeStaff.length} toplam</li>
+                      <li>✓ Saha faaliyeti: {daySahaFaaliyetleri.length} kayıt</li>
+                      <li>✓ Personel giriş talebi: {personelGirisListesi.filter((g) => g.tarih?.startsWith(selectedDate)).length}</li>
+                    </ul>
+                    {daySahaFaaliyetleri.length > 0 && (
+                      <div className="border-t pt-2 space-y-1">
+                        {daySahaFaaliyetleri.map((sf) => (
+                          <p key={sf.id} className="text-[9px] text-slate-600">• {sf.isNiteligi} — {sf.parsel}/{sf.blok}</p>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      disabled={sendingGunlukAkis}
+                      onClick={handleSendGunlukAkis}
+                      className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-60"
+                    >
+                      {sendingGunlukAkis ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
+                      GÜN SONU RAPORUNU YÖNETİME GÖNDER
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'aylik_puantaj' && (
                 <div className="space-y-3.5 animate-in fade-in duration-150">
                   <div className="bg-white rounded-3xl border p-4 shadow-xs space-y-3">
-                    <div className="flex justify-between items-center">
+                    <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
-                        <Calendar size={14} className="text-amber-500" />
-                        <span className="font-bold text-[10px] uppercase tracking-wider text-slate-900">HAFTALIK TOPLU PUANTAJ &amp; MESAİ</span>
+                        <FileText size={14} className="text-amber-500" />
+                        <span className="font-bold text-[10px] uppercase tracking-wider text-slate-900">AYLIK GÜNCEL PUANTAJ TABLOSU</span>
                       </div>
-                      <span className="text-[9px] text-slate-500 font-mono font-bold">
-                        Hafta: {(() => {
-                          const days = getDaysOfWeek();
-                          return `${days[0].getDate()}.${days[0].getMonth()+1} - ${days[6].getDate()}.${days[6].getMonth()+1}`;
-                        })()}
+                      <span className="text-[9px] font-mono font-bold text-slate-500">
+                        {String(month).padStart(2, '0')}/{year}
                       </span>
                     </div>
                     <p className="text-[9px] text-slate-500 leading-snug">
-                      Seçilen haftanın tüm günlerindeki puantaj ve mesai (fazla mesai) durumlarını toplu olarak görün. Hücrelere dokunarak hızlıca durum veya mesai saati düzenleyebilirsiniz.
+                      Bu tablo, ana sistemdeki yoklama verisiyle aynı kaynaktan canlı okunur. Çıkışı gelen personelin çıkış sonrası günleri otomatik kapanır.
                     </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={handleExportAylikPuantajCsv}
+                        className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] py-2.5 rounded-xl transition"
+                      >
+                        CSV İndir
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('yoklama')}
+                        className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-[10px] py-2.5 rounded-xl transition"
+                      >
+                        Yoklama Sekmesine Dön
+                      </button>
+                    </div>
+                  </div>
 
-                    {/* Table Container - Horizontally scrollable on mobile */}
+                  <div className="bg-white rounded-3xl border p-3 shadow-xs">
                     <div className="overflow-x-auto border rounded-2xl bg-slate-50">
-                      <table className="w-full text-left border-collapse min-w-[640px]">
+                      <table className="w-full text-left border-collapse min-w-[900px]">
                         <thead>
                           <tr className="bg-slate-100 border-b border-slate-200">
-                            <th className="p-2 text-[9px] font-black uppercase text-slate-600 tracking-wider">PERSONEL</th>
-                            {getDaysOfWeek().map((d, i) => {
-                              const daysNames = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
-                              const isToday = d.toISOString().split('T')[0] === new Date().toISOString().split('T')[0];
-                              return (
-                                <th key={i} className={`p-2 text-center text-[9px] font-black uppercase tracking-wider ${isToday ? 'bg-amber-100 text-amber-900 font-black' : 'text-slate-600'}`}>
-                                  <div>{daysNames[i]}</div>
-                                  <div className="text-[10px] font-mono">{d.getDate()}</div>
-                                </th>
-                              );
-                            })}
+                            <th className="p-2 text-[9px] font-black uppercase text-slate-600 tracking-wider sticky left-0 bg-slate-100 z-10">Personel</th>
+                            {Array.from({ length: new Date(year, month, 0).getDate() }, (_, i) => i + 1).map((d) => (
+                              <th key={d} className="p-2 text-center text-[9px] font-black uppercase text-slate-600 tracking-wider">
+                                {d}
+                              </th>
+                            ))}
+                            <th className="p-2 text-center text-[9px] font-black uppercase text-slate-600 tracking-wider">Gelen</th>
+                            <th className="p-2 text-center text-[9px] font-black uppercase text-slate-600 tracking-wider">Mesai</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {activeStaff.map(p => {
+                          {monthPersonelList.map((p) => {
+                            const personMap = yoklamalar[p.id] as any;
+                            let geldiCount = 0;
+                            let mesaiToplam = 0;
                             return (
-                              <tr key={p.id} className="border-b border-slate-150 hover:bg-slate-100/50 transition duration-100">
-                                <td className="p-2 flex items-center space-x-2">
-                                  <div className="w-6 h-6 rounded-full bg-slate-250 flex items-center justify-center font-bold text-[9px] text-slate-700 uppercase">
-                                    {p.ad[0]}{p.soyad[0]}
-                                  </div>
-                                  <div>
-                                    <div className="text-[10px] font-bold text-slate-900 leading-tight">{p.ad} {p.soyad}</div>
-                                    <div className="text-[8px] text-slate-500 leading-none">{p.gorev}</div>
-                                  </div>
+                              <tr key={p.id} className="border-b border-slate-150 hover:bg-slate-100/60">
+                                <td className="p-2 sticky left-0 bg-white z-10">
+                                  <div className="text-[10px] font-bold text-slate-900 leading-tight">{p.ad} {p.soyad}</div>
+                                  <div className="text-[8px] text-slate-500">{p.gorev || '-'}</div>
                                 </td>
-                                {getDaysOfWeek().map((d, i) => {
-                                  const pMap = yoklamalar[p.id] || {};
-                                  const dayData = pMap[d.getDate()];
-                                  const status = dayData?.durum || 'Girilmedi';
-                                  const mesai = dayData?.mesaiSaati || 0;
-
-                                  let badgeClass = "bg-slate-100 text-slate-450 border border-slate-200";
-                                  let shortLabel = "–";
-
-                                  if (status === 'Geldi') {
-                                    badgeClass = "bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold";
-                                    shortLabel = "G";
-                                  } else if (status === 'Yok') {
-                                    badgeClass = "bg-rose-50 text-rose-700 border border-rose-200 font-bold";
-                                    shortLabel = "Y";
-                                  } else if (status === 'İzinli') {
-                                    badgeClass = "bg-amber-50 text-amber-700 border border-amber-200 font-bold";
-                                    shortLabel = "İ";
-                                  } else if (status === 'Raporlu') {
-                                    badgeClass = "bg-purple-50 text-purple-700 border border-purple-200 font-bold";
-                                    shortLabel = "R";
-                                  } else if (status === 'Pazar') {
-                                    badgeClass = "bg-slate-200 text-slate-700 border border-slate-300 font-bold";
-                                    shortLabel = "P";
-                                  } else if (status === 'Tatil') {
-                                    badgeClass = "bg-blue-50 text-blue-700 border border-blue-200 font-bold";
-                                    shortLabel = "T";
+                                {Array.from({ length: new Date(year, month, 0).getDate() }, (_, i) => i + 1).map((d) => {
+                                  const active = isDayActiveForPersonel(p, year, month, d, personMap);
+                                  if (!active) {
+                                    return (
+                                      <td key={d} className="p-1 text-center bg-violet-50 text-violet-400 text-[9px] font-bold">
+                                        Ç
+                                      </td>
+                                    );
                                   }
-
+                                  const data = getYoklamaDay(personMap, year, month, d);
+                                  const durum = data?.durum || 'Girilmedi';
+                                  const mesai = Number(data?.mesaiSaati || 0);
+                                  if (durum === 'Geldi') geldiCount += 1;
+                                  mesaiToplam += mesai;
                                   return (
-                                    <td 
-                                      key={i} 
-                                      onClick={() => setSelectedCell({
-                                        personelId: p.id,
-                                        personelName: `${p.ad} ${p.soyad}`,
-                                        date: d,
-                                        currentDurum: status as any,
-                                        currentMesai: mesai
-                                      })}
-                                      className="p-1 text-center cursor-pointer hover:bg-slate-200/40 transition duration-75"
-                                    >
-                                      <div className={`mx-auto rounded-lg py-1 px-1.5 text-[9px] inline-flex items-center justify-center space-x-1 ${badgeClass} min-w-[32px]`}>
-                                        <span>{shortLabel}</span>
-                                        {mesai > 0 && <span className="text-[7.5px] font-mono font-black opacity-80">+{mesai}</span>}
-                                      </div>
+                                    <td key={d} className="p-1 text-center">
+                                      <span className="text-[9px] font-bold text-slate-700">{durum === 'Geldi' ? 'G' : durum === 'Yok' ? 'Y' : durum === 'İzinli' ? 'İ' : durum === 'Raporlu' ? 'R' : durum === 'Pazar' ? 'P' : durum === 'Tatil' ? 'T' : '-'}</span>
+                                      {mesai > 0 && <span className="block text-[7px] font-mono text-amber-700">+{mesai}</span>}
                                     </td>
                                   );
                                 })}
+                                <td className="p-1 text-center text-[9px] font-black text-emerald-700">{geldiCount}</td>
+                                <td className="p-1 text-center text-[9px] font-black text-amber-700">{mesaiToplam.toFixed(1)}</td>
                               </tr>
                             );
                           })}
@@ -2329,117 +2800,6 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                       </table>
                     </div>
                   </div>
-
-                  {/* Cell Edit Popover Mini-Modal */}
-                  {selectedCell && (
-                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[9999] flex items-center justify-center p-4">
-                      <div className="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
-                        <div className="flex justify-between items-center pb-2 border-b">
-                          <div>
-                            <span className="text-[8px] font-extrabold text-amber-600 uppercase tracking-widest block">PUANTAJ DÜZENLE</span>
-                            <h4 className="font-bold text-xs text-slate-900">{selectedCell.personelName}</h4>
-                          </div>
-                          <span className="text-[10px] text-slate-500 font-bold font-mono bg-slate-100 px-2 py-0.5 rounded-md">
-                            {selectedCell.date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', weekday: 'short' })}
-                          </span>
-                        </div>
-
-                        {/* Status Select */}
-                        <div className="space-y-1">
-                          <label className="text-[8px] font-bold text-slate-400 uppercase tracking-wider block">Katılım Durumu *</label>
-                          <select
-                            value={selectedCell.currentDurum}
-                            onChange={(e) => setSelectedCell(prev => prev ? { ...prev, currentDurum: e.target.value as any } : null)}
-                            className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none"
-                          >
-                            <option value="Girilmedi">Girilmedi (–)</option>
-                            <option value="Geldi">Geldi (G)</option>
-                            <option value="Yok">Yok (Y)</option>
-                            <option value="İzinli">İzinli (İ)</option>
-                            <option value="Raporlu">Raporlu (R)</option>
-                            <option value="Pazar">Pazar Tatili (P)</option>
-                            <option value="Tatil">Resmi Tatil (T)</option>
-                          </select>
-                        </div>
-
-                        {/* Overtime (Mesai) Selector */}
-                        <div className="space-y-1.5">
-                          <label className="text-[8px] font-bold text-slate-400 uppercase tracking-wider block">Mesai Saati (Fazla Çalışma) *</label>
-                          <div className="grid grid-cols-5 gap-1.5">
-                            {[0, 1, 2, 3, 4].map(val => (
-                              <button
-                                key={val}
-                                type="button"
-                                onClick={() => setSelectedCell(prev => prev ? { ...prev, currentMesai: val } : null)}
-                                className={`py-1.5 rounded-lg text-[10px] font-mono font-black border transition ${
-                                  selectedCell.currentMesai === val
-                                    ? 'bg-amber-500 border-amber-600 text-slate-950 shadow-sm'
-                                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                                }`}
-                              >
-                                +{val}
-                              </button>
-                            ))}
-                          </div>
-                          <input
-                            type="number"
-                            min="0"
-                            max="24"
-                            value={selectedCell.currentMesai}
-                            onChange={(e) => {
-                              const v = Number(e.target.value);
-                              setSelectedCell(prev => prev ? { ...prev, currentMesai: v } : null);
-                            }}
-                            className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none mt-1"
-                            placeholder="Örn: 2.5 veya diğer saat girin"
-                          />
-                        </div>
-
-                        {/* Buttons */}
-                        <div className="grid grid-cols-2 gap-2 pt-2">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedCell(null)}
-                            className="bg-slate-100 hover:bg-slate-200 text-slate-650 font-extrabold text-[10px] py-2.5 rounded-xl transition"
-                          >
-                            İptal Et
-                          </button>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const dVal = selectedCell.date;
-                              const pId = selectedCell.personelId;
-                              const status = selectedCell.currentDurum;
-                              const mesai = selectedCell.currentMesai;
-
-                              setYoklamalar(prev => {
-                                const next = { ...prev };
-                                const pMap = next[pId] ? { ...next[pId] } : {};
-                                pMap[dVal.getDate()] = {
-                                  durum: status,
-                                  mesaiSaati: mesai,
-                                  gonderen: currentUser?.email || 'FORMEN'
-                                };
-                                next[pId] = pMap;
-                                return next;
-                              });
-
-                              await logActionToPersonelHistory(
-                                'Puantaj Güncelledi',
-                                `${selectedCell.personelName} için ${dVal.toLocaleDateString('tr-TR')} tarihli puantajı "${status}" ve ${mesai} saat mesai olarak güncelledi.`
-                              );
-
-                              showStatus('success', `📝 ${selectedCell.personelName} için puantaj kaydı güncellendi.`);
-                              setSelectedCell(null);
-                            }}
-                            className="bg-amber-600 hover:bg-amber-700 text-white font-black text-[10px] py-2.5 rounded-xl transition shadow-md border-b-2 border-amber-800"
-                          >
-                            Kaydet
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -2475,14 +2835,14 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
               <div className="bg-white border-2 border-slate-200/80 p-5 md:p-7 shadow-xs rounded-xl max-w-xl mx-auto space-y-5 text-[10px] text-slate-800 relative">
                 
                 {/* A4 Watermark Logo Background */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02]">
-                  <span className="text-[6rem] font-black tracking-widest rotate-12">KİBRİTÇİ</span>
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.04]">
+                  <img src={KIBRITCI_LOGO_PATH} alt="" className="max-w-[85%] h-auto rotate-12" />
                 </div>
 
                 {/* Company Header */}
                 <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3 relative z-10">
-                  <div className="space-y-0.5">
-                    <h1 className="text-sm font-black tracking-tight text-slate-900 uppercase">KİBRİTÇİ İNŞAAT VE TAAHHÜT A.Ş.</h1>
+                  <div className="space-y-0.5 flex items-center gap-3">
+                    <KibritciLogo size="md" className="h-8" />
                     <p className="text-[7.5px] text-slate-500 font-mono tracking-wider uppercase">Merkez Ofis &amp; Şantiye İşleri Koordinatörlüğü</p>
                   </div>
                   <div className="bg-slate-900 text-white font-black px-2 py-1 text-[8.5px] rounded tracking-widest font-mono shrink-0">
@@ -2516,7 +2876,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                       </td>
                       <td className="border border-slate-200 bg-slate-50/50 p-2 font-bold text-slate-500 uppercase">👥 TOPLAM EKİP MEVCUDU</td>
                       <td className="border border-slate-200 p-2 font-bold text-slate-900 font-mono">
-                        {presentIds.length} Personel (Aktif Sahada)
+                        {selectedDateAttendance.gelenCount} Personel (Aktif Sahada)
                       </td>
                     </tr>
                   </tbody>
@@ -2528,15 +2888,15 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                     <span className="font-black text-[10px] text-slate-900">1. PUANTAJ VE YOKLAMA ÖZETİ</span>
                   </div>
                   <p className="text-[8.5px] text-slate-600 leading-normal font-medium">
-                    Bugün şantiyede aktif hazır bulunan <strong>{presentIds.length} personelin</strong> yoklaması ve mesai saatleri Formen tarafından e-imzalanarak sisteme işlenmiştir. Gelmeyen personeller puantaj dışı bırakılmıştır.
+                    Seçili günde şantiyede aktif hazır bulunan <strong>{selectedDateAttendance.gelenCount} personelin</strong> yoklaması ve mesai saatleri Formen tarafından e-imzalanarak sisteme işlenmiştir. Gelmeyen personeller puantaj dışı bırakılmıştır.
                   </p>
                   
                   {/* Small scrollable inline grid of present staff */}
                   <div className="grid grid-cols-2 gap-1 bg-slate-50 p-2 rounded-xl border border-slate-150 max-h-24 overflow-y-auto">
-                    {activeStaff.filter(p => presentIds.includes(p.id)).length === 0 ? (
+                    {activeStaff.filter(p => selectedDateAttendance.gelenIds.includes(p.id)).length === 0 ? (
                       <p className="col-span-2 text-slate-400 italic text-center py-2 text-[8px]">Bugün gelen personel kaydı girilmemiştir.</p>
                     ) : (
-                      activeStaff.filter(p => presentIds.includes(p.id)).map(p => (
+                      activeStaff.filter(p => selectedDateAttendance.gelenIds.includes(p.id)).map(p => (
                         <div key={p.id} className="flex items-center space-x-1 py-0.5 border-b border-slate-100/60">
                           <span className="text-[6.5px] text-emerald-600">●</span>
                           <span className="font-bold text-slate-800">{p.ad} {p.soyad}</span>
@@ -2559,21 +2919,31 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                   </div>
 
                   <div className="space-y-3">
-                    {sahaFaaliyetleri.filter(f => f.tarih === selectedDate).length === 0 ? (
+                    {selectedDateFaaliyetleri.length === 0 ? (
                       <div className="text-center py-4 bg-rose-50/50 border border-rose-100 rounded-xl text-rose-800 italic text-[9px]">
                         Bugün için girilmiş herhangi bir imalat faaliyeti bulunmamaktadır. Raporu göndermeden önce imalat girişi yapabilirsiniz.
                       </div>
                     ) : (
-                      sahaFaaliyetleri.filter(f => f.tarih === selectedDate).map((sf, idx) => (
+                      selectedDateFaaliyetleri.map((sf, idx) => (
                         <div key={sf.id} className="border border-slate-200 rounded-xl p-3 bg-slate-50/30 space-y-1.5">
                           <div className="flex justify-between items-center border-b border-slate-150 pb-1.5">
-                            <span className="font-black text-slate-900 text-[10.5px]">
+                            <span className="font-black text-slate-900 text-[10.5px] flex items-center gap-1.5 flex-wrap">
                               {idx + 1}. {sf.isNiteligi}
+                              {isMesaiSahaFaaliyet(sf) && (
+                                <span className="text-[7px] font-black uppercase bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">
+                                  Mesai Faaliyet
+                                </span>
+                              )}
                             </span>
                             <span className="bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded text-[8px] uppercase">
                               📍 {sf.parsel} / {sf.blok}
                             </span>
                           </div>
+                          {isMesaiSahaFaaliyet(sf) && (
+                            <div className="text-[8px] text-amber-900 font-bold bg-amber-50 border border-amber-100 rounded-lg px-2 py-1">
+                              Bu faaliyet mesai ile gerçekleştirildi: {formatMesaiFaaliyetLabel(sf, personeller) || '—'}
+                            </div>
+                          )}
 
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div className="md:col-span-2 space-y-1.5">
@@ -2603,14 +2973,23 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                               </div>
                             </div>
 
-                            {/* Activity photo inside report */}
-                            <div className="flex flex-col items-center justify-center bg-slate-50 border rounded-xl p-1 shrink-0 h-24 overflow-hidden">
-                              {sf.fotoUrl ? (
-                                <img src={sf.fotoUrl} alt="Kanıt Görsel" className="w-full h-full object-cover rounded-lg" />
+                            {/* Activity photos inside report */}
+                            <div className="flex flex-col items-center justify-center bg-slate-50 border rounded-xl p-1 shrink-0 min-w-[5.5rem] max-w-[8rem]">
+                              {getFaaliyetFotolar(sf).length > 0 ? (
+                                <div className="grid grid-cols-2 gap-0.5 w-full">
+                                  {getFaaliyetFotolar(sf).slice(0, 4).map((url, i) => (
+                                    <img key={i} src={url} alt={`Kanıt ${i + 1}`} className="w-full h-10 object-cover rounded" />
+                                  ))}
+                                </div>
                               ) : (
-                                <div className="text-slate-400 italic text-[7.5px] text-center p-2">
+                                <div className="text-slate-400 italic text-[7.5px] text-center p-2 h-24 flex items-center">
                                   📷 Görsel Eklenmedi
                                 </div>
+                              )}
+                              {getFaaliyetFotolar(sf).length > 1 && (
+                                <span className="text-[6px] font-bold text-slate-500 mt-0.5">
+                                  {getFaaliyetFotolar(sf).length} fotoğraf
+                                </span>
                               )}
                             </div>
                           </div>
@@ -2665,7 +3044,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                 className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-black text-[10px] py-2.5 px-6 rounded-xl transition cursor-pointer flex items-center space-x-1 border-b-4 border-amber-700"
               >
                 <Check size={12} />
-                <span>RAPORU ONAYLA &amp; ANA PROGRAMA GÖNDER</span>
+                <span>PDF OLARAK GÖNDER</span>
               </button>
             </div>
 

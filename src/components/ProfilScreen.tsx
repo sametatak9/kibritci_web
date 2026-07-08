@@ -3,6 +3,7 @@ import {
   User, Shield, KeySquare, PenTool, CheckCircle, LogOut, FileText, ChevronRight, Hash, Eye
 } from 'lucide-react';
 import { Kullanici } from './AdminPanelScreen';
+import { saveKullanici, findKullaniciByEmail } from '../lib/kullaniciUtils';
 
 interface ProfilScreenProps {
   currentUser: any;
@@ -41,31 +42,35 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({
     setTimeout(() => setStatusMessage(null), 4000);
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUser?.uid && !matchedUser?.id) return;
+    if (!currentUser?.email && !matchedUser?.email) return;
 
-    const targetId = matchedUser?.id || currentUser?.uid;
+    const target = matchedUser || findKullaniciByEmail(kullanicilar, currentUser?.email);
+    if (!target?.email) return;
 
-    setKullanicilar(prev => prev.map(u => {
-      if (u.id === targetId || u.email?.toLowerCase() === currentUser?.email?.toLowerCase()) {
-        const updated = {
-          ...u,
-          ad,
-          soyad,
-          tcNo,
-          imzaText: signatureText,
-          imzaStyle: signatureStyle
-        };
-        // Also update local storage
-        localStorage.setItem('kibritci_sig_text', signatureText);
-        localStorage.setItem('kibritci_sig_style', signatureStyle);
-        return updated;
-      }
-      return u;
-    }));
+    const updated = {
+      ...target,
+      ad,
+      soyad,
+      tcNo,
+      imzaText: signatureText,
+      imzaStyle: signatureStyle,
+    };
 
-    showNotification('success', '🎉 Profil ve dijital imza bilgileriniz başarıyla güncellendi!');
+    try {
+      await saveKullanici(updated);
+      setKullanicilar(prev =>
+        prev.map(u =>
+          u.email?.toLowerCase() === target.email.toLowerCase() ? { ...u, ...updated } : u
+        )
+      );
+      localStorage.setItem('kibritci_sig_text', signatureText);
+      localStorage.setItem('kibritci_sig_style', signatureStyle);
+      showNotification('success', '🎉 Profil ve dijital imza bilgileriniz başarıyla güncellendi!');
+    } catch {
+      showNotification('error', 'Profil kaydedilemedi. Lütfen tekrar deneyin.');
+    }
   };
 
   return (
