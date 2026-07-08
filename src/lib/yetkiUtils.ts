@@ -17,13 +17,10 @@ export const PORTAL_PAGES = [
   { key: "cari_stok", label: "Cari ve Stok Kartları", group: "FİNANS & ENVANTER" },
   { key: "evrak_aktarimi", label: "AI Belge Aktarımı", group: "FİNANS & ENVANTER" },
   { key: "kibar_hakedis", label: "ZER YAPI Hakediş", group: "FİNANS & ENVANTER" },
-  { key: "planli_organizasyon", label: "Planlı Organizasyon", group: "FİNANS & ENVANTER" },
   { key: "operator", label: "Operatör Faaliyetleri", group: "İŞ MAKİNESİ & OPERATÖR" },
   { key: "arac", label: "Araç ve Demirbaş", group: "İDARİ İŞLER & SAHA" },
   { key: "kamp", label: "Kamp Yönetimi", group: "İDARİ İŞLER & SAHA" },
-  { key: "saha", label: "Daily Saha Faaliyetleri", group: "İDARİ İŞLER & SAHA" },
-  { key: "programli_faaliyet", label: "Programlı Faaliyet", group: "İDARİ İŞLER & SAHA" },
-  { key: "saha_kolaj", label: "Saha Faaliyet Kolajı", group: "İDARİ İŞLER & SAHA" },
+  { key: "rapor_programlama", label: "Raporlama & Programlama", group: "İDARİ İŞLER & SAHA" },
   { key: "tutanak", label: "Hazır Tutanaklar", group: "İDARİ İŞLER & SAHA" },
   { key: "formen_ekrani", label: "Formen Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
   { key: "guvenlik_ekrani", label: "Güvenlik & Kapı Kontrol", group: "İDARİ İŞLER & SAHA" },
@@ -41,7 +38,7 @@ export type PortalPageKey = (typeof PORTAL_PAGES)[number]["key"];
 
 /** Mobil saha rolleri → erişilebilir panel sekmeleri */
 export const MOBILE_ROLE_ALLOWED_TABS: Record<string, PortalPageKey[]> = {
-  FORMEN: ['formen_ekrani', 'programli_faaliyet', 'personel'],
+  FORMEN: ['formen_ekrani', 'rapor_programlama', 'personel'],
   GÜVENLİK: ['guvenlik_ekrani'],
   KAMPÇI: ['kampci_ekrani'],
   LOJİSTİK: ['lojistik_ekrani'],

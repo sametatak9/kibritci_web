@@ -32,6 +32,7 @@ import { MobileManagerScreen } from './components/MobileManagerScreen';
 import { KibarHakedisScreen } from './components/KibarHakedisScreen';
 import { SahaKolajScreen } from './components/SahaKolajScreen';
 import { ProgramliFaaliyetScreen } from './components/ProgramliFaaliyetScreen';
+import { RaporlamaProgramlamaScreen } from './components/RaporlamaProgramlamaScreen';
 import { KibritciLogo } from './components/KibritciLogo';
 
 // Type definitions
@@ -70,6 +71,7 @@ import { loadKampStateSnapshot, ensureYapıFromOdalari } from './lib/kampYapisi'
 import { probeGeminiApi } from './lib/apiClient';
 import {
   hasSubstantialYoklamaData,
+  isProductionLive,
   initialSeedAllowed,
   markProductionLive,
 } from './lib/productionDataGuard';
@@ -836,7 +838,7 @@ export default function App() {
         hasDuplicateKullaniciEmails(raw) ||
         raw.some((u) => {
           const key = u.email?.trim().toLowerCase();
-          return key && (u._docId || u.id) !== key;
+          return key && ((u as any)._docId || u.id) !== key;
         });
       if (needsRepair) {
         repairKullaniciDocIdsIfNeeded(raw).catch((err) => {
@@ -1065,7 +1067,7 @@ export default function App() {
         const yetki = normalizeYetki(matched.yetki);
         isRestricted = !savedTab || isTabRestrictedForUser(savedTab, yetki, matched.kisitliSayfalar);
         if (!isRestricted) {
-          initialTab = savedTab;
+          initialTab = savedTab as any;
         }
       } catch {
         /* no-op */
@@ -1108,7 +1110,7 @@ export default function App() {
     if (!main) return;
     const sample = Array.from(main.querySelectorAll<HTMLElement>('*'))
       .slice(0, 600)
-      .reduce<{ tag: string; className: string; scrollWidth: number; clientWidth: number } | null>((acc, el) => {
+      .reduce<{ tag: string; className: string; scrollWidth: number; clientWidth: number } | null>((acc, el: any) => {
         if (!el || !el.className) return acc;
         const over = el.scrollWidth - el.clientWidth;
         if (over <= 8) return acc;
@@ -1205,12 +1207,12 @@ export default function App() {
   const setPersonellerWithSync = (updater: Personel[] | ((p: Personel[]) => Personel[])) => {
     setPersoneller(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      const prevIds = new Set(prev.map((p) => p.id));
-      const nextIds = new Set(next.map((p) => p.id));
+      const prevIds = new Set(prev.map((p) => p.id as string));
+      const nextIds = new Set(next.map((p) => p.id as string));
       let added = 0;
       let removed = 0;
-      nextIds.forEach((id) => { if (!prevIds.has(id)) added++; });
-      prevIds.forEach((id) => { if (!nextIds.has(id)) removed++; });
+      nextIds.forEach((id) => { if (!prevIds.has(id as string)) added++; });
+      prevIds.forEach((id) => { if (!nextIds.has(id as string)) removed++; });
       // #region agent log
       fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-1',hypothesisId:'H1',location:'App.tsx:setPersonellerWithSync',message:'personel local state change queued for sync',data:{prevCount:prev.length,nextCount:next.length,added,removed},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
@@ -2304,9 +2306,14 @@ export default function App() {
                   currentUser={currentUser}
                 />
               )}
-
-              {activeTab === "planli_organizasyon" && (
-                <PlanliOrganizasyonScreen />
+              {activeTab === "rapor_programlama" && (
+                isYonetici ? (
+                  <RaporlamaProgramlamaScreen 
+                    programliFaaliyetler={programliFaaliyetler}
+                    setProgramliFaaliyetler={setProgramliFaaliyetlerWithSync}
+                    currentUser={currentUser}
+                  />
+                ) : renderAccessDenied()
               )}
 
               {activeTab === "personel_kartlari" && (
@@ -2365,9 +2372,6 @@ export default function App() {
                 />
               )}
 
-              {activeTab === "saha_kolaj" && (
-                <SahaKolajScreen currentUser={currentUser} />
-              )}
 
               {activeTab === "onay_islemleri" && (
                 <OnayIslemleriScreen 
@@ -2411,15 +2415,6 @@ export default function App() {
                 ) : renderAccessDenied()
               )}
 
-              {activeTab === "programli_faaliyet" && (
-                isAllowedFormen ? (
-                  <ProgramliFaaliyetScreen
-                    programliFaaliyetler={programliFaaliyetler}
-                    setProgramliFaaliyetler={setProgramliFaaliyetlerWithSync}
-                    currentUser={currentUser}
-                  />
-                ) : renderAccessDenied()
-              )}
 
               {activeTab === "guvenlik_ekrani" && (
                 isAllowedGuvenlik ? (

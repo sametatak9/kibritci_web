@@ -24,7 +24,8 @@ export type SahaFaaliyetSaveSource =
   | 'evrak'
   | 'sync'
   | 'restore'
-  | 'delete';
+  | 'delete'
+  | 'legacy_bootstrap';
 
 export interface SahaFaaliyetSaveResult {
   ok: boolean;

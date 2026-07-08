@@ -64,7 +64,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { key: "cari_stok", label: "Cari ve Stok Kartları", icon: Package },
         { key: "evrak_aktarimi", label: "AI Belge Aktarımı", icon: BookOpen },
         { key: "kibar_hakedis", label: "ZER YAPI Hakediş", icon: CreditCard },
-        { key: "planli_organizasyon", label: "Planlı Organizasyon", icon: CalendarCheck2 },
       ]
     },
     {
@@ -78,9 +77,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { key: "arac", label: "Araç ve Demirbaş", icon: Truck },
         { key: "kamp", label: "Kamp Yönetimi", icon: Tent },
-        { key: "saha", label: "Saha Faaliyetleri", icon: Building2 },
-        { key: "programli_faaliyet", label: "Programlı Faaliyet", icon: FileText },
-        { key: "saha_kolaj", label: "Saha Kolaj Hazırla", icon: Images },
+        { key: "rapor_programlama", label: "Raporlama & Programlama", icon: BookOpen },
         { key: "tutanak", label: "Hazır Tutanaklar", icon: FileText },
         { key: "formen_ekrani", label: "Formen Mobil Paneli", icon: Contact2 },
         { key: "guvenlik_ekrani", label: "Güvenlik & Kapı Kontrol", icon: ShieldCheck },
@@ -136,7 +133,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           return isYonetici;
         }
 
-        if (item.key === 'programli_faaliyet') {
+        if (item.key === 'rapor_programlama') {
           return isYonetici;
         }
 
