@@ -1,4 +1,4 @@
-import { getKibritciLogoUrl } from './kibritciBrand';
+import { getAntetliUrl } from './reportAssets';
 
 export const CORPORATE_COMPANY = {
   legalName: 'KİBRİTÇİ İNŞAAT TAAHHÜT TURİZM SANAYİ VE TİCARET LİMİTED ŞİRKETİ',
@@ -9,15 +9,16 @@ export const CORPORATE_COMPANY = {
 };
 
 export function getCorporateReportCss(): string {
-  const logoUrl = getKibritciLogoUrl();
+  const antetUrl = getAntetliUrl();
   return `
     .corporate-report{position:relative;display:flex;flex-direction:column;min-height:190mm;background:#fff;color:#1e293b;font-family:Inter,ui-sans-serif,system-ui,sans-serif;overflow:visible;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .corporate-report--landscape{min-height:277mm}
     .corporate-report-watermark{position:absolute;inset:0;pointer-events:none;z-index:0;overflow:hidden}
-    .corporate-report-watermark-img{position:absolute;right:-4%;top:48%;transform:translateY(-50%);width:min(52vw,520px);height:auto;opacity:.09;filter:grayscale(100%) contrast(.85);mix-blend-mode:lighten}
+    .corporate-report-logo-clip{width:17rem;height:4.5rem;overflow:hidden;flex-shrink:0;position:relative;z-index:2;background:#fff}
+    .corporate-report-logo-clip img{width:918px;max-width:none;height:auto;display:block}
+    .corporate-report-watermark-clip{position:absolute;right:0;top:44%;transform:translateY(-50%);width:24rem;height:28rem;overflow:hidden;pointer-events:none}
+    .corporate-report-watermark-clip img{width:918px;max-width:none;height:auto;display:block;margin-left:-27.5rem;margin-top:-17.5rem;opacity:.14}
     .corporate-report-header{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:.75rem;margin-bottom:1rem}
-    .corporate-report-logo{background:#fff;line-height:0}
-    .corporate-report-logo-img{height:60px;width:auto;max-width:288px;object-fit:contain;display:block;mix-blend-mode:lighten}
     .corporate-report-meta{text-align:right}
     .corporate-report-doc-code{display:block;font-size:.58rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border:1px solid #334155;padding:.2rem .55rem;background:#f8fafc;margin-bottom:.2rem}
     .corporate-report-date{display:block;font-size:.55rem;color:#64748b;font-family:JetBrains Mono,ui-monospace,monospace}
@@ -29,7 +30,7 @@ export function getCorporateReportCss(): string {
     .corporate-report-footer-address{font-size:.48rem;color:#64748b;margin:0}
     .corporate-report-footer-contact{border-left:1px solid #e2e8f0;padding-left:1rem;white-space:nowrap}
     .corporate-report-footer-web{text-align:right;font-weight:600;color:#334155;align-self:end}
-    @media print{.corporate-report{min-height:auto;overflow:visible}.corporate-report-watermark-img{opacity:.08}}
+    @media print{.corporate-report{min-height:auto;overflow:visible}.corporate-report-watermark-clip img{opacity:.11}}
   `;
 }
 
@@ -43,7 +44,7 @@ export function wrapCorporateReportHtml(
     autoPrint?: boolean;
   }
 ): string {
-  const logoUrl = getKibritciLogoUrl();
+  const antetUrl = getAntetliUrl();
   const printDate = new Date().toLocaleDateString('tr-TR');
   const docCode = options?.docCode ?? '';
   const orientation = options?.orientation ?? 'landscape';
@@ -62,11 +63,13 @@ export function wrapCorporateReportHtml(
 <body class="bg-white text-slate-900 font-sans p-4 sm:p-8">
   <div class="corporate-report corporate-report--${orientation}" data-orientation="${orientation}">
     <div class="corporate-report-watermark" aria-hidden="true">
-      <img src="${logoUrl}" alt="" class="corporate-report-watermark-img" />
+      <div class="corporate-report-watermark-clip">
+        <img src="${antetUrl}" alt="" />
+      </div>
     </div>
     <header class="corporate-report-header">
-      <div class="corporate-report-logo">
-        <img src="${logoUrl}" alt="Kibritçi İnşaat" class="corporate-report-logo-img" />
+      <div class="corporate-report-logo-clip">
+        <img src="${antetUrl}" alt="Kibritçi İnşaat" />
       </div>
       ${docCode ? `<div class="corporate-report-meta"><span class="corporate-report-doc-code">${docCode}</span><span class="corporate-report-date">Baskı: ${printDate}</span></div>` : ''}
     </header>
