@@ -389,7 +389,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       const list: any[] = [];
       const email = currentUser?.email?.toLowerCase() || '';
       snap.forEach((d) => {
-        const data = { id: d.id, ...d.data() };
+        const data: any = { id: d.id, ...(d.data() as Record<string, any>) };
         const sender = String(data.gonderenKampci || data.gonderenFormen || '').toLowerCase();
         if (sender === email && (data.kaynakPanel === 'KAMPÇI' || data.gonderenKampci)) {
           list.push(data);

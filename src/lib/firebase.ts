@@ -244,8 +244,8 @@ export async function syncArrayToFirestore<T extends { id: string }>(
     if (collectionName === 'sahaFaaliyetleri') {
       const { syncSahaFaaliyetleriArray } = await import('./sahaFaaliyetPersistence');
       const result = await syncSahaFaaliyetleriArray(
-        oldArray as import('../types/erp').SahaFaaliyeti[],
-        newArray as import('../types/erp').SahaFaaliyeti[]
+        oldArray as unknown as import('../types/erp').SahaFaaliyeti[],
+        newArray as unknown as import('../types/erp').SahaFaaliyeti[]
       );
       if (!result.ok) {
         throw new Error(result.error || 'Saha faaliyet senkronizasyonu başarısız');

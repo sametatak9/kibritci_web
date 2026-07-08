@@ -85,6 +85,7 @@ for (const p of MAYIS_2026_YOKLAMA.personeller) {
         gorev: p.gorev,
         maas: p.maas,
         iseGirisTarihi: p.iseGirisTarihi,
+        calismaGunleri: [],
       },
       days: new Map(),
     });

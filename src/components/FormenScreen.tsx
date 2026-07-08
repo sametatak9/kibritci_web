@@ -28,6 +28,7 @@ import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, arrayUnion }
 import { downloadCsv } from '../lib/reportExport';
 import { KibritciLogo } from './KibritciLogo';
 import { wrapCorporateReportHtml } from '../lib/corporateReportHtml';
+import { KIBRITCI_LOGO_PATH } from '../lib/kibritciBrand';
 import type { SahaFaaliyetSaveSource } from '../lib/sahaFaaliyetPersistence';
 
 interface FormenScreenProps {
@@ -703,7 +704,7 @@ ${satirlar
           const reader = new FileReader();
           reader.onload = (event) => resolve(String(event.target?.result || ''));
           reader.onerror = reject;
-          reader.readAsDataURL(file);
+          reader.readAsDataURL(file as File);
         });
         try {
           added.push(await compressImage(rawBase64));

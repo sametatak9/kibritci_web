@@ -49,7 +49,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 }
 
 export async function generateGeminiWithFallback(options: {
-  contents: Content[] | string;
+  contents: any;
   config?: GenerateContentConfig;
   label?: string;
 }): Promise<{ text: string; model: string }> {

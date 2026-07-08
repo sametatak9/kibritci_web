@@ -120,7 +120,7 @@ const PublicGirisKayitForm: React.FC<PublicGirisKayitScreenProps> = ({
   }, []);
 
   const gorevSecenekleri = useMemo(() => {
-    const base = new Set(gorevListesi);
+    const base = new Set<string>(gorevListesi);
     if (talep.gorev?.trim()) base.add(talep.gorev.trim());
     if (form.gorev?.trim()) base.add(form.gorev.trim());
     return [...base].sort((a, b) => a.localeCompare(b, 'tr'));

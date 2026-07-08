@@ -702,7 +702,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
       const rawRecords = Array.isArray(parsedRoot?.records) && parsedRoot.records.length > 0
         ? parsedRoot.records
         : [parsedRoot];
-      const usedSaIds = new Set(satinAlmaTalepleri.map((x) => x.saId));
+      const usedSaIds = new Set<string>(satinAlmaTalepleri.map((x) => x.saId || ''));
       const finalTalepler = rawRecords.map((record: any) => {
         const talep = mapParsedLegacyToTalep(record, parsedRoot, usedSaIds);
         const normalizedKalemler = normalizeCartItemsByKnownStok(talep.kalemler);

@@ -36,7 +36,7 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, RootErrorBoun
   };
 
   render() {
-    if (!this.state.hasError) return this.props.children;
+    if (!this.state.hasError) return (this as any).props.children;
     return (
       <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#f8fafc', padding: '24px', fontFamily: 'Inter, system-ui, sans-serif' }}>
         <div style={{ maxWidth: '620px', width: '100%', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px' }}>
