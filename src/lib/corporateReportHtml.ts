@@ -1,4 +1,7 @@
-import { getKibritciLogoUrl } from './kibritciBrand';
+import {
+  KIBRITCI_REPORT_HEADER_DATA_URL,
+  KIBRITCI_REPORT_WATERMARK_DATA_URL,
+} from './reportBrandAssets';
 
 export const CORPORATE_COMPANY = {
   legalName: 'KİBRİTÇİ İNŞAAT TAAHHÜT TURİZM SANAYİ VE TİCARET LİMİTED ŞİRKETİ',
@@ -12,8 +15,8 @@ export function getCorporateReportCss(): string {
   return `
     .corporate-report{position:relative;display:flex;flex-direction:column;min-height:190mm;background:#fff;color:#1e293b;font-family:Inter,ui-sans-serif,system-ui,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .corporate-report--landscape{min-height:277mm}
-    .corporate-report-watermark-img{position:absolute;right:2%;top:50%;transform:translateY(-50%);width:480px;max-width:55%;height:auto;opacity:.09;pointer-events:none;z-index:0}
-    .corporate-report-logo-img{height:64px;width:auto;max-width:320px;display:block;object-fit:contain}
+    .corporate-report-watermark-img{position:absolute;right:1.5%;top:50%;transform:translateY(-50%);width:420px;max-width:52%;height:auto;opacity:1;pointer-events:none;z-index:0}
+    .corporate-report-logo-img{height:58px;width:auto;max-width:340px;display:block;object-fit:contain}
     .corporate-report-header{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;margin-bottom:16px}
     .corporate-report-meta{text-align:right}
     .corporate-report-doc-code{display:block;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border:1px solid #334155;padding:3px 9px;background:#f8fafc;margin-bottom:3px}
@@ -26,7 +29,7 @@ export function getCorporateReportCss(): string {
     .corporate-report-footer-address{font-size:7.5px;color:#64748b;margin:0}
     .corporate-report-footer-contact{border-left:1px solid #e2e8f0;padding-left:16px;white-space:nowrap}
     .corporate-report-footer-web{text-align:right;font-weight:600;color:#334155;align-self:end}
-    @media print{.corporate-report{min-height:auto}.corporate-report-watermark-img{opacity:.08}}
+    @media print{.corporate-report{min-height:auto}.corporate-report-watermark-img{opacity:1;-webkit-print-color-adjust:exact;print-color-adjust:exact}.corporate-report-logo-img{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   `;
 }
 
@@ -40,7 +43,8 @@ export function wrapCorporateReportHtml(
     autoPrint?: boolean;
   }
 ): string {
-  const logoUrl = getKibritciLogoUrl();
+  const headerLogoUrl = KIBRITCI_REPORT_HEADER_DATA_URL;
+  const watermarkUrl = KIBRITCI_REPORT_WATERMARK_DATA_URL;
   const printDate = new Date().toLocaleDateString('tr-TR');
   const docCode = options?.docCode ?? '';
   const orientation = options?.orientation ?? 'landscape';
@@ -58,9 +62,9 @@ export function wrapCorporateReportHtml(
 </head>
 <body class="bg-white text-slate-900 font-sans p-4 sm:p-8">
   <div class="corporate-report corporate-report--${orientation}" data-orientation="${orientation}" style="position:relative;background:#fff">
-    <img src="${logoUrl}" alt="" class="corporate-report-watermark-img" aria-hidden="true" />
+    <img src="${watermarkUrl}" alt="" class="corporate-report-watermark-img" aria-hidden="true" />
     <header class="corporate-report-header">
-      <img src="${logoUrl}" alt="Kibritçi İnşaat" class="corporate-report-logo-img" />
+      <img src="${headerLogoUrl}" alt="Kibritçi İnşaat" class="corporate-report-logo-img" />
       ${docCode ? `<div class="corporate-report-meta"><span class="corporate-report-doc-code">${docCode}</span><span class="corporate-report-date">Baskı: ${printDate}</span></div>` : ''}
     </header>
     <main class="corporate-report-body">${bodyContent}</main>

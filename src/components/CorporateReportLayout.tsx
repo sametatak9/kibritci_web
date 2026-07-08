@@ -1,6 +1,9 @@
 import React from 'react';
-import logoPng from '../assets/kibritci-logo.png';
 import { CORPORATE_COMPANY } from '../lib/corporateReportHtml';
+import {
+  KIBRITCI_REPORT_HEADER_DATA_URL,
+  KIBRITCI_REPORT_WATERMARK_DATA_URL,
+} from '../lib/reportBrandAssets';
 
 export interface CorporateReportLayoutProps {
   children: React.ReactNode;
@@ -11,22 +14,22 @@ export interface CorporateReportLayoutProps {
 }
 
 const headerLogoStyle: React.CSSProperties = {
-  height: '64px',
+  height: '58px',
   width: 'auto',
-  maxWidth: '320px',
+  maxWidth: '340px',
   display: 'block',
   objectFit: 'contain',
 };
 
 const watermarkStyle: React.CSSProperties = {
   position: 'absolute',
-  right: '2%',
+  right: '1.5%',
   top: '50%',
   transform: 'translateY(-50%)',
-  width: '480px',
-  maxWidth: '55%',
+  width: '420px',
+  maxWidth: '52%',
   height: 'auto',
-  opacity: 0.09,
+  opacity: 1,
   pointerEvents: 'none',
   zIndex: 0,
 };
@@ -49,7 +52,7 @@ export const CorporateReportLayout: React.FC<CorporateReportLayoutProps> = ({
       style={{ position: 'relative', background: '#fff' }}
     >
       <img
-        src={logoPng}
+        src={KIBRITCI_REPORT_WATERMARK_DATA_URL}
         alt=""
         aria-hidden
         draggable={false}
@@ -70,7 +73,7 @@ export const CorporateReportLayout: React.FC<CorporateReportLayoutProps> = ({
         }}
       >
         <img
-          src={logoPng}
+          src={KIBRITCI_REPORT_HEADER_DATA_URL}
           alt="Kibritçi İnşaat"
           draggable={false}
           style={headerLogoStyle}

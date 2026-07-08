@@ -79,21 +79,21 @@ html {
 /* Üst logo + hologram — sabit px, rem ölçeklemesinden etkilenmez */
 .corporate-report-watermark-img {
   position: absolute;
-  right: 2%;
+  right: 1.5%;
   top: 50%;
   transform: translateY(-50%);
-  width: 480px;
-  max-width: 55%;
+  width: 420px;
+  max-width: 52%;
   height: auto;
-  opacity: 0.09;
+  opacity: 1;
   pointer-events: none;
   z-index: 0;
 }
 
 .corporate-report-logo-img {
-  height: 64px;
+  height: 58px;
   width: auto;
-  max-width: 320px;
+  max-width: 340px;
   display: block;
   object-fit: contain;
 }
@@ -219,8 +219,11 @@ html {
     overflow: visible;
   }
 
-  .corporate-report-watermark-img {
-    opacity: 0.08;
+  .corporate-report-watermark-img,
+  .corporate-report-logo-img {
+    opacity: 1;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }
 

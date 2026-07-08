@@ -1,5 +1,6 @@
-/** Kibritçi kurumsal logo — raporlarda şeffaf arka plan */
-export const KIBRITCI_LOGO_PATH = '/kibritci-logo.png';
+/** Kibritçi kurumsal logo — antetli Word şablonundan kırpılmış */
+export const KIBRITCI_LOGO_PATH = '/kibritci-report-header.png';
+export const KIBRITCI_WATERMARK_PATH = '/kibritci-report-watermark.png';
 
 export function getKibritciLogoUrl(): string {
   if (typeof window !== 'undefined' && window.location?.origin) {
