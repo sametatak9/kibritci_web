@@ -7,6 +7,7 @@ import { AracBakim, Personel } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { CorporateReportLayout } from './CorporateReportLayout';
 import { KibritciLogo } from './KibritciLogo';
 
 interface LojistikScreenProps {
@@ -1563,21 +1564,13 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
 
                   return (
                     <div className="border border-slate-350/60 p-6 rounded-2xl bg-white text-slate-900 font-mono text-xs space-y-6 printable-document">
-                      {/* Report Header */}
-                      <div className="border-b-2 border-slate-900 pb-4 flex justify-between items-center">
-                        <div className="flex items-center gap-3">
-                          <KibritciLogo size="md" className="h-10" />
-                          <div>
-                          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Lojistik ve Vasıta Yönetim Müdürlüğü</p>
-                          <p className="text-[9px] text-slate-800 mt-1">Dönem: <strong className="font-bold">{raporAy}/{raporYil} Aylık Raporu</strong></p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span className="border border-slate-900 text-[8px] font-bold px-2 py-0.5 bg-slate-50 uppercase tracking-widest block mb-1">
-                            PLAKA: {raporArac}
-                          </span>
-                          <span className="text-[8px] text-slate-500">Derleme: {new Date().toLocaleDateString('tr-TR')}</span>
-                        </div>
+                      <CorporateReportLayout
+                        orientation="landscape"
+                        docCode={`PLAKA: ${raporArac}`}
+                      >
+                      <div className="mb-3 pb-2 border-b border-slate-200">
+                        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Lojistik ve Vasıta Yönetim Müdürlüğü</p>
+                        <p className="text-[9px] text-slate-800 mt-1">Dönem: <strong className="font-bold">{raporAy}/{raporYil} Aylık Raporu</strong></p>
                       </div>
 
                       {/* Summary Metrics */}
@@ -1719,6 +1712,8 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                           </div>
                         )}
                       </div>
+
+                      </CorporateReportLayout>
                     </div>
                   );
                 })()}

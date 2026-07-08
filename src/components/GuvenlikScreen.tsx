@@ -9,6 +9,7 @@ import { db } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { fetchApiJson } from '../lib/apiClient';
 import { collection, doc, setDoc, onSnapshot, addDoc, getDocs, deleteDoc } from 'firebase/firestore';
+import { CorporateReportLayout } from './CorporateReportLayout';
 import { KibritciLogo } from './KibritciLogo';
 
 interface GuvenlikScreenProps {
@@ -1676,15 +1677,9 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       {/* 💳 VISITOR BADGE MODAL / GİRİŞ KARTI */}
       {activeBadgeGuest && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-white text-slate-900 rounded-3xl w-80 overflow-hidden shadow-2xl border border-slate-200 flex flex-col p-5 space-y-4 animate-in zoom-in duration-150">
-            
-            {/* Header Badge */}
-            <div className="flex flex-col items-center space-y-1.5 text-center border-b pb-4">
-              <KibritciLogo size="sm" className="h-8" />
-              <p className="text-[10px] text-slate-500 font-mono">ŞANTİYE RESMİ GÜVENLİK GİRİŞ KARTI</p>
-            </div>
-
-            {/* Core Card Info */}
+          <div className="bg-white text-slate-900 rounded-3xl w-80 overflow-hidden shadow-2xl border border-slate-200 flex flex-col p-5 animate-in zoom-in duration-150 print:shadow-none">
+            <CorporateReportLayout orientation="portrait" docCode={`KART: ${activeBadgeGuest.kartNo}`}>
+            <p className="text-[10px] text-slate-500 font-mono text-center mb-3">ŞANTİYE RESMİ GÜVENLİK GİRİŞ KARTI</p>
             <div className="space-y-2.5 text-xs">
               <div className="flex justify-between items-center bg-slate-50 p-2 rounded-xl border">
                 <span className="text-[9px] font-bold text-slate-500 uppercase">KART NO:</span>
@@ -1724,8 +1719,10 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               <span className="text-[8px] font-mono tracking-[4px] text-slate-500 uppercase">{activeBadgeGuest.kartNo}</span>
             </div>
 
+            </CorporateReportLayout>
+
             {/* Actions */}
-            <div className="flex space-x-2 pt-2 text-xs">
+            <div className="flex space-x-2 pt-2 text-xs print:hidden">
               <button
                 onClick={() => {
                   window.print();

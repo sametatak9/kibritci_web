@@ -27,7 +27,7 @@ import { normalizeDateKey, formatDateLabelTr, todayDateKey } from '../lib/dateKe
 import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { downloadCsv } from '../lib/reportExport';
 import { KibritciLogo } from './KibritciLogo';
-import { kibritciLogoHtml } from '../lib/kibritciBrand';
+import { wrapCorporateReportHtml } from '../lib/corporateReportHtml';
 import type { SahaFaaliyetSaveSource } from '../lib/sahaFaaliyetPersistence';
 
 interface FormenScreenProps {
@@ -994,13 +994,16 @@ ${satirlar
             `<tr><td>${idx + 1}</td><td>${escapeHtml(sf.tarih)}</td><td>${escapeHtml(sf.isNiteligi)}</td><td>${escapeHtml(sf.parsel)} / ${escapeHtml(sf.blok)}</td><td>${escapeHtml(sf.aciklama || '-')}</td></tr>`
         )
         .join('');
-      const html = `<!doctype html><html><head><meta charset="utf-8"/><title>Formen Raporu ${selectedDate}</title>
-      <style>body{font-family:Arial,sans-serif;padding:20px;color:#0f172a}h1{font-size:16px;margin-bottom:10px}.meta{font-size:12px;color:#475569;margin-bottom:12px}
-      table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #cbd5e1;padding:6px;text-align:left;vertical-align:top}th{background:#f1f5f9}</style>
-      </head><body><div style="margin-bottom:10px;">${kibritciLogoHtml(40)}</div><h1 style="font-size:14px;margin:0 0 10px;">FORMEN GÜNLÜK SAHA RAPORU</h1>
-      <div class="meta">Tarih: ${escapeHtml(selectedDate)} | Gelen personel: ${selectedDateAttendance.gelenCount}</div>
-      <table><thead><tr><th>#</th><th>Tarih</th><th>İş Niteliği</th><th>Lokasyon</th><th>Açıklama</th></tr></thead><tbody>${rows || '<tr><td colspan="5">Kayıt yok</td></tr>'}</tbody></table>
-      <script>window.onload=()=>window.print()</script></body></html>`;
+      const innerBody = `
+      <h1 style="font-size:14px;margin:0 0 10px;">FORMEN GÜNLÜK SAHA RAPORU</h1>
+      <div style="font-size:12px;color:#475569;margin-bottom:12px">Tarih: ${escapeHtml(selectedDate)} | Gelen personel: ${selectedDateAttendance.gelenCount}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th style="border:1px solid #cbd5e1;padding:6px;background:#f1f5f9">#</th><th style="border:1px solid #cbd5e1;padding:6px;background:#f1f5f9">Tarih</th><th style="border:1px solid #cbd5e1;padding:6px;background:#f1f5f9">İş Niteliği</th><th style="border:1px solid #cbd5e1;padding:6px;background:#f1f5f9">Lokasyon</th><th style="border:1px solid #cbd5e1;padding:6px;background:#f1f5f9">Açıklama</th></tr></thead><tbody>${rows || '<tr><td colspan="5">Kayıt yok</td></tr>'}</tbody></table>`;
+      const html = wrapCorporateReportHtml(innerBody, {
+        docCode: `FORMEN-${selectedDate}`,
+        orientation: 'portrait',
+        title: `Formen Raporu ${selectedDate}`,
+        extraCss: 'table th,table td{border:1px solid #cbd5e1;padding:6px;text-align:left;vertical-align:top}',
+      });
       const popup = window.open('', '_blank', 'width=1000,height=700');
       if (popup) {
         popup.document.open();

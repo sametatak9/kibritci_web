@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { CreditCard, Copy, Check, DollarSign, Download, Building, Search, Clock } from 'lucide-react';
 import { Personel, AylikYoklamaMap, MaaşOdeme } from '../types/erp';
-import { KibritciLogo } from './KibritciLogo';
+import { CorporateReportLayout } from './CorporateReportLayout';
 import { buildPersonelListForMonth, getYoklamaDay, isDayActiveForPersonel, iterateMonthYoklama, normalizeTurkishName } from '../lib/yoklamaUtils';
 import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 
@@ -480,22 +480,13 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
 
             {/* Document Body */}
             <div className="flex-1 overflow-auto bg-white p-4 sm:p-8 lg:p-12 text-slate-900 printable-document font-sans">
-              
-              {/* Report Header */}
-              <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-center">
-                <div className="flex items-center space-x-4">
-                  <KibritciLogo size="xl" />
-                  <div>
-                    <p className="text-xs text-slate-500 font-semibold tracking-wide uppercase">MUHASEBE VE FİNANSAL HAKEDİŞ DAİRE BAŞKANLIĞI</p>
-                    <p className="text-xs text-slate-600 mt-1">Hakediş Dönemi: <strong className="text-slate-900 font-bold">{selectedMonth}. Ay / {selectedYear}</strong></p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="border border-slate-900 text-[10px] font-bold px-3 py-1 bg-slate-50 uppercase tracking-widest block mb-1">
-                    KOD: KBR-MAAS-2026-{selectedMonth}
-                  </span>
-                  <span className="text-[10px] text-slate-500 font-mono">Dekont Baskı: {new Date().toLocaleDateString('tr-TR')} {new Date().toLocaleTimeString('tr-TR')}</span>
-                </div>
+              <CorporateReportLayout
+                orientation="landscape"
+                docCode={`KOD: KBR-MAAS-2026-${selectedMonth}`}
+              >
+              <div className="mb-4 pb-3 border-b border-slate-200">
+                <p className="text-xs text-slate-500 font-semibold tracking-wide uppercase">MUHASEBE VE FİNANSAL HAKEDİŞ DAİRE BAŞKANLIĞI</p>
+                <p className="text-xs text-slate-600 mt-1">Hakediş Dönemi: <strong className="text-slate-900 font-bold">{selectedMonth}. Ay / {selectedYear}</strong></p>
               </div>
 
               {/* Document Subtitle */}
@@ -628,6 +619,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                 </div>
               </div>
 
+              </CorporateReportLayout>
             </div>
           </div>
         </div>

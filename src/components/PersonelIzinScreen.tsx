@@ -3,7 +3,7 @@ import {
   FileText, Plus, Trash2, CheckCircle2, AlertTriangle, Eye, Printer, Download, Search, Edit3, Landmark, UserCheck, ShieldAlert, BadgeInfo
 } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { KibritciLogo } from './KibritciLogo';
+import { CorporateReportLayout } from './CorporateReportLayout';
 import { collection, query, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 interface IzinFormu {
@@ -526,21 +526,13 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({ personel
             </div>
 
             <div className="flex-grow overflow-y-auto p-8 bg-[#f8fafc]">
-              <div id="izin-print-area" className="bg-white p-8 border rounded-2xl shadow-sm text-slate-800 relative space-y-6">
-                
-                {/* Kibritçi Header Logo */}
-                <div className="flex justify-between items-center border-b pb-4">
-                  <div className="flex items-center space-x-3">
-                    <KibritciLogo size="md" className="h-12" />
-                    <div className="pl-1">
-                      <span className="text-[9px] text-slate-500 font-bold block uppercase tracking-widest mt-0.5">RESMİ PERSONEL İZİN TALEP VE ONAY FORMU</span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[9px] text-slate-400 font-bold block uppercase">Belge Tarihi: {selectedIzinForPdf.tarih}</span>
-                    <span className="text-[9px] font-mono text-slate-400 block">Belge No: IZIN-2026-{selectedIzinForPdf.id.split('_')[1] || '01'}</span>
-                  </div>
-                </div>
+              <div id="izin-print-area" className="bg-white p-8 border rounded-2xl shadow-sm text-slate-800 relative">
+                <CorporateReportLayout
+                  orientation="portrait"
+                  docCode={`Belge No: IZIN-2026-${selectedIzinForPdf.id.split('_')[1] || '01'}`}
+                  printDate={selectedIzinForPdf.tarih}
+                >
+                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-4">RESMİ PERSONEL İZİN TALEP VE ONAY FORMU</p>
 
                 {/* Body Table Details */}
                 <div className="border rounded-2xl overflow-hidden text-xs">
@@ -599,6 +591,7 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({ personel
                   </div>
                 </div>
 
+                </CorporateReportLayout>
               </div>
             </div>
 

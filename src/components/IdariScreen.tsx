@@ -4,7 +4,7 @@ import {
   Plus, Trash2, ShieldAlert, Award, FileUp, CheckCircle, Check, HelpCircle, ClipboardList,
   Printer, Download, Upload, Send, Search
 } from 'lucide-react';
-import { KibritciLogo } from './KibritciLogo';
+import { CorporateReportLayout } from './CorporateReportLayout';
 import { kibritciLogoHtml } from '../lib/kibritciBrand';
 import { 
   AracBakim, Demisbas, Tahsis, KampOdasi, KampKaydi, KampSarf, KampFaaliyet,
@@ -2431,6 +2431,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
               </div>
 
               <div className="flex-1 overflow-auto p-4 bakim-raporu-print-area">
+                <CorporateReportLayout orientation="landscape" docCode="KBR-ARAC-BAKIM-RAPORU">
                 <table className="w-full text-[11px] border-collapse text-left">
                   <thead>
                     <tr className="bg-slate-50 text-slate-500 uppercase text-[9px] font-bold border-b">
@@ -2505,6 +2506,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     })}
                   </tbody>
                 </table>
+                </CorporateReportLayout>
               </div>
             </div>
           )}
@@ -4613,24 +4615,15 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
 
             {/* Document Body (Landscape corporate style print) */}
             <div className="flex-1 overflow-auto bg-white p-12 text-slate-900 printable-document font-sans">
-              
-              {/* Header decor */}
-              <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-end">
-                <div className="flex items-end gap-4">
-                  <KibritciLogo size="md" className="h-10" />
-                  <div>
-                  <p className="text-xs text-slate-500 font-semibold tracking-wide uppercase">TEKNİK MÜHENDİSLİK VE SAHA FAALİYETLERİ DAİRE BAŞKANLIĞI</p>
-                  <p className="text-xs text-slate-600 mt-1">
-                    Rapor Kapsamı: <strong className="text-slate-900 font-bold">{sahaReportType === 'GUNLUK' ? `GÜNLÜK (${sahaReportDate})` : `AYLIK (${sahaReportMonth}. Ay / 2026)`}</strong>
-                  </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="border border-slate-900 text-[10px] font-bold px-3 py-1 bg-slate-50 uppercase tracking-widest block mb-1">
-                    RAPOR MODELİ: KBR-SH-2026-{sahaReportType}
-                  </span>
-                  <span className="text-[10px] text-slate-500 font-mono">Baskı Tarihi: {new Date().toLocaleDateString('tr-TR')}</span>
-                </div>
+              <CorporateReportLayout
+                orientation="landscape"
+                docCode={`RAPOR MODELİ: KBR-SH-2026-${sahaReportType}`}
+              >
+              <div className="mb-4 pb-3 border-b border-slate-200">
+                <p className="text-xs text-slate-500 font-semibold tracking-wide uppercase">TEKNİK MÜHENDİSLİK VE SAHA FAALİYETLERİ DAİRE BAŞKANLIĞI</p>
+                <p className="text-xs text-slate-600 mt-1">
+                  Rapor Kapsamı: <strong className="text-slate-900 font-bold">{sahaReportType === 'GUNLUK' ? `GÜNLÜK (${sahaReportDate})` : `AYLIK (${sahaReportMonth}. Ay / 2026)`}</strong>
+                </p>
               </div>
 
               {/* Title Header */}
@@ -4980,6 +4973,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 );
               })()}
 
+              </CorporateReportLayout>
             </div>
           </div>
         </div>
@@ -5013,19 +5007,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
 
               {/* Rapor İçeriği */}
               <div className="flex-grow overflow-y-auto p-6 space-y-6 text-xs text-slate-800 bg-slate-50/50">
-                <div id="arac-print-area" className="bg-white border p-6 rounded-2xl shadow-sm space-y-6 text-slate-800 relative font-sans">
-                  
-                  {/* Kibritci Logo & Rapor Başlığı */}
-                  <div className="flex justify-between items-center border-b pb-4">
-                    <div className="flex items-center space-x-3">
-                      <KibritciLogo size="md" className="h-10" />
-                    </div>
-                    <div className="text-right">
-                      <span className="font-mono font-bold block text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-[10px] uppercase">Plaka/Kod: {selectedAracForPdf.plaka}</span>
-                      <span className="text-[8px] text-slate-400 font-bold block mt-1 tracking-widest uppercase">LİSANS NO: KB-SRY-2026</span>
-                    </div>
-                  </div>
-
+                <div id="arac-print-area" className="bg-white border p-6 rounded-2xl shadow-sm text-slate-800 relative font-sans">
+                  <CorporateReportLayout orientation="portrait" docCode={`Plaka: ${selectedAracForPdf.plaka} · KB-SRY-2026`}>
                   {/* Rapor Başlık Kartı */}
                   <div className="bg-slate-900 text-white rounded-xl p-4 flex justify-between items-center">
                     <div>
@@ -5155,6 +5138,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     </div>
                   </div>
 
+                  </CorporateReportLayout>
                 </div>
               </div>
 
@@ -5245,21 +5229,9 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
 
             {/* Rapor İçeriği */}
             <div className="flex-grow overflow-y-auto p-6 space-y-6 text-xs text-slate-800 bg-slate-50/50">
-              <div id="kamp-print-area" className="bg-white border p-6 rounded-2xl shadow-sm space-y-6 text-slate-800 relative">
-                
-                {/* Kibritci Logo & Başlık */}
-                <div className="flex justify-between items-center border-b pb-4">
-                  <div className="flex items-center space-x-3">
-                    <KibritciLogo size="md" />
-                    <div>
-                      <span className="text-[9px] text-slate-500 font-bold block uppercase tracking-widest mt-0.5">FİİLİ KONAKLAMA VE KOĞUŞ YERLEŞİM KROKİSİ</span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-500 font-semibold block">Rapor Tarihi: {new Date().toISOString().split('T')[0]}</span>
-                    <span className="text-[9px] font-bold text-slate-400 block mt-1">BELGE NO: KAMP-2026-KRK</span>
-                  </div>
-                </div>
+              <div id="kamp-print-area" className="bg-white border p-6 rounded-2xl shadow-sm text-slate-800 relative">
+                <CorporateReportLayout orientation="portrait" docCode="BELGE NO: KAMP-2026-KRK">
+                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-4">FİİLİ KONAKLAMA VE KOĞUŞ YERLEŞİM KROKİSİ</p>
 
                 {/* Sinyal Widgets */}
                 <div className="kamp-kroki-stats grid grid-cols-3 gap-4 text-center">
@@ -5357,6 +5329,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   </div>
                 </div>
 
+                </CorporateReportLayout>
               </div>
             </div>
 

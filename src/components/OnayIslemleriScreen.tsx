@@ -16,7 +16,7 @@ import {
   normalizeKampFaaliyetForDisplay,
   normalizeKampSayimForDisplay,
 } from '../lib/mobilOnayUtils';
-import { kibritciLogoHtml } from '../lib/kibritciBrand';
+import { wrapCorporateReportHtml } from '../lib/corporateReportHtml';
 
 interface OnayIslemleriScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
@@ -749,238 +749,50 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
       `;
     }
 
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>ONAYLI BELGE - ${code}</title>
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap');
-          body {
-            font-family: 'Inter', sans-serif;
-            color: #1e293b;
-            margin: 0;
-            padding: 40px;
-            background: #ffffff;
-          }
-          .header-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 30px;
-          }
-          .header-left {
-            text-align: left;
-            vertical-align: middle;
-          }
-          .header-right {
-            text-align: right;
-            vertical-align: middle;
-          }
-          .logo-text-title {
-            color: #1e4e78;
-            font-size: 24px;
-            font-weight: 800;
-            letter-spacing: 2px;
-            margin: 0;
-          }
-          .logo-text-sub {
-            color: #8b1e1e;
-            font-size: 14px;
-            font-weight: 800;
-            letter-spacing: 4px;
-            margin: 2px 0 0 0;
-          }
-          .doc-title-badge {
-            display: inline-block;
-            background: #f1f5f9;
-            border: 1px solid #e2e8f0;
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-weight: 700;
-            font-style: normal;
-            font-size: 11px;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-          }
-          h1 {
-            font-size: 20px;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            margin-top: 10px;
-            margin-bottom: 5px;
-            color: #0f172a;
-          }
-          .sub-header-line {
-            height: 4px;
-            background: linear-gradient(to right, #1e4e78 30%, #8b1e1e 100%);
-            margin-bottom: 30px;
-            border-radius: 2px;
-          }
-          .card {
-            background: #f8fafc;
-            border: 1px solid #f1f5f9;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 25px;
-          }
-          .card p {
-            margin: 6px 0;
-            font-size: 13px;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 12px;
-          }
-          th {
-            background-color: #0f172a;
-            color: #ffffff;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            padding: 12px;
-          }
-          td {
-            border-bottom: 1px solid #f1f5f9;
-            padding: 12px;
-          }
-          /* Visual Stamp Stamp Design */
-          .digital-stamp {
-            display: inline-block;
-            border: 3px double #1E4E78;
-            padding: 16px;
-            border-radius: 8px;
-            color: #1E4E78;
-            background-color: #f0f7ff;
-            font-family: 'JetBrains Mono', monospace;
-            text-align: center;
-            max-width: 450px;
-            margin-top: 40px;
-            margin-bottom: 30px;
-          }
-          .stamp-header {
-            font-weight: 800;
-            font-size: 11px;
-            letter-spacing: 1.5px;
-            margin-bottom: 6px;
-            text-transform: uppercase;
-            border-bottom: 1px solid #1E4E78;
-            padding-bottom: 4px;
-          }
-          .stamp-body {
-            font-size: 11px;
-            font-weight: 700;
-            margin-bottom: 8px;
-            text-align: left;
-          }
-          .stamp-footer {
-            font-size: 9px;
-            font-style: italic;
-            color: #0284c7;
-            margin-top: 8px;
-            border-top: 1px dashed #b9ddff;
-            padding-top: 6px;
-          }
-          .signatures-grid {
-            width: 100%;
-            margin-top: 60px;
-            border-top: 1px solid #f1f5f9;
-            padding-top: 30px;
-          }
-          .sig-box {
-            width: 33%;
-            text-align: center;
-            vertical-align: top;
-            font-size: 11px;
-            padding: 0 10px;
-          }
-          .sig-line {
-            border-top: 1px dashed #cbd5e1;
-            margin-top: 40px;
-            margin-bottom: 8px;
-          }
-          .sig-title {
-            font-weight: 700;
-            color: #64748b;
-            text-transform: uppercase;
-          }
-          .footer-note {
-            text-align: center;
-            font-size: 10px;
-            color: #94a3b8;
-            margin-top: 100px;
-            border-top: 1px solid #f1f5f9;
-            padding-top: 15px;
-          }
-        </style>
-      </head>
-      <body>
-        <table class="header-table">
-          <tr>
-            <td class="header-left" style="border:none; padding:0;">
-              ${kibritciLogoHtml(52)}
-            </td>
-            <td class="header-right" style="border:none; padding:0; text-align:right;">
-              <div class="doc-title-badge">DİJİTAL GÜVENLİK HAVUZU RAPORU</div>
-              <h1 style="margin:5px 0 0 0;">${title}</h1>
-              <p style="margin:2px 0 0 0; font-size:12px; color:#475569;">Belge No: <strong>${code}</strong></p>
-            </td>
-          </tr>
-        </table>
-        
-        <div class="sub-header-line"></div>
-        
-        ${contentHtml}
+    const onayExtraCss = `
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap');
+      .doc-title-badge{display:inline-block;background:#f1f5f9;border:1px solid #e2e8f0;padding:8px 16px;border-radius:8px;font-weight:700;font-size:11px;letter-spacing:1px;text-transform:uppercase}
+      h1{font-size:20px;font-weight:800;margin:10px 0 5px;color:#0f172a}
+      .sub-header-line{height:4px;background:linear-gradient(to right,#1e4e78 30%,#8b1e1e 100%);margin:16px 0 24px;border-radius:2px}
+      .card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:20px}
+      table.w-full{width:100%;border-collapse:collapse}
+      .signatures-grid{width:100%;margin-top:40px;border-top:1px solid #f1f5f9;padding-top:24px}
+      .sig-box{width:33%;text-align:center;font-size:11px;padding:0 10px;display:inline-block;vertical-align:top}
+      .sig-line{border-top:1px dashed #cbd5e1;margin-top:32px;margin-bottom:8px}
+      .sig-title{font-weight:700;color:#64748b;text-transform:uppercase}
+    `;
 
-        <!-- Digital Approval Wax/Stamp -->
-        <div class="digital-stamp" style="border: 2px uppercase dashed #d97706; padding: 15px; border-radius: 12px; background-color: #fffbeb; margin-bottom: 25px; display: flex; align-items: center; justify-content: space-between; gap: 20px;">
-          <div class="stamp-info" style="flex:1;">
-            <div class="stamp-header" style="font-weight: 900; font-size: 11px; color: #b45309; text-transform: uppercase; margin-bottom: 5px;">🔒 KİBRİTÇİ İNŞAAT - GÜVENLİ DİJİTAL ONAY RESMİ KAŞESİ</div>
-            <div class="stamp-body" style="font-size: 11px; line-height: 1.5; color: #4b5563;">
+    const innerBody = `
+        <div class="doc-title-badge">DİJİTAL GÜVENLİK HAVUZU RAPORU</div>
+        <h1>${title}</h1>
+        <p style="margin:2px 0 0;font-size:12px;color:#475569;">Belge No: <strong>${code}</strong></p>
+        <div class="sub-header-line"></div>
+        ${contentHtml}
+        <div class="digital-stamp" style="border:2px dashed #d97706;padding:15px;border-radius:12px;background-color:#fffbeb;margin:25px 0;display:flex;align-items:center;justify-content:space-between;gap:20px;">
+          <div style="flex:1;">
+            <div style="font-weight:900;font-size:11px;color:#b45309;text-transform:uppercase;margin-bottom:5px;">🔒 KİBRİTÇİ İNŞAAT - GÜVENLİ DİJİTAL ONAY RESMİ KAŞESİ</div>
+            <div style="font-size:11px;line-height:1.5;color:#4b5563;">
               YÖNETİCİ ONAYI TAMAMLANDI<br>
-              Kaşe / Mobil E-İmza: <span style="color:#d97706; font-weight: bold;">${doc.onayStamp || '🔵 KİBRİTÇİ İNŞAAT GRUBU YÖNETİM ONAYI'}</span><br>
-              Onaylayan Yetkili Ünvanı: <span style="text-decoration: underline;">ŞİRKET GENEL MÜDÜRÜ / GÖREV ALANI</span><br>
+              Kaşe / Mobil E-İmza: <span style="color:#d97706;font-weight:bold;">${doc.onayStamp || '🔵 KİBRİTÇİ İNŞAAT GRUBU YÖNETİM ONAYI'}</span><br>
+              Onaylayan Yetkili Ünvanı: <span style="text-decoration:underline;">ŞİRKET GENEL MÜDÜRÜ / GÖREV ALANI</span><br>
               Onay Tarihi: ${doc.onayTarihi || todayStr}
             </div>
           </div>
-          <div class="stamp-signature-drawing" style="shrink: 0;">
-            ${signatureHtml}
-          </div>
+          <div>${signatureHtml}</div>
         </div>
-
-        <!-- Role-only signature boxes as requested (no individual names printed) -->
-        <table class="signatures-grid" style="border:none;">
-          <tr>
-            <td class="sig-box" style="border:none;">
-              <div class="sig-line"></div>
-              <div class="sig-title">TEKLİF / KABUL EDEN</div>
-              <div style="font-size:10px; color:#64748b; margin-top:2px;">ŞANTİYE SORUMLUSU</div>
-            </td>
-            <td class="sig-box" style="border:none;">
-              <div class="sig-line"></div>
-              <div class="sig-title">KONTROL EDEN</div>
-              <div style="font-size:10px; color:#64748b; margin-top:2px;">MÜHENDİS / TEKNİK OFİS Sorumlusu</div>
-            </td>
-            <td class="sig-box" style="border:none;">
-              <div class="sig-line" style="border-top: 1px font-weight:bold solid #1e4e78;"></div>
-              <div class="sig-title" style="color:#1e4e78; font-weight:800;">DİJİTAL ONAY VEREN</div>
-              <div style="font-size:10px; color:#1e4e78; font-weight:bold; margin-top:2px;">ŞİRKET YÖNETİM KURULU / ORTAK</div>
-            </td>
-          </tr>
-        </table>
-
-        <div class="footer-note">
-          Bu belge, Kibritçi ERP Dijital Onay Havuzu üzerinden oluşturulmuş resmi arşiv kopyasıdır.<br>
-          © 2026 Kibritçi İnşaat Sanayi ve Ticaret A.Ş. Tüm hakları saklıdır.
+        <div class="signatures-grid">
+          <div class="sig-box"><div class="sig-line"></div><div class="sig-title">TEKLİF / KABUL EDEN</div><div style="font-size:10px;color:#64748b;margin-top:2px;">ŞANTİYE SORUMLUSU</div></div>
+          <div class="sig-box"><div class="sig-line"></div><div class="sig-title">KONTROL EDEN</div><div style="font-size:10px;color:#64748b;margin-top:2px;">MÜHENDİS / TEKNİK OFİS Sorumlusu</div></div>
+          <div class="sig-box"><div class="sig-line" style="border-top:1px solid #1e4e78;"></div><div class="sig-title" style="color:#1e4e78;font-weight:800;">DİJİTAL ONAY VEREN</div><div style="font-size:10px;color:#1e4e78;font-weight:bold;margin-top:2px;">ŞİRKET YÖNETİM KURULU / ORTAK</div></div>
         </div>
-        
-        <script>
-          window.print();
-        </script>
-      </body>
-      </html>
     `;
+
+    const htmlContent = wrapCorporateReportHtml(innerBody, {
+      docCode: `Belge No: ${code}`,
+      orientation: 'portrait',
+      title: `ONAYLI BELGE - ${code}`,
+      extraCss: onayExtraCss,
+    });
 
     const printWin = window.open("", "_blank");
     if (printWin) {

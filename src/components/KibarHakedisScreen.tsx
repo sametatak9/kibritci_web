@@ -6,7 +6,7 @@ import {
 import { db, parseYoklamaSnapshotData, saveDocument } from '../lib/firebase';
 import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { Personel, AylikYoklamaMap } from '../types/erp';
-import { KibritciLogo } from './KibritciLogo';
+import { CorporateReportLayout } from './CorporateReportLayout';
 import { buildPersonelListForMonth, isDayActiveForPersonel, normalizeTurkishName } from '../lib/yoklamaUtils';
 import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 import { normalizeGorev } from '../lib/gorevUtils';
@@ -634,26 +634,12 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
           </div>
 
           <div className="bg-white border rounded-3xl p-6 shadow-sm">
-            <div id="kibar-report-print-area" className="report-root bg-white space-y-4 text-xs text-slate-800">
+            <div id="kibar-report-print-area" className="report-root bg-white text-xs text-slate-800">
               <style>{REPORT_CSS}</style>
-
-              {/* —— Başlık —— */}
-              <div className="rpt-header">
-                <div className="rpt-header-main">
-                  <div className="rpt-header-brand">
-                    <KibritciLogo size="lg" showText={false} className="h-11 rpt-logo" />
-                    <div>
-                      <p>ZER YAPI · Aylık Hakediş & Faaliyet Mutabakatı</p>
-                    </div>
-                  </div>
-                  <div className="rpt-header-meta">
-                    <span className="rpt-ref">ZER-YAPI-{donemKey}</span>
-                    <p>{donemLabel} · {new Date().toLocaleDateString('tr-TR')}</p>
-                  </div>
-                </div>
-                <div className="rpt-header-title">
-                  Şantiye Sahası Aylık Hakediş ve Faaliyet Raporu — {donemLabel}
-                </div>
+              <CorporateReportLayout orientation="landscape" docCode={`ZER-YAPI-${donemKey}`}>
+              <p className="text-[10px] text-slate-500 font-bold uppercase mb-2">ZER YAPI · Aylık Hakediş & Faaliyet Mutabakatı · {donemLabel}</p>
+              <div className="rpt-header-title mb-4">
+                Şantiye Sahası Aylık Hakediş ve Faaliyet Raporu — {donemLabel}
               </div>
 
               {/* —— ZER YAPI Hakediş Özeti (rapor başı) —— */}
@@ -869,6 +855,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                 )}
               </div>
 
+              </CorporateReportLayout>
             </div>
           </div>
         </div>

@@ -4,7 +4,7 @@ import {
   Calendar, FileText, Search, CreditCard, ChevronRight, Eye, Image as ImageIcon, CheckCircle, AlertCircle
 } from 'lucide-react';
 import { KasaHareketi } from '../types/erp';
-import { KibritciLogo } from './KibritciLogo';
+import { CorporateReportLayout } from './CorporateReportLayout';
 import { compressImage } from '../lib/imageCompress';
 
 interface KasaScreenProps {
@@ -700,22 +700,13 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
 
             {/* Document Body Area suitable for landscape rendering */}
             <div className="flex-1 overflow-auto bg-white p-4 sm:p-8 lg:p-12 text-slate-900 kasa-report-printable-area font-sans">
-              
-              {/* Report Corporate Header */}
-              <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-center">
-                <div className="flex items-center space-x-4">
-                  <KibritciLogo size="xl" />
-                  <div>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">ŞANTİYE MERKEZ VE MUHASEBE VE FİNANSAL HAKEDİŞ DAİRESİ</p>
-                    <p className="text-[10px] text-slate-650 mt-1">Sorgu Aralığı: <strong className="text-slate-900 font-black">{appliedStartDate} / {appliedEndDate}</strong></p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="border border-slate-900 text-[10px] font-bold px-3 py-1 bg-slate-50 uppercase tracking-widest block mb-1">
-                    KOD: KBR-KASA-{Date.now().toString().substring(0, 8)}
-                  </span>
-                  <p className="text-[9px] text-slate-405 font-mono">Baskı Zamanı: {new Date().toLocaleDateString('tr-TR')} {new Date().toLocaleTimeString('tr-TR')}</p>
-                </div>
+              <CorporateReportLayout
+                orientation="landscape"
+                docCode={`KOD: KBR-KASA-${Date.now().toString().substring(0, 8)}`}
+              >
+              <div className="mb-4 pb-3 border-b border-slate-200">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">ŞANTİYE MERKEZ VE MUHASEBE VE FİNANSAL HAKEDİŞ DAİRESİ</p>
+                <p className="text-[10px] text-slate-650 mt-1">Sorgu Aralığı: <strong className="text-slate-900 font-black">{appliedStartDate} / {appliedEndDate}</strong></p>
               </div>
 
               {/* Title Header Section */}
@@ -839,6 +830,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
                 </div>
               </div>
 
+              </CorporateReportLayout>
             </div>
           </div>
         </div>

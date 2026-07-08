@@ -1,13 +1,5 @@
 import React from 'react';
-import letterheadImg from '../assets/kibritci-antetli.png';
-
-const COMPANY = {
-  legalName: 'KİBRİTÇİ İNŞAAT TAAHHÜT TURİZM SANAYİ VE TİCARET LİMİTED ŞİRKETİ',
-  address: 'Rüzgarlıbahçe Mah. Cumhuriyet Cad. Gülsan Plaza No: 22 /1 Kat: 3 Kavacık - Beykoz / İstanbul',
-  phone: 'T: +90 212 213 77 61 - 66 - 68',
-  email: 'info@kibritciinsaat.com.tr',
-  website: 'kibritciinsaat.com.tr',
-};
+import { CORPORATE_COMPANY } from '../lib/corporateReportHtml';
 
 export interface CorporateReportLayoutProps {
   children: React.ReactNode;
@@ -34,13 +26,13 @@ export const CorporateReportLayout: React.FC<CorporateReportLayoutProps> = ({
       data-orientation={orientation}
     >
       <div className="corporate-report-watermark" aria-hidden="true">
-        <img src={letterheadImg} alt="" draggable={false} />
+        <div className="corporate-report-watermark-icon" style={{ backgroundImage: 'url(/kibritci-antetli.png)' }} />
       </div>
 
       <header className="corporate-report-header">
         <div
           className="corporate-report-logo"
-          style={{ backgroundImage: `url(${letterheadImg})` }}
+          style={{ backgroundImage: 'url(/kibritci-antetli.png)' }}
           role="img"
           aria-label="Kibritçi İnşaat"
         />
@@ -58,15 +50,15 @@ export const CorporateReportLayout: React.FC<CorporateReportLayoutProps> = ({
         <div className="corporate-report-footer-line" />
         <div className="corporate-report-footer-grid">
           <div className="corporate-report-footer-col">
-            <p className="corporate-report-footer-legal">{COMPANY.legalName}</p>
-            <p className="corporate-report-footer-address">{COMPANY.address}</p>
+            <p className="corporate-report-footer-legal">{CORPORATE_COMPANY.legalName}</p>
+            <p className="corporate-report-footer-address">{CORPORATE_COMPANY.address}</p>
           </div>
           <div className="corporate-report-footer-col corporate-report-footer-contact">
-            <p>{COMPANY.phone}</p>
-            <p>@: {COMPANY.email}</p>
+            <p>{CORPORATE_COMPANY.phone}</p>
+            <p>@: {CORPORATE_COMPANY.email}</p>
           </div>
           <div className="corporate-report-footer-col corporate-report-footer-web">
-            <p>{COMPANY.website}</p>
+            <p>{CORPORATE_COMPANY.website}</p>
           </div>
         </div>
       </footer>
