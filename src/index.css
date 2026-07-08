@@ -67,7 +67,7 @@ html {
   background: #fff;
   color: #1e293b;
   font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
-  overflow: hidden;
+  overflow: visible;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
@@ -76,6 +76,7 @@ html {
   min-height: 277mm;
 }
 
+/* Hologram filigran — sağda büyük soluk Kibritçi logosu */
 .corporate-report-watermark {
   position: absolute;
   inset: 0;
@@ -84,24 +85,21 @@ html {
   overflow: hidden;
 }
 
-/* Word antetindeki hologram filigran — antetli PNG'den K ikonu kırpımı */
-.corporate-report-watermark-icon {
+.corporate-report-watermark-img {
   position: absolute;
-  right: 0;
-  top: 42%;
+  right: -4%;
+  top: 48%;
   transform: translateY(-50%);
-  width: 42%;
-  height: 62%;
-  background-image: url('/kibritci-antetli.png');
-  background-repeat: no-repeat;
-  background-size: 920px auto;
-  background-position: -380px -310px;
-  opacity: 0.13;
+  width: min(52vw, 520px);
+  height: auto;
+  opacity: 0.09;
+  filter: grayscale(100%) contrast(0.85);
+  mix-blend-mode: lighten;
 }
 
 .corporate-report-header {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -112,12 +110,17 @@ html {
 
 .corporate-report-logo {
   flex-shrink: 0;
-  width: 16.25rem;
-  height: 4.25rem;
-  background-image: url('/kibritci-antetli.png');
-  background-repeat: no-repeat;
-  background-position: left top;
-  background-size: 920px auto;
+  background: #fff;
+  line-height: 0;
+}
+
+.corporate-report-logo-img {
+  height: 3.75rem;
+  width: auto;
+  max-width: 18rem;
+  object-fit: contain;
+  display: block;
+  mix-blend-mode: lighten;
 }
 
 .corporate-report-meta {
@@ -230,8 +233,8 @@ html {
     overflow: visible;
   }
 
-  .corporate-report-watermark-icon {
-    opacity: 0.10;
+  .corporate-report-watermark-img {
+    opacity: 0.08;
   }
 }
 

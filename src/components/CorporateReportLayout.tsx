@@ -1,4 +1,5 @@
 import React from 'react';
+import { KIBRITCI_LOGO_PATH } from '../lib/kibritciBrand';
 import { CORPORATE_COMPANY } from '../lib/corporateReportHtml';
 
 export interface CorporateReportLayoutProps {
@@ -25,17 +26,25 @@ export const CorporateReportLayout: React.FC<CorporateReportLayoutProps> = ({
       className={`corporate-report corporate-report--${orientation} ${className}`}
       data-orientation={orientation}
     >
+      {/* Hologram filigran — büyük soluk logo */}
       <div className="corporate-report-watermark" aria-hidden="true">
-        <div className="corporate-report-watermark-icon" style={{ backgroundImage: 'url(/kibritci-antetli.png)' }} />
+        <img
+          src={KIBRITCI_LOGO_PATH}
+          alt=""
+          className="corporate-report-watermark-img"
+          draggable={false}
+        />
       </div>
 
       <header className="corporate-report-header">
-        <div
-          className="corporate-report-logo"
-          style={{ backgroundImage: 'url(/kibritci-antetli.png)' }}
-          role="img"
-          aria-label="Kibritçi İnşaat"
-        />
+        <div className="corporate-report-logo">
+          <img
+            src={KIBRITCI_LOGO_PATH}
+            alt="Kibritçi İnşaat"
+            className="corporate-report-logo-img"
+            draggable={false}
+          />
+        </div>
         {docCode && (
           <div className="corporate-report-meta">
             <span className="corporate-report-doc-code">{docCode}</span>

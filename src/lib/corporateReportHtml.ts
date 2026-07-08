@@ -1,3 +1,5 @@
+import { getKibritciLogoUrl } from './kibritciBrand';
+
 export const CORPORATE_COMPANY = {
   legalName: 'KİBRİTÇİ İNŞAAT TAAHHÜT TURİZM SANAYİ VE TİCARET LİMİTED ŞİRKETİ',
   address: 'Rüzgarlıbahçe Mah. Cumhuriyet Cad. Gülsan Plaza No: 22 /1 Kat: 3 Kavacık - Beykoz / İstanbul',
@@ -6,22 +8,16 @@ export const CORPORATE_COMPANY = {
   website: 'kibritciinsaat.com.tr',
 };
 
-function antetliUrl(): string {
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return `${window.location.origin}/kibritci-antetli.png`;
-  }
-  return '/kibritci-antetli.png';
-}
-
 export function getCorporateReportCss(): string {
-  const antetUrl = antetliUrl();
+  const logoUrl = getKibritciLogoUrl();
   return `
-    .corporate-report{position:relative;display:flex;flex-direction:column;min-height:190mm;background:#fff;color:#1e293b;font-family:Inter,ui-sans-serif,system-ui,sans-serif;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .corporate-report{position:relative;display:flex;flex-direction:column;min-height:190mm;background:#fff;color:#1e293b;font-family:Inter,ui-sans-serif,system-ui,sans-serif;overflow:visible;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .corporate-report--landscape{min-height:277mm}
     .corporate-report-watermark{position:absolute;inset:0;pointer-events:none;z-index:0;overflow:hidden}
-    .corporate-report-watermark-icon{position:absolute;right:0;top:42%;transform:translateY(-50%);width:42%;height:62%;background-image:url('${antetUrl}');background-repeat:no-repeat;background-size:920px auto;background-position:-380px -310px;opacity:.11}
-    .corporate-report-header{position:relative;z-index:1;display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:.75rem;margin-bottom:1rem}
-    .corporate-report-logo{width:260px;height:68px;background-image:url('${antetUrl}');background-repeat:no-repeat;background-position:left top;background-size:920px auto}
+    .corporate-report-watermark-img{position:absolute;right:-4%;top:48%;transform:translateY(-50%);width:min(52vw,520px);height:auto;opacity:.09;filter:grayscale(100%) contrast(.85);mix-blend-mode:lighten}
+    .corporate-report-header{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:.75rem;margin-bottom:1rem}
+    .corporate-report-logo{background:#fff;line-height:0}
+    .corporate-report-logo-img{height:60px;width:auto;max-width:288px;object-fit:contain;display:block;mix-blend-mode:lighten}
     .corporate-report-meta{text-align:right}
     .corporate-report-doc-code{display:block;font-size:.58rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border:1px solid #334155;padding:.2rem .55rem;background:#f8fafc;margin-bottom:.2rem}
     .corporate-report-date{display:block;font-size:.55rem;color:#64748b;font-family:JetBrains Mono,ui-monospace,monospace}
@@ -33,7 +29,7 @@ export function getCorporateReportCss(): string {
     .corporate-report-footer-address{font-size:.48rem;color:#64748b;margin:0}
     .corporate-report-footer-contact{border-left:1px solid #e2e8f0;padding-left:1rem;white-space:nowrap}
     .corporate-report-footer-web{text-align:right;font-weight:600;color:#334155;align-self:end}
-    @media print{.corporate-report{min-height:auto;overflow:visible}.corporate-report-watermark-icon{opacity:.09}}
+    @media print{.corporate-report{min-height:auto;overflow:visible}.corporate-report-watermark-img{opacity:.08}}
   `;
 }
 
@@ -47,13 +43,13 @@ export function wrapCorporateReportHtml(
     autoPrint?: boolean;
   }
 ): string {
+  const logoUrl = getKibritciLogoUrl();
   const printDate = new Date().toLocaleDateString('tr-TR');
   const docCode = options?.docCode ?? '';
   const orientation = options?.orientation ?? 'landscape';
   const title = options?.title ?? 'Kibritçi Rapor';
   const extraCss = options?.extraCss ?? '';
   const autoPrint = options?.autoPrint !== false;
-  const antetUrl = antetliUrl();
 
   return `<!DOCTYPE html>
 <html lang="tr">
@@ -66,10 +62,12 @@ export function wrapCorporateReportHtml(
 <body class="bg-white text-slate-900 font-sans p-4 sm:p-8">
   <div class="corporate-report corporate-report--${orientation}" data-orientation="${orientation}">
     <div class="corporate-report-watermark" aria-hidden="true">
-      <div class="corporate-report-watermark-icon" style="background-image:url('${antetUrl}')"></div>
+      <img src="${logoUrl}" alt="" class="corporate-report-watermark-img" />
     </div>
     <header class="corporate-report-header">
-      <div class="corporate-report-logo" role="img" aria-label="Kibritçi İnşaat" style="background-image:url('${antetUrl}')"></div>
+      <div class="corporate-report-logo">
+        <img src="${logoUrl}" alt="Kibritçi İnşaat" class="corporate-report-logo-img" />
+      </div>
       ${docCode ? `<div class="corporate-report-meta"><span class="corporate-report-doc-code">${docCode}</span><span class="corporate-report-date">Baskı: ${printDate}</span></div>` : ''}
     </header>
     <main class="corporate-report-body">${bodyContent}</main>
