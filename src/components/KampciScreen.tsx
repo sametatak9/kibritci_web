@@ -28,6 +28,7 @@ interface KampciScreenProps {
   setCariKartlar?: React.Dispatch<React.SetStateAction<CariKart[]>>;
   yoklamalar?: AylikYoklamaMap;
   setYoklamalar?: (updater: AylikYoklamaMap | ((y: AylikYoklamaMap) => AylikYoklamaMap)) => void;
+  saveYoklamalarNow?: (next: AylikYoklamaMap) => Promise<void>;
   stokKartlar?: StokKart[];
   currentUser: any;
   onSignOut?: () => void;
@@ -49,6 +50,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   setCariKartlar,
   yoklamalar = {},
   setYoklamalar,
+  saveYoklamalarNow,
   stokKartlar = [],
   currentUser,
   onSignOut,
