@@ -1,4 +1,4 @@
-import { getAntetliUrl } from './reportAssets';
+import { getKibritciLogoUrl } from './kibritciBrand';
 
 export const CORPORATE_COMPANY = {
   legalName: 'KİBRİTÇİ İNŞAAT TAAHHÜT TURİZM SANAYİ VE TİCARET LİMİTED ŞİRKETİ',
@@ -9,28 +9,24 @@ export const CORPORATE_COMPANY = {
 };
 
 export function getCorporateReportCss(): string {
-  const antetUrl = getAntetliUrl();
   return `
-    .corporate-report{position:relative;display:flex;flex-direction:column;min-height:190mm;background:#fff;color:#1e293b;font-family:Inter,ui-sans-serif,system-ui,sans-serif;overflow:visible;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .corporate-report{position:relative;display:flex;flex-direction:column;min-height:190mm;background:#fff;color:#1e293b;font-family:Inter,ui-sans-serif,system-ui,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .corporate-report--landscape{min-height:277mm}
-    .corporate-report-watermark{position:absolute;inset:0;pointer-events:none;z-index:0;overflow:hidden}
-    .corporate-report-logo-clip{width:17rem;height:4.5rem;overflow:hidden;flex-shrink:0;position:relative;z-index:2;background:#fff}
-    .corporate-report-logo-clip img{width:918px;max-width:none;height:auto;display:block}
-    .corporate-report-watermark-clip{position:absolute;right:0;top:44%;transform:translateY(-50%);width:24rem;height:28rem;overflow:hidden;pointer-events:none}
-    .corporate-report-watermark-clip img{width:918px;max-width:none;height:auto;display:block;margin-left:-27.5rem;margin-top:-17.5rem;opacity:.14}
-    .corporate-report-header{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:.75rem;margin-bottom:1rem}
+    .corporate-report-watermark-img{position:absolute;right:2%;top:50%;transform:translateY(-50%);width:480px;max-width:55%;height:auto;opacity:.09;pointer-events:none;z-index:0}
+    .corporate-report-logo-img{height:64px;width:auto;max-width:320px;display:block;object-fit:contain}
+    .corporate-report-header{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;margin-bottom:16px}
     .corporate-report-meta{text-align:right}
-    .corporate-report-doc-code{display:block;font-size:.58rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border:1px solid #334155;padding:.2rem .55rem;background:#f8fafc;margin-bottom:.2rem}
-    .corporate-report-date{display:block;font-size:.55rem;color:#64748b;font-family:JetBrains Mono,ui-monospace,monospace}
+    .corporate-report-doc-code{display:block;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border:1px solid #334155;padding:3px 9px;background:#f8fafc;margin-bottom:3px}
+    .corporate-report-date{display:block;font-size:8px;color:#64748b;font-family:JetBrains Mono,ui-monospace,monospace}
     .corporate-report-body{position:relative;z-index:1;flex:1}
-    .corporate-report-footer{position:relative;z-index:1;margin-top:1.5rem;padding-top:.5rem}
-    .corporate-report-footer-line{height:1px;background:linear-gradient(to right,transparent,#cbd5e1 15%,#cbd5e1 85%,transparent);margin-bottom:.55rem}
-    .corporate-report-footer-grid{display:grid;grid-template-columns:1fr auto auto;gap:1.25rem;align-items:start;font-size:.52rem;line-height:1.45;color:#475569}
-    .corporate-report-footer-legal{font-weight:800;font-size:.5rem;letter-spacing:.04em;color:#334155;text-transform:uppercase;margin:0 0 .15rem}
-    .corporate-report-footer-address{font-size:.48rem;color:#64748b;margin:0}
-    .corporate-report-footer-contact{border-left:1px solid #e2e8f0;padding-left:1rem;white-space:nowrap}
+    .corporate-report-footer{position:relative;z-index:2;margin-top:24px;padding-top:8px}
+    .corporate-report-footer-line{height:1px;background:linear-gradient(to right,transparent,#cbd5e1 15%,#cbd5e1 85%,transparent);margin-bottom:9px}
+    .corporate-report-footer-grid{display:grid;grid-template-columns:1fr auto auto;gap:20px;align-items:start;font-size:8px;line-height:1.45;color:#475569}
+    .corporate-report-footer-legal{font-weight:800;font-size:8px;letter-spacing:.04em;color:#334155;text-transform:uppercase;margin:0 0 3px}
+    .corporate-report-footer-address{font-size:7.5px;color:#64748b;margin:0}
+    .corporate-report-footer-contact{border-left:1px solid #e2e8f0;padding-left:16px;white-space:nowrap}
     .corporate-report-footer-web{text-align:right;font-weight:600;color:#334155;align-self:end}
-    @media print{.corporate-report{min-height:auto;overflow:visible}.corporate-report-watermark-clip img{opacity:.11}}
+    @media print{.corporate-report{min-height:auto}.corporate-report-watermark-img{opacity:.08}}
   `;
 }
 
@@ -44,7 +40,7 @@ export function wrapCorporateReportHtml(
     autoPrint?: boolean;
   }
 ): string {
-  const antetUrl = getAntetliUrl();
+  const logoUrl = getKibritciLogoUrl();
   const printDate = new Date().toLocaleDateString('tr-TR');
   const docCode = options?.docCode ?? '';
   const orientation = options?.orientation ?? 'landscape';
@@ -61,16 +57,10 @@ export function wrapCorporateReportHtml(
   <style>${getCorporateReportCss()}${extraCss}</style>
 </head>
 <body class="bg-white text-slate-900 font-sans p-4 sm:p-8">
-  <div class="corporate-report corporate-report--${orientation}" data-orientation="${orientation}">
-    <div class="corporate-report-watermark" aria-hidden="true">
-      <div class="corporate-report-watermark-clip">
-        <img src="${antetUrl}" alt="" />
-      </div>
-    </div>
+  <div class="corporate-report corporate-report--${orientation}" data-orientation="${orientation}" style="position:relative;background:#fff">
+    <img src="${logoUrl}" alt="" class="corporate-report-watermark-img" aria-hidden="true" />
     <header class="corporate-report-header">
-      <div class="corporate-report-logo-clip">
-        <img src="${antetUrl}" alt="Kibritçi İnşaat" />
-      </div>
+      <img src="${logoUrl}" alt="Kibritçi İnşaat" class="corporate-report-logo-img" />
       ${docCode ? `<div class="corporate-report-meta"><span class="corporate-report-doc-code">${docCode}</span><span class="corporate-report-date">Baskı: ${printDate}</span></div>` : ''}
     </header>
     <main class="corporate-report-body">${bodyContent}</main>

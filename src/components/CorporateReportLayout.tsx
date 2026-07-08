@@ -1,5 +1,5 @@
 import React from 'react';
-import antetliPng from '../assets/kibritci-antetli.png';
+import logoPng from '../assets/kibritci-logo.png';
 import { CORPORATE_COMPANY } from '../lib/corporateReportHtml';
 
 export interface CorporateReportLayoutProps {
@@ -9,6 +9,27 @@ export interface CorporateReportLayoutProps {
   orientation?: 'portrait' | 'landscape';
   className?: string;
 }
+
+const headerLogoStyle: React.CSSProperties = {
+  height: '64px',
+  width: 'auto',
+  maxWidth: '320px',
+  display: 'block',
+  objectFit: 'contain',
+};
+
+const watermarkStyle: React.CSSProperties = {
+  position: 'absolute',
+  right: '2%',
+  top: '50%',
+  transform: 'translateY(-50%)',
+  width: '480px',
+  maxWidth: '55%',
+  height: 'auto',
+  opacity: 0.09,
+  pointerEvents: 'none',
+  zIndex: 0,
+};
 
 export const CorporateReportLayout: React.FC<CorporateReportLayoutProps> = ({
   children,
@@ -25,29 +46,49 @@ export const CorporateReportLayout: React.FC<CorporateReportLayoutProps> = ({
     <div
       className={`corporate-report corporate-report--${orientation} ${className}`}
       data-orientation={orientation}
+      style={{ position: 'relative', background: '#fff' }}
     >
-      {/* Hologram filigran — antetli şablondaki soluk K logosu */}
-      <div className="corporate-report-watermark" aria-hidden="true">
-        <div className="corporate-report-watermark-clip">
-          <img src={antetliPng} alt="" draggable={false} />
-        </div>
-      </div>
+      <img
+        src={logoPng}
+        alt=""
+        aria-hidden
+        draggable={false}
+        style={watermarkStyle}
+        className="corporate-report-watermark-img"
+      />
 
-      <header className="corporate-report-header">
-        <div className="corporate-report-logo-clip">
-          <img src={antetliPng} alt="Kibritçi İnşaat" draggable={false} />
-        </div>
+      <header
+        className="corporate-report-header"
+        style={{
+          position: 'relative',
+          zIndex: 2,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          paddingBottom: '12px',
+          marginBottom: '16px',
+        }}
+      >
+        <img
+          src={logoPng}
+          alt="Kibritçi İnşaat"
+          draggable={false}
+          style={headerLogoStyle}
+          className="corporate-report-logo-img"
+        />
         {docCode && (
-          <div className="corporate-report-meta">
+          <div className="corporate-report-meta" style={{ textAlign: 'right' }}>
             <span className="corporate-report-doc-code">{docCode}</span>
             <span className="corporate-report-date">Baskı: {printDateStr}</span>
           </div>
         )}
       </header>
 
-      <main className="corporate-report-body">{children}</main>
+      <main className="corporate-report-body" style={{ position: 'relative', zIndex: 1 }}>
+        {children}
+      </main>
 
-      <footer className="corporate-report-footer">
+      <footer className="corporate-report-footer" style={{ position: 'relative', zIndex: 2 }}>
         <div className="corporate-report-footer-line" />
         <div className="corporate-report-footer-grid">
           <div className="corporate-report-footer-col">
