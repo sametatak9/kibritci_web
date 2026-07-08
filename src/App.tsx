@@ -462,16 +462,91 @@ export default function App() {
           return;
         }
         
-        setLoadingMsg('Şantiye personel kadrosu eşitleniyor...');
+        setLoadingMsg('Güvenli veritabanı senkronizasyonu (Paralel Yükleme) başlatılıyor...');
         const allowDemoSeed = initialSeedAllowed();
-        let personnelData = await seedCollectionIfEmpty(
-          'personeller',
-          allowDemoSeed ? INITIAL_PERSONEL : []
-        );
-        const personnelIdsBefore = new Set(personnelData.map(p => p.id));
 
-        setLoadingMsg('Aylık personel puantaj cetvelleri yükleniyor...');
-        let attData = await seedYoklamaIfEmpty(allowDemoSeed ? INITIAL_YOKLAMA : {});
+        const safeLoad = async <T,>(promise: Promise<T>, fallback: T, name: string): Promise<T> => {
+          try {
+            return await promise;
+          } catch (err) {
+            console.error(`Error loading ${name}:`, err);
+            return fallback;
+          }
+        };
+
+        const initialUsers: Kullanici[] = [
+          { id: 'santiye@kibritci.com', email: 'santiye@kibritci.com', yetki: 'YÖNETİCİ', durum: 'AKTİF', kayitTarihi: '2026-06-19' }
+        ];
+
+        const initialKmLogs = [
+          { id: 'log_1', tarih: '2026-06-15', plaka: '34 KBR 888', surucu: 'Ayhan Yılmaz', sabahKm: 41200, aksamKm: 41350, fark: 150 },
+          { id: 'log_2', tarih: '2026-06-16', plaka: '34 KBR 888', surucu: 'Ayhan Yılmaz', sabahKm: 41350, aksamKm: 41580, fark: 230 },
+          { id: 'log_3', tarih: '2026-06-17', plaka: '06 KBR 101', surucu: 'Mehmet Kaplan', sabahKm: 85400, aksamKm: 85920, fark: 520 },
+        ];
+
+        const [
+          rawPersonnel,
+          rawAttData,
+          reqData,
+          waybillsData,
+          invoicesData,
+          baglantiData,
+          analizData,
+          cashLogData,
+          vehicleData,
+          toolData,
+          roomData,
+          stayLogData,
+          rawReportData,
+          loadedProgramliFaaliyetler,
+          protocolData,
+          companyData,
+          stockData,
+          emailLogData,
+          loadedUsers,
+          loadedKmLogs,
+          loadedOperator,
+          loadedTaseron,
+          loadedTaseronEnerji,
+          loadedTaseronYemek,
+          loadedMaasOde,
+          loadedPersIslem,
+          loadedCariIslem,
+          loadedStokIslem
+        ] = await Promise.all([
+          safeLoad(seedCollectionIfEmpty('personeller', allowDemoSeed ? INITIAL_PERSONEL : []), [], 'personeller'),
+          safeLoad(seedYoklamaIfEmpty(allowDemoSeed ? INITIAL_YOKLAMA : {}), {}, 'yoklamalar'),
+          safeLoad(seedCollectionIfEmpty('satinAlmaTalepleri', INITIAL_SATIN_ALMA), [], 'satinAlmaTalepleri'),
+          safeLoad(seedCollectionIfEmpty('irsaliyeler', INITIAL_IRSALIYE), [], 'irsaliyeler'),
+          safeLoad(seedCollectionIfEmpty('faturalar', INITIAL_FATURA), [], 'faturalar'),
+          safeLoad(seedCollectionIfEmpty('evrakBaglantiGruplari', []), [], 'evrakBaglantiGruplari'),
+          safeLoad(seedCollectionIfEmpty('onayliAnalizRaporlari', []), [], 'onayliAnalizRaporlari'),
+          safeLoad(seedCollectionIfEmpty('kasaHareketleri', INITIAL_KASA), [], 'kasaHareketleri'),
+          safeLoad(seedCollectionIfEmpty('araclar', INITIAL_ARAC), [], 'araclar'),
+          safeLoad(seedCollectionIfEmpty('demirbaslar', []), [], 'demirbaslar'),
+          safeLoad((async () => { await seedCollectionIfEmpty('kampOdalari', []); return await fetchCollection<KampOdasi>('kampOdalari'); })(), [], 'kampOdalari'),
+          safeLoad(seedCollectionIfEmpty('kampKayitlari', []), [], 'kampKayitlari'),
+          safeLoad(seedCollectionIfEmpty('sahaFaaliyetleri', []), [], 'sahaFaaliyetleri'),
+          safeLoad(seedCollectionIfEmpty('programliFaaliyetler', []), [], 'programliFaaliyetler'),
+          safeLoad(seedCollectionIfEmpty('hazirTutanaklar', INITIAL_TUTANAK), [], 'hazirTutanaklar'),
+          safeLoad(seedCollectionIfEmpty('cariKartlar', INITIAL_CARI), [], 'cariKartlar'),
+          safeLoad(seedCollectionIfEmpty('stokKartlar', INITIAL_STOK), [], 'stokKartlar'),
+          safeLoad(seedCollectionIfEmpty('epostaGonderimleri', INITIAL_EPOSTA), [], 'epostaGonderimleri'),
+          safeLoad(seedCollectionIfEmpty('kullanicilar', initialUsers), [], 'kullanicilar'),
+          safeLoad(seedCollectionIfEmpty('aracKmLoglari', initialKmLogs), [], 'aracKmLoglari'),
+          safeLoad(seedCollectionIfEmpty('operatorFaaliyetleri', INITIAL_OPERATOR_FAALIYET), [], 'operatorFaaliyetleri'),
+          safeLoad(seedCollectionIfEmpty('taseronKesintiRaporlari', INITIAL_TASERON_KESINTI), [], 'taseronKesintiRaporlari'),
+          safeLoad(seedCollectionIfEmpty('taseronEnerjiKayitlari', INITIAL_TASERON_ENERJI), [], 'taseronEnerjiKayitlari'),
+          safeLoad(seedCollectionIfEmpty('taseronYemekKayitlari', INITIAL_TASERON_YEMEK), [], 'taseronYemekKayitlari'),
+          safeLoad(seedCollectionIfEmpty('maasOdemeleri', INITIAL_MAAS_ODEME), [], 'maasOdemeleri'),
+          safeLoad(seedCollectionIfEmpty('personelIslemGecmisi', INITIAL_PERSONEL_ISLEM), [], 'personelIslemGecmisi'),
+          safeLoad(seedCollectionIfEmpty('cariIslemGecmisi', INITIAL_CARI_ISLEM), [], 'cariIslemGecmisi'),
+          safeLoad(seedCollectionIfEmpty('stokIslemGecmisi', INITIAL_STOK_ISLEM), [], 'stokIslemGecmisi')
+        ]);
+
+        let personnelData = rawPersonnel;
+        let attData = rawAttData;
+        const personnelIdsBefore = new Set(personnelData.map(p => p.id));
 
         if (hasSubstantialYoklamaData(attData)) {
           markProductionLive();
@@ -488,7 +563,6 @@ export default function App() {
           const idsBefore = personnelIdsBefore;
           void (async () => {
             try {
-              // Legacy birleştirme sonrası yoklama her durumda Firestore'a yazılsın.
               const legacyResult = await saveYoklamaDocument(mergedYoklama, 'legacy_bootstrap');
               if (!legacyResult.ok) {
                 console.warn('Legacy yoklama arka plan kaydı engellendi:', legacyResult.error);
@@ -514,55 +588,22 @@ export default function App() {
 
         setPersoneller(personnelData);
         setYoklamalar(attData);
-        if (hasSubstantialYoklamaData(attData)) {
-          markProductionLive();
-        }
-        if (personnelData.length >= 20) {
+        if (hasSubstantialYoklamaData(attData) || personnelData.length >= 20) {
           markProductionLive();
         }
 
-        setLoadingMsg('Satın alma ve hakediş talepleri eşitleniyor...');
-        const reqData = await seedCollectionIfEmpty('satinAlmaTalepleri', INITIAL_SATIN_ALMA);
         setSatinAlmaTalepleri(reqData);
-
-        setLoadingMsg('Kontrollü irsaliye dökümleri eşleşiyor...');
-        const waybillsData = await seedCollectionIfEmpty('irsaliyeler', INITIAL_IRSALIYE);
         setIrsaliyeler(waybillsData);
-
-        setLoadingMsg('Fatura ve vergi hakediş defterleri senkronize ediliyor...');
-        const invoicesData = await seedCollectionIfEmpty('faturalar', INITIAL_FATURA);
         setFaturalar(invoicesData);
-
-        setLoadingMsg('Evrak bağlama grupları yükleniyor...');
-        const baglantiData = await seedCollectionIfEmpty('evrakBaglantiGruplari', []);
         setEvrakBaglantiGruplari(baglantiData);
-
-        const analizData = await seedCollectionIfEmpty('onayliAnalizRaporlari', []);
         setOnayliAnalizRaporlari(analizData);
-
-        setLoadingMsg('Kasa defteri hareket dökümleri indiriliyor...');
-        const cashLogData = await seedCollectionIfEmpty('kasaHareketleri', INITIAL_KASA);
         setKasaHareketleri(cashLogData);
-
-        setLoadingMsg('Araç, makine ve cansal ekipman parkı taranıyor...');
-        const vehicleData = await seedCollectionIfEmpty('araclar', INITIAL_ARAC);
         setAraclar(vehicleData);
-
-        setLoadingMsg('Demirbaş ve şantiye alet listeleri yükleniyor...');
-        const toolData = await seedCollectionIfEmpty('demirbaslar', []);
         setDemirbaslar(toolData);
-
-        setLoadingMsg('Yatakhane ve kamp oda yerleşimleri düzenleniyor...');
-        await seedCollectionIfEmpty('kampOdalari', []);
-        const roomData = await fetchCollection<KampOdasi>('kampOdalari');
         setKampOdalari(roomData);
-
-        setLoadingMsg('Yatakhane personel giriş-çıkış kayıtları eşitleniyor...');
-        const stayLogData = await seedCollectionIfEmpty('kampKayitlari', []);
         setKampKayitlari(stayLogData);
 
-        setLoadingMsg('Saha günlük faaliyet dökümleri arşivleniyor...');
-        let reportData = await seedCollectionIfEmpty('sahaFaaliyetleri', []);
+        let reportData = rawReportData;
         const { bootstrapLegacySahaFaaliyet, markLegacySahaFaaliyetBootstrapped, haziran2026SahaNeedsBootstrap } = await import('./lib/legacySahaFaaliyetBootstrap');
         const sahaMerge = bootstrapLegacySahaFaaliyet(reportData);
         if (sahaMerge) {
@@ -592,71 +633,20 @@ export default function App() {
           }
         }
         setSahaFaaliyetleri(reportData);
-
-        setLoadingMsg('Programlı faaliyet arşivi hazırlanıyor...');
-        const loadedProgramliFaaliyetler = await seedCollectionIfEmpty('programliFaaliyetler', []);
         setProgramliFaaliyetler(loadedProgramliFaaliyetler);
-
-        setLoadingMsg('Hukuki ve resmi şantiye hazır tutanaklar yükleniyor...');
-        const protocolData = await seedCollectionIfEmpty('hazirTutanaklar', INITIAL_TUTANAK);
         setHazirTutanaklar(protocolData);
-
-        setLoadingMsg('Cari kartları ve firma rehberi çekiliyor...');
-        const companyData = await seedCollectionIfEmpty('cariKartlar', INITIAL_CARI);
         setCariKartlar(companyData);
-
-        setLoadingMsg('Malzeme ve donatı stok düzey dökümleri senkronize ediliyor...');
-        const stockData = await seedCollectionIfEmpty('stokKartlar', INITIAL_STOK);
         setStokKartlar(stockData);
-
-        setLoadingMsg('Eposta ve rapor arşiv logları derleniyor...');
-        const emailLogData = await seedCollectionIfEmpty('epostaGonderimleri', INITIAL_EPOSTA);
         setEpostaGonderimleri(emailLogData);
-
-        setLoadingMsg('Üyelik yetkilendirme ve izin listesi yükleniyor...');
-        const initialUsers: Kullanici[] = [
-          { id: 'santiye@kibritci.com', email: 'santiye@kibritci.com', yetki: 'YÖNETİCİ', durum: 'AKTİF', kayitTarihi: '2026-06-19' }
-        ];
-        const loadedUsers = await seedCollectionIfEmpty('kullanicilar', initialUsers);
         setKullanicilar(loadedUsers);
-
-        setLoadingMsg('Araç kilometre seyrüsefer detay dökümleri alınıyor...');
-        const initialKmLogs = [
-          { id: 'log_1', tarih: '2026-06-15', plaka: '34 KBR 888', surucu: 'Ayhan Yılmaz', sabahKm: 41200, aksamKm: 41350, fark: 150 },
-          { id: 'log_2', tarih: '2026-06-16', plaka: '34 KBR 888', surucu: 'Ayhan Yılmaz', sabahKm: 41350, aksamKm: 41580, fark: 230 },
-          { id: 'log_3', tarih: '2026-06-17', plaka: '06 KBR 101', surucu: 'Mehmet Kaplan', sabahKm: 85400, aksamKm: 85920, fark: 520 },
-        ];
-        const loadedKmLogs = await seedCollectionIfEmpty('aracKmLoglari', initialKmLogs);
         setAracKmLoglari(loadedKmLogs);
-
-        setLoadingMsg('İş makinesi operatör faaliyet kayıtları yükleniyor...');
-        const loadedOperator = await seedCollectionIfEmpty('operatorFaaliyetleri', INITIAL_OPERATOR_FAALIYET);
         setOperatorFaaliyetleri(loadedOperator);
-
-        setLoadingMsg('Taşeron kesinti raporları arşivleniyor...');
-        const loadedTaseron = await seedCollectionIfEmpty('taseronKesintiRaporlari', INITIAL_TASERON_KESINTI);
         setTaseronKesintiRaporlari(loadedTaseron.map((r) => ({ ...r, kesintiTipi: r.kesintiTipi || 'IS_MAKINESI' })));
-
-        const loadedTaseronEnerji = await seedCollectionIfEmpty('taseronEnerjiKayitlari', INITIAL_TASERON_ENERJI);
         setTaseronEnerjiKayitlari(loadedTaseronEnerji);
-
-        const loadedTaseronYemek = await seedCollectionIfEmpty('taseronYemekKayitlari', INITIAL_TASERON_YEMEK);
         setTaseronYemekKayitlari(loadedTaseronYemek);
-
-        setLoadingMsg('Maaş ödeme kayıtları senkronize ediliyor...');
-        const loadedMaasOde = await seedCollectionIfEmpty('maasOdemeleri', INITIAL_MAAS_ODEME);
         setMaasOdemeleri(loadedMaasOde);
-
-        setLoadingMsg('Personel işlem geçmişi kayıtları yükleniyor...');
-        const loadedPersIslem = await seedCollectionIfEmpty('personelIslemGecmisi', INITIAL_PERSONEL_ISLEM);
         setPersonelIslemGecmisi(loadedPersIslem);
-
-        setLoadingMsg('Cari kart işlem geçmişi kayıtları yükleniyor...');
-        const loadedCariIslem = await seedCollectionIfEmpty('cariIslemGecmisi', INITIAL_CARI_ISLEM);
         setCariIslemGecmisi(loadedCariIslem);
-
-        setLoadingMsg('Stok kart işlem geçmişi kayıtları yükleniyor...');
-        const loadedStokIslem = await seedCollectionIfEmpty('stokIslemGecmisi', INITIAL_STOK_ISLEM);
         setStokIslemGecmisi(loadedStokIslem);
 
         setDbStatus('synced');
