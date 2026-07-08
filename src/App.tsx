@@ -2311,6 +2311,7 @@ export default function App() {
                   <RaporlamaProgramlamaScreen 
                     programliFaaliyetler={programliFaaliyetler}
                     setProgramliFaaliyetler={setProgramliFaaliyetlerWithSync}
+                    sahaFaaliyetleri={sahaFaaliyetleri}
                     currentUser={currentUser}
                   />
                 ) : renderAccessDenied()

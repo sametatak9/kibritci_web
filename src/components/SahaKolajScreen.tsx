@@ -6,7 +6,7 @@ import {
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db, removeDocument, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
-import { SahaKolajFoto } from '../types/erp';
+import { SahaKolajFoto, SahaFaaliyeti, ProgramliFaaliyet } from '../types/erp';
 import {
   AY_ADLARI,
   albumBaslik,
@@ -18,10 +18,16 @@ import {
 import { PARSEL_BLOK_MAP, PARSEL_LIST, defaultBlokForParsel } from '../data/parselBlokMap';
 
 interface SahaKolajScreenProps {
-  currentUser?: { email?: string };
+  currentUser?: { email?: string; displayName?: string };
+  sahaFaaliyetleri?: SahaFaaliyeti[];
+  programliFaaliyetler?: ProgramliFaaliyet[];
 }
 
-export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({ currentUser }) => {
+export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({ 
+  currentUser,
+  sahaFaaliyetleri = [],
+  programliFaaliyetler = [],
+}) => {
   const now = new Date();
   const [yil, setYil] = useState(now.getFullYear());
   const [ay, setAy] = useState(now.getMonth() + 1);
@@ -73,28 +79,88 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({ currentUser })
     setFilterGrup('');
   }, [albumKey]);
 
+  const allFotolar = useMemo(() => {
+    const list: SahaKolajFoto[] = [...fotolar];
+    let siraOffset = fotolar.length > 0 ? Math.max(...fotolar.map((f) => f.sira || 0)) + 1 : 1;
+
+    // Gunluk Saha Faaliyetlerinden (Formen vb.) gelen fotolar
+    sahaFaaliyetleri.forEach((sf) => {
+      if (!sf.tarih || !sf.tarih.startsWith(albumKey)) return;
+      const urls = sf.fotoUrls || (sf.fotoUrl ? [sf.fotoUrl] : []);
+      urls.forEach((url, i) => {
+        if (!url) return;
+        list.push({
+          id: `sf_${sf.id}_${i}`,
+          albumKey,
+          yil,
+          ay,
+          imageUrl: url,
+          baslik: sf.isinAdi || sf.isNiteligi || 'Günlük Faaliyet',
+          aciklama: sf.aciklama,
+          grupAdi: `Parsel: ${sf.parsel} - Blok: ${sf.blok}`,
+          sira: siraOffset++,
+          yuklemeTarihi: sf.tarih,
+          yukleyen: sf.kaydeden || 'Formen',
+          parsel: sf.parsel,
+          blok: sf.blok,
+          isReadonly: true, // we cannot edit/delete these via Saha Kolaj
+        } as any);
+      });
+    });
+
+    // Programli Faaliyetlerden gelen fotolar
+    programliFaaliyetler.forEach((pf) => {
+      if (!pf.tarih || !pf.tarih.startsWith(albumKey)) return;
+      pf.asamalar?.forEach((asama) => {
+        if (!asama.tamamlandi || !asama.fotoUrl) return;
+        list.push({
+          id: `pf_${pf.id}_${asama.adim}`,
+          albumKey,
+          yil,
+          ay,
+          imageUrl: asama.fotoUrl,
+          baslik: `${pf.isinAdi} (${asama.adim})`,
+          aciklama: asama.aciklama,
+          grupAdi: `Parsel: ${pf.parsel} - Blok: ${pf.bloklar}`,
+          sira: siraOffset++,
+          yuklemeTarihi: asama.tamamlanmaTarihi || pf.tarih,
+          yukleyen: pf.olusturan || 'Formen',
+          parsel: pf.parsel,
+          blok: pf.bloklar,
+          isReadonly: true,
+        } as any);
+      });
+    });
+
+    return list.sort((a, b) => a.sira - b.sira || a.yuklemeTarihi.localeCompare(b.yuklemeTarihi));
+  }, [fotolar, sahaFaaliyetleri, programliFaaliyetler, albumKey, yil, ay]);
+
   const gruplar = useMemo(() => {
     const set = new Set<string>();
-    fotolar.forEach((f) => {
+    allFotolar.forEach((f) => {
       const g = (f.grupAdi || '').trim();
       if (g) set.add(g);
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'tr'));
-  }, [fotolar]);
+  }, [allFotolar]);
 
   const filteredFotolar = useMemo(() => {
-    if (!filterGrup) return fotolar;
-    return fotolar.filter((f) => (f.grupAdi || '').trim() === filterGrup);
-  }, [fotolar, filterGrup]);
+    if (!filterGrup) return allFotolar;
+    return allFotolar.filter((f) => (f.grupAdi || '').trim() === filterGrup);
+  }, [allFotolar, filterGrup]);
 
   const magazinePages = useMemo(
-    () => buildMagazinePages(fotolar, yil, ay),
-    [fotolar, yil, ay]
+    () => buildMagazinePages(allFotolar, yil, ay),
+    [allFotolar, yil, ay]
   );
 
-  const kolajGruplar = useMemo(() => groupKolajFotolari(fotolar), [fotolar]);
+  const kolajGruplar = useMemo(() => groupKolajFotolari(allFotolar), [allFotolar]);
 
-  const openEdit = (f: SahaKolajFoto) => {
+  const openEdit = (f: SahaKolajFoto & { isReadonly?: boolean }) => {
+    if (f.isReadonly) {
+      alert('Bu kayıt otomatik olarak gelmiştir, düzenlenemez.');
+      return;
+    }
     setEditId(f.id);
     setEditBaslik(f.baslik || '');
     setEditAciklama(f.aciklama || '');
@@ -464,25 +530,30 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({ currentUser })
                     key={f.id}
                     className={`relative group rounded-xl overflow-hidden border-2 transition ${
                       selected ? 'border-blue-500 ring-2 ring-blue-200' : editing ? 'border-amber-500' : 'border-slate-100'
-                    }`}
+                    } ${(f as any).isReadonly ? 'opacity-90' : ''}`}
                   >
-                    <button
-                      type="button"
-                      onClick={() => toggleSelect(f.id)}
-                      className={`absolute top-1 left-1 z-10 w-5 h-5 rounded border flex items-center justify-center ${
-                        selected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white/90 border-slate-300'
-                      }`}
-                    >
-                      {selected && <Check size={12} />}
-                    </button>
+                    {!(f as any).isReadonly && (
+                      <button
+                        type="button"
+                        onClick={() => toggleSelect(f.id)}
+                        className={`absolute top-1 left-1 z-10 w-5 h-5 rounded border flex items-center justify-center ${
+                          selected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white/90 border-slate-300'
+                        }`}
+                      >
+                        {selected && <Check size={12} />}
+                      </button>
+                    )}
                     <img
                       src={f.imageUrl}
                       alt={f.baslik || f.dosyaAdi || 'saha'}
-                      className="w-full aspect-square object-cover cursor-pointer"
+                      className={`w-full aspect-square object-cover ${(f as any).isReadonly ? 'cursor-default' : 'cursor-pointer'}`}
                       onClick={() => openEdit(f)}
                     />
                     <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-1.5 opacity-0 group-hover:opacity-100 transition">
-                      <p className="text-[9px] text-white font-bold truncate">{f.baslik || f.dosyaAdi || 'Başlıksız'}</p>
+                      <p className="text-[9px] text-white font-bold truncate">
+                        {(f as any).isReadonly && <span className="mr-1 text-amber-300 font-normal">[Oto]</span>}
+                        {f.baslik || f.dosyaAdi || 'Başlıksız'}
+                      </p>
                       {f.grupAdi && (
                         <p className="text-[8px] text-amber-200 truncate">{f.grupAdi}</p>
                       )}

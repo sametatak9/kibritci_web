@@ -2,19 +2,21 @@ import React, { useState } from 'react';
 import { BookOpen, CalendarCheck2, Images, ClipboardList } from 'lucide-react';
 import { ProgramliFaaliyetScreen } from './ProgramliFaaliyetScreen';
 import { SahaKolajScreen } from './SahaKolajScreen';
-import { ProgramliFaaliyet } from '../types/erp';
+import { ProgramliFaaliyet, SahaFaaliyeti } from '../types/erp';
 
 interface RaporlamaProgramlamaScreenProps {
   programliFaaliyetler: ProgramliFaaliyet[];
   setProgramliFaaliyetler: (
     updater: ProgramliFaaliyet[] | ((prev: ProgramliFaaliyet[]) => ProgramliFaaliyet[])
   ) => void;
+  sahaFaaliyetleri: SahaFaaliyeti[];
   currentUser: any;
 }
 
 export const RaporlamaProgramlamaScreen: React.FC<RaporlamaProgramlamaScreenProps> = ({
   programliFaaliyetler,
   setProgramliFaaliyetler,
+  sahaFaaliyetleri,
   currentUser,
 }) => {
   const [activeTab, setActiveTab] = useState<'program' | 'dergi'>('program');
@@ -69,7 +71,11 @@ export const RaporlamaProgramlamaScreen: React.FC<RaporlamaProgramlamaScreenProp
         )}
         
         {activeTab === 'dergi' && (
-          <SahaKolajScreen currentUser={currentUser} />
+          <SahaKolajScreen 
+            currentUser={currentUser} 
+            sahaFaaliyetleri={sahaFaaliyetleri}
+            programliFaaliyetler={programliFaaliyetler}
+          />
         )}
       </div>
     </div>

@@ -3,6 +3,7 @@ import { Camera, CheckCircle2, FilePlus2, FileText, Flag, Hammer, Image as Image
 import jsPDF from 'jspdf';
 import { ProgramliFaaliyet, ProgramliFaaliyetAsama, ProgramliFaaliyetAsamaAnahtari } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
+import { PARSEL_LIST, PARSEL_BLOK_MAP, defaultBlokForParsel } from '../data/parselBlokMap';
 
 interface ProgramliFaaliyetScreenProps {
   programliFaaliyetler: ProgramliFaaliyet[];
@@ -37,8 +38,8 @@ export const ProgramliFaaliyetScreen: React.FC<ProgramliFaaliyetScreenProps> = (
   currentUser,
 }) => {
   const [hedefTanimi, setHedefTanimi] = useState('');
-  const [parsel, setParsel] = useState('');
-  const [bloklar, setBloklar] = useState('');
+  const [parsel, setParsel] = useState(PARSEL_LIST[0] || 'Parsel Bölge 157/46');
+  const [bloklar, setBloklar] = useState(defaultBlokForParsel(PARSEL_LIST[0] || 'Parsel Bölge 157/46'));
   const [isinAdi, setIsinAdi] = useState('');
 
   const [asamaDraftlari, setAsamaDraftlari] = useState<
@@ -296,20 +297,28 @@ export const ProgramliFaaliyetScreen: React.FC<ProgramliFaaliyetScreenProps> = (
             placeholder="Hedef Tanımı (ör. 157 Parsel A-B-C kaba temizlik)"
             className="md:col-span-2 border border-slate-250 rounded-xl px-3 py-2 text-sm"
           />
-          <input
-            type="text"
+          <select
             value={parsel}
-            onChange={(e) => setParsel(e.target.value)}
-            placeholder="Parsel"
+            onChange={(e) => {
+              const val = e.target.value;
+              setParsel(val);
+              setBloklar(defaultBlokForParsel(val));
+            }}
             className="border border-slate-250 rounded-xl px-3 py-2 text-sm"
-          />
-          <input
-            type="text"
+          >
+            {PARSEL_LIST.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+          <select
             value={bloklar}
             onChange={(e) => setBloklar(e.target.value)}
-            placeholder="Bloklar (A, B, C...)"
             className="border border-slate-250 rounded-xl px-3 py-2 text-sm"
-          />
+          >
+            {PARSEL_BLOK_MAP[parsel]?.map((b) => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
           <input
             type="text"
             value={isinAdi}
