@@ -16,6 +16,8 @@ import {
   readFileAsDataUrl,
 } from '../lib/sahaKolajUtils';
 import { PARSEL_BLOK_MAP, PARSEL_LIST, defaultBlokForParsel } from '../data/parselBlokMap';
+import { KIBRITCI_LOGO_PATH } from '../lib/kibritciBrand';
+import jsPDF from 'jspdf';
 
 interface SahaKolajScreenProps {
   currentUser?: { email?: string; displayName?: string };
@@ -52,6 +54,7 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
   const [viewMode, setViewMode] = useState<'grid' | 'dergi' | 'kolaj'>('grid');
   const [showPreview, setShowPreview] = useState(false);
   const [filterGrup, setFilterGrup] = useState<string>('');
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const printRef = useRef<HTMLDivElement>(null);
@@ -278,8 +281,241 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
     });
   };
 
-  const handlePrint = () => {
-    window.print();
+  const getImageSize = (src: string) =>
+    new Promise<{ width: number; height: number }>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve({ width: img.width || 1200, height: img.height || 800 });
+      img.onerror = reject;
+      img.src = src;
+    });
+
+  const getBase64Image = (src: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject();
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.onerror = reject;
+      img.src = src;
+    });
+  };
+
+  const handleDownloadPdf = async () => {
+    setDownloadingPdf(true);
+    try {
+      const doc = new jsPDF('p', 'mm', 'a4');
+      const pw = doc.internal.pageSize.getWidth();
+      const ph = doc.internal.pageSize.getHeight();
+      
+      const logoUrl = `${window.location.origin}${KIBRITCI_LOGO_PATH}`;
+      let logoData = '';
+      let logoW = 0; let logoH = 0;
+      try {
+        logoData = await getBase64Image(logoUrl);
+        const s = await getImageSize(logoUrl);
+        logoW = s.width; logoH = s.height;
+      } catch (e) {
+        console.warn('Logo yuklenemedi');
+      }
+
+      const drawWatermark = () => {
+        if (!logoData) return;
+        const GState = (jsPDF as any).GState || (doc as any).GState;
+        if (GState) {
+           doc.setGState(new GState({ opacity: 0.05 }));
+        }
+        const lw = 150;
+        const lh = (logoH / logoW) * lw;
+        doc.addImage(logoData, 'JPEG', (pw - lw) / 2, (ph - lh) / 2, lw, lh);
+        if (GState) {
+           doc.setGState(new GState({ opacity: 1 }));
+        }
+      };
+
+      for (let i = 0; i < magazinePages.length; i++) {
+        if (i > 0) doc.addPage();
+        const page = magazinePages[i];
+        
+        drawWatermark();
+
+        if (page.type === 'cover') {
+           doc.setFontSize(28);
+           doc.setFont('helvetica', 'bold');
+           doc.setTextColor(15, 23, 42);
+           doc.text((page.title || '').replace(/i/g, 'i').replace(/I/g, 'I').toUpperCase(), pw/2, ph/2 - 10, { align: 'center' });
+           
+           doc.setFontSize(14);
+           doc.setFont('helvetica', 'normal');
+           doc.setTextColor(100, 116, 139);
+           doc.text((page.subtitle || '').replace(/i/g, 'i').replace(/I/g, 'I'), pw/2, ph/2 + 10, { align: 'center' });
+
+           if (logoData) {
+             const lw = 60;
+             const lh = (logoH / logoW) * lw;
+             doc.addImage(logoData, 'JPEG', (pw - lw) / 2, ph/2 - 80, lw, lh);
+           }
+        }
+        else if (page.type === 'toc') {
+           doc.setFontSize(24);
+           doc.setFont('helvetica', 'bold');
+           doc.setTextColor(245, 158, 11);
+           doc.text('ICINDEKILER', 20, 30);
+           
+           doc.setLineWidth(1);
+           doc.setDrawColor(245, 158, 11);
+           doc.line(20, 35, pw - 20, 35);
+
+           doc.setFontSize(12);
+           doc.setTextColor(15, 23, 42);
+           let y = 50;
+           (page.groups || []).forEach((g, idx) => {
+             // Simple sanitize for jsPDF helvetica
+             const cleanAd = g.ad.replace(/ğ/g, 'g').replace(/Ğ/g, 'G')
+                                 .replace(/ü/g, 'u').replace(/Ü/g, 'U')
+                                 .replace(/ş/g, 's').replace(/Ş/g, 'S')
+                                 .replace(/ı/g, 'i').replace(/İ/g, 'I')
+                                 .replace(/ö/g, 'o').replace(/Ö/g, 'O')
+                                 .replace(/ç/g, 'c').replace(/Ç/g, 'C');
+             doc.text(`${idx + 1}. ${cleanAd}`, 20, y);
+             doc.text(`${g.count} fotograf`, pw - 20, y, { align: 'right' });
+             y += 10;
+           });
+        }
+        else if (page.type === 'section') {
+           doc.setFontSize(30);
+           doc.setFont('helvetica', 'bold');
+           doc.setTextColor(15, 23, 42);
+           const cleanTitle = (page.title || '').replace(/ğ/g, 'g').replace(/Ğ/g, 'G')
+                               .replace(/ü/g, 'u').replace(/Ü/g, 'U')
+                               .replace(/ş/g, 's').replace(/Ş/g, 'S')
+                               .replace(/ı/g, 'i').replace(/İ/g, 'I')
+                               .replace(/ö/g, 'o').replace(/Ö/g, 'O')
+                               .replace(/ç/g, 'c').replace(/Ç/g, 'C');
+           doc.text(cleanTitle, pw/2, ph/2, { align: 'center' });
+           
+           doc.setFontSize(14);
+           doc.setFont('helvetica', 'normal');
+           doc.setTextColor(100, 116, 139);
+           const cleanSub = (page.subtitle || '').replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ç/g, 'c');
+           doc.text(cleanSub, pw/2, ph/2 + 15, { align: 'center' });
+        }
+        else if (page.type === 'spread') {
+           if (page.title && page.title !== 'Genel Saha Faaliyetleri') {
+             doc.setFontSize(12);
+             doc.setFont('helvetica', 'bold');
+             doc.setTextColor(245, 158, 11);
+             const cleanTitle = page.title.replace(/ğ/g, 'g').replace(/Ğ/g, 'G').replace(/ü/g, 'u').replace(/Ü/g, 'U').replace(/ş/g, 's').replace(/Ş/g, 'S').replace(/ı/g, 'i').replace(/İ/g, 'I').replace(/ö/g, 'o').replace(/Ö/g, 'O').replace(/ç/g, 'c').replace(/Ç/g, 'C');
+             doc.text(cleanTitle, 15, 20);
+           }
+           
+           const margin = 15;
+           const spacing = 10;
+           const w = (pw - margin*2 - spacing) / 2;
+           const h = w * 0.75; // 4/3 aspect ratio
+           
+           let col = 0;
+           let row = 0;
+           const startY = 30;
+           
+           for (const f of (page.photos || [])) {
+             const x = margin + col * (w + spacing);
+             const y = startY + row * (h + 45); // 45 for text
+             
+             try {
+               const imgBase = await getBase64Image(f.imageUrl);
+               doc.addImage(imgBase, 'JPEG', x, y, w, h);
+             } catch (e) {
+               console.warn('Foto yuklenemedi', f.imageUrl);
+               doc.setDrawColor(200);
+               doc.rect(x, y, w, h);
+               doc.text('Gorsel Yuklenemedi', x + w/2, y + h/2, { align: 'center' });
+             }
+             
+             doc.setFontSize(11);
+             doc.setFont('helvetica', 'bold');
+             doc.setTextColor(15, 23, 42);
+             const baslik = (f.baslik || 'Faaliyet').replace(/ğ/g, 'g').replace(/Ğ/g, 'G').replace(/ü/g, 'u').replace(/Ü/g, 'U').replace(/ş/g, 's').replace(/Ş/g, 'S').replace(/ı/g, 'i').replace(/İ/g, 'I').replace(/ö/g, 'o').replace(/Ö/g, 'O').replace(/ç/g, 'c').replace(/Ç/g, 'C');
+             doc.text(baslik, x, y + h + 6);
+             
+             if (f.aciklama) {
+                doc.setFontSize(9);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(100, 116, 139);
+                const aciklama = f.aciklama.replace(/ğ/g, 'g').replace(/Ğ/g, 'G').replace(/ü/g, 'u').replace(/Ü/g, 'U').replace(/ş/g, 's').replace(/Ş/g, 'S').replace(/ı/g, 'i').replace(/İ/g, 'I').replace(/ö/g, 'o').replace(/Ö/g, 'O').replace(/ç/g, 'c').replace(/Ç/g, 'C');
+                const lines = doc.splitTextToSize(aciklama, w);
+                doc.text(lines, x, y + h + 12);
+             }
+
+             if (f.grupAdi) {
+                doc.setFontSize(8);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(245, 158, 11);
+                const grup = f.grupAdi.substring(0, 50).replace(/ğ/g, 'g').replace(/Ğ/g, 'G').replace(/ü/g, 'u').replace(/Ü/g, 'U').replace(/ş/g, 's').replace(/Ş/g, 'S').replace(/ı/g, 'i').replace(/İ/g, 'I').replace(/ö/g, 'o').replace(/Ö/g, 'O').replace(/ç/g, 'c').replace(/Ç/g, 'C');
+                doc.text(grup, x, y + h + 35);
+             }
+
+             col++;
+             if (col > 1) {
+               col = 0;
+               row++;
+             }
+           }
+        }
+        else if (page.type === 'collage') {
+           doc.setFontSize(20);
+           doc.setFont('helvetica', 'bold');
+           doc.setTextColor(15, 23, 42);
+           doc.text('KOLAJ', 15, 20);
+           
+           const cols = 5;
+           const margin = 15;
+           const spacing = 3;
+           const w = (pw - margin*2 - spacing*(cols-1)) / cols;
+           const h = w;
+           
+           let col = 0;
+           let row = 0;
+           let startY = 30;
+           
+           for (const f of (page.photos || [])) {
+             let currentY = startY + row * (h + spacing);
+             
+             if (currentY + h > ph - margin) {
+               doc.addPage();
+               drawWatermark();
+               col = 0; row = 0; startY = 20;
+               currentY = startY;
+             }
+             const currentX = margin + col * (w + spacing);
+             
+             try {
+               const imgBase = await getBase64Image(f.imageUrl);
+               doc.addImage(imgBase, 'JPEG', currentX, currentY, w, h);
+             } catch (e) {}
+             
+             col++;
+             if (col >= cols) {
+               col = 0;
+               row++;
+             }
+           }
+        }
+      }
+
+      doc.save(`Saha_Faaliyet_Raporu_${albumBaslik(yil, ay)}.pdf`);
+    } catch (error) {
+      console.error(error);
+      alert('PDF oluşturulurken bir hata oluştu.');
+    } finally {
+      setDownloadingPdf(false);
+    }
   };
 
   const yilSecenekleri = [2025, 2026, 2027];
@@ -334,12 +570,12 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
           </button>
           <button
             type="button"
-            onClick={handlePrint}
-            disabled={fotolar.length === 0}
+            onClick={handleDownloadPdf}
+            disabled={fotolar.length === 0 || downloadingPdf}
             className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-900 disabled:opacity-40 text-white text-xs font-bold rounded-xl"
           >
-            <Printer size={14} />
-            PDF / Yazdır
+            {downloadingPdf ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
+            {downloadingPdf ? 'İndiriliyor...' : 'PDF İndir'}
           </button>
         </div>
       </div>
@@ -753,8 +989,14 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
               >
                 Kolaj
               </button>
-              <button type="button" onClick={handlePrint} className="px-3 py-1.5 bg-white text-slate-900 rounded-lg text-xs font-bold flex items-center gap-1">
-                <Printer size={14} /> Yazdır
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                disabled={downloadingPdf}
+                className="px-3 py-1.5 bg-white text-slate-900 rounded-lg text-xs font-bold flex items-center gap-1 disabled:opacity-50"
+              >
+                {downloadingPdf ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} 
+                {downloadingPdf ? 'İndiriliyor...' : 'PDF İndir'}
               </button>
               <button type="button" onClick={() => setShowPreview(false)} className="p-2 hover:bg-slate-700 rounded-lg">
                 <X size={18} />
@@ -766,55 +1008,84 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
             {viewMode === 'dergi' ? (
               <div className="max-w-3xl mx-auto space-y-6">
                 {magazinePages.map((page, idx) => (
-                  <div key={idx} className="bg-white shadow-xl rounded-lg overflow-hidden min-h-[480px] p-8">
-                    {page.type === 'cover' && (
-                      <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-center border-4 border-amber-500">
-                        <p className="text-xs uppercase tracking-[0.25em] text-amber-600">Kibritçi Şantiye</p>
-                        <h1 className="text-3xl font-black mt-4">{page.title}</h1>
-                        <p className="text-slate-500 mt-2">{page.subtitle}</p>
-                      </div>
-                    )}
-                    {page.type === 'toc' && (
-                      <div>
-                        <h2 className="text-xl font-black border-b-2 border-amber-500 pb-2 mb-4">{page.title}</h2>
-                        <ul className="space-y-2">
-                          {(page.groups || []).map((g, i) => (
-                            <li key={i} className="flex justify-between text-sm py-1 border-b">
-                              <span className="font-semibold">{g.ad}</span>
-                              <span className="text-slate-400">{g.count} foto</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {page.type === 'section' && (
-                      <div className="min-h-[300px] flex flex-col justify-center">
-                        <p className="text-[10px] uppercase text-amber-600">Bölüm</p>
-                        <h2 className="text-2xl font-black">{page.title}</h2>
-                        <p className="text-slate-500 text-sm">{page.subtitle}</p>
-                      </div>
-                    )}
-                    {page.type === 'spread' && (
-                      <div className="grid grid-cols-2 gap-4">
-                        {(page.photos || []).map((f) => (
-                          <div key={f.id}>
-                            <img src={f.imageUrl} alt="" className="w-full aspect-[4/3] object-cover rounded-lg" />
-                            {f.baslik && <p className="text-xs font-bold mt-1">{f.baslik}</p>}
-                            {f.aciklama && <p className="text-[10px] text-slate-500">{f.aciklama}</p>}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {page.type === 'collage' && (
-                      <div>
-                        <h2 className="text-lg font-black mb-3">{page.title}</h2>
-                        <div className="grid grid-cols-4 sm:grid-cols-6 gap-1">
-                          {(page.photos || []).map((f) => (
-                            <img key={f.id} src={f.imageUrl} alt="" className="w-full aspect-square object-cover rounded" />
-                          ))}
+                  <div key={idx} className="bg-white shadow-2xl rounded-xl overflow-hidden min-h-[480px] p-8 relative flex flex-col border border-slate-100">
+                    <div className="absolute inset-0 z-0 flex items-center justify-center opacity-5 pointer-events-none">
+                      <img src={KIBRITCI_LOGO_PATH} alt="" className="w-2/3 h-auto grayscale" />
+                    </div>
+                    
+                    <div className="relative z-10 flex-1 flex flex-col">
+                      {page.type === 'cover' && (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center border-4 border-slate-800 p-8 bg-white/50 backdrop-blur-sm rounded-xl">
+                          <img src={KIBRITCI_LOGO_PATH} alt="Kibritçi" className="w-48 mb-8 drop-shadow-md" />
+                          <p className="text-sm font-bold uppercase tracking-[0.3em] text-slate-500 mb-2">Şantiye Saha Raporu</p>
+                          <h1 className="text-4xl md:text-5xl font-black text-slate-900 mt-2 leading-tight uppercase tracking-tight">{page.title}</h1>
+                          <p className="text-slate-600 mt-6 text-lg font-medium">{page.subtitle}</p>
+                          <div className="mt-12 h-1 w-20 bg-amber-500 rounded-full"></div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                      {page.type === 'toc' && (
+                        <div className="flex-1">
+                          <h2 className="text-3xl font-black text-slate-900 border-b-4 border-amber-500 pb-3 mb-6 flex items-center gap-3">
+                            <BookOpen className="text-amber-500" />
+                            {page.title}
+                          </h2>
+                          <ul className="space-y-3">
+                            {(page.groups || []).map((g, i) => (
+                              <li key={i} className="flex justify-between items-center text-base py-2 border-b border-slate-200">
+                                <span className="font-bold text-slate-800 flex items-center gap-2">
+                                  <span className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-xs text-slate-500">{i + 1}</span>
+                                  {g.ad}
+                                </span>
+                                <span className="text-slate-500 font-medium px-3 py-1 bg-slate-100 rounded-full text-xs">{g.count} fotoğraf</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {page.type === 'section' && (
+                        <div className="flex-1 flex flex-col justify-center items-center text-center bg-slate-50/80 rounded-2xl border-2 border-slate-100">
+                          <div className="w-16 h-1 bg-amber-500 mb-6 rounded-full"></div>
+                          <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Bölüm</p>
+                          <h2 className="text-4xl font-black text-slate-800">{page.title}</h2>
+                          <p className="text-slate-500 font-medium mt-4 bg-white px-4 py-1.5 rounded-full shadow-sm">{page.subtitle}</p>
+                        </div>
+                      )}
+                      {page.type === 'spread' && (
+                        <div className="flex-1 flex flex-col">
+                          {page.title && page.title !== 'Genel Saha Faaliyetleri' && (
+                            <div className="mb-4 inline-flex items-center gap-2 px-3 py-1 bg-slate-800 text-white rounded-full text-xs font-bold w-fit">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                              {page.title}
+                            </div>
+                          )}
+                          <div className="grid grid-cols-2 gap-6">
+                            {(page.photos || []).map((f) => (
+                              <div key={f.id} className="group flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                <img src={f.imageUrl} alt="" className="w-full aspect-[4/3] object-cover" />
+                                <div className="p-3 bg-white border-t border-slate-100">
+                                  {f.baslik && <p className="text-sm font-black text-slate-800 leading-tight">{f.baslik}</p>}
+                                  {f.aciklama && <p className="text-xs text-slate-600 mt-1.5 line-clamp-3">{f.aciklama}</p>}
+                                  {f.grupAdi && <p className="text-[10px] font-bold text-amber-600 mt-2 uppercase">{f.grupAdi}</p>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {page.type === 'collage' && (
+                        <div className="flex-1">
+                          <h2 className="text-2xl font-black text-slate-800 mb-4 flex items-center gap-2">
+                            <Grid3X3 className="text-amber-500" />
+                            {page.title}
+                          </h2>
+                          <div className="grid grid-cols-4 sm:grid-cols-6 gap-1 bg-slate-900 p-1 rounded-xl">
+                            {(page.photos || []).map((f) => (
+                              <img key={f.id} src={f.imageUrl} alt="" className="w-full aspect-square object-cover rounded-sm border border-slate-800" />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
