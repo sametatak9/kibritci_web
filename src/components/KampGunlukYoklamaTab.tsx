@@ -1,0 +1,321 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Calendar, CheckCircle, XCircle, Users, FileSignature, RefreshCw, Search
+} from 'lucide-react';
+import { Personel, AylikYoklamaMap, YoklamaDurum } from '../types/erp';
+import { 
+  buildPersonelListForMonth, 
+  getYoklamaDay, 
+  isDayActiveForPersonel, 
+  isTaseronPersonel, 
+  setYoklamaDay, 
+  isKampciTesisatciMermerci 
+} from '../lib/yoklamaUtils';
+import { todayDateKey, normalizeDateKey, formatDateLabelTr } from '../lib/dateKeyUtils';
+
+interface KampGunlukYoklamaTabProps {
+  personeller: Personel[];
+  yoklamalar: AylikYoklamaMap;
+  setYoklamalar?: (updater: AylikYoklamaMap | ((y: AylikYoklamaMap) => AylikYoklamaMap)) => void;
+  saveYoklamalarNow?: (next: AylikYoklamaMap) => Promise<void>;
+  currentUser: any;
+  addNotification?: (mesaj: string) => void;
+}
+
+export const KampGunlukYoklamaTab: React.FC<KampGunlukYoklamaTabProps> = ({
+  personeller,
+  yoklamalar,
+  setYoklamalar,
+  saveYoklamalarNow,
+  currentUser,
+  addNotification
+}) => {
+  const [selectedDate, setSelectedDate] = useState<string>(todayDateKey());
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  const [presentIds, setPresentIds] = useState<string[]>([]);
+  const [absentIds, setAbsentIds] = useState<string[]>([]);
+  const [mesaiSaatleri, setMesaiSaatleri] = useState<Record<string, number>>({});
+  
+  const [savingAttendance, setSavingAttendance] = useState(false);
+  const [hasLocalAttendanceDraft, setHasLocalAttendanceDraft] = useState(false);
+
+  const { year, month, day } = useMemo(() => {
+    const parts = selectedDate.split('-');
+    return {
+      year: parseInt(parts[0], 10),
+      month: parseInt(parts[1], 10),
+      day: parseInt(parts[2], 10),
+    };
+  }, [selectedDate]);
+
+  const monthPersonelList = useMemo(
+    () => buildPersonelListForMonth(personeller, yoklamalar, year, month),
+    [personeller, yoklamalar, year, month]
+  );
+
+  const activeStaff = useMemo(() => {
+    return monthPersonelList.filter((p) => {
+      if (isTaseronPersonel(p)) return false;
+      const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
+      if (!isAktif && !p.istenCikisTarihi) return false;
+      // SADECE Kampçı, Tesisatçı ve Mermerci personelleri listele
+      if (!isKampciTesisatciMermerci(p.gorev)) return false;
+      return isDayActiveForPersonel(p, year, month, day, yoklamalar[p.id] as any);
+    });
+  }, [monthPersonelList, year, month, day, yoklamalar]);
+
+  // Load existing records when date changes
+  useEffect(() => {
+    if (hasLocalAttendanceDraft) return;
+
+    const newPresent: string[] = [];
+    const newAbsent: string[] = [];
+    const newMesai: Record<string, number> = {};
+
+    activeStaff.forEach((p) => {
+      const map = yoklamalar[p.id] as any;
+      const existing = getYoklamaDay(map, year, month, day);
+      if (existing) {
+        if (existing.durum === 'Geldi') {
+          newPresent.push(p.id);
+        } else if (existing.durum === 'Yok' || existing.durum === 'İzinli' || existing.durum === 'Raporlu') {
+          newAbsent.push(p.id);
+        }
+        if (existing.mesaiSaati > 0) {
+          newMesai[p.id] = existing.mesaiSaati;
+        }
+      }
+    });
+
+    setPresentIds(newPresent);
+    setAbsentIds(newAbsent);
+    setMesaiSaatleri(newMesai);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, activeStaff, yoklamalar]); 
+
+  const handleDateChange = (newDate: string) => {
+    if (hasLocalAttendanceDraft) {
+      if (!window.confirm("Kaydedilmemiş değişiklikleriniz var! Çıkmak istiyor musunuz?")) return;
+    }
+    const cleanDate = normalizeDateKey(newDate);
+    setSelectedDate(cleanDate);
+    setHasLocalAttendanceDraft(false);
+    setSearchQuery('');
+  };
+
+  const setMesaiWithDraft = (id: string, value: number) => {
+    setHasLocalAttendanceDraft(true);
+    const safe = Number.isFinite(value) ? Math.max(0, Math.min(24, value)) : 0;
+    setMesaiSaatleri(prev => ({ ...prev, [id]: safe }));
+  };
+
+  const handleMarkPresent = (id: string, mesai: number = 0) => {
+    setHasLocalAttendanceDraft(true);
+    setPresentIds(prev => [...prev.filter(x => x !== id), id]);
+    setAbsentIds(prev => prev.filter(x => x !== id));
+    setMesaiSaatleri(prev => ({ ...prev, [id]: Math.max(0, Math.min(24, mesai)) }));
+  };
+
+  const handleMarkAbsent = (id: string) => {
+    setHasLocalAttendanceDraft(true);
+    setAbsentIds(prev => [...prev.filter(x => x !== id), id]);
+    setPresentIds(prev => prev.filter(x => x !== id));
+    setMesaiSaatleri(prev => ({ ...prev, [id]: 0 }));
+  };
+
+  const handleSave = async () => {
+    if (!saveYoklamalarNow) {
+      if (addNotification) addNotification("Yoklama kaydetme fonksiyonu bulunamadı!");
+      return;
+    }
+
+    if (!window.confirm(`${formatDateLabelTr(selectedDate)} tarihli Kampçı / Tesisatçı yoklamasını sisteme kaydetmek istiyor musunuz?`)) {
+      return;
+    }
+
+    setSavingAttendance(true);
+    try {
+      let nextYoklamalar = { ...yoklamalar };
+
+      activeStaff.forEach((p) => {
+        let durumToSave: YoklamaDurum | null = null;
+        let mesaiToSave = 0;
+
+        if (presentIds.includes(p.id)) {
+          durumToSave = 'Geldi';
+          mesaiToSave = mesaiSaatleri[p.id] || 0;
+        } else if (absentIds.includes(p.id)) {
+          durumToSave = 'Yok';
+        }
+
+        if (durumToSave) {
+          const personelMap = nextYoklamalar[p.id] as any || {};
+          const currentMap = setYoklamaDay(personelMap, year, month, day, {
+            durum: durumToSave,
+            mesaiSaati: mesaiToSave,
+            gonderen: currentUser?.email || 'kampci'
+          });
+          nextYoklamalar[p.id] = currentMap as any;
+        }
+      });
+
+      if (setYoklamalar) {
+        setYoklamalar(nextYoklamalar);
+      }
+      await saveYoklamalarNow(nextYoklamalar);
+
+      setHasLocalAttendanceDraft(false);
+      if (addNotification) addNotification(`📅 ${selectedDate} Yoklaması başarıyla kaydedildi!`);
+    } catch (err: any) {
+      if (addNotification) addNotification(`Yoklama kaydedilemedi: ${err?.message || 'Bilinmeyen hata'}`);
+    } finally {
+      setSavingAttendance(false);
+    }
+  };
+
+  const remainingStaff = activeStaff.filter(p => !presentIds.includes(p.id) && !absentIds.includes(p.id));
+  const filteredRemaining = remainingStaff.filter(p => 
+    `${p.ad} ${p.soyad}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (p.gorev || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-4 max-w-[420px] mx-auto pb-8 animate-in fade-in">
+      
+      {/* Date Picker Header */}
+      <div className="bg-white rounded-3xl p-4 border shadow-sm">
+        <label className="text-[10px] font-extrabold text-blue-500 uppercase tracking-widest block mb-1">Yoklama Tarihi</label>
+        <div className="flex items-center space-x-2">
+          <Calendar size={18} className="text-slate-400" />
+          <input
+            type="date"
+            value={selectedDate}
+            max={todayDateKey()}
+            onChange={(e) => handleDateChange(e.target.value)}
+            className="flex-grow bg-slate-50 border border-slate-200 text-sm font-bold text-slate-800 rounded-xl p-2 outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        {hasLocalAttendanceDraft && (
+          <div className="mt-2 text-[10px] text-amber-600 font-bold animate-pulse">
+            ⚠️ Kaydedilmemiş değişiklikleriniz var!
+          </div>
+        )}
+      </div>
+
+      {/* Main List Area */}
+      <div className="bg-white rounded-3xl p-4 border shadow-sm space-y-4">
+        <div className="flex items-center space-x-2 text-slate-800 border-b border-slate-100 pb-2">
+          <Users size={16} className="text-blue-500" />
+          <span className="font-bold text-[11px] uppercase tracking-wider">Personel Yoklama Listesi</span>
+          <span className="bg-blue-100 text-blue-800 text-[9px] font-black px-2 py-0.5 rounded-full ml-auto">
+            {activeStaff.length} KİŞİ
+          </span>
+        </div>
+
+        {/* Search */}
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+          <input 
+            type="text"
+            placeholder="Personel adı veya görev ara..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 py-2 pl-9 pr-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs font-semibold text-slate-700"
+          />
+        </div>
+
+        {/* Unmarked list */}
+        <div className="max-h-[30vh] overflow-y-auto space-y-1 divide-y divide-slate-100 pr-1">
+          {filteredRemaining.length === 0 ? (
+            <p className="text-[10px] text-slate-400 italic text-center py-6">Kalan personel bulunmuyor.</p>
+          ) : (
+            filteredRemaining.map(p => {
+              const hrs = mesaiSaatleri[p.id] || 0;
+              return (
+                <div key={p.id} className="flex items-center justify-between py-2 pt-3">
+                  <div className="min-w-0 flex-grow">
+                    <span className="font-bold text-xs text-slate-800 block truncate">{p.ad} {p.soyad}</span>
+                    <span className="text-[9px] text-slate-400 font-medium block truncate">{p.gorev}</span>
+                  </div>
+                  <div className="flex items-center space-x-2 shrink-0">
+                    {/* Mesai Input Area */}
+                    <div className="flex items-center bg-slate-100 rounded-lg px-1.5 py-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setMesaiWithDraft(p.id, Math.max(0, hrs - 1))}
+                        className="w-5 h-5 bg-white text-slate-800 rounded font-black text-[10px] hover:bg-slate-200 flex items-center justify-center shadow-sm"
+                      >
+                        -
+                      </button>
+                      <span className="text-[10px] font-black mx-1.5 min-w-[14px] text-center text-slate-700">{hrs}</span>
+                      <button
+                        type="button"
+                        onClick={() => setMesaiWithDraft(p.id, Math.min(24, hrs + 1))}
+                        className="w-5 h-5 bg-white text-slate-800 rounded font-black text-[10px] hover:bg-slate-200 flex items-center justify-center shadow-sm"
+                      >
+                        +
+                      </button>
+                    </div>
+                    <button 
+                      onClick={() => handleMarkPresent(p.id, hrs)}
+                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-200 transition text-[10px] font-extrabold"
+                    >
+                      Geldi
+                    </button>
+                    <button 
+                      onClick={() => handleMarkAbsent(p.id)}
+                      className="bg-rose-50 hover:bg-rose-100 text-rose-700 px-3 py-1.5 rounded-lg border border-rose-200 transition text-[10px] font-extrabold"
+                    >
+                      Yok
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* Processed list (Present / Absent) summary */}
+      {(presentIds.length > 0 || absentIds.length > 0) && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-emerald-50 rounded-2xl p-3 border border-emerald-100 shadow-sm flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <CheckCircle size={14} className="text-emerald-500" />
+              <span className="text-[10px] font-bold text-emerald-800">Gelenler</span>
+            </div>
+            <span className="text-emerald-700 font-black text-sm">{presentIds.length}</span>
+          </div>
+          <div className="bg-rose-50 rounded-2xl p-3 border border-rose-100 shadow-sm flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <XCircle size={14} className="text-rose-500" />
+              <span className="text-[10px] font-bold text-rose-800">Gelmeyenler</span>
+            </div>
+            <span className="text-rose-700 font-black text-sm">{absentIds.length}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Submit Button */}
+      <div className="bg-white rounded-3xl p-4 border shadow-sm">
+        <button
+          onClick={handleSave}
+          disabled={savingAttendance || !hasLocalAttendanceDraft}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {savingAttendance ? (
+            <RefreshCw size={18} className="animate-spin" />
+          ) : (
+            <FileSignature size={18} />
+          )}
+          {savingAttendance ? 'KAYDEDİLİYOR...' : 'YOKLAMAYI SİSTEME KAYDET'}
+        </button>
+        <p className="text-center text-[9px] text-slate-400 mt-3 italic">
+          Yoklamayı kaydettiğinizde merkez ofise günlük olarak iletilir.
+        </p>
+      </div>
+
+    </div>
+  );
+};

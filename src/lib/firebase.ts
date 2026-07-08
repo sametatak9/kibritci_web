@@ -3,6 +3,7 @@ import {
   getFirestore, 
   collection, 
   doc, 
+  getDoc,
   setDoc, 
   deleteDoc, 
   getDocs, 
@@ -203,26 +204,23 @@ function buildYoklamaFirestorePayload(map: Record<string, unknown>): { dataJson:
  */
 export async function seedYoklamaIfEmpty(initialYoklama: any): Promise<any> {
   const docRef = doc(db, 'yoklamalar', 'global_yoklama_map');
-  const snapshot = await withTimeout(getDocs(collection(db, 'yoklamalar')));
+  const docSnap = await withTimeout(getDoc(docRef));
   
-  if (snapshot.empty) {
+  if (!docSnap.exists()) {
     console.log(`Seeding dynamic yoklama map...`);
     await withTimeout(setDoc(docRef, cleanUndefined(buildYoklamaFirestorePayload(initialYoklama))));
     return initialYoklama;
   }
   
-  // Find 'global_yoklama_map' document
-  const globalDoc = snapshot.docs.find(d => d.id === 'global_yoklama_map');
-  if (globalDoc) {
-    return parseYoklamaSnapshotData(globalDoc.data() as Record<string, unknown>);
-  }
-  return {};
+  return parseYoklamaSnapshotData(docSnap.data() as Record<string, unknown>);
 }
 
 export async function fetchYoklamaDocument(): Promise<Record<string, unknown>> {
-  const snapshot = await withTimeout(getDocs(collection(db, 'yoklamalar')));
-  const globalDoc = snapshot.docs.find((d) => d.id === 'global_yoklama_map');
-  if (globalDoc) return parseYoklamaSnapshotData(globalDoc.data() as Record<string, unknown>);
+  const docRef = doc(db, 'yoklamalar', 'global_yoklama_map');
+  const docSnap = await withTimeout(getDoc(docRef));
+  if (docSnap.exists()) {
+    return parseYoklamaSnapshotData(docSnap.data() as Record<string, unknown>);
+  }
   return {};
 }
 
@@ -267,10 +265,26 @@ export async function syncArrayToFirestore<T extends { id: string }>(
 
     const promises: Promise<any>[] = [];
 
+    // Helper for stable deep comparison independent of key order
+    const stableStringify = (obj: any): string => {
+      const isObject = (val: any) => val && typeof val === 'object' && !Array.isArray(val);
+      const stringifyObj = (o: any): any => {
+        if (!isObject(o)) {
+          if (Array.isArray(o)) return o.map(stringifyObj);
+          return o;
+        }
+        return Object.keys(o).sort().reduce((acc: any, key: string) => {
+          acc[key] = stringifyObj(o[key]);
+          return acc;
+        }, {});
+      };
+      return JSON.stringify(stringifyObj(obj));
+    };
+
     // Save/Update new or changed items
     for (const [id, item] of newMap.entries()) {
       const oldItem = oldMap.get(id);
-      if (!oldItem || JSON.stringify(oldItem) !== JSON.stringify(item)) {
+      if (!oldItem || stableStringify(oldItem) !== stableStringify(item)) {
         promises.push(saveDocument(collectionName, item));
       }
     }

@@ -1943,6 +1943,7 @@ export default function App() {
           setCariKartlar={setCariKartlarWithSync}
           yoklamalar={yoklamalar}
           setYoklamalar={setYoklamalarWithSync}
+          saveYoklamalarNow={saveYoklamalarNow}
           stokKartlar={stokKartlar}
           currentUser={currentUser}
           onSignOut={handleSignOut}

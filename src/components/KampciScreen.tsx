@@ -11,6 +11,7 @@ import { assignKampResident, evictKampResident } from '../lib/kampPlacementUtils
 import { buildKampciGunlukOzet } from '../lib/gunlukAkisUtils';
 import { buildWhatsAppUrl } from '../lib/mobilOnayUtils';
 import { KampHaftalikYoklamaTab } from './KampHaftalikYoklamaTab';
+import { KampGunlukYoklamaTab } from './KampGunlukYoklamaTab';
 import { collection, onSnapshot, doc, updateDoc, setDoc, query, orderBy } from 'firebase/firestore';
 
 interface KampciScreenProps {
@@ -54,8 +55,8 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   isStandalone = false,
   addNotification
 }) => {
-  // Tabs: 'rooms' | 'placement' | 'warehouse' | 'activities' | 'haftalik_yoklama' | ...
-  const [activeSubTab, setActiveSubTab] = useState<'rooms' | 'placement' | 'warehouse' | 'activities' | 'gunluk_akis' | 'personel_giris' | 'haftalik_yoklama'>('placement');
+  // Tabs: 'rooms' | 'placement' | 'warehouse' | 'activities' | 'haftalik_yoklama' | 'yoklama' | ...
+  const [activeSubTab, setActiveSubTab] = useState<'rooms' | 'placement' | 'warehouse' | 'activities' | 'gunluk_akis' | 'personel_giris' | 'haftalik_yoklama' | 'yoklama'>('placement');
   const [sendingKampAkis, setSendingKampAkis] = useState(false);
   const [viewMode, setViewMode] = useState<'web' | 'mobile'>('web');
 
@@ -1258,6 +1259,18 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveSubTab('yoklama')}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center space-x-2 border cursor-pointer ${
+            activeSubTab === 'yoklama'
+              ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-500/20'
+              : 'bg-white border-slate-200/80 text-slate-500 hover:bg-slate-50'
+          }`}
+        >
+          <ClipboardList size={14} />
+          <span>📝 Günlük Yoklama</span>
+        </button>
+
+        <button
           onClick={() => setActiveSubTab('haftalik_yoklama')}
           className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center space-x-2 border cursor-pointer ${
             activeSubTab === 'haftalik_yoklama'
@@ -2107,6 +2120,17 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           yoklamalar={yoklamalar}
           setYoklamalar={setYoklamalar}
           personeller={personeller}
+          currentUser={currentUser}
+          addNotification={addNotification}
+        />
+      )}
+
+      {activeSubTab === 'yoklama' && setYoklamalar && saveYoklamalarNow && (
+        <KampGunlukYoklamaTab
+          personeller={personeller}
+          yoklamalar={yoklamalar}
+          setYoklamalar={setYoklamalar}
+          saveYoklamalarNow={saveYoklamalarNow}
           currentUser={currentUser}
           addNotification={addNotification}
         />

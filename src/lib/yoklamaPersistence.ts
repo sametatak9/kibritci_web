@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   limit,
   orderBy,
@@ -70,10 +71,10 @@ export function parseYoklamaDataJson(raw: Record<string, unknown> | undefined): 
 }
 
 export async function fetchYoklamaMap(): Promise<AylikYoklamaMap> {
-  const snapshot = await withTimeout(getDocs(collection(db, 'yoklamalar')));
-  const globalDoc = snapshot.docs.find((d) => d.id === YOKLAMA_DOC_ID);
-  if (!globalDoc) return {};
-  return parseYoklamaDataJson(globalDoc.data() as Record<string, unknown>);
+  const docRef = doc(db, 'yoklamalar', YOKLAMA_DOC_ID);
+  const docSnap = await withTimeout(getDoc(docRef));
+  if (!docSnap.exists()) return {};
+  return parseYoklamaDataJson(docSnap.data() as Record<string, unknown>);
 }
 
 async function fetchYoklamaMapWithRetry(retries = 3): Promise<AylikYoklamaMap> {

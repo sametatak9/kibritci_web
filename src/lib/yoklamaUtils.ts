@@ -8,6 +8,12 @@ export interface YoklamaGunKaydi {
 
 type PersonelYoklamaMap = GunlukYoklama | Record<string, YoklamaGunKaydi>;
 
+export function isKampciTesisatciMermerci(gorev?: string): boolean {
+  if (!gorev) return false;
+  const g = gorev.toUpperCase().replace(/İ/g, 'I').replace(/Ş/g, 'S').replace(/Ç/g, 'C').replace(/Ü/g, 'U').replace(/Ö/g, 'O').replace(/Ğ/g, 'G');
+  return g.includes('KAMPCI') || g.includes('TESISATCI') || g.includes('MERMERCI');
+}
+
 /** GunlukYoklama → iterateMonthYoklama uyumlu kayıt haritası */
 export function asYoklamaGunMap(
   personMap: PersonelYoklamaMap | undefined

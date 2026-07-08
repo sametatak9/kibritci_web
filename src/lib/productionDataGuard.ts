@@ -1,6 +1,8 @@
 import { AylikYoklamaMap } from '../types/erp';
 import { countYoklamaDayEntries } from './yoklamaGuard';
 
+import { resolveFirebaseConfig } from './firebaseConfig';
+
 /** Tarayıcıda canlı üretim modu işaretlendiğinde demo/legacy veri yazımı engellenir */
 export const PRODUCTION_LIVE_KEY = 'kibritci_production_live';
 
@@ -14,6 +16,10 @@ export function markProductionLive(): void {
 
 export function isProductionLive(): boolean {
   try {
+    const config = resolveFirebaseConfig();
+    if (config.projectId === 'kibritci-erp') {
+      return true;
+    }
     return localStorage.getItem(PRODUCTION_LIVE_KEY) === '1';
   } catch {
     return false;

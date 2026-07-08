@@ -9,7 +9,7 @@ import {
 import { Personel, AylikYoklamaMap, YoklamaDurum, SahaFaaliyeti as SahaFaaliyetiType, SahaFaaliyetTipi } from '../types/erp';
 import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
-import { buildPersonelListForMonth, getYoklamaDay, isDayActiveForPersonel, isTaseronPersonel, setYoklamaDay } from '../lib/yoklamaUtils';
+import { buildPersonelListForMonth, getYoklamaDay, isDayActiveForPersonel, isTaseronPersonel, setYoklamaDay, isKampciTesisatciMermerci } from '../lib/yoklamaUtils';
 import { buildFormenGunlukOzet } from '../lib/gunlukAkisUtils';
 import { buildWhatsAppUrl, isLegacySahaRecord } from '../lib/mobilOnayUtils';
 import {
@@ -220,6 +220,8 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     if (isTaseronPersonel(p)) return false;
     const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
     if (!isAktif && !p.istenCikisTarihi) return false;
+    // Kampçı, Tesisatçı ve Mermerci personeller Kampçı ekranında listelenecektir.
+    if (isKampciTesisatciMermerci(p.gorev)) return false;
     return isDayActiveForPersonel(p, year, month, day, yoklamalar[p.id] as any);
   });
   const assignedPersonelOnSelectedDate = useMemo(() => {
@@ -1374,30 +1376,51 @@ ${satirlar
                       {filteredRemaining.length === 0 ? (
                         <p className="text-[9px] text-slate-400 italic text-center py-4">Kalan veya aranan personel bulunmuyor.</p>
                       ) : (
-                        filteredRemaining.map(p => (
-                          <div key={p.id} className="flex items-center justify-between py-1.5 pt-2">
-                            <div className="min-w-0">
-                              <span className="font-bold text-[10px] text-slate-800 block truncate">{p.ad} {p.soyad}</span>
-                              <span className="text-[8px] text-slate-400 font-medium block truncate">{p.gorev}</span>
+                        filteredRemaining.map(p => {
+                          const hrs = mesaiSaatleri[p.id] || 0;
+                          return (
+                            <div key={p.id} className="flex items-center justify-between py-1.5 pt-2">
+                              <div className="min-w-0 flex-grow">
+                                <span className="font-bold text-[10px] text-slate-800 block truncate">{p.ad} {p.soyad}</span>
+                                <span className="text-[8px] text-slate-400 font-medium block truncate">{p.gorev}</span>
+                              </div>
+                              <div className="flex items-center space-x-2 shrink-0">
+                                {/* Mesai Input Area */}
+                                <div className="flex items-center bg-slate-100 rounded-lg px-1.5 py-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setMesaiWithDraft(p.id, Math.max(0, hrs - 1))}
+                                    className="w-4 h-4 bg-white text-slate-800 rounded font-black text-[9px] hover:bg-slate-200 flex items-center justify-center shadow-sm"
+                                  >
+                                    -
+                                  </button>
+                                  <span className="text-[9px] font-black mx-1.5 min-w-[12px] text-center text-slate-700">{hrs}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMesaiWithDraft(p.id, Math.min(24, hrs + 1))}
+                                    className="w-4 h-4 bg-white text-slate-800 rounded font-black text-[9px] hover:bg-slate-200 flex items-center justify-center shadow-sm"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                                <button 
+                                  onClick={() => handleMarkPresent(p.id, hrs)}
+                                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg border border-emerald-200 transition text-[9px] font-extrabold"
+                                  title="Geldi"
+                                >
+                                  Geldi
+                                </button>
+                                <button 
+                                  onClick={() => handleMarkAbsent(p.id)}
+                                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 px-2 py-1 rounded-lg border border-rose-200 transition text-[9px] font-extrabold"
+                                  title="Yok"
+                                >
+                                  Yok
+                                </button>
+                              </div>
                             </div>
-                            <div className="flex space-x-1 shrink-0">
-                              <button 
-                                onClick={() => handleMarkPresent(p.id)}
-                                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 p-1 rounded-lg border border-emerald-200 transition text-[9px] font-extrabold"
-                                title="Geldi"
-                              >
-                                Geldi
-                              </button>
-                              <button 
-                                onClick={() => handleMarkAbsent(p.id)}
-                                className="bg-rose-50 hover:bg-rose-100 text-rose-700 p-1 rounded-lg border border-rose-200 transition text-[9px] font-extrabold"
-                                title="Yok"
-                              >
-                                Yok
-                              </button>
-                            </div>
-                          </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   </div>
