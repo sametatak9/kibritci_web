@@ -412,12 +412,14 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
              doc.setFont('helvetica', 'bold');
              doc.setTextColor(245, 158, 11);
              const cleanTitle = page.title.replace(/ğ/g, 'g').replace(/Ğ/g, 'G').replace(/ü/g, 'u').replace(/Ü/g, 'U').replace(/ş/g, 's').replace(/Ş/g, 'S').replace(/ı/g, 'i').replace(/İ/g, 'I').replace(/ö/g, 'o').replace(/Ö/g, 'O').replace(/ç/g, 'c').replace(/Ç/g, 'C');
-             doc.text(cleanTitle, 15, 20);
+             doc.text(cleanTitle, pw/2, 20, { align: 'center' });
            }
            
+           const numPhotos = page.photos?.length || 0;
+           const isSingle = numPhotos === 1;
            const margin = 15;
            const spacing = 10;
-           const w = (pw - margin*2 - spacing) / 2;
+           const w = isSingle ? (pw - margin * 4) : (pw - margin * 2 - spacing) / 2;
            const h = w * 0.75; // 4/3 aspect ratio
            
            let col = 0;
@@ -425,7 +427,7 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
            const startY = 30;
            
            for (const f of (page.photos || [])) {
-             const x = margin + col * (w + spacing);
+             const x = isSingle ? (pw - w) / 2 : margin + col * (w + spacing);
              const y = startY + row * (h + 45); // 45 for text
              
              try {
@@ -506,6 +508,41 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
                row++;
              }
            }
+        }
+        else if (page.type === 'summary') {
+           doc.setFontSize(24);
+           doc.setFont('helvetica', 'bold');
+           doc.setTextColor(245, 158, 11);
+           const cleanTitle = (page.title || '').replace(/ğ/g, 'g').replace(/Ğ/g, 'G').replace(/ü/g, 'u').replace(/Ü/g, 'U').replace(/ş/g, 's').replace(/Ş/g, 'S').replace(/ı/g, 'i').replace(/İ/g, 'I').replace(/ö/g, 'o').replace(/Ö/g, 'O').replace(/ç/g, 'c').replace(/Ç/g, 'C');
+           doc.text(cleanTitle, pw/2, 30, { align: 'center' });
+           
+           doc.setLineWidth(1);
+           doc.setDrawColor(245, 158, 11);
+           doc.line(20, 35, pw - 20, 35);
+
+           doc.setFontSize(12);
+           let y = 50;
+           (page.summaryData || []).forEach((g, idx) => {
+             if (y > ph - 30) {
+               doc.addPage();
+               drawWatermark();
+               y = 30;
+             }
+             doc.setFont('helvetica', 'bold');
+             doc.setTextColor(15, 23, 42);
+             const cleanAd = g.parsel.replace(/ğ/g, 'g').replace(/Ğ/g, 'G').replace(/ü/g, 'u').replace(/Ü/g, 'U').replace(/ş/g, 's').replace(/Ş/g, 'S').replace(/ı/g, 'i').replace(/İ/g, 'I').replace(/ö/g, 'o').replace(/Ö/g, 'O').replace(/ç/g, 'c').replace(/Ç/g, 'C');
+             doc.text(`${idx + 1}. Parsel: ${cleanAd}`, 20, y);
+             doc.text(`${g.count} fotograf`, pw - 20, y, { align: 'right' });
+             
+             y += 6;
+             doc.setFont('helvetica', 'normal');
+             doc.setFontSize(9);
+             doc.setTextColor(100, 116, 139);
+             const bloksText = g.bloks.join(', ').replace(/ğ/g, 'g').replace(/Ğ/g, 'G').replace(/ü/g, 'u').replace(/Ü/g, 'U').replace(/ş/g, 's').replace(/Ş/g, 'S').replace(/ı/g, 'i').replace(/İ/g, 'I').replace(/ö/g, 'o').replace(/Ö/g, 'O').replace(/ç/g, 'c').replace(/Ç/g, 'C');
+             const lines = doc.splitTextToSize(`Bloklar: ${bloksText}`, pw - 40);
+             doc.text(lines, 25, y);
+             y += lines.length * 5 + 4;
+           });
         }
       }
 
@@ -1051,21 +1088,21 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
                         </div>
                       )}
                       {page.type === 'spread' && (
-                        <div className="flex-1 flex flex-col">
+                        <div className="flex-1 flex flex-col items-center">
                           {page.title && page.title !== 'Genel Saha Faaliyetleri' && (
-                            <div className="mb-4 inline-flex items-center gap-2 px-3 py-1 bg-slate-800 text-white rounded-full text-xs font-bold w-fit">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                            <div className="mb-6 inline-flex items-center gap-2 px-4 py-1.5 bg-slate-800 text-white rounded-full text-sm font-bold w-fit">
+                              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
                               {page.title}
                             </div>
                           )}
-                          <div className="grid grid-cols-2 gap-6">
+                          <div className={`flex flex-wrap justify-center gap-6 ${page.photos?.length === 1 ? 'max-w-2xl' : 'w-full'}`}>
                             {(page.photos || []).map((f) => (
-                              <div key={f.id} className="group flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                              <div key={f.id} className={`group flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden ${page.photos?.length === 1 ? 'w-full' : 'w-[calc(50%-0.75rem)]'}`}>
                                 <img src={f.imageUrl} alt="" className="w-full aspect-[4/3] object-cover" />
-                                <div className="p-3 bg-white border-t border-slate-100">
-                                  {f.baslik && <p className="text-sm font-black text-slate-800 leading-tight">{f.baslik}</p>}
-                                  {f.aciklama && <p className="text-xs text-slate-600 mt-1.5 line-clamp-3">{f.aciklama}</p>}
-                                  {f.grupAdi && <p className="text-[10px] font-bold text-amber-600 mt-2 uppercase">{f.grupAdi}</p>}
+                                <div className="p-4 bg-white border-t border-slate-100 flex-1 flex flex-col">
+                                  <p className="text-base font-black text-slate-800 leading-tight">{f.baslik}</p>
+                                  {f.aciklama && <p className="text-sm text-slate-600 mt-2 flex-1">{f.aciklama}</p>}
+                                  {f.grupAdi && <p className="text-xs font-bold text-amber-600 mt-3 uppercase tracking-wider">{f.grupAdi}</p>}
                                 </div>
                               </div>
                             ))}
@@ -1081,6 +1118,25 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
                           <div className="grid grid-cols-4 sm:grid-cols-6 gap-1 bg-slate-900 p-1 rounded-xl">
                             {(page.photos || []).map((f) => (
                               <img key={f.id} src={f.imageUrl} alt="" className="w-full aspect-square object-cover rounded-sm border border-slate-800" />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {page.type === 'summary' && (
+                        <div className="flex-1 flex flex-col">
+                          <h2 className="text-3xl font-black text-slate-900 border-b-4 border-amber-500 pb-3 mb-6 flex items-center gap-3">
+                            <Layers className="text-amber-500" />
+                            {page.title}
+                          </h2>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {(page.summaryData || []).map((s, i) => (
+                              <div key={i} className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                                <div className="flex justify-between items-center mb-2">
+                                  <h3 className="font-bold text-lg text-slate-800">Parsel: {s.parsel}</h3>
+                                  <span className="bg-amber-100 text-amber-800 text-xs font-bold px-2 py-1 rounded-full">{s.count} Fotoğraf</span>
+                                </div>
+                                <p className="text-xs text-slate-500 font-medium">Bloklar: {s.bloks.join(', ')}</p>
+                              </div>
                             ))}
                           </div>
                         </div>

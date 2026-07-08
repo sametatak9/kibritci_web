@@ -44,7 +44,7 @@ export function groupKolajFotolari(fotolar: SahaKolajFoto[]): KolajGrup[] {
   return groups;
 }
 
-export type MagazinePageType = 'cover' | 'toc' | 'section' | 'spread' | 'collage';
+export type MagazinePageType = 'cover' | 'toc' | 'section' | 'spread' | 'collage' | 'summary';
 
 export interface MagazinePage {
   type: MagazinePageType;
@@ -52,6 +52,7 @@ export interface MagazinePage {
   subtitle?: string;
   photos?: SahaKolajFoto[];
   groups?: { ad: string; count: number }[];
+  summaryData?: { parsel: string; count: number; bloks: string[] }[];
 }
 
 const SPREAD_SIZE = 4;
@@ -86,6 +87,31 @@ export function buildMagazinePages(fotolar: SahaKolajFoto[], yil: number, ay: nu
   }
 
   pages.push({ type: 'collage', title: 'Ay Özeti Kolaj', photos: fotolar });
+
+  // Summary Page
+  const parselMap = new Map<string, Set<string>>();
+  for (const f of fotolar) {
+    const p = f.parsel || 'Genel Saha';
+    const b = f.blok || 'Belirtilmedi';
+    if (!parselMap.has(p)) parselMap.set(p, new Set());
+    parselMap.get(p)!.add(b);
+  }
+
+  const summaryData = Array.from(parselMap.entries()).map(([parsel, blocks]) => {
+    const count = fotolar.filter((f) => (f.parsel || 'Genel Saha') === parsel).length;
+    return {
+      parsel,
+      count,
+      bloks: Array.from(blocks).sort(),
+    };
+  }).sort((a, b) => b.count - a.count);
+
+  pages.push({
+    type: 'summary',
+    title: 'Parsel Bazlı Faaliyet Özeti',
+    summaryData,
+  });
+
   return pages;
 }
 
