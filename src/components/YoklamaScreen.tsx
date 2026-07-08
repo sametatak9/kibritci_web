@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Calendar, Trash2, ShieldAlert, CheckCircle, FileText, ChevronRight } from 'lucide-react';
 import { Personel, AylikYoklamaMap, YoklamaDurum } from '../types/erp';
-import { KibritciLogo } from './KibritciLogo';
+import { CorporateReportLayout } from './CorporateReportLayout';
 
 const maskName = (name?: string): string => {
   if (!name) return '';
@@ -681,25 +681,16 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               </div>
             </div>
 
-            {/* Document Body (Strictly styled like A4 Landscape paper) */}
-            <div className="flex-1 overflow-auto bg-white p-12 text-slate-900 printable-document font-sans">
-              
-              {/* Report Header Wrapper */}
-              <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-center">
-                <div className="flex items-center space-x-4">
-                  <KibritciLogo size="xl" />
-                  <div>
-                    <h1 className="text-lg font-black tracking-tight text-[#1E4E78] uppercase">KİBRİTÇİ İNŞAAT TAAHHÜT A.Ş.</h1>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">ŞANTİYE VE MERKEZ BORDRO VE PUANTAJ DENETLEME ŞEFLİĞİ</p>
-                    <p className="text-[10px] text-slate-600 mt-1">Dönem: <strong className="text-slate-900 font-bold">{selectedMonth}. Ay / {selectedYear}</strong></p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="border border-slate-900 text-[10px] font-bold px-3 py-1 bg-slate-50 uppercase tracking-widest block mb-1">
-                    BELGE NO: KBR-PNT-2026-{printModal === 'BOS' ? 'BLANK' : 'FILLED'}
-                  </span>
-                  <span className="text-[10px] text-slate-500 font-mono">Baskı Tarihi: {new Date().toLocaleDateString('tr-TR')} {new Date().toLocaleTimeString('tr-TR')}</span>
-                </div>
+            {/* Document Body — Kurumsal antetli A4 yatay format */}
+            <div className="flex-1 overflow-auto bg-white p-8 text-slate-900 printable-document font-sans">
+              <CorporateReportLayout
+                orientation="landscape"
+                docCode={`BELGE NO: KBR-PNT-2026-${printModal === 'BOS' ? 'BLANK' : 'FILLED'}`}
+              >
+              {/* Birim & dönem bilgisi */}
+              <div className="mb-4 pb-3 border-b border-slate-200">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">ŞANTİYE VE MERKEZ BORDRO VE PUANTAJ DENETLEME ŞEFLİĞİ</p>
+                <p className="text-[10px] text-slate-600 mt-0.5">Dönem: <strong className="text-slate-900 font-bold">{selectedMonth}. Ay / {selectedYear}</strong></p>
               </div>
 
               {/* Title Header Section */}
@@ -931,6 +922,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                 </div>
               </div>
 
+              </CorporateReportLayout>
             </div>
           </div>
         </div>

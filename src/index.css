@@ -57,3 +57,174 @@ html {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(156, 163, 175, 0.6);
 }
+
+/* ── Kurumsal Antetli Rapor Şablonu ───────────────────────────────────── */
+.corporate-report {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 190mm;
+  background: #fff;
+  color: #1e293b;
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  overflow: hidden;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.corporate-report--landscape {
+  min-height: 277mm;
+}
+
+.corporate-report-watermark {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.corporate-report-watermark img {
+  position: absolute;
+  right: -8%;
+  top: 42%;
+  transform: translateY(-50%);
+  width: 58%;
+  opacity: 0.07;
+  filter: grayscale(100%);
+}
+
+.corporate-report-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 0.75rem;
+  margin-bottom: 1rem;
+  flex-shrink: 0;
+}
+
+.corporate-report-logo {
+  width: 11rem;
+  height: 3.25rem;
+  background-repeat: no-repeat;
+  background-position: left top;
+  background-size: 52rem auto;
+  flex-shrink: 0;
+}
+
+.corporate-report-meta {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.corporate-report-doc-code {
+  display: block;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid #334155;
+  padding: 0.2rem 0.55rem;
+  background: #f8fafc;
+  margin-bottom: 0.2rem;
+}
+
+.corporate-report-date {
+  display: block;
+  font-size: 0.55rem;
+  color: #64748b;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+
+.corporate-report-body {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+}
+
+.corporate-report-footer {
+  position: relative;
+  z-index: 1;
+  margin-top: 1.5rem;
+  padding-top: 0.5rem;
+  flex-shrink: 0;
+}
+
+.corporate-report-footer-line {
+  height: 1px;
+  background: linear-gradient(to right, transparent, #cbd5e1 15%, #cbd5e1 85%, transparent);
+  margin-bottom: 0.55rem;
+}
+
+.corporate-report-footer-grid {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 1.25rem;
+  align-items: start;
+  font-size: 0.52rem;
+  line-height: 1.45;
+  color: #475569;
+}
+
+.corporate-report-footer-legal {
+  font-weight: 800;
+  font-size: 0.5rem;
+  letter-spacing: 0.04em;
+  color: #334155;
+  text-transform: uppercase;
+  margin-bottom: 0.15rem;
+}
+
+.corporate-report-footer-address {
+  font-size: 0.48rem;
+  color: #64748b;
+}
+
+.corporate-report-footer-contact {
+  border-left: 1px solid #e2e8f0;
+  padding-left: 1rem;
+  white-space: nowrap;
+}
+
+.corporate-report-footer-web {
+  text-align: right;
+  font-weight: 600;
+  color: #334155;
+  align-self: end;
+}
+
+@media print {
+  @page {
+    margin: 10mm 12mm;
+    size: A4 landscape;
+  }
+
+  .corporate-report--portrait {
+    page: portrait;
+  }
+
+  @page portrait {
+    size: A4 portrait;
+    margin: 12mm 14mm;
+  }
+
+  .corporate-report[data-orientation="landscape"] {
+    page: landscape;
+  }
+
+  @page landscape {
+    size: A4 landscape;
+    margin: 10mm 12mm;
+  }
+
+  .corporate-report {
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .corporate-report-watermark img {
+    opacity: 0.06;
+  }
+}
