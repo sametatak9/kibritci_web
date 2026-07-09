@@ -124,6 +124,13 @@ export const KampGunlukYoklamaTab: React.FC<KampGunlukYoklamaTabProps> = ({
     setMesaiSaatleri(prev => ({ ...prev, [id]: 0 }));
   };
 
+  const handleUndo = (id: string) => {
+    setHasLocalAttendanceDraft(true);
+    setPresentIds(prev => prev.filter(x => x !== id));
+    setAbsentIds(prev => prev.filter(x => x !== id));
+    setMesaiSaatleri(prev => ({ ...prev, [id]: 0 }));
+  };
+
   const handleSave = async () => {
     if (!saveYoklamalarNow) {
       if (addNotification) addNotification("Yoklama kaydetme fonksiyonu bulunamadı!");
@@ -176,6 +183,12 @@ export const KampGunlukYoklamaTab: React.FC<KampGunlukYoklamaTabProps> = ({
 
   const remainingStaff = activeStaff.filter(p => !presentIds.includes(p.id) && !absentIds.includes(p.id));
   const filteredRemaining = remainingStaff.filter(p => 
+    `${p.ad} ${p.soyad}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (p.gorev || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const processedStaff = activeStaff.filter(p => presentIds.includes(p.id) || absentIds.includes(p.id));
+  const filteredProcessed = processedStaff.filter(p => 
     `${p.ad} ${p.soyad}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (p.gorev || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -293,6 +306,45 @@ export const KampGunlukYoklamaTab: React.FC<KampGunlukYoklamaTabProps> = ({
               <span className="text-[10px] font-bold text-rose-800">Gelmeyenler</span>
             </div>
             <span className="text-rose-700 font-black text-sm">{absentIds.length}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Processed Staff Pool (İşlem Görenler Havuzu) */}
+      {filteredProcessed.length > 0 && (
+        <div className="bg-white rounded-3xl p-4 border shadow-sm space-y-4">
+          <div className="flex items-center space-x-2 text-slate-800 border-b border-slate-100 pb-2">
+            <CheckCircle size={16} className="text-blue-500" />
+            <span className="font-bold text-[11px] uppercase tracking-wider">Yoklaması Alınanlar Havuzu</span>
+            <span className="bg-slate-100 text-slate-800 text-[9px] font-black px-2 py-0.5 rounded-full ml-auto">
+              {filteredProcessed.length} KİŞİ
+            </span>
+          </div>
+          <div className="max-h-[30vh] overflow-y-auto space-y-1 divide-y divide-slate-100 pr-1">
+            {filteredProcessed.map(p => {
+              const isGeldi = presentIds.includes(p.id);
+              const hrs = mesaiSaatleri[p.id] || 0;
+              return (
+                <div key={p.id} className="flex items-center justify-between py-2 pt-3">
+                  <div className="min-w-0 flex-grow">
+                    <span className="font-bold text-xs text-slate-800 block truncate">{p.ad} {p.soyad}</span>
+                    <span className="text-[9px] text-slate-400 font-medium block truncate">
+                      {p.gorev} &bull; <span className={isGeldi ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}>{isGeldi ? 'Geldi' : 'Yok'}</span>
+                      {isGeldi && hrs > 0 && <span className="text-blue-600 font-bold ml-1">({hrs}s mesai)</span>}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <button 
+                      onClick={() => handleUndo(p.id)}
+                      className="bg-slate-50 hover:bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg border border-slate-200 transition text-[10px] font-extrabold flex items-center gap-1"
+                    >
+                      <RefreshCw size={10} />
+                      Geri Al
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
