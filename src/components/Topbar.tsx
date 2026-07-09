@@ -126,13 +126,13 @@ export const Topbar: React.FC<TopbarProps> = ({
     .toUpperCase();
 
   return (
-    <header className="h-[56px] bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/60 px-3 md:px-6 flex items-center justify-between shrink-0 font-sans select-none relative text-slate-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.3)] gap-2 z-40">
+    <header className="h-[56px] bg-white/80 backdrop-blur-xl border-b border-slate-200/80 px-3 md:px-6 flex items-center justify-between shrink-0 font-sans select-none relative text-slate-800 shadow-sm gap-2 z-40">
       
       {/* Left Area: Sidebar Toggle & Section Title */}
       <div className="flex items-center space-x-2 md:space-x-3 text-[13px] min-w-0">
         <button 
           onClick={onToggleSidebar}
-          className="lg:hidden p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition duration-150 cursor-pointer shadow-xs"
+          className="lg:hidden p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition duration-150 cursor-pointer shadow-xs"
           title="Menüyü Aç"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -142,10 +142,10 @@ export const Topbar: React.FC<TopbarProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 min-w-0">
           <div className="flex items-center space-x-1.5">
             <KibritciLogo size="sm" showText={false} className="h-5" />
-            <span className="text-slate-200 font-black tracking-wider text-[11px] uppercase">KİBRİTÇİ ERP</span>
+            <span className="text-slate-800 font-black tracking-wider text-[11px] uppercase">KİBRİTÇİ ERP</span>
           </div>
-          <span className="text-slate-650 hidden sm:inline">/</span>
-          <span className="font-bold text-white tracking-wide text-xs truncate max-w-[160px] sm:max-w-[260px] md:max-w-[340px]">
+          <span className="text-slate-400 hidden sm:inline">/</span>
+          <span className="font-bold text-slate-800 tracking-wide text-xs truncate max-w-[160px] sm:max-w-[260px] md:max-w-[340px]">
             {formatTabName(currentTab)}
           </span>
         </div>
@@ -155,28 +155,22 @@ export const Topbar: React.FC<TopbarProps> = ({
       <div className="hidden xl:flex items-center space-x-6">
         
         {/* Exchange Rates Ticker */}
-        <div className="flex items-center bg-slate-950/65 border border-slate-800/80 rounded-xl px-3 py-1 space-x-3.5 text-[10px] font-mono text-slate-400">
-          <span className="flex items-center gap-1 font-bold text-slate-500">
+        <div className="flex items-center bg-slate-100/80 border border-slate-200/80 rounded-xl px-3 py-1 space-x-3.5 text-[10px] font-mono text-slate-600">
+          <span className="flex items-center gap-1 font-bold text-slate-700">
             <TrendingUp size={11} className="text-amber-500" />
             PİYASA:
           </span>
-          <span className="flex items-center space-x-1">
-            <span>🇺🇸 USD</span>
-            <span className="text-emerald-500 font-bold">{rates.usd} TL</span>
-          </span>
-          <span className="text-slate-800">|</span>
-          <span className="flex items-center space-x-1">
-            <span>🇪🇺 EUR</span>
-            <span className="text-emerald-500 font-bold">{rates.eur} TL</span>
-          </span>
+          <span><span className="text-slate-400 mr-1">US</span>USD <span className="font-bold text-emerald-600">{rates.usd} TL</span></span>
+          <span className="text-slate-300">|</span>
+          <span><span className="text-slate-400 mr-1">EU</span>EUR <span className="font-bold text-emerald-600">{rates.eur} TL</span></span>
         </div>
 
         {/* Date & Time Widget */}
-        <div className="flex items-center bg-slate-950/45 border border-slate-800/40 rounded-xl py-1 px-3 space-x-2.5 text-[11px] font-semibold text-slate-300">
-          <Clock size={12} className="text-amber-500" />
+        <div className="flex items-center text-slate-600 bg-slate-100/80 px-3 py-1.5 rounded-xl border border-slate-200/80 text-[10px] shadow-xs">
+          <Clock size={12} className="mr-2 text-amber-500" />
           <span className="text-slate-400 font-mono">{formattedDate}</span>
-          <span className="text-slate-700">|</span>
-          <span className="text-white font-mono font-bold tracking-wider">{formattedTime}</span>
+          <span className="text-slate-700 mx-2">|</span>
+          <span className="text-slate-800 font-mono font-bold tracking-wider">{formattedTime}</span>
         </div>
       </div>
 
@@ -211,38 +205,38 @@ export const Topbar: React.FC<TopbarProps> = ({
 
         {/* User Card with Avatar Initials */}
         {currentUser && (
-          <div className="flex items-center space-x-2 bg-slate-800/50 border border-slate-800 hover:bg-slate-800/80 transition duration-150 rounded-xl p-1 pr-2 md:pr-3 max-w-[140px] sm:max-w-[190px] md:max-w-none">
+          <div className="flex items-center space-x-2 bg-slate-100 border border-slate-200 hover:bg-slate-200/80 transition duration-150 rounded-xl p-1 pr-2 md:pr-3 max-w-[140px] sm:max-w-[190px] md:max-w-none">
             <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-amber-500 to-orange-600 text-white font-black text-[10px] flex items-center justify-center shadow-sm shrink-0">
               {userInitials}
             </div>
-            <div className="text-[10px] font-bold truncate text-slate-200 hidden sm:block">
+            <div className="text-[10px] font-bold truncate text-slate-700 hidden sm:block">
               {userFullName}
             </div>
           </div>
         )}
 
         {/* Global Action Icons (Search simulation / Notifications) */}
-        <div className="flex items-center space-x-2 md:space-x-3.5 border-l border-slate-850 pl-2 md:pl-3.5 relative shrink-0" ref={dropdownRef}>
+        <div className="flex items-center space-x-2 md:space-x-3.5 border-l border-slate-200 pl-2 md:pl-3.5 relative shrink-0" ref={dropdownRef}>
           
           {/* Mobil Görünüm (Must remain exactly as is) */}
           {onToggleMobileMode && (
             <button 
               onClick={onToggleMobileMode}
-              className="text-slate-400 hover:text-white transition duration-150 cursor-pointer flex items-center gap-1.5 text-[10px] font-extrabold mr-1"
+              className="text-slate-500 hover:text-slate-800 transition duration-150 cursor-pointer flex items-center gap-1.5 text-[10px] font-extrabold mr-1"
               title="Mobil Arayüze Geç"
             >
-              <Smartphone size={14} className="text-slate-400" />
-              <span className="hidden sm:inline text-slate-350">Mobil Görünüm</span>
+              <Smartphone size={14} className="text-slate-500" />
+              <span className="hidden sm:inline text-slate-600">Mobil Görünüm</span>
             </button>
           )}
 
           {/* Bildirim Lambası (Must remain exactly as is) */}
           <button 
             onClick={() => setShowDropdown(!showDropdown)}
-            className="text-slate-400 hover:text-white transition relative cursor-pointer p-1 rounded-lg hover:bg-slate-800"
+            className="text-slate-500 hover:text-slate-800 transition relative cursor-pointer p-1 rounded-lg hover:bg-slate-100"
           >
             {unreadCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 bg-amber-500 border-2 border-slate-900 text-slate-950 font-black text-[8px] rounded-full w-4 h-4 flex items-center justify-center animate-pulse">
+              <span className="absolute -top-1.5 -right-1.5 bg-amber-500 border-2 border-white text-slate-950 font-black text-[8px] rounded-full w-4 h-4 flex items-center justify-center animate-pulse">
                 {unreadCount}
               </span>
             )}
@@ -251,9 +245,9 @@ export const Topbar: React.FC<TopbarProps> = ({
 
           {/* Notifications Dropdown Panel */}
           {showDropdown && (
-            <div className="absolute right-0 top-9 w-[min(20rem,calc(100vw-1rem))] bg-slate-900 border border-slate-800 rounded-2xl shadow-xl z-50 text-xs text-slate-300 p-3.5 space-y-3 flex flex-col max-h-96 animate-in fade-in slide-in-from-top-2 duration-150">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2 shrink-0">
-                <span className="font-extrabold text-white flex items-center space-x-1.5">
+            <div className="absolute right-0 top-9 w-[min(20rem,calc(100vw-1rem))] bg-white border border-slate-200 rounded-2xl shadow-xl z-50 text-xs text-slate-600 p-3.5 space-y-3 flex flex-col max-h-96 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2 shrink-0">
+                <span className="font-extrabold text-slate-800 flex items-center space-x-1.5">
                   <span>🔔</span>
                   <span>Şantiye Aktivite Akışı</span>
                 </span>
