@@ -645,33 +645,33 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
       <div className="w-[430px] shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm max-h-[calc(100vh-3rem)] lg:sticky lg:top-6 lg:self-start">
 
         {/* Header card indicator */}
-        <div className="bg-[#2563EB] text-slate-100 p-4 shrink-0 flex items-center justify-between">
+        <div className="bg-white border-b border-slate-100 p-5 shrink-0 flex items-center justify-between">
           <div className="space-y-1">
-            <span className="text-[10px] font-bold tracking-widest text-blue-200 uppercase">
+            <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">
               Personel Kayıt & Düzenleme
             </span>
-            <h3 className="font-display font-bold text-sm">
+            <h3 className="font-display font-black text-slate-800 text-sm">
               { 'id' in formData ? "👤 Personel Bilgilerini Güncelle" : "👤 Yeni Personel Girişi" }
             </h3>
           </div>
-          <span className="text-[10px] bg-blue-700/80 border border-blue-600 px-2 py-0.5 rounded-full font-mono font-bold">
+          <span className="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded-full font-mono font-bold shadow-sm">
             { 'id' in formData ? "Düzeltme Modu" : "Yeni Kayıt" }
           </span>
         </div>
 
         {/* Tab switcher for registration method - only shown in Create Mode */}
         { !('id' in formData) && (
-          <div className="flex border-b border-slate-100 bg-slate-50/50 p-2 gap-2 shrink-0">
+          <div className="flex border-b border-slate-100 bg-white p-3 gap-2 shrink-0">
             <button
               type="button"
               onClick={() => {
                 setRegMethod('manual');
                 setParseError(null);
               }}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition cursor-pointer ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition cursor-pointer ${
                 regMethod === 'manual'
-                  ? 'bg-white text-blue-600 shadow-sm border border-slate-150/80'
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/50'
+                  ? 'bg-slate-900 text-white shadow-md shadow-slate-900/10'
+                  : 'text-slate-500 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 border border-transparent'
               }`}
             >
               <UserPlus size={14} />
@@ -683,26 +683,26 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                 setRegMethod('sgk_pdf');
                 setParseSuccess(null);
               }}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition cursor-pointer ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition cursor-pointer ${
                 regMethod === 'sgk_pdf'
-                  ? 'bg-white text-blue-600 shadow-sm border border-slate-150/80'
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/50'
+                  ? 'bg-slate-900 text-white shadow-md shadow-slate-900/10'
+                  : 'text-slate-500 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 border border-transparent'
               }`}
             >
               <FileText size={14} />
-              SGK veya Dekont ile Kayıt (AI)
+              SGK veya Dekont (AI)
             </button>
           </div>
         )}
 
         {regMethod === 'sgk_pdf' && !('id' in formData) ? (
           <div className="p-5 space-y-3 overflow-y-auto min-h-0">
-            <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-3 space-y-1 text-slate-700">
-              <h5 className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
-                <ShieldCheck size={14} className="text-blue-600" />
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 space-y-1 text-slate-700">
+              <h5 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <ShieldCheck size={14} className="text-slate-900" />
                 Yapay Zeka Destekli SGK & Dekont Girişi
               </h5>
-              <p className="text-[10px] leading-relaxed text-blue-800">
+              <p className="text-[10px] leading-relaxed text-slate-600">
                 SGK İşe Giriş Bildirgesi veya banka dekontunu yükleyin; ad, soyad, TC, IBAN ve banka bilgileri otomatik doldurulur.
               </p>
             </div>
@@ -715,13 +715,13 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               onDrop={handleDrop}
               className={`h-44 border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-4 text-center transition relative ${
                 dragActive
-                  ? "border-blue-500 bg-blue-50/30"
-                  : "border-slate-200 hover:border-slate-300 bg-slate-50/30"
+                  ? "border-slate-800 bg-slate-50"
+                  : "border-slate-200 hover:border-slate-300 bg-white"
               }`}
             >
               {isParsing ? (
                 <div className="space-y-3 flex flex-col items-center">
-                  <Loader2 size={36} className="text-blue-600 animate-spin" />
+                  <Loader2 size={36} className="text-slate-800 animate-spin" />
                   <div className="space-y-1">
                     <p className="text-xs font-bold text-slate-800">Belge Analiz Ediliyor...</p>
                     <p className="text-[10px] text-slate-500">Gemini Yapay Zeka verileri çözümlüyor, lütfen bekleyin.</p>
@@ -729,7 +729,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                 </div>
               ) : (
                 <div className="space-y-4 flex flex-col items-center">
-                  <div className="p-3 bg-blue-50 text-blue-600 rounded-full">
+                  <div className="p-3 bg-slate-100 text-slate-600 rounded-full shadow-sm">
                     <UploadCloud size={28} />
                   </div>
                   <div className="space-y-1">
@@ -740,7 +740,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                       veya bilgisayarınızdan seçmek için tıklayın
                     </p>
                   </div>
-                  <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-1.5 px-4 rounded-lg shadow-sm transition active:scale-95 inline-block">
+                  <label className="cursor-pointer bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-2 px-5 rounded-xl shadow-sm transition active:scale-95 inline-block">
                     Dosya Seç
                     <input
                       type="file"
@@ -799,7 +799,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                   maxLength={11}
                   value={formData.tcNo}
                   onChange={handleInputChange}
-                  className="w-full text-xs font-medium border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50 focus:border-blue-500 transition duration-150"
+                  className="w-full text-xs font-medium border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50  transition duration-150"
                   placeholder="11 Hane"
                 />
               </div>
@@ -809,7 +809,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                   name="cinsiyet"
                   value={formData.cinsiyet}
                   onChange={handleInputChange}
-                  className="w-full text-xs border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50 focus:border-blue-500 transition"
+                  className="w-full text-xs border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50  transition"
                 >
                   <option value="Erkek">Erkek</option>
                   <option value="Kadın">Kadın</option>
@@ -825,7 +825,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                   name="ad"
                   value={formData.ad}
                   onChange={handleInputChange}
-                  className="w-full text-xs font-semibold border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50 focus:border-blue-500 transition"
+                  className="w-full text-xs font-semibold border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50  transition"
                   placeholder="İsim"
                 />
               </div>
@@ -836,7 +836,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                   name="soyad"
                   value={formData.soyad}
                   onChange={handleInputChange}
-                  className="w-full text-xs font-semibold border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50 focus:border-blue-500 transition"
+                  className="w-full text-xs font-semibold border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50  transition"
                   placeholder="Soyisim"
                 />
               </div>
@@ -1198,7 +1198,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
           <div className="shrink-0 p-4 border-t border-slate-100 flex gap-2 bg-white shadow-[0_-4px_12px_rgba(0,0,0,0.06)] z-10">
             <button
               onClick={handleSave}
-              className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] transition cursor-pointer text-white font-bold text-xs py-2.5 rounded-xl shadow-md"
+              className="flex-1 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] transition cursor-pointer text-white font-bold text-xs py-2.5 rounded-xl shadow-md"
             >
               { 'id' in formData ? "Verileri Güncelle" : "Kaydı Tamamla" }
             </button>
@@ -1250,7 +1250,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
             <input
               type="text"
               placeholder="İsim veya soyisim ile filtrele..."
-              className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-slate-700 focus:outline-none focus:border-blue-500 transition duration-150"
+              className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-slate-700 focus:outline-none  transition duration-150"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -1274,9 +1274,9 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                 <div
                   key={p.id}
                   onClick={() => handleSelectPersonel(p)}
-                  className={`p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs transition duration-200 cursor-pointer ${
+                  className={`p-3.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs transition duration-200 cursor-pointer ${
                     isSelected
-                      ? 'bg-blue-50/70 border-blue-500/50 shadow-sm'
+                      ? 'bg-slate-50 border-slate-900 shadow-sm'
                       : 'bg-white border-slate-100 hover:border-slate-200 hover:bg-slate-50/50'
                   }`}
                 >
@@ -1311,7 +1311,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                         TC: {p.tcNo} · Görev: <span className="text-slate-600 font-bold">{p.gorev}</span>
                       </p>
                       <div className="flex flex-wrap gap-1.5 mt-2">
-                        <span className="inline-flex items-center gap-1 bg-blue-50/60 border border-blue-100 text-[#1e4e78] px-2 py-0.5 rounded font-bold font-mono text-[9px]">
+                        <span className="inline-flex items-center gap-1 bg-slate-50 border border-slate-100 text-[#1e4e78] px-2 py-0.5 rounded font-bold font-mono text-[9px]">
                           <span>📅 İşe Giriş:</span>
                           <span>{p.iseGirisTarihi || '-'}</span>
                         </span>
@@ -1341,7 +1341,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                           e.stopPropagation();
                           handleShowHistory(p);
                         }}
-                        className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg cursor-pointer transition active:scale-95"
+                        className="p-2 bg-blue-50 hover:bg-blue-100 text-slate-900 rounded-lg cursor-pointer transition active:scale-95"
                       >
                         <History size={13} />
                       </button>
@@ -1465,7 +1465,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl border border-slate-150 p-6 w-[500px] max-w-full shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2 text-blue-600">
+              <div className="flex items-center space-x-2 text-slate-900">
                 <History size={20} />
                 <h3 className="font-display font-bold text-sm uppercase tracking-wider">Personel Geçmiş Raporu</h3>
               </div>
@@ -1505,7 +1505,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
             </div>
 
             <div className="flex gap-2 pt-2">
-              <button onClick={generateHistoryReport} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2 rounded-xl transition cursor-pointer flex items-center justify-center gap-1">
+              <button onClick={generateHistoryReport} className="flex-1 bg-slate-900 hover:bg-slate-900 text-white font-bold text-xs py-2 rounded-xl transition cursor-pointer flex items-center justify-center gap-1">
                 <Download size={12} /> Raporu İndir
               </button>
               <button onClick={() => setShowHistoryModal(false)} className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-2 px-4 rounded-xl transition cursor-pointer">
@@ -1550,7 +1550,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                       manualName: taseronResolveModal.manualName,
                       pending: taseronResolveModal.pending,
                     })}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-xs"
+                    className="flex-1 bg-slate-900 hover:bg-slate-900 text-white font-bold py-2 rounded-xl text-xs"
                   >
                     Yeni Kart Aç
                   </button>
@@ -1587,7 +1587,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                   <button
                     type="button"
                     onClick={handleCreateTaseronCari}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-xs"
+                    className="flex-1 bg-slate-900 hover:bg-slate-900 text-white font-bold py-2 rounded-xl text-xs"
                   >
                     Evet, Kart Aç
                   </button>
