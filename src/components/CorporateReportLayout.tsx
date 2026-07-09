@@ -14,11 +14,13 @@ export interface CorporateReportLayoutProps {
 }
 
 const headerLogoStyle: React.CSSProperties = {
-  height: '80px',
+  height: '110px',
   width: 'auto',
-  maxWidth: '420px',
+  maxWidth: '450px',
   display: 'block',
   objectFit: 'contain',
+  objectPosition: 'left center',
+  marginLeft: '-10px', // Pull it slightly left in case the base64 image has internal padding
 };
 
 const watermarkStyle: React.CSSProperties = {
