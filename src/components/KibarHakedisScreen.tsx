@@ -482,7 +482,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
           <button
             onClick={handleRefreshYoklama}
             disabled={refreshingYoklama}
-            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow cursor-pointer flex items-center space-x-1"
+            className="bg-slate-900 hover:bg-slate-900 disabled:opacity-60 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow cursor-pointer flex items-center space-x-1"
             title="Seçili ayın güncel yoklamasını veritabanından tekrar çeker."
           >
             <RefreshCw size={12} className={refreshingYoklama ? 'animate-spin' : ''} />
@@ -547,7 +547,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                           {normalizeGorev(p.gorev)} • {geldiGun} gün
                           {mesaiSaat > 0 && ` • ${mesaiSaat} sa mesai`}
                         </span>
-                        <span className="text-[8px] text-blue-700 block">
+                        <span className="text-[8px] text-slate-800 block">
                           Gün kaz.: {formatMoney(gunKazanci)}
                           {mesaiKazanci > 0 && ` + Mesai: ${formatMoney(mesaiKazanci)}`}
                           {' = '}{formatMoney(toplamKazanc)}
@@ -557,7 +557,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                         </span>
                       </div>
                       {isExcluded ? (
-                        <button onClick={() => handleIncludeStaff(p.id)} className="bg-blue-50 border border-blue-100 text-blue-600 font-bold text-[9px] py-1 px-2.5 rounded-lg cursor-pointer">
+                        <button onClick={() => handleIncludeStaff(p.id)} className="bg-slate-50 border border-slate-200 text-slate-800 font-bold text-[9px] py-1 px-2.5 rounded-lg cursor-pointer">
                           Dahil Et
                         </button>
                       ) : (
@@ -577,7 +577,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
             <div className="grid grid-cols-2 gap-3 text-center">
               <div className="bg-slate-50 border p-3 rounded-xl">
                 <span className="text-[8px] text-slate-500 font-bold block uppercase">Personel</span>
-                <span className="text-base font-extrabold text-blue-700 block mt-0.5">{activeStaffRows.length} Kişi</span>
+                <span className="text-base font-extrabold text-slate-800 block mt-0.5">{activeStaffRows.length} Kişi</span>
               </div>
               <div className="bg-slate-50 border p-3 rounded-xl">
                 <span className="text-[8px] text-slate-500 font-bold block uppercase">Toplam İş Günü</span>
@@ -585,17 +585,17 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
               </div>
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl space-y-2">
-              <span className="text-[9px] text-blue-800 font-bold block uppercase">Maaş Kaynaklı Kazançlar (Bilgi)</span>
+            <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-2">
+              <span className="text-[9px] text-slate-800 font-bold block uppercase">Maaş Kaynaklı Kazançlar (Bilgi)</span>
               <div className="flex justify-between text-[10px]">
-                <span className="text-blue-700">Gün kazancı</span>
-                <span className="font-mono font-bold text-blue-900">{formatMoney(totalGunKazanci)}</span>
+                <span className="text-slate-800">Gün kazancı</span>
+                <span className="font-mono font-bold text-slate-800">{formatMoney(totalGunKazanci)}</span>
               </div>
               <div className="flex justify-between text-[10px]">
                 <span className="text-amber-700">Mesai kazancı</span>
                 <span className="font-mono font-bold text-amber-800">{formatMoney(totalMesaiKazanci)}</span>
               </div>
-              <div className="flex justify-between text-[10px] border-t border-blue-200 pt-2">
+              <div className="flex justify-between text-[10px] border-t border-slate-200 pt-2">
                 <span className="text-indigo-800 font-bold">Toplam kazanç</span>
                 <span className="font-mono font-black text-indigo-900">{formatMoney(totalMaasKazanci)}</span>
               </div>

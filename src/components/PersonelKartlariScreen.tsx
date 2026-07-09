@@ -262,7 +262,7 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
       {/* Top Selector Banner */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-xs gap-4 shrink-0">
         <div className="space-y-1">
-          <span className="text-[10px] font-black tracking-widest text-blue-600 uppercase">Personel Künyesi &amp; Raporlar</span>
+          <span className="text-[10px] font-black tracking-widest text-slate-800 uppercase">Personel Künyesi &amp; Raporlar</span>
           <h2 className="font-display font-bold text-sm text-slate-900 flex items-center gap-1.5">
             👤 Şantiye Personel Detay ve Geçmiş Kartları
           </h2>
@@ -274,7 +274,7 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
           <select
             value={selectedPersId}
             onChange={(e) => setSelectedPersId(e.target.value)}
-            className="text-xs font-bold border border-[#e2e8f0] rounded-xl p-2.5 bg-slate-50 focus:border-blue-500 outline-none"
+            className="text-xs font-bold border border-[#e2e8f0] rounded-xl p-2.5 bg-slate-50  outline-none"
           >
             {personeller.map(p => (
               <option key={p.id} value={p.id}>{p.ad} {p.soyad} ({p.gorev})</option>
@@ -283,7 +283,7 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(Number(e.target.value))}
-            className="text-xs font-bold border border-[#e2e8f0] rounded-xl p-2.5 bg-slate-50 focus:border-blue-500 outline-none"
+            className="text-xs font-bold border border-[#e2e8f0] rounded-xl p-2.5 bg-slate-50  outline-none"
           >
             {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => (
               <option key={m} value={m}>{m}. Ay</option>
@@ -292,7 +292,7 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="text-xs font-bold border border-[#e2e8f0] rounded-xl p-2.5 bg-slate-50 focus:border-blue-500 outline-none"
+            className="text-xs font-bold border border-[#e2e8f0] rounded-xl p-2.5 bg-slate-50  outline-none"
           >
             {[2025, 2026, 2027].map((y) => (
               <option key={y} value={y}>{y}</option>
@@ -321,12 +321,12 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
               <div className="absolute top-0 right-0 w-24 h-24 bg-blue-550/5 rounded-full -mr-8 -mt-8"></div>
               
               <div className="flex items-center space-x-4">
-                <div className="w-14 h-14 bg-gradient-to-tr from-blue-600 to-blue-550 rounded-2xl flex items-center justify-center text-white text-lg font-black shadow-md border border-blue-400/20">
+                <div className="w-14 h-14 bg-gradient-to-tr from-blue-600 to-blue-550 rounded-2xl flex items-center justify-center text-white text-lg font-black shadow-md border border-slate-800/20">
                   {selectedPersonnel.ad[0]}{selectedPersonnel.soyad[0]}
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[9px] font-bold text-blue-600 uppercase tracking-widest bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5">
+                    <span className="text-[9px] font-bold text-slate-800 uppercase tracking-widest bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
                       {selectedPersonnel.gorev}
                     </span>
                     {selectedPersonnel.firmaTipi === 'TASERON' ? (
@@ -413,7 +413,7 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
               <div className="space-y-3.5 text-xs font-semibold text-slate-700">
                 {assignedVehicle && (
                 <div className="flex items-start space-x-3 bg-slate-50/50 p-2.5 rounded-xl border border-slate-150/50">
-                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                  <div className="p-2 bg-slate-50 text-slate-800 rounded-lg">
                     <Truck size={15} />
                   </div>
                   <div className="space-y-0.5">
@@ -530,7 +530,7 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
 
             <div className="bg-white border border-[#e2e8f0] rounded-2xl p-5 shadow-sm space-y-4">
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                <Activity size={14} className="text-blue-500" />
+                <Activity size={14} className="text-slate-600" />
                 Saha Görevlendirme Kayıtları
               </h4>
               <div className="space-y-2.5">

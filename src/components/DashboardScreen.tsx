@@ -136,8 +136,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     {
       title: "Aktif Kadro (Personel)",
       value: `${activePersonelCount} / ${totalPersonel}`,
-      color: "text-blue-600",
-      bg: "bg-blue-50/70 border-blue-100",
+      color: "text-slate-800",
+      bg: "bg-blue-50/70 border-slate-200",
       icon: Users,
       trend: "Canlı Şantiye Kadrosu",
       trendColor: "text-emerald-600"
@@ -240,9 +240,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
       {/* 📘 Şantiye Hızlı Kılavuz & Sistem Rehberi */}
       <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4 relative overflow-hidden bg-gradient-to-r from-blue-50/20 to-transparent">
-        <div className="absolute right-0 top-0 w-32 h-32 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-5 -translate-y-10 translate-x-10" />
+        <div className="absolute right-0 top-0 w-32 h-32 bg-slate-500 rounded-full mix-blend-multiply filter blur-3xl opacity-5 -translate-y-10 translate-x-10" />
         <div className="space-y-1">
-          <span className="bg-blue-500/10 text-blue-700 text-[9px] font-black tracking-wider px-2.5 py-0.5 rounded-full border border-blue-500/10 uppercase">
+          <span className="bg-slate-500/10 text-slate-800 text-[9px] font-black tracking-wider px-2.5 py-0.5 rounded-full border border-slate-800/10 uppercase">
             EĞİTİM &amp; PRATİK KULLANIM REHBERLERİ
           </span>
           <h3 className="font-display font-black text-slate-800 text-sm tracking-tight">
@@ -256,9 +256,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
           <div 
             onClick={() => onNavigate("yoklama")} 
-            className="p-3.5 rounded-2xl bg-slate-50 hover:bg-blue-55/40 border border-slate-100 hover:border-blue-200 transition duration-200 cursor-pointer space-y-1.5 group"
+            className="p-3.5 rounded-2xl bg-slate-50 hover:bg-blue-55/40 border border-slate-100 hover:border-slate-200 transition duration-200 cursor-pointer space-y-1.5 group"
           >
-            <div className="flex items-center justify-between text-blue-700 font-bold text-xs">
+            <div className="flex items-center justify-between text-slate-800 font-bold text-xs">
               <span className="group-hover:underline">1. Yoklama &amp; Puantaj</span>
               <span>→</span>
             </div>
@@ -440,7 +440,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     <p className="text-xs font-mono font-bold leading-none">{traceData?.attendance.izinli}</p>
                     <span className="text-[8px] font-semibold text-slate-400 block mt-1">İzin</span>
                   </div>
-                  <div className="bg-blue-50 text-blue-700 p-1.5 rounded-lg border border-blue-100">
+                  <div className="bg-slate-50 text-slate-800 p-1.5 rounded-lg border border-slate-200">
                     <p className="text-xs font-mono font-bold leading-none">{traceData?.attendance.raporlu}</p>
                     <span className="text-[8px] font-semibold text-slate-400 block mt-1">Rapor</span>
                   </div>
@@ -611,7 +611,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                 <p class="text-base font-mono font-black">${traceData.attendance.izinli}</p>
                                 <span class="text-[10px] text-slate-400 font-normal">İzinli Gün</span>
                               </div>
-                              <div class="bg-blue-50 border border-blue-150 text-blue-800 p-3 rounded-xl">
+                              <div class="bg-slate-50 border border-blue-150 text-slate-800 p-3 rounded-xl">
                                 <p class="text-base font-mono font-black">${traceData.attendance.raporlu}</p>
                                 <span class="text-[10px] text-slate-400 font-normal">Raporlu Gün</span>
                               </div>
@@ -747,7 +747,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </h4>
             <button 
               onClick={() => onNavigate("idari")} 
-              className="text-[10px] text-blue-800 hover:underline font-bold bg-blue-50 px-2 py-1 rounded border border-blue-100"
+              className="text-[10px] text-slate-800 hover:underline font-bold bg-slate-50 px-2 py-1 rounded border border-slate-200"
             >
               Kamp Yönetimine Git →
             </button>
@@ -758,8 +758,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
               <span className="text-[18px] font-bold font-mono text-slate-800 block leading-none">{totalRooms}</span>
               <span className="text-[8px] font-bold text-slate-400 uppercase block mt-1">Toplam Oda</span>
             </div>
-            <div className="p-3 bg-blue-50 border border-blue-105 rounded-xl">
-              <span className="text-[18px] font-bold font-mono text-blue-700 block leading-none">{totalBeds}</span>
+            <div className="p-3 bg-slate-50 border border-blue-105 rounded-xl">
+              <span className="text-[18px] font-bold font-mono text-slate-800 block leading-none">{totalBeds}</span>
               <span className="text-[8px] font-bold text-slate-400 uppercase block mt-1">Yatak Kapasitesi</span>
             </div>
             <div className="p-3 bg-emerald-50 border border-emerald-105 rounded-xl">
@@ -814,7 +814,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             <h4 className="font-display font-black text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
               🔔 Şantiye Canlı Aktivite Akışı (Live Logs)
             </h4>
-            <span className="text-[9px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-100 font-mono animate-pulse">
+            <span className="text-[9px] text-slate-800 font-bold bg-slate-50 px-2 py-0.5 rounded border border-slate-200 font-mono animate-pulse">
               Canlı Akış
             </span>
           </div>
@@ -826,7 +826,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   key={b.id || idx} 
                   className="flex items-start space-x-3 p-2.5 rounded-xl hover:bg-slate-50 transition border border-transparent hover:border-slate-100"
                 >
-                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-slate-500 mt-1.5 shrink-0" />
                   <div className="flex-1 min-w-0 text-xs">
                     <p className="font-medium text-slate-700 leading-normal">{b.mesaj}</p>
                     <span className="text-[9px] text-slate-400 font-mono block mt-0.5">
@@ -864,7 +864,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 transition border border-transparent hover:border-slate-100"
               >
                 <div className="flex items-center space-x-3 text-xs">
-                  <div className="w-8 h-8 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center font-bold text-blue-700 text-[10px]">
+                  <div className="w-8 h-8 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center font-bold text-slate-800 text-[10px]">
                     {p.ad[0]}{p.soyad[0]}
                   </div>
                   <div>

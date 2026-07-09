@@ -811,15 +811,15 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
       <div className="max-w-4xl mx-auto space-y-6">
         
         {/* Header banner */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 p-6 rounded-3xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-slate-200 p-6 rounded-3xl flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
-            <span className="text-[10px] font-black uppercase text-blue-600 tracking-widest block">YAPAY ZEKA ENTEGRASYONU</span>
+            <span className="text-[10px] font-black uppercase text-slate-800 tracking-widest block">YAPAY ZEKA ENTEGRASYONU</span>
             <h1 className="font-display font-black text-xl text-slate-850 tracking-tight uppercase leading-none">Eski Evrakları Programa Aktar</h1>
             <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
               2 yıldır devam eden şantiyenin geçmiş verilerini sisteme aktarmak için fatura, irsaliye, makbuz, hakediş, yoklama/puantaj ve saha faaliyet raporu belgelerini yükleyin. Yapay zeka otomatik olarak algılar ve ilgili modüle kaydeder.
             </p>
           </div>
-          <div className="w-12 h-12 bg-white border border-blue-100 rounded-2xl flex items-center justify-center text-blue-500 shrink-0 shadow-xs">
+          <div className="w-12 h-12 bg-white border border-slate-200 rounded-2xl flex items-center justify-center text-slate-600 shrink-0 shadow-xs">
             <Layers size={22} className="animate-pulse" />
           </div>
         </div>
@@ -913,7 +913,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
                 onDragLeave={handleDrag}
                 onDrop={handleDrop}
                 className={`border-2 border-dashed rounded-2xl p-10 text-center flex flex-col items-center justify-center gap-3 transition ${
-                  dragActive ? 'border-blue-500 bg-blue-500/5' : 'border-slate-200 hover:border-slate-400 bg-slate-50'
+                  dragActive ? 'border-slate-800 bg-slate-500/5' : 'border-slate-200 hover:border-slate-400 bg-slate-50'
                 }`}
               >
                 <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-slate-450 border border-slate-150 shadow-2xs">
@@ -921,7 +921,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-slate-705">
-                    Sürükleyip Bırakın veya <label className="text-blue-600 hover:text-blue-550 cursor-pointer underline">Göz Atın<input type="file" onChange={handleFileChange} accept=".pdf,.png,.jpg,.jpeg" className="hidden" /></label>
+                    Sürükleyip Bırakın veya <label className="text-slate-800 hover:text-blue-550 cursor-pointer underline">Göz Atın<input type="file" onChange={handleFileChange} accept=".pdf,.png,.jpg,.jpeg" className="hidden" /></label>
                   </h4>
                   <p className="text-xs text-slate-500 mt-1">PDF, PNG, JPG, JPEG (Maks. 10MB)</p>
                 </div>
@@ -931,7 +931,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
             selectedFile && (
               <div className="bg-white border border-slate-200 rounded-3xl p-5 flex justify-between items-center text-xs shadow-sm">
                 <div className="flex items-center space-x-3 min-w-0">
-                  <div className="w-10 h-10 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-center text-blue-500 shrink-0">
+                  <div className="w-10 h-10 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-center text-slate-600 shrink-0">
                     <FileText size={18} />
                   </div>
                   <div className="min-w-0">
@@ -960,7 +960,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           {selectedFile && !parsedData && !parsing && (
             <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-5 shadow-sm animate-fade-in">
               <div className="space-y-1">
-                <span className="text-[10px] font-black tracking-widest text-blue-600 uppercase block">2. EVRAK TÜRÜ VE FORMAT SEÇİMİ</span>
+                <span className="text-[10px] font-black tracking-widest text-slate-800 uppercase block">2. EVRAK TÜRÜ VE FORMAT SEÇİMİ</span>
                 <h3 className="text-sm font-extrabold text-slate-800">Bu evrak hangi şantiye kategorisine aittir?</h3>
                 <p className="text-xs text-slate-500">Yapay zekanın evrakı doğru kurallarla çözmesi için formatı seçin.</p>
               </div>
@@ -983,11 +983,11 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
                       onClick={() => setDocType(type.key as any)}
                       className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer flex gap-3 items-start ${
                         isSelected 
-                          ? 'bg-blue-50 border-blue-500 text-blue-700 ring-2 ring-blue-500/10 font-bold shadow-xs' 
+                          ? 'bg-slate-50 border-slate-800 text-slate-800 ring-2 ring-blue-500/10 font-bold shadow-xs' 
                           : 'bg-slate-50 border-slate-200 hover:border-slate-350 text-slate-650'
                       }`}
                     >
-                      <Icon size={18} className={`shrink-0 mt-0.5 ${isSelected ? 'text-blue-600' : 'text-slate-500'}`} />
+                      <Icon size={18} className={`shrink-0 mt-0.5 ${isSelected ? 'text-slate-800' : 'text-slate-500'}`} />
                       <div>
                         <h4 className="text-xs font-bold leading-none">{type.label}</h4>
                         <p className="text-[9px] text-slate-500 mt-1 leading-tight">{type.desc}</p>
@@ -1000,7 +1000,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
               <div className="pt-2 flex justify-end">
                 <button
                   onClick={handleStartParsing}
-                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-slate-800 font-black text-xs px-6 py-3.5 rounded-2xl transition tracking-wide flex items-center justify-center space-x-2 shadow-sm cursor-pointer"
+                  className="w-full sm:w-auto bg-slate-900 hover:bg-slate-900 text-slate-800 font-black text-xs px-6 py-3.5 rounded-2xl transition tracking-wide flex items-center justify-center space-x-2 shadow-sm cursor-pointer"
                 >
                   <RefreshCw size={12} className="animate-spin-slow" />
                   <span>YAPAY ZEKA İLE AYRIŞTIRMAYA BAŞLA</span>
@@ -1016,7 +1016,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
                 <RefreshCw size={26} className="animate-spin" />
               </div>
               <div className="space-y-1">
-                <p className="text-sm font-bold text-blue-600">Yapay Zeka Evrakı Çözümlüyor...</p>
+                <p className="text-sm font-bold text-slate-800">Yapay Zeka Evrakı Çözümlüyor...</p>
                 <p className="text-xs text-slate-500 font-mono italic">"{loadingStep}"</p>
               </div>
             </div>
@@ -1027,7 +1027,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
               <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
                 <div className="flex justify-between items-center border-b border-slate-200 pb-3">
                   <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase block">3. YAPAY ZEKA DOĞRULAMA FORMU</span>
-                  <span className="bg-blue-50 text-blue-700 font-bold font-mono text-[9px] px-2 py-0.5 rounded border border-blue-100">GEMINI OKUMA SONUCU</span>
+                  <span className="bg-slate-50 text-slate-800 font-bold font-mono text-[9px] px-2 py-0.5 rounded border border-slate-200">GEMINI OKUMA SONUCU</span>
                 </div>
 
                 {/* Manual Document Type Override Dropdown */}

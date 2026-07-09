@@ -123,7 +123,7 @@ export const ParselBlokAnalizPanel: React.FC<ParselBlokAnalizPanelProps> = ({ sa
     <div className="flex-grow overflow-y-auto p-4 space-y-4 bg-slate-50/20">
       <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
         <div className="flex items-center gap-2">
-          <BarChart3 size={16} className="text-blue-600" />
+          <BarChart3 size={16} className="text-slate-800" />
           <h5 className="font-bold text-sm text-slate-800">Parsel Blok Analiz</h5>
         </div>
         <p className="text-[10px] text-slate-500">
@@ -168,7 +168,7 @@ export const ParselBlokAnalizPanel: React.FC<ParselBlokAnalizPanelProps> = ({ sa
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={handleAnalizEt} className="text-[10px] bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-2 rounded-lg flex items-center gap-1 cursor-pointer">
+          <button type="button" onClick={handleAnalizEt} className="text-[10px] bg-slate-900 hover:bg-slate-900 text-white font-bold px-3 py-2 rounded-lg flex items-center gap-1 cursor-pointer">
             <Search size={12} /> Analiz Et
           </button>
           {analizSonuc && (
@@ -195,7 +195,7 @@ export const ParselBlokAnalizPanel: React.FC<ParselBlokAnalizPanelProps> = ({ sa
             ].map(([label, val]) => (
               <div key={String(label)} className="bg-white border border-slate-200 rounded-xl p-3 text-center">
                 <div className="text-[9px] text-slate-500 font-bold uppercase">{label}</div>
-                <div className="text-xl font-black text-blue-700">{val}</div>
+                <div className="text-xl font-black text-slate-800">{val}</div>
               </div>
             ))}
           </div>

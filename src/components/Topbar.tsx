@@ -179,7 +179,7 @@ export const Topbar: React.FC<TopbarProps> = ({
         
         {/* Live system status indicator badge */}
         {dbStatus === 'loading' && (
-          <div className="hidden sm:flex items-center bg-blue-500/10 text-blue-400 border border-blue-500/20 py-1 px-3 rounded-full text-[10px] font-bold space-x-1.5 animate-pulse">
+          <div className="hidden sm:flex items-center bg-slate-500/10 text-slate-600 border border-slate-800/20 py-1 px-3 rounded-full text-[10px] font-bold space-x-1.5 animate-pulse">
             <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-ping" />
             <span>Bulut Eşitleniyor...</span>
           </div>

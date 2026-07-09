@@ -330,7 +330,7 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
         </div>
         <div className="bg-white border rounded-2xl p-4 shadow-sm">
           <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Toplam Net Ödeme</span>
-          <span className="text-2xl font-black font-mono text-blue-600">
+          <span className="text-2xl font-black font-mono text-slate-800">
             {maasOdemeleri.filter(m => m.ay === selectedAy && m.yil === selectedYil && m.odendi).reduce((s, m) => s + m.netOdeme, 0).toFixed(0)} TL
           </span>
         </div>
@@ -387,7 +387,7 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
                 <div className="flex justify-between items-start">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[10px]">
+                      <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-800 flex items-center justify-center font-bold text-[10px]">
                         {personel.ad[0]}{personel.soyad[0]}
                       </div>
                       <div>
@@ -411,9 +411,9 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
                         <span className="text-slate-400 block">Kesinti</span>
                         <span className="font-bold text-rose-600">{hesap.kesinti.toFixed(2)} TL</span>
                       </div>
-                      <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
-                        <span className="text-blue-400 block">Net Ödeme</span>
-                        <span className="font-bold text-blue-800">{hesap.net.toFixed(2)} TL</span>
+                      <div className="bg-slate-50 rounded-lg p-2 border border-slate-200">
+                        <span className="text-slate-600 block">Net Ödeme</span>
+                        <span className="font-bold text-slate-800">{hesap.net.toFixed(2)} TL</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 mt-2 text-[10px] text-slate-500">

@@ -58,7 +58,7 @@ export const EvrakTabBilgi: React.FC<{ tab: TabKey }> = ({ tab }) => {
   const msg = MESSAGES[tab];
   return (
     <div className="flex gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
-      <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+      <Info className="w-4 h-4 text-slate-600 shrink-0 mt-0.5" />
       <div>
         <p className="font-bold text-slate-800 mb-0.5">{msg.title}</p>
         <p className="leading-relaxed">{msg.body}</p>

@@ -205,7 +205,7 @@ export const AdminYetkiSablonTab: React.FC<AdminYetkiSablonTabProps> = ({
                           onClick={() => toggleVisible(page.key)}
                           className={`px-2 py-1 rounded-lg text-[9px] font-bold border cursor-pointer flex items-center gap-1 ${
                             canSee
-                              ? 'bg-blue-50 border-blue-200 text-blue-800'
+                              ? 'bg-slate-50 border-slate-200 text-slate-800'
                               : 'bg-slate-50 border-slate-200 text-slate-400'
                           }`}
                         >

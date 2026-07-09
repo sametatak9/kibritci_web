@@ -917,7 +917,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
         <div className="p-4 border-t bg-slate-50 shrink-0">
           <button
             onClick={handleSavePurchaseOrder}
-            className="w-full bg-blue-600 hover:bg-blue-750 text-white font-bold text-xs py-2.5 rounded-xl shadow transition cursor-pointer"
+            className="w-full bg-slate-900 hover:bg-blue-750 text-white font-bold text-xs py-2.5 rounded-xl shadow transition cursor-pointer"
           >
             Satın Alma Talebini Kaydet
           </button>
@@ -934,7 +934,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
             <button
               type="button"
               onClick={() => setTalepTab('MEVCUT')}
-              className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${talepTab === 'MEVCUT' ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}
+              className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${talepTab === 'MEVCUT' ? 'bg-slate-900 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}
             >
               Mevcut Talepler
             </button>
@@ -973,7 +973,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
             <button
               type="button"
               onClick={handleExportSelectedExcel}
-              className="text-[10px] font-bold px-2.5 py-2 rounded-lg border bg-blue-600 text-white border-blue-700 hover:bg-blue-700"
+              className="text-[10px] font-bold px-2.5 py-2 rounded-lg border bg-slate-900 text-white border-blue-700 hover:bg-slate-900"
             >
               Seçili Satın Almaları Excel Raporla
             </button>
@@ -1123,7 +1123,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
                         ) : (
                           <button
                             onClick={() => toggleArsiv(sa.id, false)}
-                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-xl font-bold transition cursor-pointer"
+                            className="bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 px-3 py-1.5 rounded-xl font-bold transition cursor-pointer"
                           >
                             Arşivden Çıkar
                           </button>
@@ -1154,7 +1154,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
                         ) : (
                           <button
                             onClick={() => toggleArsiv(sa.id, false)}
-                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-1 rounded-lg font-bold transition cursor-pointer"
+                            className="bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 px-2 py-1 rounded-lg font-bold transition cursor-pointer"
                           >
                             Arşivden Çıkar
                           </button>
@@ -1209,7 +1209,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
               </button>
               <button 
                 onClick={handleCreateCari} 
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-center text-xs"
+                className="flex-1 bg-slate-900 hover:bg-slate-900 text-white font-bold py-2 rounded-xl text-center text-xs"
               >
                 Evet, Kart Aç
               </button>
@@ -1260,7 +1260,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
               </button>
               <button 
                 onClick={handleCreateStok} 
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-center text-xs"
+                className="flex-1 bg-slate-900 hover:bg-slate-900 text-white font-bold py-2 rounded-xl text-center text-xs"
               >
                 Evet, Kart Aç
               </button>

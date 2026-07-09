@@ -182,7 +182,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 shrink-0">
         {[
           { title: "Toplam Hakediş Maaş", value: `₺${grandBaseHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`, color: "border-slate-200 bg-white" },
-          { title: "Toplam Mesai Hakediş", value: `₺${grandOvertimeHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`, color: "border-blue-100 bg-blue-50/30 text-blue-800" },
+          { title: "Toplam Mesai Hakediş", value: `₺${grandOvertimeHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`, color: "border-slate-200 bg-blue-50/30 text-slate-800" },
           { title: "Toplam Kesinti / Avans", value: `₺${grandKesinti.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`, color: "border-rose-100 bg-rose-50/30 text-rose-800" },
           { title: "Net Ödenecek Banka Tutarı", value: `₺${grandNetPayment.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`, color: "border-emerald-100 bg-emerald-50 text-emerald-800 font-bold" }
         ].map((item, idx) => (
@@ -259,7 +259,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
               <button
                 type="button"
                 onClick={onOpenMaasOdeme}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] px-3 py-1.5 rounded-lg transition shadow-sm cursor-pointer"
+                className="bg-slate-900 hover:bg-slate-900 text-white font-bold text-[11px] px-3 py-1.5 rounded-lg transition shadow-sm cursor-pointer"
               >
                 Maaş Ödeme Ekranına Git
               </button>
@@ -303,7 +303,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                     </div>
                     <div className="text-center">
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block">Ört. Mesai</span>
-                      <span className="text-xs font-semibold text-blue-600">{totalOvertimeHours} Saat</span>
+                      <span className="text-xs font-semibold text-slate-800">{totalOvertimeHours} Saat</span>
                     </div>
                   </div>
 
@@ -360,7 +360,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                       <button
                         type="button"
                         onClick={onOpenMaasOdeme}
-                        className="px-3 py-1.5 rounded-xl font-bold text-[10px] uppercase cursor-pointer transition active:scale-95 shadow-sm border bg-blue-100 hover:bg-blue-200 text-blue-800 border-blue-200"
+                        className="px-3 py-1.5 rounded-xl font-bold text-[10px] uppercase cursor-pointer transition active:scale-95 shadow-sm border bg-slate-100 hover:bg-blue-200 text-slate-800 border-slate-200"
                       >
                         💳 Ödemeyi Maaş Ödeme'den Yap
                       </button>
@@ -381,7 +381,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                     </div>
                     <div className="bg-white rounded-lg p-2 border border-slate-100 text-center">
                       <span className="text-slate-400 block">İzinli</span>
-                      <span className="font-bold text-blue-700">{izinliGun} gün</span>
+                      <span className="font-bold text-slate-800">{izinliGun} gün</span>
                     </div>
                     <div className="bg-white rounded-lg p-2 border border-slate-100 text-center">
                       <span className="text-slate-400 block">Pazar</span>
@@ -399,9 +399,9 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                       <span className="text-slate-400 block">Raporlu</span>
                       <span className="font-bold text-violet-700">{raporluGun} gün</span>
                     </div>
-                    <div className="bg-blue-50 rounded-lg p-2 border border-blue-100 text-center">
-                      <span className="text-blue-400 block">Toplam Mesai</span>
-                      <span className="font-bold text-blue-800">{totalOvertimeHours} saat</span>
+                    <div className="bg-slate-50 rounded-lg p-2 border border-slate-200 text-center">
+                      <span className="text-slate-600 block">Toplam Mesai</span>
+                      <span className="font-bold text-slate-800">{totalOvertimeHours} saat</span>
                     </div>
                   </div>
                   <div className="mt-2 text-[9px] text-slate-400 flex gap-4">
@@ -465,7 +465,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                       URL.revokeObjectURL(url);
                     }
                   }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow cursor-pointer"
+                  className="bg-slate-900 hover:bg-slate-900 text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow cursor-pointer"
                 >
                   💾 Masaüstüne HTML Rapor Dosyası Kaydet
                 </button>
@@ -507,7 +507,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                       <th className="p-2 text-center border-r border-slate-300">Çalışma Gün</th>
                       <th className="p-2 text-center border-r border-slate-300">Fazla Mesai (Saat)</th>
                       <th className="p-2 text-right border-r border-slate-300 text-[#1E4E78]">Günden Doğan Kazanç (₺)</th>
-                      <th className="p-2 text-right border-r border-slate-300 text-blue-800">Mesayiden Doğan Kazanç (₺)</th>
+                      <th className="p-2 text-right border-r border-slate-300 text-slate-800">Mesayiden Doğan Kazanç (₺)</th>
                       <th className="p-2 text-right border-r border-slate-300 text-rose-800">Kesinti / Avans / Borç (₺)</th>
                       <th className="p-2 text-left border-r border-slate-300">Banka Bilgisi</th>
                       <th className="p-2 text-right text-emerald-800 font-bold bg-slate-55 w-28">En Son Alacağı Maaş (Net ₺)</th>
@@ -523,9 +523,9 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                             <td className="p-2 border-r border-slate-300 font-bold text-slate-850">{personel.ad} {personel.soyad}</td>
                             <td className="p-2 border-r border-slate-300 uppercase text-[8px] font-bold text-slate-600">{personel.gorev}</td>
                             <td className="p-2 text-center border-r border-slate-300">{hakedisDays} Gün</td>
-                            <td className="p-2 text-center border-r border-slate-300 font-mono text-blue-700">{totalOvertimeHours} st</td>
+                            <td className="p-2 text-center border-r border-slate-300 font-mono text-slate-800">{totalOvertimeHours} st</td>
                             <td className="p-2 text-right border-r border-slate-300 font-mono">₺{totalBaseHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
-                            <td className="p-2 text-right border-r border-slate-300 font-mono text-blue-700">₺{totalOvertimeHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-2 text-right border-r border-slate-300 font-mono text-slate-800">₺{totalOvertimeHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
                             <td className="p-2 text-right border-r border-slate-300 text-rose-700 font-mono">-₺{cutAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
                             <td className="p-2 border-r border-slate-300 text-slate-500 text-[8px] truncate max-w-[120px]">{personel.bankaAdi} · {personel.ibanNo || "IBAN_YOK"}</td>
                             <td className="p-2 text-right text-emerald-755 font-bold bg-emerald-50/40 font-mono">
@@ -544,7 +544,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                                     let color = "text-slate-450 bg-slate-100";
                                     if (dayData.durum === 'Geldi') { letter = "G"; color = "text-emerald-700 bg-emerald-100/50 font-bold"; }
                                     else if (dayData.durum === 'Yok') { letter = "Y"; color = "text-rose-700 bg-rose-100/50 font-bold"; }
-                                    else if (dayData.durum === 'İzinli') { letter = "İ"; color = "text-blue-700 bg-blue-100/50"; }
+                                    else if (dayData.durum === 'İzinli') { letter = "İ"; color = "text-slate-800 bg-blue-100/50"; }
                                     else if (dayData.durum === 'Raporlu') { letter = "R"; color = "text-violet-700 bg-violet-100/50"; }
                                     else if (dayData.durum === 'Pazar') { letter = "P"; color = "text-amber-700 bg-amber-100/50 font-bold"; }
                                     else if (dayData.durum === 'Tatil') { letter = "T"; color = "text-indigo-700 bg-indigo-100/50"; }
@@ -569,7 +569,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                                 <span><strong>Tatil:</strong> {tatilGun} gün</span>
                                 <span><strong>Yok:</strong> {yokGun} gün</span>
                                 <span><strong>Raporlu:</strong> {raporluGun} gün</span>
-                                <span className="text-blue-600"><strong>Toplam Mesai:</strong> {totalOvertimeHours} saat</span>
+                                <span className="text-slate-800"><strong>Toplam Mesai:</strong> {totalOvertimeHours} saat</span>
                               </div>
                             </td>
                           </tr>
@@ -581,7 +581,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                       <td colSpan={3} className="p-2.5 text-left uppercase text-[10px]">TOPLAM ÖDEME PORTFÖYÜ</td>
                       <td colSpan={2} className="p-2.5 text-center"></td>
                       <td className="p-2.5 text-right font-mono text-[#1E4E78]">₺{grandBaseHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
-                      <td className="p-2.5 text-right font-mono text-blue-700">₺{grandOvertimeHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
+                      <td className="p-2.5 text-right font-mono text-slate-800">₺{grandOvertimeHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
                       <td className="p-2.5 text-right text-rose-800 font-mono">-₺{grandKesinti.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
                       <td className="p-2.5"></td>
                       <td className="p-2.5 text-right text-emerald-800 font-display font-mono text-[10px] bg-emerald-100 border-l border-emerald-250">

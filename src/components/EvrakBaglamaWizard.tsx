@@ -58,7 +58,7 @@ export const EvrakBaglamaWizard: React.FC<EvrakBaglamaWizardProps> = ({
 
   const tabBilgi = 'evrak-baglama';
 
-  const accentBtn = accent === 'emerald' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700';
+  const accentBtn = accent === 'emerald' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-900 hover:bg-slate-900';
   const accentRing = accent === 'emerald' ? 'ring-emerald-500' : 'ring-blue-500';
 
   const selectedSa = satinAlmaTalepleri.find((s) => s.saId === saId);
@@ -396,7 +396,7 @@ export const EvrakBaglamaWizard: React.FC<EvrakBaglamaWizardProps> = ({
       {step === 2 && (
         <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
           <div className="p-4 border-b bg-slate-50 flex flex-wrap gap-2 text-[10px] font-bold">
-            {saId && <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-lg">SA: {saId}</span>}
+            {saId && <span className="bg-slate-100 text-slate-800 px-2 py-1 rounded-lg">SA: {saId}</span>}
             {selectedIrs.map((ir) => (
               <span key={ir.id} className="bg-emerald-100 text-emerald-800 px-2 py-1 rounded-lg">
                 İRS: {ir.irsaliyeNo}

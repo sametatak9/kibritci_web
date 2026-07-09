@@ -289,7 +289,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
                 required
                 value={newDate}
                 onChange={(e) => setNewDate(e.target.value)}
-                className="w-full text-xs font-semibold p-2 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 max-h-10 outline-none"
+                className="w-full text-xs font-semibold p-2 bg-slate-50 border border-slate-200 rounded-xl  max-h-10 outline-none"
               />
             </div>
 
@@ -317,7 +317,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
                 type="number"
                 required
                 placeholder="0.00"
-                className="w-full text-xs font-black p-2 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none"
+                className="w-full text-xs font-black p-2 bg-slate-50 border border-slate-200 rounded-xl  outline-none"
                 value={newAmount}
                 onChange={(e) => setNewAmount(e.target.value)}
               />
@@ -332,7 +332,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
                 type="text"
                 required
                 placeholder="Harcama veya Gelir Açıklaması..."
-                className="w-full text-xs font-semibold p-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500"
+                className="w-full text-xs font-semibold p-2 bg-slate-50 border border-slate-200 rounded-xl outline-none "
                 value={newDesc}
                 onChange={(e) => setNewDesc(e.target.value)}
               />
@@ -362,7 +362,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
               <input 
                 type="text"
                 placeholder="İsteğe bağlı döküman no veya referans kodu..."
-                className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500"
+                className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-xl outline-none "
                 value={newRefId}
                 onChange={(e) => setNewRefId(e.target.value)}
               />
@@ -374,7 +374,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
               
               <div 
                 className={`border-2 border-dashed rounded-xl p-3 flex flex-col items-center justify-center transition text-center relative ${
-                  dragActive ? "border-blue-500 bg-blue-50/50" : "border-slate-200 bg-slate-50 hover:bg-slate-100"
+                  dragActive ? "border-slate-800 bg-blue-50/50" : "border-slate-200 bg-slate-50 hover:bg-slate-100"
                 }`}
                 onDragEnter={handleDrag}
                 onDragOver={handleDrag}
@@ -392,7 +392,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
 
                 {uploadedFileName ? (
                   <div className="space-y-2 py-1">
-                    <FileText className="mx-auto text-blue-500 animate-bounce" size={24} />
+                    <FileText className="mx-auto text-slate-600 animate-bounce" size={24} />
                     <div className="text-[10px] font-bold text-slate-700 max-w-[280px] truncate">
                       {uploadedFileName}
                     </div>
@@ -410,7 +410,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
                     <button 
                       type="button"
                       onClick={triggerFileInput}
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] py-1.5 px-3 rounded-lg shadow-sm transition cursor-pointer"
+                      className="bg-slate-900 hover:bg-slate-900 text-white font-bold text-[10px] py-1.5 px-3 rounded-lg shadow-sm transition cursor-pointer"
                     >
                       📁 Evrak Görseli Seç
                     </button>
@@ -472,7 +472,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
 
               <button 
                 onClick={handleFilterSubmit}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] py-1.5 px-3 rounded-lg shadow-sm transition cursor-pointer font-sans"
+                className="bg-slate-900 hover:bg-slate-900 text-white font-bold text-[11px] py-1.5 px-3 rounded-lg shadow-sm transition cursor-pointer font-sans"
               >
                 Filtrele
               </button>
@@ -555,7 +555,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
                               setSelectedReceiptUrl(kh.fisEvrakUrl || null);
                               setSelectedReceiptName(kh.aciklama);
                             }}
-                            className="p-1 px-1.5 bg-blue-50 border border-blue-100 hover:bg-blue-100 text-blue-700 rounded-lg flex items-center space-x-1 transition shadow-xs text-[9px] font-bold cursor-pointer"
+                            className="p-1 px-1.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-800 rounded-lg flex items-center space-x-1 transition shadow-xs text-[9px] font-bold cursor-pointer"
                             title="Fatura/Fiş Evrak Görselini Göster"
                           >
                             <ImageIcon size={10} />
@@ -685,7 +685,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
                       alert("Haftalık kasa döküm mutabakat raporu başarıyla derlendi ve masaüstünüze HTML/Yazdırılabilir formatta kaydedildi.");
                     }
                   }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow cursor-pointer"
+                  className="bg-slate-900 hover:bg-slate-900 text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow cursor-pointer"
                 >
                   💾 Masaüstüne HTML Rapor Dosyası Kaydet
                 </button>

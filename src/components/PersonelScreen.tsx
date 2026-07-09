@@ -1341,7 +1341,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                           e.stopPropagation();
                           handleShowHistory(p);
                         }}
-                        className="p-2 bg-blue-50 hover:bg-blue-100 text-slate-900 rounded-lg cursor-pointer transition active:scale-95"
+                        className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-900 rounded-lg cursor-pointer transition active:scale-95"
                       >
                         <History size={13} />
                       </button>
@@ -1486,7 +1486,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">İlişkili İşlemler</p>
               <div className="space-y-1 text-[10px] text-slate-500">
                 <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
-                  <FileText size={12} className="text-blue-500" />
+                  <FileText size={12} className="text-slate-600" />
                   <span>İzin Dilekçeleri (bu modül entegrasyonu sonraki aşamada eklenecektir)</span>
                 </div>
                 <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
@@ -1565,7 +1565,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               </>
             ) : (
               <>
-                <div className="flex items-center gap-2 text-blue-700">
+                <div className="flex items-center gap-2 text-slate-800">
                   <Building2 size={18} />
                   <h3 className="font-display font-bold text-xs uppercase">Yeni Taşeron Cari Kartı</h3>
                 </div>

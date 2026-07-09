@@ -952,7 +952,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                 <div className="lg:col-span-2 bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
                   <div className="flex justify-between items-center border-b border-slate-200 pb-2">
                     <span className="font-display font-black text-xs text-white uppercase tracking-widest block">👥 ŞANTİYE PERSONEL GİRİŞ PANELİ</span>
-                    <span className="bg-blue-950 text-blue-400 text-[9px] font-mono font-bold py-0.5 px-2 rounded">REALTIME</span>
+                    <span className="bg-blue-950 text-slate-600 text-[9px] font-mono font-bold py-0.5 px-2 rounded">REALTIME</span>
                   </div>
 
                   <div className="relative">
@@ -1292,7 +1292,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                         <div className="space-y-1 text-[11px] text-slate-500 font-semibold">
                           <p>👤 Adı Soyadı: <span className="text-slate-800 font-bold">{item.adSoyad}</span></p>
                           <p>🏢 Kurum: <span className="text-slate-150">{item.firma}</span></p>
-                          <p>🤝 Görüşülen Yetkili: <span className="text-blue-400 font-bold">{item.ziyaretEdilen}</span></p>
+                          <p>🤝 Görüşülen Yetkili: <span className="text-slate-600 font-bold">{item.ziyaretEdilen}</span></p>
                           <p>💼 Neden: <span className="text-slate-805">{item.ziyaretSebebi || 'Genel Görüşme'}</span></p>
                           <p className="text-[9px] text-slate-500 pt-1">Giriş Saati: {new Date(item.girisZamani).toLocaleString('tr-TR')}</p>
                         </div>
@@ -1612,7 +1612,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                           <span className="font-bold text-slate-805">{guest.adSoyad}</span>
                           <span className="font-mono text-[9px] text-amber-500">{guest.kartNo}</span>
                         </div>
-                        <p className="text-[11px] text-slate-500">Görüşülen Yetkili: <strong className="text-blue-400">{guest.ziyaretEdilen}</strong></p>
+                        <p className="text-[11px] text-slate-500">Görüşülen Yetkili: <strong className="text-slate-600">{guest.ziyaretEdilen}</strong></p>
                         <p className="text-[10px] text-slate-500">{guest.firma} | {guest.ziyaretSebebi}</p>
                         <div className="flex justify-between text-[9px] text-slate-550 font-mono pt-1">
                           <span>Giriş: {guest.girisZamani ? new Date(guest.girisZamani).toLocaleTimeString('tr-TR') : '-'}</span>
@@ -1704,7 +1704,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               <div className="space-y-1.5 pt-1 text-[11px]">
                 <p className="flex justify-between">
                   <span className="text-slate-500 font-bold text-[9px] uppercase">GÖRÜŞÜLECEK:</span>
-                  <span className="font-bold text-blue-600">{activeBadgeGuest.ziyaretEdilen}</span>
+                  <span className="font-bold text-slate-800">{activeBadgeGuest.ziyaretEdilen}</span>
                 </p>
                 <p className="flex justify-between">
                   <span className="text-slate-500 font-bold text-[9px] uppercase">GİRİŞ SAATİ:</span>

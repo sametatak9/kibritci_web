@@ -32,7 +32,7 @@ export const BagliEvraklarListesi: React.FC<BagliEvraklarListesiProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [detayPayload, setDetayPayload] = useState<EvrakDetayPayload | null>(null);
-  const accentBadge = accent === 'emerald' ? 'text-emerald-700 bg-emerald-50' : 'text-blue-700 bg-blue-50';
+  const accentBadge = accent === 'emerald' ? 'text-emerald-700 bg-emerald-50' : 'text-slate-800 bg-slate-50';
 
   const gruplar = useMemo(
     () =>

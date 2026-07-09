@@ -255,8 +255,8 @@ export const YapayZekaKarsilastirScreen: React.FC<YapayZekaKarsilastirScreenProp
 
                 <div className="p-4 space-y-1 text-xs font-mono">
                   {sa && (
-                    <div className="flex items-center gap-2 py-1 border-l-2 border-blue-500 pl-3">
-                      <span className="text-blue-700 font-bold">SA</span>
+                    <div className="flex items-center gap-2 py-1 border-l-2 border-slate-800 pl-3">
+                      <span className="text-slate-800 font-bold">SA</span>
                       <span>{sa.saId}</span>
                       <span className="text-slate-500 font-sans text-[10px]">
                         · {sa.kalemler.length} kalem
@@ -321,7 +321,7 @@ export const YapayZekaKarsilastirScreen: React.FC<YapayZekaKarsilastirScreenProp
             <div key={r.id} className="bg-white border rounded-xl p-4 text-xs space-y-2">
               <div className="flex flex-wrap gap-2 items-center">
                 <span className="font-bold">{r.tarih}</span>
-                {r.saId && <span className="text-blue-700">SA:{r.saId}</span>}
+                {r.saId && <span className="text-slate-800">SA:{r.saId}</span>}
                 {r.faturaNo && <span>FAT:{r.faturaNo}</span>}
                 <span
                   className={`ml-auto px-2 py-0.5 rounded text-[10px] font-bold ${

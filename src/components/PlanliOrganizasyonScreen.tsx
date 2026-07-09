@@ -164,7 +164,7 @@ export const PlanliOrganizasyonScreen: React.FC = () => {
     switch (p) {
       case 'ACİL': return 'bg-rose-100 text-rose-800 border-rose-200';
       case 'YÜKSEK': return 'bg-amber-100 text-amber-800 border-amber-200';
-      case 'ORTA': return 'bg-blue-100 text-blue-850 border-blue-200';
+      case 'ORTA': return 'bg-slate-100 text-blue-850 border-slate-200';
       default: return 'bg-slate-100 text-slate-700 border-slate-200';
     }
   };
@@ -237,7 +237,7 @@ export const PlanliOrganizasyonScreen: React.FC = () => {
                   {t.status !== 'DONE' && (
                     <button 
                       onClick={() => handleMoveTask(t, 'forward')}
-                      className="bg-blue-550 hover:bg-blue-600 text-white py-1 px-2 rounded-lg font-bold text-[9px] transition cursor-pointer"
+                      className="bg-blue-550 hover:bg-slate-900 text-white py-1 px-2 rounded-lg font-bold text-[9px] transition cursor-pointer"
                     >
                       İleri ▶
                     </button>
@@ -264,7 +264,7 @@ export const PlanliOrganizasyonScreen: React.FC = () => {
         </div>
         <button
           onClick={() => setShowAddTaskModal(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-md transition duration-150 flex items-center gap-1.5 cursor-pointer active:scale-95"
+          className="bg-slate-900 hover:bg-slate-900 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-md transition duration-150 flex items-center gap-1.5 cursor-pointer active:scale-95"
         >
           <Plus size={15} />
           Yeni Görev Ekle
@@ -274,7 +274,7 @@ export const PlanliOrganizasyonScreen: React.FC = () => {
       {/* Board Columns container */}
       <div className="flex-grow flex gap-4 overflow-x-auto pb-4">
         {renderColumn('TODO', 'Yapılacaklar', 'bg-slate-700', 'text-white')}
-        {renderColumn('IN_PROGRESS', 'Çalışılıyor', 'bg-blue-600', 'text-white')}
+        {renderColumn('IN_PROGRESS', 'Çalışılıyor', 'bg-slate-900', 'text-white')}
         {renderColumn('REVIEW', 'Kontrol & Onay', 'bg-amber-500', 'text-slate-950')}
         {renderColumn('DONE', 'Tamamlandı', 'bg-emerald-600', 'text-white')}
       </div>
@@ -367,7 +367,7 @@ export const PlanliOrganizasyonScreen: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-center shadow transition cursor-pointer"
+                  className="flex-1 bg-slate-900 hover:bg-slate-900 text-white font-bold py-2 rounded-xl text-center shadow transition cursor-pointer"
                 >
                   Görevi Kaydet
                 </button>

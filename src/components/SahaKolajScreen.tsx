@@ -591,7 +591,7 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
             type="button"
             onClick={() => { setShowPreview(true); setViewMode('dergi'); }}
             disabled={fotolar.length === 0}
-            className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-bold rounded-xl"
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-900 disabled:opacity-40 text-white text-xs font-bold rounded-xl"
           >
             <BookOpen size={14} />
             Dergi Önizle
@@ -737,8 +737,8 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
             )}
 
             {selectedIds.size > 0 && (
-              <div className="border border-blue-200 bg-blue-50 rounded-xl p-3 space-y-2">
-                <span className="font-bold text-blue-800">{selectedIds.size} seçili</span>
+              <div className="border border-slate-200 bg-slate-50 rounded-xl p-3 space-y-2">
+                <span className="font-bold text-slate-800">{selectedIds.size} seçili</span>
                 <input
                   type="text"
                   placeholder="Grup adı (ör: A Blok Beton)"
@@ -749,7 +749,7 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
                 <button
                   type="button"
                   onClick={handleBulkGrup}
-                  className="w-full bg-blue-600 text-white font-bold py-1.5 rounded-lg"
+                  className="w-full bg-slate-900 text-white font-bold py-1.5 rounded-lg"
                 >
                   Seçililere Grup Ata
                 </button>
@@ -802,7 +802,7 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
                   <div
                     key={f.id}
                     className={`relative group rounded-xl overflow-hidden border-2 transition ${
-                      selected ? 'border-blue-500 ring-2 ring-blue-200' : editing ? 'border-amber-500' : 'border-slate-100'
+                      selected ? 'border-slate-800 ring-2 ring-blue-200' : editing ? 'border-amber-500' : 'border-slate-100'
                     } ${(f as any).isReadonly ? 'opacity-90' : ''}`}
                   >
                     {!(f as any).isReadonly && (
@@ -810,7 +810,7 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
                         type="button"
                         onClick={() => toggleSelect(f.id)}
                         className={`absolute top-1 left-1 z-10 w-5 h-5 rounded border flex items-center justify-center ${
-                          selected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white/90 border-slate-300'
+                          selected ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white/90 border-slate-300'
                         }`}
                       >
                         {selected && <Check size={12} />}

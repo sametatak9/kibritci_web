@@ -137,7 +137,7 @@ export const KampHaftalikYoklamaTab: React.FC<KampHaftalikYoklamaTabProps> = ({
   if (!started) {
     return (
       <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-4 max-w-lg mx-auto">
-        <Calendar size={40} className="mx-auto text-blue-500" />
+        <Calendar size={40} className="mx-auto text-slate-600" />
         <h3 className="font-bold text-slate-800">Haftalık Yoklama</h3>
         <p className="text-xs text-slate-500 leading-relaxed">
           Başlat dediğinizde kamp odalarındaki aktif personelin mevcut aylık yoklaması yüklenir.
@@ -147,7 +147,7 @@ export const KampHaftalikYoklamaTab: React.FC<KampHaftalikYoklamaTabProps> = ({
         <button
           type="button"
           onClick={handleBaslat}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-black text-xs px-6 py-3 rounded-xl inline-flex items-center gap-2 cursor-pointer"
+          className="bg-slate-900 hover:bg-slate-900 text-white font-black text-xs px-6 py-3 rounded-xl inline-flex items-center gap-2 cursor-pointer"
         >
           <Play size={14} />
           Haftalık Yoklamayı Başlat
@@ -162,8 +162,8 @@ export const KampHaftalikYoklamaTab: React.FC<KampHaftalikYoklamaTabProps> = ({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2 items-center justify-between bg-blue-50 border border-blue-100 rounded-xl p-3">
-        <span className="text-xs font-bold text-blue-900">{ayAdi} — Haftalık yoklama düzenleme</span>
+      <div className="flex flex-wrap gap-2 items-center justify-between bg-slate-50 border border-slate-200 rounded-xl p-3">
+        <span className="text-xs font-bold text-slate-800">{ayAdi} — Haftalık yoklama düzenleme</span>
         <div className="flex gap-2">
           <button
             type="button"

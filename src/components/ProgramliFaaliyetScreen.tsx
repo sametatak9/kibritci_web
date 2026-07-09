@@ -286,7 +286,7 @@ export const ProgramliFaaliyetScreen: React.FC<ProgramliFaaliyetScreenProps> = (
     <div className="p-4 md:p-6 space-y-5">
       <div className="bg-white border border-slate-200 rounded-2xl p-4 md:p-5 shadow-sm">
         <div className="flex items-center gap-2 mb-3">
-          <Flag size={17} className="text-blue-600" />
+          <Flag size={17} className="text-slate-800" />
           <h2 className="text-sm md:text-base font-bold text-slate-800 uppercase tracking-wide">Programlı Faaliyet Oluştur</h2>
         </div>
         <form onSubmit={handleCreateProgram} className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -328,7 +328,7 @@ export const ProgramliFaaliyetScreen: React.FC<ProgramliFaaliyetScreenProps> = (
           />
           <button
             type="submit"
-            className="md:col-span-2 inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2.5 font-bold text-sm cursor-pointer"
+            className="md:col-span-2 inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-900 text-white rounded-xl py-2.5 font-bold text-sm cursor-pointer"
           >
             <FilePlus2 size={16} />
             Programı Başlat

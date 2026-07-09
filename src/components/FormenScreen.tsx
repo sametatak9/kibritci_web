@@ -1230,7 +1230,7 @@ ${satirlar
                   <div className="bg-white p-2.5 rounded-2xl border border-slate-200/60 shadow-xs grid grid-cols-3 gap-2 text-center">
                     <div className="bg-blue-50/50 p-1.5 rounded-xl">
                       <span className="text-[10px] text-slate-500 font-bold block">Havuz (Kalan)</span>
-                      <strong className="text-sm font-black text-blue-600 block">{remainingStaff.length}</strong>
+                      <strong className="text-sm font-black text-slate-800 block">{remainingStaff.length}</strong>
                     </div>
                     <div className="bg-emerald-50/50 p-1.5 rounded-xl">
                       <span className="text-[10px] text-slate-500 font-bold block">Present (Geldi)</span>
@@ -1635,12 +1635,12 @@ ${satirlar
                   )}
 
                   {editingFaaliyetId && (
-                    <div className="bg-blue-50 border border-blue-200 p-2.5 rounded-2xl flex items-center justify-between text-[9px] font-bold text-blue-900 shadow-sm mb-3">
+                    <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-2xl flex items-center justify-between text-[9px] font-bold text-slate-800 shadow-sm mb-3">
                       <span>✏️ Kayıt düzenleniyor — değişiklikleri kaydetmek için formu kullanın.</span>
                       <button
                         type="button"
                         onClick={resetFaaliyetForm}
-                        className="bg-white border border-blue-200 text-blue-700 px-2 py-1 rounded-lg text-[8px] uppercase"
+                        className="bg-white border border-slate-200 text-slate-800 px-2 py-1 rounded-lg text-[8px] uppercase"
                       >
                         İptal
                       </button>
@@ -1787,7 +1787,7 @@ ${satirlar
                         <button
                           type="button"
                           onClick={handleFillWorkerCountsFromSelection}
-                          className="text-[8px] bg-blue-600 hover:bg-blue-700 text-white font-bold px-2 py-1 rounded-lg"
+                          className="text-[8px] bg-slate-900 hover:bg-slate-900 text-white font-bold px-2 py-1 rounded-lg"
                         >
                           Seçimden Sayıyı Doldur
                         </button>
@@ -1797,7 +1797,7 @@ ${satirlar
                         value={faaliyetPersonelSearch}
                         onChange={(e) => setFaaliyetPersonelSearch(e.target.value)}
                         placeholder="Personel ad/görev ara..."
-                        className="w-full bg-white border border-slate-200 py-1.5 px-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 text-[10px] font-medium text-slate-800"
+                        className="w-full bg-white border border-slate-200 py-1.5 px-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-slate-900 focus:border-slate-900 text-[10px] font-medium text-slate-800"
                       />
                       <div className="max-h-36 overflow-y-auto space-y-1 pr-0.5">
                         {filteredFaaliyetPersonelPool.length === 0 && (
@@ -1818,7 +1818,7 @@ ${satirlar
                               }
                               className={`w-full text-left border rounded-xl px-2.5 py-1.5 text-[10px] font-bold transition ${
                                 selected
-                                  ? 'bg-blue-50 border-blue-300 text-blue-900'
+                                  ? 'bg-slate-50 border-slate-200 text-slate-800'
                                   : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
                               }`}
                             >
@@ -2061,7 +2061,7 @@ ${satirlar
                           <button
                             type="button"
                             onClick={() => loadFaaliyetIntoForm(sf)}
-                            className="text-[9px] bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-1 rounded-lg font-bold"
+                            className="text-[9px] bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 px-2 py-1 rounded-lg font-bold"
                           >
                             Düzelt
                           </button>
@@ -2301,7 +2301,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                               </div>
                               <span className={`px-2 py-0.5 rounded-full text-[7.5px] font-black uppercase ${
                                 item.durum === 'ONAYLANDI' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
-                                item.durum === 'WP_GÖNDERİLDİ' ? 'bg-blue-100 text-blue-800 border border-blue-300' :
+                                item.durum === 'WP_GÖNDERİLDİ' ? 'bg-slate-100 text-slate-800 border border-slate-200' :
                                 item.durum === 'GİRİŞ_BELGESİ_YÜKLENDİ' ? 'bg-purple-100 text-purple-800 border border-purple-300' :
                                 'bg-amber-100 text-amber-800 border border-amber-300'
                               }`}>
@@ -2461,7 +2461,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                             <div key={item.id} className="border border-slate-100 rounded-2xl p-2.5 bg-blue-50/30 text-[9px] space-y-1">
                               <div className="flex justify-between items-start">
                                 <div>
-                                  <span className="font-black text-blue-800 text-[8px] uppercase tracking-wider block mb-0.5">📝 BİLGİ GÜNCELLEME TALEBİ</span>
+                                  <span className="font-black text-slate-800 text-[8px] uppercase tracking-wider block mb-0.5">📝 BİLGİ GÜNCELLEME TALEBİ</span>
                                   <h6 className="font-bold text-slate-900 text-xs leading-none">
                                     {item.eskiBilgiler?.ad} {item.eskiBilgiler?.soyad} ➜ {item.yeniBilgiler?.ad} {item.yeniBilgiler?.soyad}
                                   </h6>
@@ -2539,8 +2539,8 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                             onClick={() => openGuncellemeForm(selectedPersonelForDetail)}
                             className={`py-2 px-3 rounded-xl font-bold text-[9px] border transition flex items-center justify-center space-x-1 ${
                               showGuncellemeForm 
-                                ? 'bg-blue-50 text-blue-700 border-blue-200' 
-                                : 'bg-white text-blue-600 border-blue-100 hover:bg-blue-50/50'
+                                ? 'bg-slate-50 text-slate-800 border-slate-200' 
+                                : 'bg-white text-slate-800 border-slate-200 hover:bg-blue-50/50'
                             }`}
                           >
                             <span>📝 Bilgileri Güncelle</span>
@@ -2615,8 +2615,8 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
 
                         {/* Form B: Bilgileri Güncelleme Talebi */}
                         {showGuncellemeForm && (
-                          <div className="border border-blue-100 rounded-2xl p-3 bg-blue-50/10 space-y-3 animate-in fade-in duration-150">
-                            <span className="font-extrabold text-[8px] text-blue-700 uppercase block tracking-wider">📝 BİLGİ DÜZELTME & GÜNCELLEME FORMU</span>
+                          <div className="border border-slate-200 rounded-2xl p-3 bg-blue-50/10 space-y-3 animate-in fade-in duration-150">
+                            <span className="font-extrabold text-[8px] text-slate-800 uppercase block tracking-wider">📝 BİLGİ DÜZELTME & GÜNCELLEME FORMU</span>
                             
                             <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                               <div className="grid grid-cols-2 gap-2">
@@ -2694,7 +2694,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                             <button
                               type="button"
                               onClick={handleSaveGuncellemeTalebi}
-                              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[9px] py-2 rounded-lg transition"
+                              className="w-full bg-slate-900 hover:bg-slate-900 text-white font-extrabold text-[9px] py-2 rounded-lg transition"
                             >
                               GÜNCELLEME TALEBİNİ BİLDİR
                             </button>
@@ -2929,7 +2929,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                           <span className="font-bold text-slate-800">{p.ad} {p.soyad}</span>
                           <span className="text-slate-400 text-[8px]">({p.gorev})</span>
                           {mesaiSaatleri[p.id] > 0 && (
-                            <span className="text-[8px] font-mono text-blue-700 font-black ml-auto bg-blue-50 px-1 rounded">
+                            <span className="text-[8px] font-mono text-slate-800 font-black ml-auto bg-slate-50 px-1 rounded">
                               +{mesaiSaatleri[p.id]} Sa
                             </span>
                           )}

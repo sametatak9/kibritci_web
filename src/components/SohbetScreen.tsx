@@ -29,7 +29,7 @@ export const SohbetScreen: React.FC<SohbetScreenProps> = ({ currentUser, kullani
     { key: "GENEL", label: "💬 Genel", color: "bg-slate-100 text-slate-800 border-slate-200" },
     { key: "ONAY", label: "🛡️ Onay Talebi", color: "bg-amber-50 text-amber-800 border-amber-200" },
     { key: "GIRIS", label: "👷 İşçi Girişi", color: "bg-emerald-50 text-emerald-800 border-emerald-200" },
-    { key: "IZIN", label: "📅 İzin & Sevk", color: "bg-blue-50 text-blue-800 border-blue-200" },
+    { key: "IZIN", label: "📅 İzin & Sevk", color: "bg-slate-50 text-slate-800 border-slate-200" },
     { key: "MALZEME", label: "📦 Malzeme", color: "bg-purple-50 text-purple-800 border-purple-200" },
   ];
 
@@ -109,13 +109,13 @@ export const SohbetScreen: React.FC<SohbetScreenProps> = ({ currentUser, kullani
         {/* Header bar */}
         <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
           <div className="flex items-center space-x-2">
-            <MessageCircle size={18} className="text-blue-600 animate-pulse" />
+            <MessageCircle size={18} className="text-slate-800 animate-pulse" />
             <div>
               <h4 className="font-display font-bold text-slate-800 text-sm uppercase tracking-wider">Kibritçi İletişim &amp; Sohbet Odası</h4>
               <p className="text-[10px] text-slate-400 font-medium">Tüm şantiye, idari kadro ve yönetim arasında anlık, güvenli mesajlaşma hattı</p>
             </div>
           </div>
-          <span className="bg-blue-50 text-blue-800 text-[9px] font-bold px-2 py-0.5 rounded-full border border-blue-100">
+          <span className="bg-slate-50 text-slate-800 text-[9px] font-bold px-2 py-0.5 rounded-full border border-slate-200">
             Canlı NoSQL Bağlantısı
           </span>
         </div>
@@ -130,7 +130,7 @@ export const SohbetScreen: React.FC<SohbetScreenProps> = ({ currentUser, kullani
               <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-200`}>
                 <div className={`max-w-[70%] rounded-2xl p-3.5 shadow-xs border ${
                   isMe 
-                    ? 'bg-blue-600 text-white border-blue-500 rounded-tr-none' 
+                    ? 'bg-slate-900 text-white border-slate-800 rounded-tr-none' 
                     : 'bg-white text-slate-800 border-slate-200 rounded-tl-none'
                 }`}>
                   {/* Sender header */}
@@ -138,7 +138,7 @@ export const SohbetScreen: React.FC<SohbetScreenProps> = ({ currentUser, kullani
                     <span className={`text-[9px] font-bold tracking-tight uppercase ${isMe ? 'text-blue-200' : 'text-slate-500'}`}>
                       {msg.senderName}
                     </span>
-                    <span className={`text-[8px] px-1 rounded font-mono ${isMe ? 'bg-blue-700 text-blue-100' : 'bg-slate-100 text-slate-600'}`}>
+                    <span className={`text-[8px] px-1 rounded font-mono ${isMe ? 'bg-slate-900 text-blue-100' : 'bg-slate-100 text-slate-600'}`}>
                       {msg.senderRole}
                     </span>
                     {msg.tag && msg.tag !== 'GENEL' && (
@@ -182,7 +182,7 @@ export const SohbetScreen: React.FC<SohbetScreenProps> = ({ currentUser, kullani
                 onClick={() => setSelectedTag(t.key)}
                 className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold border transition cursor-pointer shrink-0 ${
                   selectedTag === t.key 
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs' 
+                    ? 'bg-slate-900 text-white border-slate-800 shadow-xs' 
                     : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
                 }`}
               >
@@ -197,11 +197,11 @@ export const SohbetScreen: React.FC<SohbetScreenProps> = ({ currentUser, kullani
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               placeholder="Şantiye ekibine anlık mesaj gönderin..."
-              className="flex-1 bg-slate-50 border border-slate-200 text-xs rounded-xl p-2.5 outline-none focus:bg-white focus:border-blue-500 transition font-medium"
+              className="flex-1 bg-slate-50 border border-slate-200 text-xs rounded-xl p-2.5 outline-none focus:bg-white  transition font-medium"
             />
             <button
               type="submit"
-              className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-extrabold text-xs py-2.5 px-4 rounded-xl shadow transition duration-150 flex items-center space-x-1 cursor-pointer shrink-0"
+              className="bg-slate-900 hover:bg-slate-900 active:scale-95 text-white font-extrabold text-xs py-2.5 px-4 rounded-xl shadow transition duration-150 flex items-center space-x-1 cursor-pointer shrink-0"
             >
               <Send size={13} />
               <span>Gönder</span>
@@ -242,9 +242,9 @@ export const SohbetScreen: React.FC<SohbetScreenProps> = ({ currentUser, kullani
 
           <button
             onClick={() => shareTemplate("izin")}
-            className="w-full text-left p-2.5 rounded-xl border border-blue-100 bg-blue-50/50 hover:bg-blue-50 transition text-[10px] font-bold text-blue-900 flex items-center space-x-2 cursor-pointer"
+            className="w-full text-left p-2.5 rounded-xl border border-slate-200 bg-blue-50/50 hover:bg-slate-50 transition text-[10px] font-bold text-slate-800 flex items-center space-x-2 cursor-pointer"
           >
-            <FileText size={13} className="text-blue-600 shrink-0" />
+            <FileText size={13} className="text-slate-800 shrink-0" />
             <div className="leading-tight">
               <span>Personel Sevk &amp; İzin Duyurusu</span>
               <p className="text-[8px] text-slate-400 font-semibold">Kadro izinlerini duyurur</p>
@@ -264,7 +264,7 @@ export const SohbetScreen: React.FC<SohbetScreenProps> = ({ currentUser, kullani
               return (
                 <div key={u.id} className="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded-lg text-[10.5px]">
                   <div className="flex items-center space-x-2 min-w-0">
-                    <div className="w-5 h-5 bg-blue-100 text-blue-700 font-bold rounded-full flex items-center justify-center text-[8.5px] uppercase shrink-0">
+                    <div className="w-5 h-5 bg-slate-100 text-slate-800 font-bold rounded-full flex items-center justify-center text-[8.5px] uppercase shrink-0">
                       {u.ad ? u.ad[0] : u.email?.[0] || 'U'}
                     </div>
                     <div className="truncate leading-tight">

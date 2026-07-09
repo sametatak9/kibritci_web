@@ -427,7 +427,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     switch (status) {
       case 'Geldi': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
       case 'Yok': return 'bg-rose-100 text-rose-800 border-rose-200';
-      case 'İzinli': return 'bg-sky-100 text-blue-800 border-sky-200';
+      case 'İzinli': return 'bg-sky-100 text-slate-800 border-sky-200';
       case 'Raporlu': return 'bg-amber-100 text-amber-800 border-amber-200';
       case 'Pazar': return 'bg-orange-100 text-orange-800 border-orange-200';
       case 'Tatil': return 'bg-purple-100 text-purple-800 border-purple-200';
@@ -1171,7 +1171,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               </button>
               <button 
                 onClick={() => handleBulkOvertime(2)}
-                className="text-[10px] bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-150 rounded-lg px-2 py-1 font-bold cursor-pointer transition"
+                className="text-[10px] bg-slate-50 text-slate-800 hover:bg-slate-100 border border-blue-150 rounded-lg px-2 py-1 font-bold cursor-pointer transition"
                 title="Her iş gününe stabil 2 saat fazla mesai yazar"
               >
                 ⏱ Herkese +2sa Mesai Girişi
@@ -1257,7 +1257,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
             </button>
             <button
               onClick={() => setShowAiUpload(prev => !prev)}
-              className="text-[11px] bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
+              className="text-[11px] bg-slate-900 hover:bg-slate-900 text-white rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
               title="Formenlerin doldurduğu günlük yoklama kağıdını fotoğraf çekip AI ile sisteme yükleyin."
             >
               <span>🤖 AI ile Günlük Yoklama Yükle</span>
@@ -1371,10 +1371,10 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
       {/* AI Daily Yoklama Upload and Verification Panel */}
       {showAiUpload && (
-        <div className="bg-white border border-blue-200 rounded-2xl p-5 shadow-md space-y-4 animate-in slide-in-from-top-2 duration-200">
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-md space-y-4 animate-in slide-in-from-top-2 duration-200">
           <div className="border-b pb-2 flex justify-between items-center">
             <div>
-              <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest block">🤖 GEMINI YAPAY ZEKA DESTEKLİ GÜNLÜK YOKLAMA</span>
+              <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest block">🤖 GEMINI YAPAY ZEKA DESTEKLİ GÜNLÜK YOKLAMA</span>
               <h3 className="font-bold text-sm text-slate-800 mt-0.5">Yoklama Evrağı / Günlük Puantaj Kağıdı Yükleme</h3>
             </div>
             <button 
@@ -1394,7 +1394,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                 <p className="text-[10px] text-slate-400">Doldurulmuş olan günlük puantaj çizelgesinin net bir fotoğrafını veya PDF'ini yükleyin.</p>
               </div>
 
-              <div className="border-2 border-dashed border-slate-250 rounded-xl p-4 text-center hover:border-blue-500 transition cursor-pointer relative bg-slate-50/50">
+              <div className="border-2 border-dashed border-slate-250 rounded-xl p-4 text-center hover:border-slate-800 transition cursor-pointer relative bg-slate-50/50">
                 <input 
                   type="file"
                   accept="image/*,application/pdf"
@@ -1425,8 +1425,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               </div>
 
               {aiLoading && (
-                <div className="p-4 bg-blue-50 border border-blue-150 rounded-xl flex items-center justify-center space-x-2.5 animate-pulse text-xs font-bold text-blue-700">
-                  <RefreshCw size={14} className="animate-spin text-blue-600" />
+                <div className="p-4 bg-slate-50 border border-blue-150 rounded-xl flex items-center justify-center space-x-2.5 animate-pulse text-xs font-bold text-slate-800">
+                  <RefreshCw size={14} className="animate-spin text-slate-800" />
                   <span>Gemini AI Evrağı Çözümlüyor...</span>
                 </div>
               )}
@@ -1553,7 +1553,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                     <button
                       type="button"
                       onClick={handleCommitAiYoklama}
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-5 rounded-xl text-xs transition shadow cursor-pointer"
+                      className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-1.5 px-5 rounded-xl text-xs transition shadow cursor-pointer"
                     >
                       Onayla ve Puantaja İşle
                     </button>
@@ -1670,13 +1670,13 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
             <span className="font-bold text-slate-600 uppercase">Hücre Değerini Değiştirmek İçin Harfe Tıklayınız:</span>
             <span className="flex items-center space-x-1"><span className="w-4 h-4 bg-emerald-100 text-emerald-800 rounded font-bold text-center inline-block">G</span> <span>Geldi (G)</span></span>
             <span className="flex items-center space-x-1"><span className="w-4 h-4 bg-rose-100 text-rose-800 rounded font-bold text-center inline-block">Y</span> <span>Yok (Y)</span></span>
-            <span className="flex items-center space-x-1"><span className="w-4 h-4 bg-sky-100 text-blue-800 rounded font-bold text-center inline-block">İ</span> <span>İzinli (İ)</span></span>
+            <span className="flex items-center space-x-1"><span className="w-4 h-4 bg-sky-100 text-slate-800 rounded font-bold text-center inline-block">İ</span> <span>İzinli (İ)</span></span>
             <span className="flex items-center space-x-1"><span className="w-4 h-4 bg-amber-100 text-amber-800 rounded font-bold text-center inline-block">R</span> <span>Raporlu (R)</span></span>
             <span className="flex items-center space-x-1"><span className="w-4 h-4 bg-orange-100 text-orange-800 rounded font-bold text-center inline-block">P</span> <span>Pazar (P)</span></span>
             <span className="flex items-center space-x-1"><span className="w-4 h-4 bg-purple-100 text-purple-800 rounded font-bold text-center inline-block">T</span> <span>Tatil (T)</span></span>
           </div>
 
-          <span className="text-blue-700 font-bold bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100">
+          <span className="text-slate-800 font-bold bg-slate-50 px-2.5 py-0.5 rounded-full border border-slate-200">
             Hücrelerin altındaki kutulardan günlük fazla mesai saatlerini (Saat) elle girebilirsiniz.
           </span>
         </div>
@@ -1722,7 +1722,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                     <th scope="col" className="px-2 py-3 text-center w-16 min-w-16 border-l font-bold text-emerald-700 bg-slate-50">
                       Gelen Gün
                     </th>
-                    <th scope="col" className="px-2 py-3 text-center w-20 min-w-20 font-bold text-blue-700 bg-slate-50">
+                    <th scope="col" className="px-2 py-3 text-center w-20 min-w-20 font-bold text-slate-800 bg-slate-50">
                       Top. Mesai
                     </th>
                   </tr>
@@ -1804,7 +1804,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                               onChange={(e) => isActiveDay && handleMesaiChange(p.id, day, parseMesaiInput(e.target.value))}
                               className={`w-7 text-[8px] font-bold font-mono text-center rounded border py-0.5 focus:outline-none ${
                                 isActiveDay
-                                  ? `${isHoliday ? (isOfficial ? 'bg-purple-50 border-purple-200 text-purple-700' : 'bg-orange-50 border-orange-200 text-orange-700') : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600'} focus:border-blue-500`
+                                  ? `${isHoliday ? (isOfficial ? 'bg-purple-50 border-purple-200 text-purple-700' : 'bg-orange-50 border-orange-200 text-orange-700') : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600'} `
                                   : 'bg-slate-900 border-slate-800 text-slate-500'
                               }`}
                             />
@@ -1840,7 +1840,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                         <td className="px-2 py-3 text-center whitespace-nowrap border-l font-bold text-emerald-700 bg-slate-50/50">
                           {totalGeldi} Gün
                         </td>
-                        <td className="px-2 py-3 text-center whitespace-nowrap font-bold text-blue-700 font-mono bg-slate-50/50">
+                        <td className="px-2 py-3 text-center whitespace-nowrap font-bold text-slate-800 font-mono bg-slate-50/50">
                           {totalMesai} Saat
                         </td>
                       </tr>
@@ -1918,7 +1918,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                       alert("GÜNCEL PUANTAJ RAPORU BAŞARIYLA DERLENDİ\n\nKibritçi İnşaat Taahhüt A.Ş. onaylı puantaj cetveli masaüstünüze HTML/Yazdırılabilir formatta başarıyla kaydedildi.");
                     }
                   }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow cursor-pointer"
+                  className="bg-slate-900 hover:bg-slate-900 text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow cursor-pointer"
                 >
                   💾 Masaüstüne HTML Rapor Dosyası Kaydet
                 </button>
@@ -2044,7 +2044,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                             <tr className="border-b border-slate-200 hover:bg-slate-50">
                               <td className="p-1.5 px-2 border-r border-slate-300 font-bold text-slate-900 bg-slate-50/50">
                                 <div>{p.ad} {p.soyad}</div>
-                                <div className="text-[8px] text-blue-600 uppercase font-bold">{p.gorev} · {p.departman}</div>
+                                <div className="text-[8px] text-slate-800 uppercase font-bold">{p.gorev} · {p.departman}</div>
                                 <div className="text-[7px] text-slate-550 font-mono font-normal">
                                   Giriş: {p.iseGirisTarihi || '-'} {p.istenCikisTarihi ? `· Çıkış: ${p.istenCikisTarihi}` : ''}
                                 </div>
@@ -2112,7 +2112,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                                             if (!isActiveDay) {
                                               boxStyle = "bg-slate-200 text-slate-400 border-slate-350";
                                             } else if (hasOvertime) {
-                                              boxStyle = "bg-blue-100 text-blue-800 border-blue-300 font-bold";
+                                              boxStyle = "bg-slate-100 text-slate-800 border-slate-200 font-bold";
                                             } else if (isHoliday) {
                                               boxStyle = isOfficial 
                                                 ? "bg-purple-100 text-purple-700 border-purple-200 font-semibold" 
@@ -2135,7 +2135,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                                         <span className="text-[8.5px] font-bold text-rose-800 font-mono bg-rose-50 px-2.5 py-1 rounded border border-rose-200 whitespace-nowrap">
                                           Gelmeyen: {totalYok} Gün
                                         </span>
-                                        <span className="text-[8.5px] font-bold text-blue-800 font-mono bg-blue-50 px-2.5 py-1 rounded border border-blue-200 whitespace-nowrap">
+                                        <span className="text-[8.5px] font-bold text-slate-800 font-mono bg-slate-50 px-2.5 py-1 rounded border border-slate-200 whitespace-nowrap">
                                           Mesai: {totalMesai} Saat
                                         </span>
                                       </div>
@@ -2290,7 +2290,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                       const statusStyles: Record<string, string> = {
                         'Geldi': 'bg-emerald-100 text-emerald-800 border-emerald-200',
                         'Yok': 'bg-rose-100 text-rose-800 border-rose-200',
-                        'İzinli': 'bg-blue-100 text-blue-800 border-blue-200',
+                        'İzinli': 'bg-slate-100 text-slate-800 border-slate-200',
                         'Raporlu': 'bg-violet-100 text-violet-800 border-violet-200',
                         'Pazar': 'bg-amber-100 text-amber-800 border-amber-200',
                         'Tatil': 'bg-indigo-100 text-indigo-800 border-indigo-200',
@@ -2448,7 +2448,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                         <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
                           <span className="text-[11px] font-bold text-slate-700">{tarihLabel}</span>
                           {f.kaynakEkran && (
-                            <span className="text-[9px] font-bold uppercase tracking-wide text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                            <span className="text-[9px] font-bold uppercase tracking-wide text-slate-800 bg-slate-50 px-2 py-0.5 rounded-full">
                               {f.kaynakEkran.replace(/_/g, ' ')}
                             </span>
                           )}

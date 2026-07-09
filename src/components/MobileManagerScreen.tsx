@@ -306,7 +306,7 @@ export const MobileManagerScreen: React.FC<MobileManagerScreenProps> = ({
         desc: `${s.talepEden}: ${s.malzemeDetay} (${s.miktar} ${s.birim})`,
         tarih: s.tarih,
         icon: ShoppingCart,
-        color: 'text-blue-500 bg-blue-500/10'
+        color: 'text-slate-600 bg-slate-500/10'
       });
     });
 
@@ -600,7 +600,7 @@ export const MobileManagerScreen: React.FC<MobileManagerScreenProps> = ({
                 <div className="bg-white border border-slate-200 p-3 rounded-2xl flex flex-col justify-between space-y-2 shadow-xs">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Aktif Kadro</span>
-                    <Users size={16} className="text-blue-500" />
+                    <Users size={16} className="text-slate-600" />
                   </div>
                   <div>
                     <h3 className="text-base font-black text-slate-800">{activePersonelCount} <span className="text-[11px] text-slate-400">/ {totalPersonel}</span></h3>
@@ -719,7 +719,7 @@ export const MobileManagerScreen: React.FC<MobileManagerScreenProps> = ({
                     </div>
                     <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-200">
                       <div 
-                        className="bg-blue-500 h-full rounded-full transition-all duration-500"
+                        className="bg-slate-500 h-full rounded-full transition-all duration-500"
                         style={{ width: `${(activePersonelCount / (totalPersonel || 1)) * 100}%` }}
                       />
                     </div>

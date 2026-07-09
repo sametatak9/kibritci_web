@@ -689,7 +689,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                             <td className="p-3">
                               <div className="flex flex-col gap-1.5">
                                 <select 
-                                  className={`p-1.5 text-[11px] font-bold rounded-lg border bg-slate-50 outline-none cursor-pointer text-slate-855 focus:border-blue-500 ${
+                                  className={`p-1.5 text-[11px] font-bold rounded-lg border bg-slate-50 outline-none cursor-pointer text-slate-855  ${
                                     pendingRoles[user.email] && pendingRoles[user.email] !== user.yetki
                                       ? 'border-amber-400 ring-1 ring-amber-300'
                                       : ''

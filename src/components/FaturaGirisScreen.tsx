@@ -533,10 +533,10 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
           <div className="w-full lg:w-[440px] bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
             
             {/* AI parse box */}
-            <div className="bg-gradient-to-tr from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-4 space-y-3">
-              <span className="font-extrabold text-blue-900 tracking-wide text-[9px] uppercase block">🤖 YAPAY ZEKA DESTEKLİ FATURA OKUYUCU</span>
-              <p className="text-[10px] text-blue-700 font-medium">Fatura belgenizi yükleyin; no, firma ve kalemleri yapay zeka ile otomatik dolduralım.</p>
-              <div className="relative border-2 border-dashed border-blue-200 rounded-xl p-4 text-center bg-white hover:bg-blue-50/20 transition cursor-pointer">
+            <div className="bg-gradient-to-tr from-blue-50 to-indigo-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+              <span className="font-extrabold text-slate-800 tracking-wide text-[9px] uppercase block">🤖 YAPAY ZEKA DESTEKLİ FATURA OKUYUCU</span>
+              <p className="text-[10px] text-slate-800 font-medium">Fatura belgenizi yükleyin; no, firma ve kalemleri yapay zeka ile otomatik dolduralım.</p>
+              <div className="relative border-2 border-dashed border-slate-200 rounded-xl p-4 text-center bg-white hover:bg-blue-50/20 transition cursor-pointer">
                 <input 
                   type="file"
                   accept="image/*,application/pdf"
@@ -544,7 +544,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 />
                 {isFtParsing ? (
-                  <span className="text-[10px] font-bold text-blue-800 block animate-pulse">Gemini Belgeyi Çözümlüyor...</span>
+                  <span className="text-[10px] font-bold text-slate-800 block animate-pulse">Gemini Belgeyi Çözümlüyor...</span>
                 ) : (
                   <span className="text-[10px] font-bold text-slate-550 block">Belge Seçin veya Sürükleyin</span>
                 )}
@@ -593,7 +593,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
                 </div>
               </div>
 
-              <p className="text-[10px] text-blue-700 bg-blue-50 border border-blue-100 rounded-xl p-2.5">
+              <p className="text-[10px] text-slate-800 bg-slate-50 border border-slate-200 rounded-xl p-2.5">
                 PO ve irsaliye bağlama «Bağlama» sekmesinde 2 aşamalı yapılır. YZ analiz için «YZ Karşılaştır» menüsünü kullanın.
               </p>
 
@@ -759,7 +759,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
                             <button
                               type="button"
                               onClick={() => handlePreviewPdf(ft)}
-                              className="text-[10px] bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded px-2 py-1 font-bold cursor-pointer"
+                              className="text-[10px] bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 rounded px-2 py-1 font-bold cursor-pointer"
                             >
                               Aç
                             </button>
@@ -829,7 +829,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
               </button>
               <button 
                 onClick={handleCreateCari} 
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-center text-xs"
+                className="flex-1 bg-slate-900 hover:bg-slate-900 text-white font-bold py-2 rounded-xl text-center text-xs"
               >
                 Evet, Kart Aç
               </button>
@@ -880,7 +880,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
               </button>
               <button 
                 onClick={handleCreateStok} 
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-center text-xs"
+                className="flex-1 bg-slate-900 hover:bg-slate-900 text-white font-bold py-2 rounded-xl text-center text-xs"
               >
                 Evet, Kart Aç
               </button>

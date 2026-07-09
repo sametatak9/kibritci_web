@@ -41,8 +41,8 @@ export const DocumentCompareWizard: React.FC<DocumentCompareWizardProps> = ({
   launchConfig,
   onLaunchConsumed,
 }) => {
-  const accentBtn = accent === 'emerald' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700';
-  const accentText = accent === 'emerald' ? 'text-emerald-700' : 'text-blue-700';
+  const accentBtn = accent === 'emerald' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-900 hover:bg-slate-900';
+  const accentText = accent === 'emerald' ? 'text-emerald-700' : 'text-slate-800';
 
   const [selectedSaId, setSelectedSaId] = useState('');
   const [selectedIrIds, setSelectedIrIds] = useState<string[]>([]);

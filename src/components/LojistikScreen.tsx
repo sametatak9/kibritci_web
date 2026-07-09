@@ -575,7 +575,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
       <div className="max-w-7xl mx-auto space-y-5">
         
         {/* Upper Dashboard Widget */}
-        <div className="bg-gradient-to-r from-blue-700 to-indigo-800 rounded-3xl p-5 lg:p-6 text-white shadow-lg border border-blue-600">
+        <div className="bg-gradient-to-r from-blue-700 to-indigo-800 rounded-3xl p-5 lg:p-6 text-white shadow-lg border border-slate-800">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-center space-x-3">
               <div className="p-3 bg-white/10 rounded-2xl">
@@ -613,49 +613,49 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
         <div className="flex space-x-1.5 overflow-x-auto p-1 bg-white/80 backdrop-blur-xs rounded-2xl border border-slate-200 shrink-0 select-none scrollbar-none">
           <button 
             onClick={() => setActiveTab('günlük_rutin')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'günlük_rutin' ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'günlük_rutin' ? 'bg-slate-900 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
           >
             🗓️ Günlük Rutin
           </button>
           <button 
             onClick={() => setActiveTab('günlük_faaliyet')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'günlük_faaliyet' ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'günlük_faaliyet' ? 'bg-slate-900 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
           >
             📝 Günlük Faaliyet Kaydı
           </button>
           <button 
             onClick={() => setActiveTab('haftalık_km')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'haftalık_km' ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'haftalık_km' ? 'bg-slate-900 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
           >
             📊 Haftalık KM
           </button>
           <button 
             onClick={() => setActiveTab('araç_kartı')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'araç_kartı' ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'araç_kartı' ? 'bg-slate-900 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
           >
             🚗 Araç Kartı &amp; Onay
           </button>
           <button 
             onClick={() => setActiveTab('rotalar')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'rotalar' ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'rotalar' ? 'bg-slate-900 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
           >
             📍 Seyahat Rotaları
           </button>
           <button 
             onClick={() => setActiveTab('yol_harcaması')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'yol_harcaması' ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'yol_harcaması' ? 'bg-slate-900 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
           >
             💳 Fiş / Yol Harcaması
           </button>
           <button 
             onClick={() => setActiveTab('mini_raporlar')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'mini_raporlar' ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'mini_raporlar' ? 'bg-slate-900 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
           >
             🖨️ Mini Raporlar
           </button>
           <button 
             onClick={() => setActiveTab('aylik_rapor')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'aylik_rapor' ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'aylik_rapor' ? 'bg-slate-900 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
           >
             📅 Aylık Sefer Raporu
           </button>
@@ -685,7 +685,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                       type="date" 
                       value={rutinTarih} 
                       onChange={(e) => setRutinTarih(e.target.value)}
-                      className="rounded-xl border border-slate-300 px-3 py-1 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                      className="rounded-xl border border-slate-300 px-3 py-1 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20  transition"
                     />
                   </div>
                 </div>
@@ -701,7 +701,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                           
                           {/* Info Block */}
                           <div className="flex items-center space-x-3">
-                            <span className="font-mono bg-blue-50 text-blue-700 text-xs font-bold px-2.5 py-1 rounded-xl border border-blue-100 shadow-3xs shrink-0">
+                            <span className="font-mono bg-slate-50 text-slate-800 text-xs font-bold px-2.5 py-1 rounded-xl border border-slate-200 shadow-3xs shrink-0">
                               {arac.plaka}
                             </span>
                             <div>
@@ -719,7 +719,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                                 placeholder="Sayaç"
                                 value={rutinKmInputs[arac.plaka]?.sabah || ''}
                                 onChange={(e) => handleRutinInputChange(arac.plaka, 'sabah', e.target.value)}
-                                className="w-24 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                                className="w-24 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                               />
                             </div>
                             <div>
@@ -729,7 +729,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                                 placeholder="Sayaç"
                                 value={rutinKmInputs[arac.plaka]?.aksam || ''}
                                 onChange={(e) => handleRutinInputChange(arac.plaka, 'aksam', e.target.value)}
-                                className="w-24 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                                className="w-24 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                               />
                             </div>
                             <div className="flex-1 sm:w-48">
@@ -739,7 +739,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                                 placeholder="Açıklama giriniz..."
                                 value={rutinKmInputs[arac.plaka]?.aciklama || ''}
                                 onChange={(e) => handleRutinInputChange(arac.plaka, 'aciklama', e.target.value)}
-                                className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                                className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                               />
                             </div>
                           </div>
@@ -753,7 +753,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                 <div className="pt-2 border-t flex justify-end">
                   <button
                     onClick={handleSaveGunlukRutin}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-blue-500/10 cursor-pointer"
+                    className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-blue-500/10 cursor-pointer"
                   >
                     <CheckCircle className="h-4 w-4" />
                     <span>Günlük Rutini Kaydet</span>
@@ -779,7 +779,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                       <select
                         value={faaliyetArac}
                         onChange={(e) => setFaaliyetArac(e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-700"
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-700"
                         required
                       >
                         <option value="">-- Araç Seçin --</option>
@@ -795,7 +795,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                         type="date"
                         value={faaliyetTarih}
                         onChange={(e) => setFaaliyetTarih(e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                         required
                       />
                     </div>
@@ -809,7 +809,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                         placeholder="Örn: Şantiye - Liman - Şantiye (Seyahat yapılmadıysa boş bırakın)"
                         value={faaliyetRota}
                         onChange={(e) => setFaaliyetRota(e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                       />
                     </div>
 
@@ -820,7 +820,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                         placeholder="Örn: 250 (İsteğe bağlı)"
                         value={faaliyetMasraf}
                         onChange={(e) => setFaaliyetMasraf(e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800 font-mono"
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800 font-mono"
                       />
                     </div>
                   </div>
@@ -832,7 +832,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                       placeholder="Örn: Demir sevkiyatı yapıldı, şantiye şefine teslim edildi."
                       value={faaliyetDetay}
                       onChange={(e) => setFaaliyetDetay(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                     />
                   </div>
 
@@ -886,7 +886,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                     <button
                       type="submit"
                       disabled={faaliyetSaveLoading}
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-blue-500/10 cursor-pointer"
+                      className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-blue-500/10 cursor-pointer"
                     >
                       {faaliyetSaveLoading ? 'Faaliyet Kaydediliyor...' : 'Faaliyet Kaydet'}
                     </button>
@@ -913,7 +913,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                     <select
                       value={weeklyPlaka}
                       onChange={(e) => setWeeklyPlaka(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-700"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-700"
                     >
                       <option value="">-- Plaka Seçin --</option>
                       {araclar.map(a => (
@@ -935,7 +935,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                         type="date"
                         value={pazartesiTarih}
                         onChange={(e) => setPazartesiTarih(e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                       />
                     </div>
 
@@ -946,7 +946,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                         placeholder="Örn: 154200"
                         value={pazartesiKm}
                         onChange={(e) => setPazartesiKm(e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                       />
                     </div>
                   </div>
@@ -961,7 +961,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                         type="date"
                         value={cumartesiTarih}
                         onChange={(e) => setCumartesiTarih(e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                       />
                     </div>
 
@@ -972,7 +972,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                         placeholder="Örn: 155150"
                         value={cumartesiKm}
                         onChange={(e) => setCumartesiKm(e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                       />
                     </div>
                   </div>
@@ -980,7 +980,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                   <div className="col-span-1 md:col-span-2 flex justify-end pt-2 border-t">
                     <button
                       type="submit"
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-blue-500/10 cursor-pointer"
+                      className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-blue-500/10 cursor-pointer"
                     >
                       <span>Haftalık Takip Girişini Kaydet</span>
                     </button>
@@ -1009,7 +1009,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                       placeholder="Örn: 34KBR999"
                       value={newPlaka}
                       onChange={(e) => setNewPlaka(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800 font-mono"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800 font-mono"
                     />
                   </div>
 
@@ -1020,7 +1020,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                       placeholder="Örn: Ford Transit 2023"
                       value={newMarkaModel}
                       onChange={(e) => setNewMarkaModel(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                     />
                   </div>
 
@@ -1031,7 +1031,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                       placeholder="Örn: 104500"
                       value={newMuayeneKm}
                       onChange={(e) => setNewMuayeneKm(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                     />
                   </div>
 
@@ -1041,7 +1041,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                       type="date" 
                       value={newMuayeneTarihi}
                       onChange={(e) => setNewMuayeneTarihi(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                     />
                   </div>
 
@@ -1052,7 +1052,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                       placeholder="Örn: 95000"
                       value={newYagBakimKm}
                       onChange={(e) => setNewYagBakimKm(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                     />
                   </div>
 
@@ -1062,7 +1062,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                       type="date" 
                       value={newYagBakimTarihi}
                       onChange={(e) => setNewYagBakimTarihi(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                     />
                   </div>
 
@@ -1071,7 +1071,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                     <select
                       value={newYagBakimKmAraligi}
                       onChange={(e) => setNewYagBakimKmAraligi(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                     >
                       <option value="10000">10.000 KM</option>
                       <option value="15000">15.000 KM</option>
@@ -1083,7 +1083,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                   <div className="col-span-1 md:col-span-2 flex justify-end pt-2 border-t">
                     <button
                       type="submit"
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-blue-500/10 cursor-pointer"
+                      className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-blue-500/10 cursor-pointer"
                     >
                       <span>Kart Onay Talebi Gönder</span>
                     </button>
@@ -1110,7 +1110,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                       placeholder="Örn: Şantiye - Merkez Ofis - Liman"
                       value={rotaIsmi}
                       onChange={(e) => setRotaIsmi(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                     />
                   </div>
 
@@ -1119,7 +1119,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                     <select
                       value={rotaArac}
                       onChange={(e) => setRotaArac(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-700"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-700"
                     >
                       <option value="">-- Araç Seçin --</option>
                       {araclar.map(a => (
@@ -1135,7 +1135,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                       placeholder="Örn: Ahmet Bey (Saha Şefi)"
                       value={rotaYoneticiAd}
                       onChange={(e) => setRotaYoneticiAd(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                     />
                   </div>
 
@@ -1146,7 +1146,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                       placeholder="Örn: +90 555..."
                       value={rotaYoneticiTel}
                       onChange={(e) => setRotaYoneticiTel(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                     />
                   </div>
 
@@ -1156,7 +1156,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                       type="date" 
                       value={rotaTarih}
                       onChange={(e) => setRotaTarih(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                     />
                   </div>
 
@@ -1167,14 +1167,14 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                       placeholder="Gözlemlerinizi veya teslimat detaylarını yazabilirsiniz..."
                       value={rotaNotlar}
                       onChange={(e) => setRotaNotlar(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                     />
                   </div>
 
                   <div className="col-span-1 md:col-span-2 flex justify-end pt-2 border-t">
                     <button
                       type="submit"
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-blue-500/10 cursor-pointer"
+                      className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-blue-500/10 cursor-pointer"
                     >
                       <span>Rotayı ve İletişimi Kaydet</span>
                     </button>
@@ -1203,7 +1203,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                         placeholder="Örn: 1450.50"
                         value={harcamaTutar}
                         onChange={(e) => setHarcamaTutar(e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800 font-mono"
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800 font-mono"
                       />
                     </div>
 
@@ -1213,7 +1213,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                         type="date" 
                         value={harcamaTarih}
                         onChange={(e) => setHarcamaTarih(e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                       />
                     </div>
                   </div>
@@ -1225,7 +1225,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                       placeholder="Örn: Yakıt Alımı - BP Bolu İstasyonu"
                       value={harcamaAciklama}
                       onChange={(e) => setHarcamaAciklama(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                     />
                   </div>
 
@@ -1283,7 +1283,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                     <button
                       type="submit"
                       disabled={compressing}
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-blue-500/10 cursor-pointer"
+                      className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-blue-500/10 cursor-pointer"
                     >
                       <span>Harcama Talebini Gönder</span>
                     </button>
@@ -1644,7 +1644,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                                     <td className="p-1 font-bold">{l.tarih}</td>
                                     <td className="p-1 text-right">{details.sabah || '-'}</td>
                                     <td className="p-1 text-right">{details.aksam || '-'}</td>
-                                    <td className="p-1 text-right font-bold text-blue-600">{difference ? `${difference} KM` : '-'}</td>
+                                    <td className="p-1 text-right font-bold text-slate-800">{difference ? `${difference} KM` : '-'}</td>
                                     <td className="p-1 pl-4 text-slate-500 italic text-[8.5px]">{details.aciklama || 'Sorunsuz'}</td>
                                   </tr>
                                 );
@@ -1742,7 +1742,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                             <span className="font-mono text-[10px] font-bold text-slate-700 bg-white border px-1.5 py-0.5 rounded shadow-3xs">{a.plaka}</span>
                             <span className="text-xs font-bold text-slate-800 ml-2">{a.markaModel}</span>
                           </div>
-                          <div className="text-right text-[10px] font-mono font-bold text-blue-600">
+                          <div className="text-right text-[10px] font-mono font-bold text-slate-800">
                             {a.mevcutKm} KM
                           </div>
                         </div>
@@ -1778,7 +1778,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                   placeholder="Rota / Bölge Ara..."
                   value={rotaSearch}
                   onChange={(e) => setRotaSearch(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 pl-8 pr-3 py-1.5 text-[11px] focus:ring-2 focus:ring-blue-500/20 text-slate-800"
+                  className="w-full rounded-xl border border-slate-300 pl-8 pr-3 py-1.5 text-[11px] focus:ring-2 focus:ring-slate-900 focus:border-slate-900/20 text-slate-800"
                 />
               </div>
 

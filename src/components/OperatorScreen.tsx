@@ -460,8 +460,8 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
               </div>
 
               {baslangicSaat && bitisSaat && (
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-2 text-center">
-                  <span className="text-[10px] text-blue-600 font-bold">Hesaplanan Süre: {hesaplaCalismaSuresi(baslangicSaat, bitisSaat).toFixed(1)} saat</span>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-2 text-center">
+                  <span className="text-[10px] text-slate-800 font-bold">Hesaplanan Süre: {hesaplaCalismaSuresi(baslangicSaat, bitisSaat).toFixed(1)} saat</span>
                 </div>
               )}
 
@@ -572,7 +572,7 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
                         <div className="flex items-center gap-2 mb-1">
                           <span className="bg-amber-100 text-amber-800 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">{f.operatorTipi}</span>
                           <span className="text-[10px] text-slate-400 font-mono">{f.tarih}</span>
-                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${f.kesintiYansitildi ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${f.kesintiYansitildi ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-800'}`}>
                             {f.kesintiYansitildi ? 'Kesintiye Yansıtıldı' : 'Bekliyor'}
                           </span>
                         </div>
@@ -585,7 +585,7 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
                         </div>
                       </div>
                       <div className="flex gap-1 shrink-0">
-                        <button onClick={() => handleDuzenle(f)} className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600 transition" title="Düzenle"><Edit3 size={12} /></button>
+                        <button onClick={() => handleDuzenle(f)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-800 transition" title="Düzenle"><Edit3 size={12} /></button>
                         <button onClick={() => handleSil(f.id)} className="p-1.5 rounded-lg hover:bg-rose-100 text-rose-600 transition" title="Sil"><Trash2 size={12} /></button>
                       </div>
                     </div>
@@ -671,9 +671,9 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="bg-blue-100 text-blue-800 text-[9px] font-black px-2 py-0.5 rounded-full">{rapor.taseronFirmaAdi}</span>
+                          <span className="bg-slate-100 text-slate-800 text-[9px] font-black px-2 py-0.5 rounded-full">{rapor.taseronFirmaAdi}</span>
                           <span className="text-[10px] text-slate-400 font-mono">{rapor.donemAy}/{rapor.donemYil}</span>
-                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${rapor.ucretOnayBekliyor ? 'bg-amber-100 text-amber-800' : rapor.onayDurumu === 'ONAYLANDI' ? 'bg-emerald-100 text-emerald-700' : rapor.onayDurumu === 'GONDERILDI' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${rapor.ucretOnayBekliyor ? 'bg-amber-100 text-amber-800' : rapor.onayDurumu === 'ONAYLANDI' ? 'bg-emerald-100 text-emerald-700' : rapor.onayDurumu === 'GONDERILDI' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-800'}`}>
                             {rapor.ucretOnayBekliyor ? 'ÜCRET BEKLİYOR' : rapor.onayDurumu}
                           </span>
                         </div>
@@ -691,7 +691,7 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
                           <button onClick={() => handleRaporOnayla(rapor.id)} className="p-1.5 rounded-lg hover:bg-emerald-100 text-emerald-600 transition" title="Onayla"><CheckCircle size={12} /></button>
                         )}
                         {rapor.onayDurumu === 'ONAYLANDI' && (
-                          <button onClick={() => handleRaporGonder(rapor)} className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600 transition" title="E-posta Gönder"><Mail size={12} /></button>
+                          <button onClick={() => handleRaporGonder(rapor)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-800 transition" title="E-posta Gönder"><Mail size={12} /></button>
                         )}
                         <button onClick={() => (rapor.ucretOnayBekliyor ? alert('Ücret onayı Taşeron sekmesinden yapılır.') : indirIsMakinesiRaporu(rapor))} className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-600 transition" title="İndir"><Download size={12} /></button>
                       </div>
