@@ -62,13 +62,19 @@ async function completeEmailLogin(
     cred = await withAuthTimeout(signInWithEmailAndPassword(auth, emailLower, passTrim), 8000);
   } catch (signErr: unknown) {
     const code = (signErr as { code?: string })?.code;
-    if (code === 'auth/user-not-found') {
-      cred = await withAuthTimeout(
-        createUserWithEmailAndPassword(auth, emailLower, passTrim),
-        10000
-      );
-    } else if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') {
-      throw signErr;
+    if (code === 'auth/user-not-found' || code === 'auth/invalid-credential' || code === 'auth/wrong-password') {
+      try {
+        cred = await withAuthTimeout(
+          createUserWithEmailAndPassword(auth, emailLower, passTrim),
+          10000
+        );
+      } catch (createErr: any) {
+        if (createErr.code === 'auth/email-already-in-use') {
+          // The user actually exists in Auth, which means they just typed the wrong password.
+          throw new Error('E-posta veya şifre hatalı. Lütfen kontrol edip tekrar deneyin.');
+        }
+        throw createErr;
+      }
     } else {
       throw signErr;
     }
