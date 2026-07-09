@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
+import { generateGuvenlikReportHtml } from '../lib/guvenlikReportHtml';
 import { 
   ShieldAlert, FileText, Users, Truck, UserCheck, Search, PlusCircle, Trash2, 
   Check, X, FileUp, Camera, Printer, Clock, AlertTriangle, Key, Download, ArrowRight, RefreshCw, Barcode,
@@ -770,20 +773,22 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                 <span className="font-display font-black text-xs text-slate-805 uppercase tracking-widest block border-b pb-2">📄 YENİ İRSALİYE &amp; TESLİMAT EVRAKI GİRİŞİ</span>
                 
                 {/* AI Document Scanner block */}
-                <div className="bg-gradient-to-br from-indigo-950/40 to-slate-900 border border-indigo-900/40 rounded-2xl p-4 space-y-3 text-xs">
-                  <div className="flex justify-between items-center">
-                    <span className="font-extrabold text-indigo-400 tracking-wide uppercase text-[10px] flex items-center gap-1.5">
-                      ✨ YAPAY ZEKA (AI) MOBİL EVRAK OKUYUCU
+                <div className="bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-700 rounded-3xl p-5 space-y-4 text-white shadow-xl shadow-indigo-500/20 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 rounded-full bg-white opacity-5 blur-2xl"></div>
+                  <div className="absolute bottom-0 left-0 -ml-8 -mb-8 w-24 h-24 rounded-full bg-blue-300 opacity-10 blur-xl"></div>
+                  <div className="flex justify-between items-center relative z-10">
+                    <span className="font-extrabold text-white tracking-wide uppercase text-[11px] flex items-center gap-2">
+                      <span className="text-xl">🤖</span> YAPAY ZEKA EVRAK OKUYUCU
                     </span>
-                    <span className="font-bold text-[8px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full font-sans uppercase">
-                      GEMINI DESTEKLİ
+                    <span className="font-bold text-[9px] bg-white/20 text-white backdrop-blur-sm border border-white/30 px-3 py-1 rounded-full uppercase tracking-wider shadow-sm">
+                      Gemini AI
                     </span>
                   </div>
-                  <p className="text-[10.5px] text-slate-305 leading-relaxed">
-                    Şantiyeye giren aracın teslim ettiği belgenin (İrsaliye veya Fatura) fotoğrafını çekip/yükleyin; evrak türünü, numarasını, firmasını ve içindeki tüm kalemleri saniyeler içinde yapay zeka ile otomatik dolduralım.
+                  <p className="text-[11px] text-indigo-100 leading-relaxed font-medium relative z-10">
+                    Evrakın (Fatura, İrsaliye vb.) fotoğrafını çekin veya yükleyin. Sistem belge türünü, numarasını, firmasını ve içindeki tüm kalemleri <strong className="text-white">saniyeler içinde otomatik</strong> dolduracaktır.
                   </p>
                   
-                  <div className="relative border border-dashed border-indigo-950 rounded-xl p-3.5 text-center bg-white/45 hover:bg-indigo-950/20 transition cursor-pointer">
+                  <div className="relative border-2 border-dashed border-white/40 rounded-2xl p-5 text-center bg-white/10 hover:bg-white/20 backdrop-blur-md transition-all duration-300 cursor-pointer group z-10">
                     <input
                       type="file"
                       accept="image/*,application/pdf"
@@ -797,26 +802,31 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                       disabled={isAiParsing}
                     />
                     {isAiParsing ? (
-                      <div className="flex flex-col items-center justify-center space-y-1.5 py-1">
-                        <div className="animate-spin rounded-full h-4.5 w-4.5 border-2 border-indigo-500 border-t-transparent"></div>
-                        <span className="text-[10.5px] font-bold text-indigo-300 animate-pulse">Fotoğraf yapay zeka ile çözümleniyor, lütfen bekleyin...</span>
+                      <div className="flex flex-col items-center justify-center space-y-3 py-2">
+                        <div className="animate-spin rounded-full h-8 w-8 border-4 border-white/20 border-t-white"></div>
+                        <span className="text-[11px] font-bold text-white animate-pulse tracking-wide">Yapay zeka analiz ediyor, lütfen bekleyin...</span>
                       </div>
                     ) : (
-                      <div className="space-y-1">
-                        <span className="text-xs font-bold text-indigo-400 block">📷 Evrak Fotoğrafı Çek veya Dosya Seç</span>
-                        <span className="text-[9px] text-slate-500 block">Kamera, PDF, PNG, JPG, WEBP formatları desteklenir</span>
+                      <div className="space-y-2 py-1 transform group-hover:scale-105 transition-transform duration-300">
+                        <div className="bg-white/20 w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-2 shadow-inner">
+                          <Camera size={24} className="text-white" />
+                        </div>
+                        <span className="text-[13px] font-bold text-white block">Fotoğraf Çek veya Seç</span>
+                        <span className="text-[10px] text-indigo-200 block font-medium">Kamera, PDF, PNG, JPG Desteklenir</span>
                       </div>
                     )}
                   </div>
 
                   {aiParseError && (
-                    <div className="bg-red-950/40 border border-red-900/50 text-red-400 p-2.5 rounded-xl text-[10.5px] font-semibold">
-                      ❌ {aiParseError}
+                    <div className="bg-red-500/20 border border-red-500/50 backdrop-blur-sm text-red-100 p-3 rounded-xl text-[11px] font-semibold relative z-10 flex items-start gap-2">
+                      <AlertTriangle size={14} className="text-red-300 flex-shrink-0 mt-0.5" />
+                      <span>{aiParseError}</span>
                     </div>
                   )}
                   {aiParseSuccess && (
-                    <div className="bg-emerald-950/40 border border-emerald-900/50 text-emerald-400 p-2.5 rounded-xl text-[10.5px] whitespace-pre-line font-medium leading-relaxed font-sans">
-                      🎉 {aiParseSuccess}
+                    <div className="bg-emerald-500/20 border border-emerald-500/50 backdrop-blur-sm text-emerald-50 p-3 rounded-xl text-[11px] whitespace-pre-line font-semibold leading-relaxed relative z-10 flex items-start gap-2">
+                      <Check size={14} className="text-emerald-300 flex-shrink-0 mt-0.5" />
+                      <span>{aiParseSuccess}</span>
                     </div>
                   )}
                 </div>
