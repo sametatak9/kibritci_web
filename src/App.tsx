@@ -1835,6 +1835,15 @@ export default function App() {
           {hideSidebarAndTopbar ? "Kendi Paneline Dön" : "Ana Sayfaya Dön"}
         </button>
       </div>
+      
+      {/* Global Advanced UX Providers */}
+      <SoundProvider />
+      <ContextMenuProvider />
+      <KeyboardNavProvider />
+      <ConfettiProvider />
+      <EasterEggProvider />
+      <ToastProvider />
+      <CommandPalette onSelect={(tab) => setActiveTab(tab as any)} />
     </div>
   );
 
