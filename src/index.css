@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+﻿@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -25,7 +25,7 @@ body {
   color: var(--color-slate-800);
 }
 
-/* 🖥️ Optimized Desktop Scaling & Sizing Density */
+/* ğŸ–¥ï¸ Optimized Desktop Scaling & Sizing Density */
 html {
   font-size: 16px; /* Slightly scaled up */
 }
@@ -76,7 +76,7 @@ html {
   background: rgba(156, 163, 175, 0.6);
 }
 
-/* ── Kurumsal Antetli Rapor Şablonu ───────────────────────────────────── */
+/* â”€â”€ Kurumsal Antetli Rapor Åablonu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .corporate-report {
   position: relative;
   display: flex;
@@ -94,7 +94,7 @@ html {
   min-height: 277mm;
 }
 
-/* Üst logo + hologram — sabit px, rem ölçeklemesinden etkilenmez */
+/* Ãœst logo + hologram â€” sabit px, rem Ã¶lÃ§eklemesinden etkilenmez */
 .corporate-report-watermark-img {
   position: absolute;
   right: 1.5%;
@@ -245,22 +245,104 @@ html {
   }
 }
 
-/* ⚡ Premium Micro-Animations and Soft Touch UI Interaction ⚡ */
+/* âš¡ Premium Micro-Animations and Soft Touch UI Interaction âš¡ */
 button, select, input, a, textarea {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 button:active, a:active, [role="button"]:active {
-  transform: scale(0.95);
+  transform: scale(0.97);
 }
 
 button:hover, [role="button"]:hover {
   filter: brightness(1.05);
 }
 
-/* Elegant glowing focus states */
+/* Elegant glowing focus states (Slate Theme) */
 input:focus, select:focus, textarea:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  border-color: #1e293b; /* slate-800 */
+  box-shadow: 0 0 0 3px rgba(30, 41, 59, 0.15);
 }
+
+/* Glassmorphism & Advanced Cards */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03);
+}
+
+.hover-card {
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.hover-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+}
+
+
+/* ?? İLERİ SEVİYE: GLOBAL UI ENHANCEMENTS (MAGIC SELECTORS) ?? */
+
+/* Ana Kartlar İçin 3D Float Etkisi */
+.bg-white.border-slate-200.rounded-2xl,
+.bg-white.border-slate-200.rounded-3xl,
+.bg-slate-50.border-slate-200.rounded-2xl,
+.bg-slate-50.border-slate-200.rounded-3xl {
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+}
+
+.bg-white.border-slate-200.rounded-2xl:hover,
+.bg-white.border-slate-200.rounded-3xl:hover,
+.bg-slate-50.border-slate-200.rounded-2xl:hover,
+.bg-slate-50.border-slate-200.rounded-3xl:hover {
+  transform: translateY(-3px) !important;
+  box-shadow: 0 15px 35px -5px rgba(15, 23, 42, 0.08), 0 10px 15px -6px rgba(15, 23, 42, 0.04) !important;
+  border-color: rgba(203, 213, 225, 0.9) !important;
+}
+
+/* Primary Butonlar İçin Premium Etkileşim */
+.bg-slate-900.text-white {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+.bg-slate-900.text-white:hover {
+  transform: translateY(-1.5px) !important;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.35) !important;
+  background-color: #0f172a !important;
+}
+
+.bg-slate-900.text-white:active {
+  transform: scale(0.96) translateY(0) !important;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.2) !important;
+}
+
+/* Secondary/Ghost Butonlar ve Tablo Satırları İçin Zarif Hover */
+.bg-slate-50.text-slate-800.border-slate-200.rounded-xl,
+.bg-white.text-slate-800.border-slate-200.rounded-xl {
+  transition: all 0.25s ease !important;
+}
+
+.bg-slate-50.text-slate-800.border-slate-200.rounded-xl:hover,
+.bg-white.text-slate-800.border-slate-200.rounded-xl:hover {
+  background-color: #f8fafc !important;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Sidebar ve Menü Hover Efektleri */
+.hover\:bg-slate-100:hover, .hover\:bg-slate-200:hover {
+  transform: translateX(2px) !important;
+  transition: all 0.2s ease !important;
+}
+
+/* Cam Efektli (Glassmorphism) Modallar */
+.fixed.inset-0.bg-slate-900\\/50, .fixed.inset-0.bg-slate-800\\/50, .fixed.inset-0.bg-slate-950\\/75, .fixed.inset-0.bg-slate-950\\/50, .fixed.inset-0.bg-black\\/50 {
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  background-color: rgba(15, 23, 42, 0.3) !important; /* Daha zarif ve şeffaf bir arka plan */
+}
+
