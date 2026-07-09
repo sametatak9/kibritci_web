@@ -3,6 +3,8 @@ import { ToastProvider } from './components/ToastProvider';
 import { SoundProvider } from './components/SoundProvider';
 import { ContextMenuProvider } from './components/ContextMenuProvider';
 import { KeyboardNavProvider } from './components/KeyboardNavProvider';
+import { ConfettiProvider } from './components/ConfettiProvider';
+import { EasterEggProvider } from './components/EasterEggProvider';
 import { CommandPalette } from './components/CommandPalette';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';

@@ -21,6 +21,10 @@ export const ToastProvider: React.FC = () => {
       if (isError) type = 'error';
       else if (isSuccess) type = 'success';
       
+      if (type === 'success') {
+        window.dispatchEvent(new CustomEvent('app-confetti'));
+      }
+      
       const newToast: Toast = {
         id: Math.random().toString(36).substr(2, 9),
         message,

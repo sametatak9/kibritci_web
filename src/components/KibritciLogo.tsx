@@ -21,8 +21,28 @@ export const KibritciLogo: React.FC<KibritciLogoProps> = ({
 
   const heightClass = className.includes('h-') ? '' : sizes[size];
 
+  const [clickCount, setClickCount] = React.useState(0);
+  const [lastClickTime, setLastClickTime] = React.useState(0);
+
+  const handleClick = () => {
+    const now = Date.now();
+    if (now - lastClickTime > 2000) {
+      setClickCount(1);
+    } else {
+      setClickCount(prev => prev + 1);
+      if (clickCount + 1 >= 5) {
+        window.dispatchEvent(new CustomEvent('app-easter-egg'));
+        setClickCount(0);
+      }
+    }
+    setLastClickTime(now);
+  };
+
   return (
-    <div className={`flex items-center select-none shrink-0 ${heightClass} ${className}`}>
+    <div 
+      className={`flex items-center select-none shrink-0 ${heightClass} ${className} cursor-pointer`}
+      onClick={handleClick}
+    >
       <img
         src={KIBRITCI_LOGO_PATH}
         alt="Kibritçi İnşaat"
