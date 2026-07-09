@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { Kullanici } from './AdminPanelScreen';
 import { saveKullanici, findKullaniciByEmail } from '../lib/kullaniciUtils';
+import { getAuth, updatePassword } from 'firebase/auth';
 
 interface ProfilScreenProps {
   currentUser: any;
@@ -26,6 +27,7 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({
   const [ad, setAd] = useState(matchedUser?.ad || '');
   const [soyad, setSoyad] = useState(matchedUser?.soyad || '');
   const [tcNo, setTcNo] = useState(matchedUser?.tcNo || '');
+  const [yeniSifre, setYeniSifre] = useState('');
 
   // Signature fields
   const [signatureText, setSignatureText] = useState(
@@ -67,7 +69,15 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({
       );
       localStorage.setItem('kibritci_sig_text', signatureText);
       localStorage.setItem('kibritci_sig_style', signatureStyle);
-      showNotification('success', '🎉 Profil ve dijital imza bilgileriniz başarıyla güncellendi!');
+
+      if (yeniSifre.trim().length >= 6) {
+        const auth = getAuth();
+        if (auth.currentUser) {
+          await updatePassword(auth.currentUser, yeniSifre.trim());
+        }
+      }
+
+      showNotification('success', '🎉 Profil, şifre ve imza bilgileriniz başarıyla güncellendi!');
     } catch {
       showNotification('error', 'Profil kaydedilemedi. Lütfen tekrar deneyin.');
     }
@@ -172,6 +182,16 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({
               </div>
             </div>
 
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase">Yeni Şifre (Değiştirmek İsterseniz)</label>
+              <input 
+                type="password" 
+                placeholder="En az 6 karakter (Boş bırakırsanız değişmez)"
+                value={yeniSifre}
+                onChange={(e) => setYeniSifre(e.target.value)}
+                className="w-full bg-slate-50 border text-slate-800 text-xs font-bold p-2.5 rounded-xl outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
             <button
               type="submit"
               className="w-full bg-slate-900 hover:bg-slate-950 text-white font-black text-xs py-3 rounded-xl transition cursor-pointer flex items-center justify-center space-x-1.5 shadow-md"
@@ -198,7 +218,7 @@ export const ProfilScreen: React.FC<ProfilScreenProps> = ({
         <div className={`bg-white rounded-2xl border p-5 shadow-sm space-y-4 ${isStandalone ? 'bg-slate-950 border-slate-800 text-slate-200' : 'col-span-7'}`}>
           <div className="flex items-center space-x-2 border-b pb-2 border-slate-100">
             <PenTool size={16} className="text-amber-500" />
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">Dijital İmza Ayarları</h3>
+            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">Üyelik Bilgileri & Dijital İmza</h3>
           </div>
 
           <div className="space-y-4">
