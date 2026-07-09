@@ -165,6 +165,62 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
   // Status message
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [islemTarihi, setIslemTarihi] = useState(islemTarihi);
+  const getIslemZamani = () => { const timeStr = getIslemZamani().split('T')[1]; return `${islemTarihi}T${timeStr}`; };
+
+  const handleNobetRaporuAl = async () => {
+    try {
+      showStatus('success', 'Rapor oluşturuluyor, lütfen bekleyin...');
+      
+      const todayLogs = personelLoglar.filter(l => l.zaman && l.zaman.startsWith(islemTarihi));
+      const todayAraclar = [...iceridekiAraclar, ...aracGecmisLoglar].filter(a => a.girisZamani && a.girisZamani.startsWith(islemTarihi));
+      const todayZiyaretciler = [...aktifZiyaretciler, ...ziyaretciGecmisLoglar].filter(z => z.girisZamani && z.girisZamani.startsWith(islemTarihi));
+      const todayEvraklar = gelenEvraklar.filter(e => e.tarih === islemTarihi);
+
+      const htmlContent = generateGuvenlikReportHtml(
+        islemTarihi,
+        todayLogs,
+        todayAraclar,
+        todayZiyaretciler,
+        todayEvraklar
+      );
+
+      const container = document.createElement('div');
+      container.innerHTML = htmlContent;
+      container.style.position = 'absolute';
+      container.style.top = '-9999px';
+      container.style.left = '-9999px';
+      container.style.width = '1000px'; 
+      document.body.appendChild(container);
+
+      const canvas = await html2canvas(container, { scale: 2, useCORS: true });
+      document.body.removeChild(container);
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      let heightLeft = pdfHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+      heightLeft -= pdf.internal.pageSize.getHeight();
+
+      while (heightLeft >= 0) {
+        position = heightLeft - pdfHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+        heightLeft -= pdf.internal.pageSize.getHeight();
+      }
+
+      pdf.save(`Kibritci_Guvenlik_Raporu_${islemTarihi}.pdf`);
+      showStatus('success', 'Rapor başarıyla indirildi.');
+    } catch (error) {
+      console.error("PDF oluşturma hatası:", error);
+      showStatus('error', 'Rapor oluşturulurken bir hata oluştu.');
+    }
+  };
 
   const showStatus = (type: 'success' | 'error', text: string) => {
     setStatusMsg({ type, text });
@@ -259,7 +315,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   const handleArchiveNobetGunu = async (notes: string) => {
     setIsArchiving(true);
     try {
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = islemTarihi;
       const todayLogs = personelLoglar.filter(l => l.zaman && l.zaman.startsWith(todayStr));
       const todayAraclar = [...iceridekiAraclar, ...aracGecmisLoglar].filter(a => a.girisZamani && a.girisZamani.startsWith(todayStr));
       const todayZiyaretciler = [...aktifZiyaretciler, ...ziyaretciGecmisLoglar].filter(z => z.girisZamani && z.girisZamani.startsWith(todayStr));
@@ -268,7 +324,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       const archiveRef = doc(collection(db, 'guvenlikNobetArsivleri'));
       await setDoc(archiveRef, {
         tarih: todayStr,
-        kayitZamani: new Date().toISOString(),
+        kayitZamani: getIslemZamani(),
         kaydeden: currentUser?.email || 'Nöbetçi Güvenlik',
         notlar: notes,
         personelLoglari: todayLogs,
@@ -313,7 +369,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
     setLoadingIrsaliye(true);
     try {
-      const uniqueId = `EVR-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      const uniqueId = `EVR-${islemTarihi.replace(/-/g, '')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
       
       // 1. Save to the general received documents pool (Guvenlik Gelen Evraklar)
       const newEvrak = {
@@ -321,7 +377,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         evrakNo: irsaliyeNo,
         evrakTuru, // 'İRSALİYE' | 'FATURA' | 'MAKBUZ' | 'GENEL_EVRAK'
         firma,
-        tarih: new Date().toISOString().slice(0, 10),
+        tarih: islemTarihi,
         saat: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
         fotoUrl: irsaliyeFoto || "",
         durum: 'BEKLEMEDE',
@@ -349,7 +405,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
           irsaliyeNo,
           firma,
           saId: "", // Removed preselected PO match from gate - matched in office instead!
-          tarih: new Date().toISOString().slice(0, 10),
+          tarih: islemTarihi,
           onayDurumu: 'ONAY BEKLİYOR',
           fisEvrakUrl: irsaliyeFoto || "",
           kalemler: eklenenKalemler.map(x => ({
@@ -364,7 +420,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         const newFatura: Fatura = {
           id: uniqueId,
           faturaNo: irsaliyeNo,
-          tarih: new Date().toISOString().slice(0, 10),
+          tarih: islemTarihi,
           cariKartId: "",
           cariUnvan: firma,
           toplamTutar: 0,
@@ -416,7 +472,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         tcNo: personel.tcNo,
         gorev: personel.gorev,
         tip,
-        zaman: new Date().toISOString(),
+        zaman: getIslemZamani(),
         kaydeden: currentUser?.email || 'kapici_kibritci'
       };
 
@@ -454,7 +510,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         surucuAdi,
         aciklama: aracAciklama,
         durum: 'İÇERİDE',
-        girisZamani: new Date().toISOString(),
+        girisZamani: getIslemZamani(),
         cikisZamani: null,
         kaydeden: currentUser?.email || 'guvenlik_gate'
       };
@@ -480,7 +536,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       const vehiclePlaka = matchedArac ? matchedArac.plaka : id;
       await setDoc(doc(db, 'guvenlikAracLoglari', id), {
         durum: 'ÇIKTI',
-        cikisZamani: new Date().toISOString()
+        cikisZamani: getIslemZamani()
       }, { merge: true });
       if (addNotification) {
         addNotification(`${vehiclePlaka} plakalı araç şantiyeden çıkış yaptı.`);
@@ -512,7 +568,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         ziyaretSebebi,
         ziyaretEdilen,
         durum: 'İÇERİDE',
-        girisZamani: new Date().toISOString(),
+        girisZamani: getIslemZamani(),
         cikisZamani: null,
         kartNo: `ZK-${Math.floor(1000 + Math.random() * 9000)}`
       };
@@ -543,7 +599,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       const guestName = matchedGuest ? matchedGuest.adSoyad : id;
       await setDoc(doc(db, 'guvenlikZiyaretciLoglari', id), {
         durum: 'ÇIKTI',
-        cikisZamani: new Date().toISOString()
+        cikisZamani: getIslemZamani()
       }, { merge: true });
       if (addNotification) {
         addNotification(`Ziyaretçi ${guestName} şantiyeden çıkış yaptı.`);
@@ -956,7 +1012,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                   BUGÜN GÖNDERDİĞİM EVRAKLAR
                 </span>
                 {gelenEvraklar.filter(e => {
-                  const todayStr = new Date().toISOString().slice(0,10);
+                  const todayStr = islemTarihi;
                   return e.tarih === todayStr && e.kaydeden === (currentUser?.email || 'nobetci_guvenlik');
                 }).length === 0 ? (
                   <div className="text-center py-6 text-[10px] text-slate-400 font-bold">Bugün henüz evrak göndermediniz.</div>
@@ -964,7 +1020,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {gelenEvraklar
                       .filter(e => {
-                        const todayStr = new Date().toISOString().slice(0,10);
+                        const todayStr = islemTarihi;
                         return e.tarih === todayStr && e.kaydeden === (currentUser?.email || 'nobetci_guvenlik');
                       })
                       .map(e => (
@@ -1413,28 +1469,28 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                       <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40">
                         <span className="text-[9px] font-bold text-slate-500 block uppercase">Personel Hareketi</span>
                         <span className="text-sm font-black text-slate-805 font-mono">
-                          {personelLoglar.filter(l => l.zaman && l.zaman.startsWith(new Date().toISOString().slice(0, 10))).length} Kayıt
+                          {personelLoglar.filter(l => l.zaman && l.zaman.startsWith(islemTarihi)).length} Kayıt
                         </span>
                       </div>
 
                       <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40">
                         <span className="text-[9px] font-bold text-slate-500 block uppercase">Araç Kaydı</span>
                         <span className="text-sm font-black text-slate-805 font-mono">
-                          {[...iceridekiAraclar, ...aracGecmisLoglar].filter(a => (a.girisZamani && a.girisZamani.startsWith(new Date().toISOString().slice(0, 10)))).length} Araç
+                          {[...iceridekiAraclar, ...aracGecmisLoglar].filter(a => (a.girisZamani && a.girisZamani.startsWith(islemTarihi))).length} Araç
                         </span>
                       </div>
 
                       <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40">
                         <span className="text-[9px] font-bold text-slate-500 block uppercase">Misafir Sayısı</span>
                         <span className="text-sm font-black text-slate-805 font-mono">
-                          {[...aktifZiyaretciler, ...ziyaretciGecmisLoglar].filter(z => (z.girisZamani && z.girisZamani.startsWith(new Date().toISOString().slice(0, 10)))).length} Ziyaretçi
+                          {[...aktifZiyaretciler, ...ziyaretciGecmisLoglar].filter(z => (z.girisZamani && z.girisZamani.startsWith(islemTarihi))).length} Ziyaretçi
                         </span>
                       </div>
 
                       <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40">
                         <span className="text-[9px] font-bold text-slate-500 block uppercase">Evrak Alımı</span>
                         <span className="text-sm font-black text-slate-805 font-mono">
-                          {gelenEvraklar.filter(e => e.tarih === new Date().toISOString().slice(0, 10)).length} Evrak
+                          {gelenEvraklar.filter(e => e.tarih === islemTarihi).length} Evrak
                         </span>
                       </div>
                     </div>
