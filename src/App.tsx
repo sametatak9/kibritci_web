@@ -1836,7 +1836,6 @@ export default function App() {
         </button>
       </div>
       
-      {/* Global Advanced UX Providers */}
       <SoundProvider />
       <ContextMenuProvider />
       <KeyboardNavProvider />

@@ -2,6 +2,13 @@ import { Component, StrictMode, type ReactNode } from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { ToastProvider } from './components/ToastProvider';
+import { SoundProvider } from './components/SoundProvider';
+import { ContextMenuProvider } from './components/ContextMenuProvider';
+import { KeyboardNavProvider } from './components/KeyboardNavProvider';
+import { ConfettiProvider } from './components/ConfettiProvider';
+import { EasterEggProvider } from './components/EasterEggProvider';
+import { CommandPalette } from './components/CommandPalette';
 
 type RootErrorBoundaryState = {
   hasError: boolean;
@@ -70,6 +77,12 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, RootErrorBoun
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <RootErrorBoundary>
+      <SoundProvider />
+      <ContextMenuProvider />
+      <KeyboardNavProvider />
+      <ConfettiProvider />
+      <EasterEggProvider />
+      <ToastProvider />
       <App />
     </RootErrorBoundary>
   </StrictMode>,
