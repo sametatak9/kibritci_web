@@ -5,11 +5,11 @@ export const generateGuvenlikReportHtml = (
   ziyaretciler: any[],
   evraklar: any[]
 ): string => {
-  const KIBRITCI_LOGO_BASE64 = \`data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MDAgMTAwIiBmaWxsPSJub25lIj4KICA8cGF0aCBkPSJNMzAgODBMNzAgMjBMMTEwIDgwSDMwWiIgZmlsbD0iI0Y1OTUwNiIvPgogIDxwYXRoIGQ9Ik03MCAyMEwxMTAgODBIMzBMMzAgODBMMzAgODBMMzAgODBaIiBmaWxsPSIjRjU5NTA2IiBmaWxsLW9wYWNpdHk9IjAuMSIvPgogIDx0ZXh0IHg9IjE0MCIgeT0iNzAiIGZvbnQtZmFtaWx5PSJBcmlhbCwgSGVsdmV0aWNhLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjU1IiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iIzFFMjkyQiI+S0k8dHNwYW4gZmlsbD0iI0Y1OTUwNiI+QjwvdHNwYW4+UklUQ8SwPC90ZXh0Pgo8L3N2Zz4=\`;
+  const KIBRITCI_LOGO_BASE64 = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MDAgMTAwIiBmaWxsPSJub25lIj4KICA8cGF0aCBkPSJNMzAgODBMNzAgMjBMMTEwIDgwSDMwWiIgZmlsbD0iI0Y1OTUwNiIvPgogIDxwYXRoIGQ9Ik03MCAyMEwxMTAgODBIMzBMMzAgODBMMzAgODBMMzAgODBaIiBmaWxsPSIjRjU5NTA2IiBmaWxsLW9wYWNpdHk9IjAuMSIvPgogIDx0ZXh0IHg9IjE0MCIgeT0iNzAiIGZvbnQtZmFtaWx5PSJBcmlhbCwgSGVsdmV0aWNhLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjU1IiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iIzFFMjkyQiI+S0k8dHNwYW4gZmlsbD0iI0Y1OTUwNiI+QjwvdHNwYW4+UklUQ8SwPC90ZXh0Pgo8L3N2Zz4=`;
 
   const dateFormatted = new Date(islemTarihi).toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' });
 
-  let html = \`
+  let html = `
   <!DOCTYPE html>
   <html>
   <head>
@@ -103,10 +103,10 @@ export const generateGuvenlikReportHtml = (
         <p>Tarih: \${dateFormatted}</p>
       </div>
     </div>
-  \`;
+  `;
 
   // 1. Ziyaretçiler Tablosu
-  html += \`
+  html += `
     <div class="section-title">1. ZİYARETÇİ KAYITLARI (\${ziyaretciler.length})</div>
     <table>
       <thead>
@@ -120,14 +120,14 @@ export const generateGuvenlikReportHtml = (
         </tr>
       </thead>
       <tbody>
-  \`;
+  `;
   if (ziyaretciler.length === 0) {
-    html += \`<tr><td colspan="6" style="text-align: center; font-style: italic;">Kayıt bulunamadı.</td></tr>\`;
+    html += `<tr><td colspan="6" style="text-align: center; font-style: italic;">Kayıt bulunamadı.</td></tr>`;
   } else {
     ziyaretciler.forEach(z => {
       const giris = z.girisZamani ? new Date(z.girisZamani).toLocaleTimeString('tr-TR') : '-';
       const cikis = z.cikisZamani ? new Date(z.cikisZamani).toLocaleTimeString('tr-TR') : '-';
-      html += \`
+      html += `
         <tr>
           <td><strong>\${z.adSoyad || ''}</strong></td>
           <td>\${z.firma || ''}</td>
@@ -136,13 +136,13 @@ export const generateGuvenlikReportHtml = (
           <td>\${giris}</td>
           <td>\${cikis}</td>
         </tr>
-      \`;
+      `;
     });
   }
-  html += \`</tbody></table>\`;
+  html += `</tbody></table>`;
 
   // 2. Araç Kayıtları Tablosu
-  html += \`
+  html += `
     <div class="section-title">2. ARAÇ GİRİŞ-ÇIKIŞ KAYITLARI (\${araclar.length})</div>
     <table>
       <thead>
@@ -156,14 +156,14 @@ export const generateGuvenlikReportHtml = (
         </tr>
       </thead>
       <tbody>
-  \`;
+  `;
   if (araclar.length === 0) {
-    html += \`<tr><td colspan="6" style="text-align: center; font-style: italic;">Kayıt bulunamadı.</td></tr>\`;
+    html += `<tr><td colspan="6" style="text-align: center; font-style: italic;">Kayıt bulunamadı.</td></tr>`;
   } else {
     araclar.forEach(a => {
       const giris = a.girisZamani ? new Date(a.girisZamani).toLocaleTimeString('tr-TR') : '-';
       const cikis = a.cikisZamani ? new Date(a.cikisZamani).toLocaleTimeString('tr-TR') : '-';
-      html += \`
+      html += `
         <tr>
           <td><strong>\${a.plaka || ''}</strong></td>
           <td>\${a.surucuAdi || ''}</td>
@@ -172,13 +172,13 @@ export const generateGuvenlikReportHtml = (
           <td>\${giris}</td>
           <td>\${cikis}</td>
         </tr>
-      \`;
+      `;
     });
   }
-  html += \`</tbody></table>\`;
+  html += `</tbody></table>`;
 
   // 3. Gelen Evraklar Tablosu
-  html += \`
+  html += `
     <div class="section-title">3. TESLİM ALINAN EVRAKLAR (\${evraklar.length})</div>
     <table>
       <thead>
@@ -191,12 +191,12 @@ export const generateGuvenlikReportHtml = (
         </tr>
       </thead>
       <tbody>
-  \`;
+  `;
   if (evraklar.length === 0) {
-    html += \`<tr><td colspan="5" style="text-align: center; font-style: italic;">Kayıt bulunamadı.</td></tr>\`;
+    html += `<tr><td colspan="5" style="text-align: center; font-style: italic;">Kayıt bulunamadı.</td></tr>`;
   } else {
     evraklar.forEach(e => {
-      html += \`
+      html += `
         <tr>
           <td><strong>\${e.evrakTuru || ''}</strong></td>
           <td>\${e.evrakNo || ''}</td>
@@ -204,13 +204,13 @@ export const generateGuvenlikReportHtml = (
           <td>\${e.saat || '-'}</td>
           <td>\${e.durum || ''}</td>
         </tr>
-      \`;
+      `;
     });
   }
-  html += \`</tbody></table>\`;
+  html += `</tbody></table>`;
 
   // 4. Personel Logları Tablosu
-  html += \`
+  html += `
     <div class="section-title">4. PERSONEL GİRİŞ-ÇIKIŞ (\${personelLoglar.length})</div>
     <table>
       <thead>
@@ -222,32 +222,32 @@ export const generateGuvenlikReportHtml = (
         </tr>
       </thead>
       <tbody>
-  \`;
+  `;
   if (personelLoglar.length === 0) {
-    html += \`<tr><td colspan="4" style="text-align: center; font-style: italic;">Kayıt bulunamadı.</td></tr>\`;
+    html += `<tr><td colspan="4" style="text-align: center; font-style: italic;">Kayıt bulunamadı.</td></tr>`;
   } else {
     personelLoglar.forEach(p => {
       const saat = p.zaman ? new Date(p.zaman).toLocaleTimeString('tr-TR') : '-';
-      html += \`
+      html += `
         <tr>
           <td><strong>\${p.ad || ''} \${p.soyad || ''}</strong></td>
           <td>\${p.gorev || ''}</td>
           <td style="color: \${p.tip === 'GİRİŞ' ? 'green' : 'red'}; font-weight: bold;">\${p.tip || ''}</td>
           <td>\${saat}</td>
         </tr>
-      \`;
+      `;
     });
   }
-  html += \`</tbody></table>\`;
+  html += `</tbody></table>`;
 
-  html += \`
+  html += `
     <div class="footer">
       Bu belge KIBRITCI ERP sistemi tarafından otomatik oluşturulmuştur. <br/>
       Rapor Oluşturma Zamanı: \${new Date().toLocaleString('tr-TR')}
     </div>
   </body>
   </html>
-  \`;
+  `;
 
   return html;
 };
