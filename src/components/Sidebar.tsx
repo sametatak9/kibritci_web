@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Building2, Users, CalendarCheck2, CreditCard, ShoppingCart, Truck, KeySquare, FileText, Tent, Mail, ChartBar as BarChart3, BookOpen, Contact as Contact2, Package, LogOut, Wallet, Hop as Home, ShieldCheck, PenTool, MessageSquare, Smartphone, HardHat, Banknote, Images, Sparkles, Link2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Building2, Users, CalendarCheck2, CreditCard, ShoppingCart, Truck, KeySquare, FileText, Tent, Mail, ChartBar as BarChart3, BookOpen, Contact as Contact2, Package, LogOut, Moon, Sun, Wallet, Hop as Home, ShieldCheck, PenTool, MessageSquare, Smartphone, HardHat, Banknote, Images, Sparkles, Link2, ChevronDown, ChevronRight } from 'lucide-react';
 import { getRoleAllowedTabs, normalizeYetki } from '../lib/yetkiUtils';
 
 interface SidebarProps {
@@ -239,6 +239,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
+          
+        <div className="px-3">
+          <button
+            onClick={() => document.documentElement.classList.toggle('dark-mode')}
+            className="w-full flex items-center justify-center space-x-2 bg-slate-900 hover:bg-black text-white py-2.5 rounded-xl font-bold text-[11px] transition cursor-pointer shadow-sm keep-colors"
+          >
+            <Moon size={14} />
+            <span>Gece Modu</span>
+          </button>
+        </div>
+
           <div className="px-3">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
               Modüller

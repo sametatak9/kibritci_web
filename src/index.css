@@ -346,3 +346,37 @@ input:focus, select:focus, textarea:focus {
   background-color: rgba(15, 23, 42, 0.3) !important; /* Daha zarif ve şeffaf bir arka plan */
 }
 
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(15px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+
+/* 🌙 GECE MODU (Sıfır Risk Filter Metodu) 🌙 */
+.dark-mode {
+  filter: invert(0.92) hue-rotate(180deg);
+  background-color: #f8fafc; /* This becomes extremely dark after inversion */
+}
+
+.dark-mode img, 
+.dark-mode video, 
+.dark-mode [data-theme-ignore="true"],
+.dark-mode .keep-colors {
+  filter: invert(1) hue-rotate(180deg); /* Reverts the inversion for images */
+}
+
+/* Skeleton Yükleme Animasyonu */
+@keyframes shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+.animate-shimmer {
+  animation: shimmer 2s infinite linear;
+  background: linear-gradient(to right, #f1f5f9 4%, #e2e8f0 25%, #f1f5f9 36%);
+  background-size: 1000px 100%;
+}
+

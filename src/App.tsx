@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { ToastProvider } from './components/ToastProvider';
+import { CommandPalette } from './components/CommandPalette';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { CircleAlert as AlertCircle, RefreshCw } from 'lucide-react';
@@ -197,6 +199,16 @@ export default function App() {
   const [geminiApiAlert, setGeminiApiAlert] = useState<string | null>(null);
 
   // Global State Engine
+  
+  // --- Toast Override ---
+  useEffect(() => {
+    const originalAlert = window.alert;
+    window.alert = (message) => {
+      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message } }));
+    };
+    return () => { window.alert = originalAlert; };
+  }, []);
+
   const [personeller, setPersoneller] = useState<Personel[]>([]);
   const [yoklamalar, setYoklamalar] = useState<AylikYoklamaMap>({});
   const yoklamaPersonCount = Object.keys(yoklamalar || {}).length;
