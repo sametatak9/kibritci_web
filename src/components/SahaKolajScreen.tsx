@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookOpen, Calendar, FileUp, Grid3X3, Images, Loader2, Pencil, Printer,
-  Trash2, X, Check, Layers, Eye,
+  Trash2, X, Check, Layers, Eye, AlertCircle, Plus, Camera, Search, Filter, FileDown, CheckCircle2, ChevronRight, MessageSquare, History
 } from 'lucide-react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db, removeDocument, saveDocument } from '../lib/firebase';
@@ -17,7 +17,7 @@ import {
 } from '../lib/sahaKolajUtils';
 import { PARSEL_BLOK_MAP, PARSEL_LIST, defaultBlokForParsel } from '../data/parselBlokMap';
 import { KIBRITCI_LOGO_PATH } from '../lib/kibritciBrand';
-import { Trash2, AlertCircle, Plus, Camera, Search, Filter, Layers, FileDown, Eye, CheckCircle2, ChevronRight, MessageSquare, History } from 'lucide-react';
+
 
 interface SahaKolajScreenProps {
   currentUser?: { email?: string; displayName?: string };

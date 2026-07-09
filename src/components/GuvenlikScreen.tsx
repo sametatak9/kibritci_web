@@ -165,8 +165,14 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
   // Status message
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
-  const [islemTarihi, setIslemTarihi] = useState(islemTarihi);
-  const getIslemZamani = () => { const timeStr = getIslemZamani().split('T')[1]; return `${islemTarihi}T${timeStr}`; };
+  const [islemTarihi, setIslemTarihi] = useState(new Date().toISOString().split('T')[0]);
+  const getIslemZamani = () => { 
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    return `${islemTarihi}T${hours}:${minutes}:${seconds}.000Z`; 
+  };
 
   const handleNobetRaporuAl = async () => {
     try {
