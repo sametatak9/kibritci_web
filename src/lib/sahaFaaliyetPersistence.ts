@@ -194,15 +194,6 @@ export async function removeSahaFaaliyetSafe(
     await archiveSahaFaaliyet(record, kaynak, 'Silme öncesi otomatik yedek');
   }
 
-  if (isProductionLive()) {
-    return {
-      ok: false,
-      blocked: true,
-      error:
-        'Canlı sistemde saha faaliyeti silinemez. Kayıt otomatik arşivlendi; gerekirse Saha Faaliyetleri arşivinden geri yükleyebilirsiniz.',
-    };
-  }
-
   try {
     await withTimeout(deleteDoc(doc(db, SAHA_FAALIYET_COLLECTION, id)), 15000);
     return { ok: true, id };
