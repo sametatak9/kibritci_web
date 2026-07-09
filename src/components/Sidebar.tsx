@@ -212,27 +212,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {isOpen && (
         <div
           onClick={onClose}
-          className="fixed inset-0 bg-black/60 z-35 lg:hidden backdrop-blur-xs transition-opacity cursor-pointer animate-fade-in"
+          className="fixed inset-0 bg-black/60 z-35 lg:hidden backdrop-blur-sm transition-opacity cursor-pointer animate-fade-in"
         />
       )}
-      <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-68 bg-white h-screen border-r border-slate-200 flex flex-col select-none shrink-0 font-sans text-slate-800 transition-transform duration-300 transform ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-        <div className="p-5 border-b border-slate-200 flex items-center justify-between">
+      <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-68 bg-slate-950/95 backdrop-blur-xl h-screen border-r border-slate-800/60 flex flex-col select-none shrink-0 font-sans text-slate-300 shadow-2xl transition-transform duration-300 transform ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+        <div className="p-5 border-b border-slate-800/60 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-sm transform hover:rotate-3 transition">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-900/50 transform hover:rotate-3 transition">
               <Building2 size={22} className="stroke-[2.5]" />
             </div>
             <div>
-              <h1 className="font-display font-bold text-[15px] tracking-wide text-slate-900 uppercase">
+              <h1 className="font-display font-bold text-[15px] tracking-wide text-white uppercase">
                 KİBRİTÇİ ERP
               </h1>
-              <p className="text-[11px] text-slate-500 font-medium tracking-tight">
+              <p className="text-[11px] text-slate-400 font-medium tracking-tight">
                 Şantiye Yönetim Sistemi
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="lg:hidden text-slate-400 hover:text-slate-650 p-1 rounded-lg"
+            className="lg:hidden text-slate-500 hover:text-slate-300 p-1 rounded-lg"
           >
             ✕
           </button>
@@ -240,7 +240,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
           <div className="px-3">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none">
               Modüller
             </span>
           </div>
@@ -252,7 +252,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={() =>
                   setExpandedGroups((prev) => ({ ...prev, [group.group]: !prev[group.group] }))
                 }
-                className="w-full px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center justify-between hover:text-slate-600 transition cursor-pointer"
+                className="w-full px-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 flex items-center justify-between hover:text-slate-300 transition cursor-pointer"
               >
                 <span>{group.group}</span>
                 {expandedGroups[group.group] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -267,16 +267,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       setActiveTab(item.key);
                       if (onClose) onClose();
                     }}
-                    className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-[13px] font-semibold transition-all duration-200 group text-left cursor-pointer ${
+                    className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-[13px] transition-all duration-200 group text-left cursor-pointer ${
                       isActive
-                        ? "bg-blue-50 text-blue-700 border-l-4 border-blue-600 shadow-xs font-semibold"
-                        : "text-slate-650 hover:bg-slate-50 hover:text-slate-900"
+                        ? "bg-blue-500/10 text-blue-400 border-l-4 border-blue-500 shadow-xs font-bold"
+                        : "text-slate-400 font-medium hover:bg-white/5 hover:text-white"
                     }`}
                   >
                     <Icon
                       size={16}
                       className={`shrink-0 transition-transform group-hover:scale-105 ${
-                        isActive ? "text-blue-650" : "text-slate-400 group-hover:text-slate-700"
+                        isActive ? "text-blue-400" : "text-slate-500 group-hover:text-slate-300"
                       }`}
                     />
                     <span className="truncate">{item.label}</span>
@@ -287,32 +287,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
           ))}
         </div>
 
-        <div className="p-4 border-t border-slate-200 space-y-2">
+        <div className="p-4 border-t border-slate-800/60 space-y-2">
           {onSignatureEdit && (
             <button
               onClick={onSignatureEdit}
-              className="w-full flex items-center space-x-2 px-3 py-2 rounded-lg text-[13px] font-semibold text-slate-650 hover:bg-slate-50 hover:text-slate-900 transition cursor-pointer"
+              className="w-full flex items-center space-x-2 px-3 py-2 rounded-lg text-[13px] font-semibold text-slate-400 hover:bg-white/5 hover:text-white transition cursor-pointer"
             >
-              <PenTool size={16} className="text-slate-400" />
+              <PenTool size={16} className="text-slate-500" />
               <span>İmza Ayarları</span>
             </button>
           )}
           {onToggleMobileMode && (
             <button
               onClick={onToggleMobileMode}
-              className="w-full flex items-center space-x-2 px-3 py-2 rounded-lg text-[13px] font-semibold text-slate-650 hover:bg-slate-50 hover:text-slate-900 transition cursor-pointer"
+              className="w-full flex items-center space-x-2 px-3 py-2 rounded-lg text-[13px] font-semibold text-slate-400 hover:bg-white/5 hover:text-white transition cursor-pointer lg:hidden"
             >
-              <Smartphone size={16} className="text-slate-400" />
-              <span>Mobil Mod</span>
+              <Smartphone size={16} className="text-slate-500" />
+              <span>Mobil Görünüme Geç</span>
             </button>
           )}
           {onSignOut && (
             <button
               onClick={onSignOut}
-              className="w-full flex items-center space-x-2 px-3 py-2 rounded-lg text-[13px] font-semibold text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+              className="w-full flex items-center space-x-2 px-3 py-2 rounded-lg text-[13px] font-semibold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition cursor-pointer"
             >
               <LogOut size={16} />
-              <span>Oturumu Kapat</span>
+              <span>Çıkış Yap</span>
             </button>
           )}
         </div>

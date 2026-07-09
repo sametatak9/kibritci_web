@@ -126,7 +126,7 @@ export const Topbar: React.FC<TopbarProps> = ({
     .toUpperCase();
 
   return (
-    <header className="h-[56px] bg-slate-900 border-b border-slate-800 px-3 md:px-6 flex items-center justify-between shrink-0 font-sans select-none relative text-slate-100 shadow-md gap-2">
+    <header className="h-[56px] bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/60 px-3 md:px-6 flex items-center justify-between shrink-0 font-sans select-none relative text-slate-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.3)] gap-2 z-40">
       
       {/* Left Area: Sidebar Toggle & Section Title */}
       <div className="flex items-center space-x-2 md:space-x-3 text-[13px] min-w-0">
