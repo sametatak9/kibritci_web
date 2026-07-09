@@ -2601,7 +2601,7 @@ export default function App() {
               <div className="flex items-center space-x-2.5">
                 <span className="text-xl">✍️</span>
                 <div>
-                  <h3 className="font-display font-semibold text-sm">Dijital Onay &amp; İmza Ayarları</h3>
+                  <h3 className="font-display font-semibold text-sm">Üyelik Bilgileri Güncelle</h3>
                   <p className="text-[10px] text-slate-400">Belgeleri onayladığınızda vurulacak imza şablonu</p>
                 </div>
               </div>

@@ -305,7 +305,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-[13px] font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition cursor-pointer"
             >
               <PenTool size={16} className="text-slate-400" />
-              <span>İmza Ayarları</span>
+              <span>Üyelik Bilg. Güncelle</span>
             </button>
           )}
           {onToggleMobileMode && (
