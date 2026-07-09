@@ -289,6 +289,17 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     }
   };
 
+  const handleDeleteEvrak = async (evrakId: string) => {
+    if (!window.confirm('Bu evrak kaydını tamamen silmek istediğinize emin misiniz?')) return;
+    try {
+      await deleteDoc(doc(db, 'guvenlikGelenEvraklar', evrakId));
+      if (addNotification) addNotification('Evrak kaydı silindi.');
+    } catch (e) {
+      console.error(e);
+      alert('Silinemedi.');
+    }
+  };
+
   const handleSaveIrsaliye = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!irsaliyeNo || !firma) {
@@ -720,6 +731,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                     <input
                       type="file"
                       accept="image/*,application/pdf"
+                      capture="environment"
                       onChange={(e) => {
                         if (e.target.files?.[0]) {
                           processSecurityDocumentAi(e.target.files[0]);
@@ -802,6 +814,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                         <input 
                           type="file"
                           accept="image/*"
+                          capture="environment"
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) {
@@ -935,6 +948,50 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                     </button>
                   </div>
                 </form>
+              </div>
+              
+              {/* Geçmiş Evraklarım Listesi (Sadece günlük / kendi gönderdikleri) */}
+              <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4 mt-6">
+                <span className="font-display font-black text-xs text-amber-500 uppercase tracking-widest block border-b border-slate-200 pb-2">
+                  BUGÜN GÖNDERDİĞİM EVRAKLAR
+                </span>
+                {gelenEvraklar.filter(e => {
+                  const todayStr = new Date().toISOString().slice(0,10);
+                  return e.tarih === todayStr && e.kaydeden === (currentUser?.email || 'nobetci_guvenlik');
+                }).length === 0 ? (
+                  <div className="text-center py-6 text-[10px] text-slate-400 font-bold">Bugün henüz evrak göndermediniz.</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {gelenEvraklar
+                      .filter(e => {
+                        const todayStr = new Date().toISOString().slice(0,10);
+                        return e.tarih === todayStr && e.kaydeden === (currentUser?.email || 'nobetci_guvenlik');
+                      })
+                      .map(e => (
+                        <div key={e.id} className="bg-slate-50 border border-slate-200 p-3 rounded-2xl flex flex-col justify-between gap-3 relative">
+                          <div>
+                            <div className="flex justify-between items-start">
+                              <span className="text-[10px] font-black text-slate-800">{e.evrakTuru} - {e.evrakNo}</span>
+                              <span className={`text-[8px] px-2 py-0.5 rounded-full font-bold uppercase ${e.durum === 'BEKLEMEDE' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                {e.durum}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-bold mt-1">{e.firma}</div>
+                            <div className="text-[9px] text-slate-400 mt-0.5">{e.kalemler?.length || 0} Kalem Malzeme</div>
+                          </div>
+                          
+                          {e.durum === 'BEKLEMEDE' && (
+                            <button
+                              onClick={() => handleDeleteEvrak(e.id)}
+                              className="w-full mt-2 text-[10px] py-1.5 font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition cursor-pointer"
+                            >
+                              🗑 Sil (İptal Et)
+                            </button>
+                          )}
+                        </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
             </div>
