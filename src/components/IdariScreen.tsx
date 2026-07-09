@@ -4619,19 +4619,18 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 orientation="landscape"
                 docCode={`RAPOR MODELİ: KBR-SH-2026-${sahaReportType}`}
               >
-              <div className="mb-4 pb-3 border-b border-slate-200">
-                <p className="text-xs text-slate-500 font-semibold tracking-wide uppercase">TEKNİK MÜHENDİSLİK VE SAHA FAALİYETLERİ DAİRE BAŞKANLIĞI</p>
-                <p className="text-xs text-slate-600 mt-1">
-                  Rapor Kapsamı: <strong className="text-slate-900 font-bold">{sahaReportType === 'GUNLUK' ? `GÜNLÜK (${sahaReportDate})` : `AYLIK (${sahaReportMonth}. Ay / 2026)`}</strong>
+              <div className="mb-4 pb-3 border-b border-black">
+                <p className="text-xs text-black font-semibold mt-1">
+                  Rapor Kapsamı: <strong className="text-black font-bold">{sahaReportType === 'GUNLUK' ? `GÜNLÜK (${sahaReportDate})` : `AYLIK (${sahaReportMonth}. Ay / 2026)`}</strong>
                 </p>
               </div>
 
               {/* Title Header */}
               <div className="text-center mb-6">
-                <h2 className="text-sm font-bold text-slate-900 tracking-wider uppercase border-y border-slate-200 py-2.5 bg-slate-50">
-                  {sahaReportType === 'GUNLUK' ? 'GÜNLÜK ŞANTİYE İMALAT VE FAALİYET REFERANS RAPORU' : 'AYLIK DETAYLI ŞANTİYE İMALAT VE FAALİYET KONSOLİDE RAPORU'}
+                <h2 className="text-sm font-bold text-black tracking-wider uppercase border border-black py-2.5 bg-gray-100">
+                  {sahaReportType === 'GUNLUK' ? 'GÜNLÜK SAHA FAALİYET RAPORU' : 'AYLIK SAHA FAALİYET RAPORU'}
                 </h2>
-                <p className="text-[9px] text-slate-400 mt-1 italic">
+                <p className="text-[9px] text-gray-600 mt-1 italic">
                   * Bu belge, o gün şantiyede aktif çalışan personelleri, metraj döküm ve imalat miktarlarını ispatlayan teknik referans belgesidir.
                 </p>
               </div>
@@ -4640,7 +4639,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 const parts = sahaReportDate.split('-');
                 const dayNum = parseInt(parts[2]);
                 const activePersonel = personeller.filter(
-                  (p) => (p.durum === true || String(p.durum) === 'true') && p.firmaTipi !== 'TASERON'
+                  (p) => (p.durum === true || String(p.durum) === 'true')
                 );
                 let countGeldi = 0;
                 let countYok = 0;
@@ -4665,28 +4664,28 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 const totalPersonnel = activePersonel.length;
 
                 return (
-                  <div className="mb-6 bg-slate-50 border border-slate-300 p-4 rounded-xl">
-                    <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest block mb-2">📊 O Günkü Toplam Şantiye Yoklama/Katılım Durumu</span>
-                    <div className="grid grid-cols-5 gap-3 text-center">
-                      <div className="bg-white border rounded-lg p-2">
-                        <span className="text-[9px] text-slate-400 block font-bold">TOPLAM KADRO</span>
-                        <strong className="text-xs font-bold text-slate-800">{totalPersonnel} Kişi</strong>
+                  <div className="mb-6 bg-white border border-black p-4">
+                    <span className="text-[11px] font-bold text-black uppercase tracking-widest block mb-3 border-b border-black pb-1">O Günkü Toplam Şantiye Yoklama/Katılım Durumu</span>
+                    <div className="grid grid-cols-5 gap-0 text-center border-l border-t border-black">
+                      <div className="bg-gray-100 border-b border-r border-black p-2">
+                        <span className="text-[10px] text-black block font-bold">TOPLAM KADRO</span>
+                        <strong className="text-xs font-bold text-black">{totalPersonnel} Kişi</strong>
                       </div>
-                      <div className="bg-emerald-50 border border-emerald-250 rounded-lg p-2 text-emerald-800">
-                        <span className="text-[9px] text-emerald-600 block font-bold">GELEN (AKTİF)</span>
+                      <div className="bg-white border-b border-r border-black p-2 text-black">
+                        <span className="text-[10px] text-black block font-bold">GELEN (AKTİF)</span>
                         <strong className="text-xs font-black">{countGeldi} Kişi</strong>
                       </div>
-                      <div className="bg-red-50 border border-red-200 rounded-lg p-2 text-red-850">
-                        <span className="text-[9px] text-red-650 block font-bold">GELMEYEN</span>
+                      <div className="bg-white border-b border-r border-black p-2 text-black">
+                        <span className="text-[10px] text-black block font-bold">GELMEYEN</span>
                         <strong className="text-xs font-black">{countYok} Kişi</strong>
                       </div>
-                      <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-2 text-cyan-800">
-                        <span className="text-[9px] text-cyan-600 block font-bold">İZİNLİ / RAPORLU</span>
+                      <div className="bg-white border-b border-r border-black p-2 text-black">
+                        <span className="text-[10px] text-black block font-bold">İZİNLİ / RAPORLU</span>
                         <strong className="text-xs font-bold">{countIzinli + countRaporlu} Kişi</strong>
                       </div>
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-amber-800">
-                        <span className="text-[9px] text-amber-600 block font-bold">GİRİLMEMİŞ / DİĞER</span>
-                        <strong className="text-xs font-bold text-slate-600">{countGirilmedi} Kişi</strong>
+                      <div className="bg-white border-b border-r border-black p-2 text-black">
+                        <span className="text-[10px] text-black block font-bold">GİRİLMEMİŞ / DİĞER</span>
+                        <strong className="text-xs font-bold text-black">{countGirilmedi} Kişi</strong>
                       </div>
                     </div>
                   </div>
@@ -4707,13 +4706,13 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     Seçilen kriterlere uygun şantiye faaliyeti kaydı bulunamadı.
                   </div>
                 ) : (
-                  <div className="border border-slate-350 rounded-xl overflow-hidden shadow-sm">
-                    <table className="w-full text-xs text-slate-800 border-collapse">
+                  <div className="border border-black overflow-hidden bg-white">
+                    <table className="w-full text-[11px] text-black border-collapse">
                       <thead>
-                        <tr className="bg-slate-100 text-slate-800/80 font-bold border-b border-slate-300 text-[10px] uppercase tracking-wide">
-                          <th className="p-2.5 text-left border-r border-slate-200 w-24">Tarih</th>
-                          <th className="p-2.5 text-left border-r border-slate-200 w-44">İşin Niteliği / Lokasyon</th>
-                          <th className="p-2.5 text-left">Teknik Çalışma Açıklaması &amp; Metraji &amp; Fotoğrafları</th>
+                        <tr className="bg-gray-200 text-black font-bold border-b border-black uppercase tracking-wide">
+                          <th className="p-2 border-r border-black w-24">Tarih</th>
+                          <th className="p-2 border-r border-black w-48">İşin Niteliği / Lokasyon</th>
+                          <th className="p-2 text-left">Teknik Çalışma Açıklaması &amp; Metraji &amp; Fotoğrafları</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -4724,24 +4723,24 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                             const parts = sf.tarih.split('-');
                             return parts.length >= 2 && parseInt(parts[1]) === sahaReportMonth;
                           }
-                        }).map(sf => (
-                          <tr key={sf.id} className="border-b border-slate-200 text-[11px] font-sans hover:bg-slate-50/50">
-                            <td className="p-3 border-r border-slate-200 font-bold text-slate-950 whitespace-nowrap">{sf.tarih}</td>
-                            <td className="p-3 border-r border-slate-200">
-                              <span className="font-bold text-slate-900 block">{sf.isNiteligi}</span>
-                              <span className="text-[9px] font-semibold text-slate-800 block uppercase mt-0.5">{sf.parsel} · {sf.blok}</span>
+                        }).map((sf, index) => (
+                          <tr key={sf.id} className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} border-b border-black text-black font-sans`}>
+                            <td className="p-2 border-r border-black font-bold text-center whitespace-nowrap">{sf.tarih}</td>
+                            <td className="p-2 border-r border-black">
+                              <span className="font-bold block">{sf.isNiteligi}</span>
+                              <span className="text-[10px] font-semibold block uppercase mt-0.5">{sf.parsel} · {sf.blok}</span>
                             </td>
-                            <td className="p-3 text-slate-650 leading-relaxed font-normal">
+                            <td className="p-2 leading-relaxed font-normal">
                               <p className="whitespace-pre-line leading-relaxed">{sf.aciklama}</p>
                               {getSahaFaaliyetFotoUrl(sf) && (
-                                <div className="mt-3 inline-block border border-slate-200 rounded-lg p-1 bg-white max-w-[160px] shadow-xs">
+                                <div className="mt-3 inline-block border border-black p-1 bg-white max-w-[160px]">
                                   <img 
                                     src={getSahaFaaliyetFotoUrl(sf)} 
                                     alt="İmalat Saha Fotoğrafı" 
                                     referrerPolicy="no-referrer"
-                                    className="h-20 w-auto object-cover rounded-md block mx-auto"
+                                    className="h-24 w-auto object-cover block mx-auto"
                                   />
-                                  <span className="text-[7px] text-slate-400 block mt-1 tracking-wider text-center font-mono font-bold uppercase">📷 SAHA İMALAT GÖRSELİ</span>
+                                  <span className="text-[8px] block mt-1 tracking-wider text-center font-mono font-bold uppercase">SAHA İMALAT GÖRSELİ</span>
                                 </div>
                               )}
                             </td>
@@ -4766,22 +4765,21 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   });
 
                   return (
-                    <div className="mt-6 bg-slate-50 border border-slate-300 rounded-xl p-4">
-                      <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-widest block mb-2.5 pb-1 border-b border-slate-200">
-                        👷 O GÜN ŞANTİYEDE ÇALIŞAN AKTİF PERSONEL KADROSU ({sahadakiAktifKadro.length} Personel)
+                    <div className="mt-6 bg-white border border-black p-4">
+                      <span className="text-[11px] font-extrabold text-black uppercase tracking-widest block mb-2.5 pb-1 border-b border-black">
+                        O GÜN ŞANTİYEDE ÇALIŞAN AKTİF PERSONEL KADROSU ({sahadakiAktifKadro.length} Personel)
                       </span>
                       {sahadakiAktifKadro.length > 0 ? (
                         <div className="flex flex-wrap gap-1.5">
                           {sahadakiAktifKadro.map((p) => (
-                            <span key={p.id} className="text-[9px] font-bold bg-white text-slate-800 border border-slate-200 px-2 py-1 rounded-md shadow-xs inline-flex items-center space-x-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            <span key={p.id} className="text-[9px] font-bold bg-white text-black border border-black px-2 py-1 inline-flex items-center space-x-1.5">
                               <span>{p.ad} {p.soyad}</span>
-                              <span className="text-[8px] text-slate-400 font-medium">({p.gorev})</span>
+                              <span className="text-[8px] font-medium">({p.gorev})</span>
                             </span>
                           ))}
                         </div>
                       ) : (
-                        <p className="text-[10px] text-slate-400 italic">O gün için puantaj cetvelinde aktif şantiye çalışanı (GELDI durumunda) bulunmamaktadır.</p>
+                        <p className="text-[10px] text-gray-500 italic">O gün için puantaj cetvelinde aktif şantiye çalışanı bulunmamaktadır.</p>
                       )}
                     </div>
                   );
@@ -4790,181 +4788,43 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
 
               {/* Official Signature Lines */}
               {(() => {
-                const activeOnayKey = sahaReportType === 'GUNLUK' ? sahaReportDate : `AYLIK_2026_${sahaReportMonth}`;
-                const currentOnay = sahaRaporOnaylari[activeOnayKey] || {};
-
                 return (
                   <div className="mt-12 text-xs">
-                    <div className="bg-slate-200 border border-slate-300 p-2.5 text-[9px] font-extrabold text-slate-800 uppercase tracking-wider mb-6">
-                      📌 TEKNİK MERKEZ VE ŞANTİYE ONAY DEPARTMANLARI (E-İMZA SİSTEMİ)
-                    </div>
-                    <div className="grid grid-cols-3 gap-6 text-center">
+                    <div className="grid grid-cols-3 gap-0 text-center border-l border-t border-black">
                       
-                      {/* 1. HAZIRLAYAN (FORMEN) */}
-                      <div className="border border-slate-300 p-4 rounded-xl bg-slate-50 flex flex-col justify-between min-h-[160px]">
+                      {/* 1. HAZIRLAYAN */}
+                      <div className="border-r border-b border-black p-4 bg-white flex flex-col justify-between min-h-[160px]">
                         <div>
-                          <span className="font-extrabold text-[#2563EB] tracking-wider uppercase block mb-0.5 text-[10px]">HAZIRLAYAN (FORMEN)</span>
-                          <span className="text-[9px] text-slate-500 block mb-4">Saha Şantiye Formeni</span>
+                          <span className="font-extrabold text-black tracking-wider uppercase block mb-0.5 text-[11px]">HAZIRLAYAN</span>
                         </div>
-                        
                         <div className="my-auto">
-                          {currentOnay.hazirlayanSigned ? (
-                            <div className="relative group">
-                              <span className="font-serif italic font-black text-slate-800 text-sm tracking-wide block py-1 bg-slate-50/50 rounded border border-dashed border-slate-200 shadow-3xs">
-                                ✍️ {currentOnay.hazirlayanName}
-                              </span>
-                              <span className="text-[7px] text-emerald-600 font-bold block mt-1">
-                                ✔️ E-İMZA ONAYLI · {currentOnay.hazirlayanDate}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleTemizleOnay('hazirlayan')}
-                                className="print:hidden mt-2 text-[8px] font-extrabold text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-1.5 py-0.5 rounded transition inline-block cursor-pointer"
-                              >
-                                ✖ Onayı Kaldır
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="print:hidden space-y-2">
-                              <input
-                                type="text"
-                                placeholder="Formen İsim Soyisim"
-                                className="w-full text-center border-b pb-1 text-[11px] text-slate-800 outline-none  font-semibold bg-transparent"
-                                value={tempHazirlayan}
-                                onChange={(e) => setTempHazirlayan(e.target.value)}
-                              />
-                              <button
-                                type="button"
-                                disabled={onayLoading}
-                                onClick={() => handleOnayla('hazirlayan', tempHazirlayan)}
-                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[9px] py-1 px-2 rounded tracking-wide uppercase transition cursor-pointer"
-                              >
-                                {onayLoading ? 'Lütfen Bekleyin...' : '✅ E-İmza ile Onayla'}
-                              </button>
-                            </div>
-                          )}
-                          {!currentOnay.hazirlayanSigned && (
-                            <div className="hidden print:block text-slate-300 italic text-[10px] my-4">
-                              (Paraf / Islak İmza)
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="mt-4">
-                          <div className="h-0.5 bg-slate-200 w-32 mx-auto mb-1"></div>
-                          <span className="text-[8px] text-slate-400 italic block">Formen İmza</span>
+                           <div className="text-gray-400 italic text-[10px] my-4">
+                             (İmza)
+                           </div>
                         </div>
                       </div>
 
-                      {/* 2. KONTROL EDEN (ŞANTİYE ŞEFİ) */}
-                      <div className="border border-slate-300 p-4 rounded-xl bg-slate-50 flex flex-col justify-between min-h-[160px]">
+                      {/* 2. ŞANTİYE ŞEFİ */}
+                      <div className="border-r border-b border-black p-4 bg-white flex flex-col justify-between min-h-[160px]">
                         <div>
-                          <span className="font-extrabold text-[#2563EB] tracking-wider uppercase block mb-0.5 text-[10px]">KONTROL EDEN (ŞANTİYE ŞEFİ)</span>
-                          <span className="text-[9px] text-slate-500 block mb-4">Şantiye Şefi / Başmühendis</span>
+                          <span className="font-extrabold text-black tracking-wider uppercase block mb-0.5 text-[11px]">ŞANTİYE ŞEFİ</span>
                         </div>
-
                         <div className="my-auto">
-                          {currentOnay.kontrolEdenSigned ? (
-                            <div className="relative group">
-                              <span className="font-serif italic font-black text-slate-800 text-sm tracking-wide block py-1 bg-slate-50/50 rounded border border-dashed border-slate-200 shadow-3xs">
-                                ✍️ {currentOnay.kontrolEdenName}
-                              </span>
-                              <span className="text-[7px] text-emerald-600 font-bold block mt-1">
-                                ✔️ E-İMZA ONAYLI · {currentOnay.kontrolEdenDate}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleTemizleOnay('kontrolEden')}
-                                className="print:hidden mt-2 text-[8px] font-extrabold text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-1.5 py-0.5 rounded transition inline-block cursor-pointer"
-                              >
-                                ✖ Onayı Kaldır
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="print:hidden space-y-2">
-                              <input
-                                type="text"
-                                placeholder="Şantiye Şefi İsim Soyisim"
-                                className="w-full text-center border-b pb-1 text-[11px] text-slate-800 outline-none  font-semibold bg-transparent"
-                                value={tempKontrolEden}
-                                onChange={(e) => setTempKontrolEden(e.target.value)}
-                              />
-                              <button
-                                type="button"
-                                disabled={onayLoading}
-                                onClick={() => handleOnayla('kontrolEden', tempKontrolEden)}
-                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[9px] py-1 px-2 rounded tracking-wide uppercase transition cursor-pointer"
-                              >
-                                {onayLoading ? 'Lütfen Bekleyin...' : '✅ E-İmza ile Onayla'}
-                              </button>
-                            </div>
-                          )}
-                          {!currentOnay.kontrolEdenSigned && (
-                            <div className="hidden print:block text-slate-300 italic text-[10px] my-4">
-                              (Paraf / Islak İmza)
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="mt-4">
-                          <div className="h-0.5 bg-slate-200 w-32 mx-auto mb-1"></div>
-                          <span className="text-[8px] text-slate-400 italic block">Şantiye Şefi İmza</span>
+                           <div className="text-gray-400 italic text-[10px] my-4">
+                             (İmza)
+                           </div>
                         </div>
                       </div>
 
-                      {/* 3. ONAYLAYAN (PROJE MÜDÜRÜ) */}
-                      <div className="border border-slate-300 p-4 rounded-xl bg-slate-50 flex flex-col justify-between min-h-[160px]">
+                      {/* 3. PROJE MÜDÜRÜ */}
+                      <div className="border-r border-b border-black p-4 bg-white flex flex-col justify-between min-h-[160px]">
                         <div>
-                          <span className="font-extrabold text-[#2563EB] tracking-wider uppercase block mb-0.5 text-[10px]">ONAYLAYAN (PROJE MÜDÜRÜ)</span>
-                          <span className="text-[9px] text-slate-500 block mb-4">Proje Müdürü / Kibritçi Temsilcisi</span>
+                          <span className="font-extrabold text-black tracking-wider uppercase block mb-0.5 text-[11px]">PROJE MÜDÜRÜ</span>
                         </div>
-
                         <div className="my-auto">
-                          {currentOnay.onaylayanSigned ? (
-                            <div className="relative group">
-                              <span className="font-serif italic font-black text-slate-800 text-sm tracking-wide block py-1 bg-slate-50/50 rounded border border-dashed border-slate-200 shadow-3xs">
-                                ✍️ {currentOnay.onaylayanName}
-                              </span>
-                              <span className="text-[7px] text-emerald-600 font-bold block mt-1">
-                                ✔️ E-İMZA ONAYLI · {currentOnay.onaylayanDate}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleTemizleOnay('onaylayan')}
-                                className="print:hidden mt-2 text-[8px] font-extrabold text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-1.5 py-0.5 rounded transition inline-block cursor-pointer"
-                              >
-                                ✖ Onayı Kaldır
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="print:hidden space-y-2">
-                              <input
-                                type="text"
-                                placeholder="Proje Müdürü İsim Soyisim"
-                                className="w-full text-center border-b pb-1 text-[11px] text-slate-800 outline-none  font-semibold bg-transparent"
-                                value={tempOnaylayan}
-                                onChange={(e) => setTempOnaylayan(e.target.value)}
-                              />
-                              <button
-                                type="button"
-                                disabled={onayLoading}
-                                onClick={() => handleOnayla('onaylayan', tempOnaylayan)}
-                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[9px] py-1 px-2 rounded tracking-wide uppercase transition cursor-pointer"
-                              >
-                                {onayLoading ? 'Lütfen Bekleyin...' : '✅ E-İmza ile Onayla'}
-                              </button>
-                            </div>
-                          )}
-                          {!currentOnay.onaylayanSigned && (
-                            <div className="hidden print:block text-slate-300 italic text-[10px] my-4">
-                              (Kaşe / Kağıt İmza)
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="mt-4">
-                          <div className="h-0.5 bg-slate-200 w-32 mx-auto mb-1"></div>
-                          <span className="text-[8px] text-slate-400 italic block">Proje Müdürü İmza</span>
+                           <div className="text-gray-400 italic text-[10px] my-4">
+                             (İmza)
+                           </div>
                         </div>
                       </div>
 
