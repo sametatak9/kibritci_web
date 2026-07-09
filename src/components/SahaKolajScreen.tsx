@@ -17,7 +17,7 @@ import {
 } from '../lib/sahaKolajUtils';
 import { PARSEL_BLOK_MAP, PARSEL_LIST, defaultBlokForParsel } from '../data/parselBlokMap';
 import { KIBRITCI_LOGO_PATH } from '../lib/kibritciBrand';
-import jsPDF from 'jspdf';
+import { Trash2, AlertCircle, Plus, Camera, Search, Filter, Layers, FileDown, Eye, CheckCircle2, ChevronRight, MessageSquare, History } from 'lucide-react';
 
 interface SahaKolajScreenProps {
   currentUser?: { email?: string; displayName?: string };
@@ -310,6 +310,7 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
   const handleDownloadPdf = async () => {
     setDownloadingPdf(true);
     try {
+      const { jsPDF } = await import('jspdf');
       const doc = new jsPDF('p', 'mm', 'a4');
       const pw = doc.internal.pageSize.getWidth();
       const ph = doc.internal.pageSize.getHeight();

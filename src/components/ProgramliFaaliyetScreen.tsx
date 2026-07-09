@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Camera, CheckCircle2, FilePlus2, FileText, Flag, Hammer, Image as ImageIcon } from 'lucide-react';
-import jsPDF from 'jspdf';
+
 import { ProgramliFaaliyet, ProgramliFaaliyetAsama, ProgramliFaaliyetAsamaAnahtari } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
 import { PARSEL_LIST, PARSEL_BLOK_MAP, defaultBlokForParsel } from '../data/parselBlokMap';
@@ -202,6 +202,7 @@ export const ProgramliFaaliyetScreen: React.FC<ProgramliFaaliyetScreenProps> = (
 
   const handleDownloadPdf = async (faaliyet: ProgramliFaaliyet) => {
     try {
+      const { jsPDF } = await import('jspdf');
       const doc = new jsPDF('p', 'mm', 'a4');
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();

@@ -1,7 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
-import { generateGuvenlikReportHtml } from '../lib/guvenlikReportHtml';
 import { 
   ShieldAlert, FileText, Users, Truck, UserCheck, Search, PlusCircle, Trash2, 
   Check, X, FileUp, Camera, Printer, Clock, AlertTriangle, Key, Download, ArrowRight, RefreshCw, Barcode,
@@ -175,6 +172,10 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     try {
       showStatus('success', 'Rapor oluşturuluyor, lütfen bekleyin...');
       
+      const { default: html2canvas } = await import('html2canvas');
+      const { jsPDF } = await import('jspdf');
+      const { generateGuvenlikReportHtml } = await import('../lib/guvenlikReportHtml');
+
       const todayLogs = personelLoglar.filter(l => l.zaman && l.zaman.startsWith(islemTarihi));
       const todayAraclar = [...iceridekiAraclar, ...aracGecmisLoglar].filter(a => a.girisZamani && a.girisZamani.startsWith(islemTarihi));
       const todayZiyaretciler = [...aktifZiyaretciler, ...ziyaretciGecmisLoglar].filter(z => z.girisZamani && z.girisZamani.startsWith(islemTarihi));
