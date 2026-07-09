@@ -82,14 +82,29 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
   const checkAndSuggestStok = (name: string, unit: string = "ADET") => {
     const exact = stokKartlar.find((s) => normalizeCardName(s.stokAdi) === normalizeCardName(name));
     const near = findNearDuplicateStokName(stokKartlar, name, 1);
+    if (!exact && near) {
+      if (window.confirm(`'${name}' ismine çok benzer olan '${near.stokAdi}' kaydı bulundu. Bununla eşleştirmek ister misiniz?\n\nİptal'e basarsanız yeni bir kayıt açma ekranına yönlendirileceksiniz.`)) {
+        setCartItems(prev => {
+          const newCart = [...prev];
+          const lastItem = newCart[newCart.length - 1];
+          if (lastItem && lastItem.urunAdi === name) {
+            lastItem.urunAdi = near.stokAdi;
+          }
+          return newCart;
+        });
+        return;
+      } else {
+        setSuggestedStokName(name);
+        setSuggestedStokUnit(unit);
+        setShowStokSuggest(true);
+        return;
+      }
+    }
     if (!exact && !near) {
       setSuggestedStokName(name);
       setSuggestedStokUnit(unit);
       setShowStokSuggest(true);
       return;
-    }
-    if (!exact && near) {
-      setTempItem((prev) => ({ ...prev, urunAdi: near.stokAdi }));
     }
   };
 
@@ -862,18 +877,31 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <select
+            <div className="grid grid-cols-3 gap-2">
+              <input 
+                type="text"
+                list="birim-datalist"
+                placeholder="Ölçü Birimi (Örn: ADET)"
                 value={tempItem.birim}
                 onChange={(e) => setTempItem(prev => ({ ...prev, birim: e.target.value as any }))}
                 className="p-1.5 border border-slate-200 bg-white rounded-lg text-[10px]"
-              >
-                <option value="ADET">ADET</option>
-                <option value="TON">TON</option>
-                <option value="KG">KG</option>
-                <option value="M3">M3</option>
-                <option value="TORBA">TORBA</option>
-              </select>
+              />
+              <datalist id="birim-datalist">
+                <option value="ADET" />
+                <option value="TON" />
+                <option value="KG" />
+                <option value="M3" />
+                <option value="TORBA" />
+                <option value="METRE" />
+                <option value="PAKET" />
+              </datalist>
+              <input 
+                type="text"
+                placeholder="Kullanılacak Alan (Opsiyonel)"
+                value={tempItem.kullanilacakYer || ""}
+                onChange={(e) => setTempItem(prev => ({ ...prev, kullanilacakYer: e.target.value }))}
+                className="p-1.5 border border-slate-200 bg-white rounded-lg text-[10px]"
+              />
               <button
                 type="button"
                 onClick={handleAddToCart}
@@ -886,7 +914,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
             <div className="space-y-1.5 max-h-32 overflow-y-auto pt-2 border-t text-[11px] font-semibold text-slate-700">
               {cartItems.map((p) => (
                 <div key={p.id} className="flex justify-between items-center bg-white p-2 rounded-lg border">
-                  <span>{p.urunAdi}</span>
+                  <span>{p.urunAdi} {p.kullanilacakYer ? <span className="text-[9px] text-slate-400">({p.kullanilacakYer})</span> : null}</span>
                   <div className="flex items-center space-x-2">
                     <span className="font-mono text-slate-900">{p.miktar} {p.birim}</span>
                     <button
