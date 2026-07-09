@@ -12,6 +12,7 @@ import {
   isKampciTesisatciMermerci 
 } from '../lib/yoklamaUtils';
 import { todayDateKey, normalizeDateKey, formatDateLabelTr } from '../lib/dateKeyUtils';
+import { downloadCsv } from '../lib/reportExport';
 
 interface KampGunlukYoklamaTabProps {
   personeller: Personel[];
@@ -193,24 +194,53 @@ export const KampGunlukYoklamaTab: React.FC<KampGunlukYoklamaTabProps> = ({
     (p.gorev || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const handleExportCsv = () => {
+    const rows = [
+      ['Ad', 'Soyad', 'Gorev', 'Durum', 'Mesai']
+    ];
+    activeStaff.forEach((p) => {
+      let d = 'Belirsiz';
+      let m = '';
+      if (presentIds.includes(p.id)) {
+        d = 'Geldi';
+        m = (mesaiSaatleri[p.id] || 0).toString();
+      } else if (absentIds.includes(p.id)) {
+        d = 'Yok';
+      }
+      rows.push([p.ad, p.soyad, p.gorev || '', d, m]);
+    });
+    downloadCsv(rows, `Kamp_Yoklama_${selectedDate}`);
+  };
+
   return (
     <div className="space-y-4 max-w-[420px] mx-auto pb-8 animate-in fade-in">
       
       {/* Date Picker Header */}
-      <div className="bg-white rounded-3xl p-4 border shadow-sm">
-        <label className="text-[10px] font-extrabold text-slate-600 uppercase tracking-widest block mb-1">Yoklama Tarihi</label>
-        <div className="flex items-center space-x-2">
-          <Calendar size={18} className="text-slate-400" />
-          <input
-            type="date"
-            value={selectedDate}
-            max={todayDateKey()}
-            onChange={(e) => handleDateChange(e.target.value)}
-            className="flex-grow bg-slate-50 border border-slate-200 text-sm font-bold text-slate-800 rounded-xl p-2 outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
-          />
+      <div className="bg-white rounded-3xl p-4 border shadow-sm flex flex-col gap-2">
+        <div className="flex justify-between items-end">
+          <div className="flex-1">
+            <label className="text-[10px] font-extrabold text-slate-600 uppercase tracking-widest block mb-1">Yoklama Tarihi</label>
+            <div className="flex items-center space-x-2">
+              <Calendar size={18} className="text-slate-400" />
+              <input
+                type="date"
+                value={selectedDate}
+                max={todayDateKey()}
+                onChange={(e) => handleDateChange(e.target.value)}
+                className="flex-grow bg-slate-50 border border-slate-200 text-sm font-bold text-slate-800 rounded-xl p-2 outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+              />
+            </div>
+          </div>
+          <button 
+            onClick={handleExportCsv}
+            className="ml-3 shrink-0 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[10px] font-bold px-3 py-2 rounded-xl border border-emerald-200 transition-colors flex items-center justify-center no-print"
+          >
+            Excel'e Aktar
+          </button>
         </div>
+        
         {hasLocalAttendanceDraft && (
-          <div className="mt-2 text-[10px] text-amber-600 font-bold animate-pulse">
+          <div className="mt-1 text-[10px] text-amber-600 font-bold animate-pulse">
             ⚠️ Kaydedilmemiş değişiklikleriniz var!
           </div>
         )}

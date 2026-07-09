@@ -9,6 +9,7 @@ import { KeyboardNavProvider } from './components/KeyboardNavProvider';
 import { ConfettiProvider } from './components/ConfettiProvider';
 import { EasterEggProvider } from './components/EasterEggProvider';
 import { CommandPalette } from './components/CommandPalette';
+import { NetworkProvider } from './components/NetworkProvider';
 
 type RootErrorBoundaryState = {
   hasError: boolean;
@@ -83,6 +84,7 @@ createRoot(document.getElementById('root')!).render(
       <ConfettiProvider />
       <EasterEggProvider />
       <ToastProvider />
+      <NetworkProvider />
       <App />
     </RootErrorBoundary>
   </StrictMode>,

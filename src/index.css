@@ -396,3 +396,56 @@ input:focus, select:focus, textarea:focus {
   z-index: 10;
 }
 
+
+/* --- PRINT STYLES (Yazdırma Optimizasyonu) --- */
+@media print {
+  /* Arka planları zorla beyaz yap, renkleri koru (print-color-adjust) */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  
+  body, html {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* Gereksiz kısımları (menüler, butonlar) gizle */
+  .no-print, nav, aside, footer, button, .sidebar-container, .topbar-container {
+    display: none !important;
+  }
+
+  /* Ana içeriği genişlet */
+  main, .flex-1, .w-full, .p-4, .p-6 {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    overflow: visible !important;
+  }
+
+  /* Tabloların düzgün çıkmasını sağla */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    page-break-inside: auto;
+  }
+  
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  th, td {
+    border: 1px solid #cbd5e1 !important; /* slate-300 */
+    padding: 8px !important;
+    color: #000 !important;
+  }
+  
+  /* Gölgeleri ve yuvarlaklıkları kaldır */
+  .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl, .rounded-xl, .rounded-2xl {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+}
+
