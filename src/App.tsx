@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ToastProvider } from './components/ToastProvider';
+import { SoundProvider } from './components/SoundProvider';
+import { ContextMenuProvider } from './components/ContextMenuProvider';
+import { KeyboardNavProvider } from './components/KeyboardNavProvider';
 import { CommandPalette } from './components/CommandPalette';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';

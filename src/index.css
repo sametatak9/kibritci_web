@@ -380,3 +380,19 @@ input:focus, select:focus, textarea:focus {
   background-size: 1000px 100%;
 }
 
+
+/* Excel Tarzı Klavye Yönlendirmesi İçin Odaklanmış Satır */
+.row-focused {
+  background-color: #f1f5f9 !important; /* slate-100 */
+  position: relative;
+}
+.row-focused::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid #3b82f6; /* blue-500 */
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 10;
+}
+
