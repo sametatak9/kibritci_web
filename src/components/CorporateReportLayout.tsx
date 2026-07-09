@@ -14,9 +14,9 @@ export interface CorporateReportLayoutProps {
 }
 
 const headerLogoStyle: React.CSSProperties = {
-  height: '58px',
+  height: '80px',
   width: 'auto',
-  maxWidth: '340px',
+  maxWidth: '420px',
   display: 'block',
   objectFit: 'contain',
 };

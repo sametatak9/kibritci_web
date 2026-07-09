@@ -16,7 +16,7 @@ export function getCorporateReportCss(): string {
     .corporate-report{position:relative;display:flex;flex-direction:column;min-height:190mm;background:#fff;color:#1e293b;font-family:Inter,ui-sans-serif,system-ui,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .corporate-report--landscape{min-height:277mm}
     .corporate-report-watermark-img{position:absolute;right:1.5%;top:50%;transform:translateY(-50%);width:420px;max-width:52%;height:auto;opacity:1;pointer-events:none;z-index:0}
-    .corporate-report-logo-img{height:58px;width:auto;max-width:340px;display:block;object-fit:contain}
+    .corporate-report-logo-img{height:80px;width:auto;max-width:420px;display:block;object-fit:contain}
     .corporate-report-header{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;margin-bottom:16px}
     .corporate-report-meta{text-align:right}
     .corporate-report-doc-code{display:block;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border:1px solid #334155;padding:3px 9px;background:#f8fafc;margin-bottom:3px}
