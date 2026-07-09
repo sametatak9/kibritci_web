@@ -1139,7 +1139,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       <button
         type="submit"
         disabled={loadingPlacement}
-        className="w-full bg-slate-900 hover:bg-slate-900 disabled:bg-blue-800/40 text-white font-bold text-xs py-3 rounded-xl transition cursor-pointer flex items-center justify-center space-x-2 shadow-lg shadow-blue-500/10"
+        className="w-full bg-slate-900 hover:bg-slate-900 disabled:bg-slate-900 text-white font-bold text-xs py-3 rounded-xl transition cursor-pointer flex items-center justify-center space-x-2 shadow-lg shadow-slate-500/10"
       >
         {loadingPlacement ? <RefreshCw size={13} className="animate-spin" /> : <UserPlus size={14} />}
         <span>Odaya Yerleştir ve Kaydet</span>
@@ -1204,7 +1204,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           onClick={() => setActiveSubTab('placement')}
           className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center space-x-2 border cursor-pointer ${
             activeSubTab === 'placement' 
-              ? 'bg-blue-650 border-slate-800 text-white shadow-md shadow-blue-500/10' 
+              ? 'bg-slate-900 border-slate-800 text-white shadow-md shadow-slate-500/10' 
               : 'bg-white border-slate-200/80 text-slate-500 hover:bg-slate-50'
           }`}
         >
@@ -1228,7 +1228,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           onClick={() => setActiveSubTab('rooms')}
           className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center space-x-2 border cursor-pointer ${
             activeSubTab === 'rooms' 
-              ? 'bg-blue-650 border-slate-800 text-white shadow-md shadow-blue-500/10' 
+              ? 'bg-slate-900 border-slate-800 text-white shadow-md shadow-slate-500/10' 
               : 'bg-white border-slate-200/80 text-slate-500 hover:bg-slate-50'
           }`}
         >
@@ -1240,7 +1240,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           onClick={() => setActiveSubTab('warehouse')}
           className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center space-x-2 border cursor-pointer ${
             activeSubTab === 'warehouse' 
-              ? 'bg-blue-650 border-slate-800 text-white shadow-md shadow-blue-500/10' 
+              ? 'bg-slate-900 border-slate-800 text-white shadow-md shadow-slate-500/10' 
               : 'bg-white border-slate-200/80 text-slate-500 hover:bg-slate-50'
           }`}
         >
@@ -1252,7 +1252,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           onClick={() => setActiveSubTab('activities')}
           className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center space-x-2 border cursor-pointer ${
             activeSubTab === 'activities' 
-              ? 'bg-blue-650 border-slate-800 text-white shadow-md shadow-blue-500/10' 
+              ? 'bg-slate-900 border-slate-800 text-white shadow-md shadow-slate-500/10' 
               : 'bg-white border-slate-200/80 text-slate-500 hover:bg-slate-50'
           }`}
         >
@@ -1264,7 +1264,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           onClick={() => setActiveSubTab('yoklama')}
           className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center space-x-2 border cursor-pointer ${
             activeSubTab === 'yoklama'
-              ? 'bg-slate-900 border-slate-800 text-white shadow-md shadow-blue-500/20'
+              ? 'bg-slate-900 border-slate-800 text-white shadow-md shadow-slate-500/10'
               : 'bg-white border-slate-200/80 text-slate-500 hover:bg-slate-50'
           }`}
         >
@@ -1915,7 +1915,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
               <button
                 type="submit"
                 disabled={loadingFaaliyet}
-                className="w-full bg-slate-900 hover:bg-slate-900 text-white font-bold text-xs py-3 rounded-xl transition cursor-pointer flex items-center justify-center space-x-2 shadow-lg shadow-blue-500/10"
+                className="w-full bg-slate-900 hover:bg-slate-900 text-white font-bold text-xs py-3 rounded-xl transition cursor-pointer flex items-center justify-center space-x-2 shadow-lg shadow-slate-500/10"
               >
                 {loadingFaaliyet ? <RefreshCw size={13} className="animate-spin" /> : <CheckCircle size={14} />}
                 <span>Faaliyeti Kaydet &amp; Onaya Gönder</span>
@@ -2281,7 +2281,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
         </div>
         <button
           onClick={() => setViewMode('mobile')}
-          className="text-xs bg-blue-650 hover:bg-slate-900 text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer transition shadow-md shadow-blue-500/10"
+          className="text-xs bg-slate-900 hover:bg-slate-900 text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer transition shadow-md shadow-slate-500/10"
         >
           📱 Mobil Sürüm Test Et
         </button>

@@ -802,7 +802,7 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
                   <div
                     key={f.id}
                     className={`relative group rounded-xl overflow-hidden border-2 transition ${
-                      selected ? 'border-slate-800 ring-2 ring-blue-200' : editing ? 'border-amber-500' : 'border-slate-100'
+                      selected ? 'border-slate-800 ring-2 ring-slate-800' : editing ? 'border-amber-500' : 'border-slate-100'
                     } ${(f as any).isReadonly ? 'opacity-90' : ''}`}
                   >
                     {!(f as any).isReadonly && (

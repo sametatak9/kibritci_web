@@ -182,7 +182,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 shrink-0">
         {[
           { title: "Toplam Hakediş Maaş", value: `₺${grandBaseHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`, color: "border-slate-200 bg-white" },
-          { title: "Toplam Mesai Hakediş", value: `₺${grandOvertimeHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`, color: "border-slate-200 bg-blue-50/30 text-slate-800" },
+          { title: "Toplam Mesai Hakediş", value: `₺${grandOvertimeHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`, color: "border-slate-200 bg-slate-50/30 text-slate-800" },
           { title: "Toplam Kesinti / Avans", value: `₺${grandKesinti.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`, color: "border-rose-100 bg-rose-50/30 text-rose-800" },
           { title: "Net Ödenecek Banka Tutarı", value: `₺${grandNetPayment.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`, color: "border-emerald-100 bg-emerald-50 text-emerald-800 font-bold" }
         ].map((item, idx) => (
@@ -360,7 +360,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                       <button
                         type="button"
                         onClick={onOpenMaasOdeme}
-                        className="px-3 py-1.5 rounded-xl font-bold text-[10px] uppercase cursor-pointer transition active:scale-95 shadow-sm border bg-slate-100 hover:bg-blue-200 text-slate-800 border-slate-200"
+                        className="px-3 py-1.5 rounded-xl font-bold text-[10px] uppercase cursor-pointer transition active:scale-95 shadow-sm border bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200"
                       >
                         💳 Ödemeyi Maaş Ödeme'den Yap
                       </button>
@@ -544,7 +544,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                                     let color = "text-slate-450 bg-slate-100";
                                     if (dayData.durum === 'Geldi') { letter = "G"; color = "text-emerald-700 bg-emerald-100/50 font-bold"; }
                                     else if (dayData.durum === 'Yok') { letter = "Y"; color = "text-rose-700 bg-rose-100/50 font-bold"; }
-                                    else if (dayData.durum === 'İzinli') { letter = "İ"; color = "text-slate-800 bg-blue-100/50"; }
+                                    else if (dayData.durum === 'İzinli') { letter = "İ"; color = "text-slate-800 bg-slate-100/50"; }
                                     else if (dayData.durum === 'Raporlu') { letter = "R"; color = "text-violet-700 bg-violet-100/50"; }
                                     else if (dayData.durum === 'Pazar') { letter = "P"; color = "text-amber-700 bg-amber-100/50 font-bold"; }
                                     else if (dayData.durum === 'Tatil') { letter = "T"; color = "text-indigo-700 bg-indigo-100/50"; }

@@ -25,7 +25,7 @@ export const CompareDirectiveModal: React.FC<CompareDirectiveModalProps> = ({
   onConfirm,
 }) => {
   const accentBtn = accent === 'emerald' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-900 hover:bg-slate-900';
-  const accentRing = accent === 'emerald' ? 'ring-emerald-200' : 'ring-blue-200';
+  const accentRing = accent === 'emerald' ? 'ring-emerald-200' : 'ring-slate-800';
 
   const [compareFocus, setCompareFocus] = useState<CompareFocus[]>(['miktar', 'urun_adi']);
   const [customInstructions, setCustomInstructions] = useState('');

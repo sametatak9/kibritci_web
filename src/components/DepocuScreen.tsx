@@ -439,12 +439,12 @@ export const DepocuScreen: React.FC<DepocuScreenProps> = ({
       </div>
       
       {/* 📦 Header */}
-      <header className="bg-gradient-to-r from-blue-700 to-indigo-800 p-4 sticky top-0 z-40 flex items-center justify-between select-none shadow-md shrink-0 text-white">
+      <header className="bg-gradient-to-r from-slate-100 to-indigo-800 p-4 sticky top-0 z-40 flex items-center justify-between select-none shadow-md shrink-0 text-white">
         <div className="flex items-center space-x-2.5">
           <KibritciLogo size="sm" className="h-8" />
           <div>
             <h1 className="text-xs font-black tracking-widest text-white uppercase leading-none">DEPO SORUMLUSU</h1>
-            <p className="text-[10px] text-blue-100 font-mono mt-0.5 uppercase tracking-wider font-semibold">MOBİL SAYIM &amp; ZİMMET PANELİ</p>
+            <p className="text-[10px] text-slate-100 font-mono mt-0.5 uppercase tracking-wider font-semibold">MOBİL SAYIM &amp; ZİMMET PANELİ</p>
           </div>
         </div>
 
@@ -804,7 +804,7 @@ export const DepocuScreen: React.FC<DepocuScreenProps> = ({
                 <button
                   type="submit"
                   disabled={loadingSayim}
-                  className="w-full bg-slate-900 hover:bg-slate-900 disabled:bg-blue-800/40 text-white font-bold text-xs py-3 rounded-2xl transition cursor-pointer flex items-center justify-center space-x-2 shadow-sm"
+                  className="w-full bg-slate-900 hover:bg-slate-900 disabled:bg-slate-900 text-white font-bold text-xs py-3 rounded-2xl transition cursor-pointer flex items-center justify-center space-x-2 shadow-sm"
                 >
                   {loadingSayim ? <RefreshCw size={13} className="animate-spin" /> : <Check size={14} />}
                   <span>HAFTALIK SAYIMI ONAYA GÖNDER</span>
@@ -927,7 +927,7 @@ export const DepocuScreen: React.FC<DepocuScreenProps> = ({
                 <button
                   type="submit"
                   disabled={loadingZimmet}
-                  className="w-full bg-slate-900 hover:bg-slate-900 disabled:bg-blue-800/40 text-white font-bold text-xs py-3 rounded-xl transition cursor-pointer flex items-center justify-center space-x-2 shadow-sm"
+                  className="w-full bg-slate-900 hover:bg-slate-900 disabled:bg-slate-900 text-white font-bold text-xs py-3 rounded-xl transition cursor-pointer flex items-center justify-center space-x-2 shadow-sm"
                 >
                   {loadingZimmet ? <RefreshCw size={13} className="animate-spin" /> : <UserCheck size={14} />}
                   <span>ZİMMETI PERSONELE TAHSİS ET</span>

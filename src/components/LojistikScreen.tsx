@@ -575,7 +575,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
       <div className="max-w-7xl mx-auto space-y-5">
         
         {/* Upper Dashboard Widget */}
-        <div className="bg-gradient-to-r from-blue-700 to-indigo-800 rounded-3xl p-5 lg:p-6 text-white shadow-lg border border-slate-800">
+        <div className="bg-gradient-to-r from-slate-100 to-indigo-800 rounded-3xl p-5 lg:p-6 text-white shadow-lg border border-slate-800">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-center space-x-3">
               <div className="p-3 bg-white/10 rounded-2xl">
@@ -583,7 +583,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
               </div>
               <div>
                 <h1 className="font-semibold text-base tracking-tight">Şöför Mobil Paneli</h1>
-                <p className="text-[11px] text-blue-100 mt-0.5">
+                <p className="text-[11px] text-slate-100 mt-0.5">
                   Giriş Yapan Yetkili: <span className="font-bold">{currentChauffeurName}</span>
                 </p>
               </div>
@@ -592,17 +592,17 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
             {/* Quick Stats Grid */}
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="bg-white/10 px-3 py-1.5 rounded-xl border border-white/5">
-                <span className="text-[10px] text-blue-200 block">Sistem Vasıtaları</span>
+                <span className="text-[10px] text-slate-500 block">Sistem Vasıtaları</span>
                 <span className="text-sm font-bold font-mono">{araclar.length}</span>
               </div>
               <div className="bg-white/10 px-3 py-1.5 rounded-xl border border-white/5">
-                <span className="text-[10px] text-blue-200 block">Bekleyen Onaylar</span>
+                <span className="text-[10px] text-slate-500 block">Bekleyen Onaylar</span>
                 <span className="text-sm font-bold font-mono text-amber-300">
                   {aracTalepleri.filter(t => t.durum === 'ONAY BEKLİYOR').length + yolHarcamalari.filter(y => y.durum === 'ONAY BEKLİYOR').length}
                 </span>
               </div>
               <div className="bg-white/10 px-3 py-1.5 rounded-xl border border-white/5">
-                <span className="text-[10px] text-blue-200 block">Kayıtlı Rotalar</span>
+                <span className="text-[10px] text-slate-500 block">Kayıtlı Rotalar</span>
                 <span className="text-sm font-bold font-mono">{seyahatRotalari.length}</span>
               </div>
             </div>
@@ -613,49 +613,49 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
         <div className="flex space-x-1.5 overflow-x-auto p-1 bg-white/80 backdrop-blur-xs rounded-2xl border border-slate-200 shrink-0 select-none scrollbar-none">
           <button 
             onClick={() => setActiveTab('günlük_rutin')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'günlük_rutin' ? 'bg-slate-900 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'günlük_rutin' ? 'bg-slate-900 text-white shadow-sm shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
           >
             🗓️ Günlük Rutin
           </button>
           <button 
             onClick={() => setActiveTab('günlük_faaliyet')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'günlük_faaliyet' ? 'bg-slate-900 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'günlük_faaliyet' ? 'bg-slate-900 text-white shadow-sm shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
           >
             📝 Günlük Faaliyet Kaydı
           </button>
           <button 
             onClick={() => setActiveTab('haftalık_km')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'haftalık_km' ? 'bg-slate-900 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'haftalık_km' ? 'bg-slate-900 text-white shadow-sm shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
           >
             📊 Haftalık KM
           </button>
           <button 
             onClick={() => setActiveTab('araç_kartı')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'araç_kartı' ? 'bg-slate-900 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'araç_kartı' ? 'bg-slate-900 text-white shadow-sm shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
           >
             🚗 Araç Kartı &amp; Onay
           </button>
           <button 
             onClick={() => setActiveTab('rotalar')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'rotalar' ? 'bg-slate-900 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'rotalar' ? 'bg-slate-900 text-white shadow-sm shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
           >
             📍 Seyahat Rotaları
           </button>
           <button 
             onClick={() => setActiveTab('yol_harcaması')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'yol_harcaması' ? 'bg-slate-900 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'yol_harcaması' ? 'bg-slate-900 text-white shadow-sm shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
           >
             💳 Fiş / Yol Harcaması
           </button>
           <button 
             onClick={() => setActiveTab('mini_raporlar')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'mini_raporlar' ? 'bg-slate-900 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'mini_raporlar' ? 'bg-slate-900 text-white shadow-sm shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
           >
             🖨️ Mini Raporlar
           </button>
           <button 
             onClick={() => setActiveTab('aylik_rapor')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'aylik_rapor' ? 'bg-slate-900 text-white shadow-sm shadow-blue-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition duration-150 shrink-0 cursor-pointer ${activeTab === 'aylik_rapor' ? 'bg-slate-900 text-white shadow-sm shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
           >
             📅 Aylık Sefer Raporu
           </button>
@@ -753,7 +753,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                 <div className="pt-2 border-t flex justify-end">
                   <button
                     onClick={handleSaveGunlukRutin}
-                    className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-blue-500/10 cursor-pointer"
+                    className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-slate-500/10 cursor-pointer"
                   >
                     <CheckCircle className="h-4 w-4" />
                     <span>Günlük Rutini Kaydet</span>
@@ -886,7 +886,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                     <button
                       type="submit"
                       disabled={faaliyetSaveLoading}
-                      className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-blue-500/10 cursor-pointer"
+                      className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-slate-500/10 cursor-pointer"
                     >
                       {faaliyetSaveLoading ? 'Faaliyet Kaydediliyor...' : 'Faaliyet Kaydet'}
                     </button>
@@ -980,7 +980,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                   <div className="col-span-1 md:col-span-2 flex justify-end pt-2 border-t">
                     <button
                       type="submit"
-                      className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-blue-500/10 cursor-pointer"
+                      className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-slate-500/10 cursor-pointer"
                     >
                       <span>Haftalık Takip Girişini Kaydet</span>
                     </button>
@@ -1083,7 +1083,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                   <div className="col-span-1 md:col-span-2 flex justify-end pt-2 border-t">
                     <button
                       type="submit"
-                      className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-blue-500/10 cursor-pointer"
+                      className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-slate-500/10 cursor-pointer"
                     >
                       <span>Kart Onay Talebi Gönder</span>
                     </button>
@@ -1174,7 +1174,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                   <div className="col-span-1 md:col-span-2 flex justify-end pt-2 border-t">
                     <button
                       type="submit"
-                      className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-blue-500/10 cursor-pointer"
+                      className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-slate-500/10 cursor-pointer"
                     >
                       <span>Rotayı ve İletişimi Kaydet</span>
                     </button>
@@ -1283,7 +1283,7 @@ export const LojistikScreen: React.FC<LojistikScreenProps> = ({
                     <button
                       type="submit"
                       disabled={compressing}
-                      className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-blue-500/10 cursor-pointer"
+                      className="bg-slate-900 hover:bg-slate-900 text-white font-bold py-2.5 px-6 rounded-2xl text-xs transition flex items-center space-x-1.5 shadow-sm shadow-slate-500/10 cursor-pointer"
                     >
                       <span>Harcama Talebini Gönder</span>
                     </button>

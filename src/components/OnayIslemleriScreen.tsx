@@ -1028,7 +1028,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
       {/* Upper header */}
       <div className="bg-white p-5 px-6 border-b border-slate-200 flex justify-between items-center shrink-0">
         <div className="flex items-center space-x-3.5">
-          <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/10">
+          <div className="w-10 h-10 bg-gradient-to-tr from-slate-100 to-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/10">
             <ShieldCheck size={20} className="stroke-[2.5]" />
           </div>
           <div>
@@ -1105,7 +1105,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
             
             <button 
               onClick={() => setActiveTab('satin_alma')}
-              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'satin_alma' ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
+              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'satin_alma' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <span className="flex items-center space-x-2"><ShoppingCart size={13} className={activeTab === 'satin_alma' ? 'text-white' : 'text-amber-500'} /> <span>Satın Alma Talepleri</span></span>
               {pendingRequests.length > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'satin_alma' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'}`}>{pendingRequests.length}</span>}
@@ -1113,7 +1113,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
             <button 
               onClick={() => setActiveTab('guvenlik_belgeleri')}
-              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'guvenlik_belgeleri' ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
+              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'guvenlik_belgeleri' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <span className="flex items-center space-x-2"><Truck size={13} className={activeTab === 'guvenlik_belgeleri' ? 'text-white' : 'text-emerald-500'} /> <span>Güvenlik Belgeleri</span></span>
               {(pendingWaybills.length + pendingInvoices.length) > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'guvenlik_belgeleri' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'}`}>{pendingWaybills.length + pendingInvoices.length}</span>}
@@ -1121,7 +1121,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
             <button 
               onClick={() => setActiveTab('kampci_belgeleri')}
-              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'kampci_belgeleri' ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
+              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'kampci_belgeleri' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <span className="flex items-center space-x-2"><Package size={13} className={activeTab === 'kampci_belgeleri' ? 'text-white' : 'text-slate-600'} /> <span>Kampçı Belgeleri</span></span>
               {(pendingKampSayimlar.length + pendingKampFaaliyetler.length) > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'kampci_belgeleri' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-800'}`}>{pendingKampSayimlar.length + pendingKampFaaliyetler.length}</span>}
@@ -1129,7 +1129,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
             <button 
               onClick={() => setActiveTab('formen_belgeleri')}
-              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'formen_belgeleri' ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
+              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'formen_belgeleri' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <span className="flex items-center space-x-2"><UserCheck size={13} className={activeTab === 'formen_belgeleri' ? 'text-white' : 'text-sky-500'} /> <span>Formen Belgeleri</span></span>
               {pendingPersonelCount > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'formen_belgeleri' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800'}`}>{pendingPersonelCount}</span>}
@@ -1137,7 +1137,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
             <button 
               onClick={() => setActiveTab('gunluk_loglar')}
-              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'gunluk_loglar' ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
+              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'gunluk_loglar' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <span className="flex items-center space-x-2"><FileText size={13} className={activeTab === 'gunluk_loglar' ? 'text-white' : 'text-amber-500'} /> <span>Günlük Loglar</span></span>
               {pendingGunlukAkis.length > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'gunluk_loglar' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'}`}>{pendingGunlukAkis.length}</span>}
@@ -1145,7 +1145,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
             <button 
               onClick={() => setActiveTab('sofor_talepleri')}
-              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'sofor_talepleri' ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
+              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'sofor_talepleri' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <span className="flex items-center space-x-2"><Truck size={13} className={activeTab === 'sofor_talepleri' ? 'text-white' : 'text-sky-500'} /> <span>Şöför Talepleri</span></span>
               {pendingSoforCount > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'sofor_talepleri' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800'}`}>{pendingSoforCount}</span>}
@@ -1153,7 +1153,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
             <button 
               onClick={() => setActiveTab('depocu_talepleri')}
-              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'depocu_talepleri' ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
+              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'depocu_talepleri' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <span className="flex items-center space-x-2"><Package size={13} className={activeTab === 'depocu_talepleri' ? 'text-white' : 'text-indigo-500'} /> <span>Depocu Talepleri</span></span>
               {pendingDepocuCount > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'depocu_talepleri' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-800'}`}>{pendingDepocuCount}</span>}
@@ -1161,7 +1161,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
             <button 
               onClick={() => setActiveTab('gecmis')}
-              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'gecmis' ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
+              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'gecmis' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <span className="flex items-center space-x-2"><CheckCircle size={13} /> <span>Geçmiş Onaylananlar</span></span>
             </button>
@@ -1384,7 +1384,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
             <div className="space-y-6">
               <div className="border bg-slate-950 p-4.5 rounded-2xl border-slate-800/80 flex justify-between items-center text-xs">
                 <div className="space-y-1">
-                  <span className="text-blue-450 font-bold block text-[11px] tracking-widest uppercase">🏕️ KAMPÇI BELGELERİ (AMİRLİK &amp; DEPO SAYIMI)</span>
+                  <span className="text-slate-700 font-bold block text-[11px] tracking-widest uppercase">🏕️ KAMPÇI BELGELERİ (AMİRLİK &amp; DEPO SAYIMI)</span>
                   <p className="text-slate-405 leading-relaxed text-[11px]">
                     Kamp sorumlusu tarafından gönderilen depo stok mutabakatları ile şantiye içi günlük kamp faaliyet raporları.
                   </p>
@@ -1588,7 +1588,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                               <span>✒️ Eklenen Kaşe / E-İmza: {doc.onayStamp}</span>
                               <button
                                 onClick={() => handleStartEditStamp(doc.id, doc.onayStamp || '')}
-                                className="text-slate-600 hover:text-blue-300 font-sans hover:underline text-[9px] ml-2"
+                                className="text-slate-600 hover:text-slate-500 font-sans hover:underline text-[9px] ml-2"
                               >
                                 [Düzelt]
                               </button>
@@ -1669,7 +1669,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                               <span>✒️ Eklenen Kaşe / E-İmza: {doc.onayStamp}</span>
                               <button
                                 onClick={() => handleStartEditStamp(doc.id, doc.onayStamp || '')}
-                                className="text-slate-600 hover:text-blue-300 font-sans hover:underline text-[9px] ml-2"
+                                className="text-slate-600 hover:text-slate-500 font-sans hover:underline text-[9px] ml-2"
                               >
                                 [Düzelt]
                               </button>
@@ -1750,7 +1750,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                               <span>✒️ Eklenen Kaşe / E-İmza: {doc.onayStamp}</span>
                               <button
                                 onClick={() => handleStartEditStamp(doc.id, doc.onayStamp || '')}
-                                className="text-slate-600 hover:text-blue-300 font-sans hover:underline text-[9px] ml-2"
+                                className="text-slate-600 hover:text-slate-500 font-sans hover:underline text-[9px] ml-2"
                               >
                                 [Düzelt]
                               </button>
@@ -2095,7 +2095,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                                   window.open(buildWhatsAppUrl(waText), '_blank');
                                 }
                               }}
-                              className="bg-slate-900 hover:bg-blue-750 active:scale-95 text-white font-extrabold text-[9px] py-1.5 px-3 rounded-xl flex items-center space-x-1.5 cursor-pointer border-b-2 border-blue-800 transition"
+                              className="bg-slate-900 hover:bg-slate-900 active:scale-95 text-white font-extrabold text-[9px] py-1.5 px-3 rounded-xl flex items-center space-x-1.5 cursor-pointer border-b-2 border-slate-800 transition"
                             >
                               <MessageSquare size={11} />
                               <span>WhatsApp'tan Yöneticiye İlet</span>
@@ -2426,7 +2426,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                               </div>
                               
                               {/* New info column */}
-                              <div className="bg-blue-950/25 p-2 rounded-xl border border-blue-900/40 space-y-1">
+                              <div className="bg-slate-900/25 p-2 rounded-xl border border-slate-800/40 space-y-1">
                                 <span className="text-slate-600 font-bold block text-[8px] uppercase">YENİ BİLGİLER</span>
                                 <div className="leading-snug">
                                   <p><span className="text-slate-300">Görev:</span> <span className={item.eskiBilgiler?.gorev !== item.yeniBilgiler?.gorev ? "text-amber-400 font-bold" : ""}>{item.yeniBilgiler?.gorev}</span></p>
@@ -2891,7 +2891,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
                   {activeDocForDetail.data.karsilastirmaRaporu && (
                     <div className="p-3 bg-indigo-950/40 border border-indigo-900 rounded-xl">
-                      <span className="font-bold text-[9px] text-blue-300 block mb-1 uppercase tracking-wider">📋 İrsaliye Analiz &amp; Sapma Raporu</span>
+                      <span className="font-bold text-[9px] text-slate-500 block mb-1 uppercase tracking-wider">📋 İrsaliye Analiz &amp; Sapma Raporu</span>
                       <p className="font-mono text-[9px] text-slate-350 whitespace-pre-wrap leading-relaxed">{activeDocForDetail.data.karsilastirmaRaporu}</p>
                     </div>
                   )}

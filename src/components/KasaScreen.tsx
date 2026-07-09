@@ -374,7 +374,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
               
               <div 
                 className={`border-2 border-dashed rounded-xl p-3 flex flex-col items-center justify-center transition text-center relative ${
-                  dragActive ? "border-slate-800 bg-blue-50/50" : "border-slate-200 bg-slate-50 hover:bg-slate-100"
+                  dragActive ? "border-slate-800 bg-slate-50/50" : "border-slate-200 bg-slate-50 hover:bg-slate-100"
                 }`}
                 onDragEnter={handleDrag}
                 onDragOver={handleDrag}

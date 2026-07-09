@@ -135,10 +135,10 @@ export const SohbetScreen: React.FC<SohbetScreenProps> = ({ currentUser, kullani
                 }`}>
                   {/* Sender header */}
                   <div className="flex items-center space-x-2 mb-1 border-b pb-1 border-white/10">
-                    <span className={`text-[9px] font-bold tracking-tight uppercase ${isMe ? 'text-blue-200' : 'text-slate-500'}`}>
+                    <span className={`text-[9px] font-bold tracking-tight uppercase ${isMe ? 'text-slate-500' : 'text-slate-500'}`}>
                       {msg.senderName}
                     </span>
-                    <span className={`text-[8px] px-1 rounded font-mono ${isMe ? 'bg-slate-900 text-blue-100' : 'bg-slate-100 text-slate-600'}`}>
+                    <span className={`text-[8px] px-1 rounded font-mono ${isMe ? 'bg-slate-900 text-slate-100' : 'bg-slate-100 text-slate-600'}`}>
                       {msg.senderRole}
                     </span>
                     {msg.tag && msg.tag !== 'GENEL' && (
@@ -154,7 +154,7 @@ export const SohbetScreen: React.FC<SohbetScreenProps> = ({ currentUser, kullani
                   </p>
 
                   {/* Timestamp */}
-                  <div className={`text-right text-[8.5px] mt-1.5 font-semibold ${isMe ? 'text-blue-200' : 'text-slate-400'}`}>
+                  <div className={`text-right text-[8.5px] mt-1.5 font-semibold ${isMe ? 'text-slate-500' : 'text-slate-400'}`}>
                     {new Date(msg.timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
@@ -242,7 +242,7 @@ export const SohbetScreen: React.FC<SohbetScreenProps> = ({ currentUser, kullani
 
           <button
             onClick={() => shareTemplate("izin")}
-            className="w-full text-left p-2.5 rounded-xl border border-slate-200 bg-blue-50/50 hover:bg-slate-50 transition text-[10px] font-bold text-slate-800 flex items-center space-x-2 cursor-pointer"
+            className="w-full text-left p-2.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition text-[10px] font-bold text-slate-800 flex items-center space-x-2 cursor-pointer"
           >
             <FileText size={13} className="text-slate-800 shrink-0" />
             <div className="leading-tight">

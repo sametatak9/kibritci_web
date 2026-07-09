@@ -164,7 +164,7 @@ export const PlanliOrganizasyonScreen: React.FC = () => {
     switch (p) {
       case 'ACİL': return 'bg-rose-100 text-rose-800 border-rose-200';
       case 'YÜKSEK': return 'bg-amber-100 text-amber-800 border-amber-200';
-      case 'ORTA': return 'bg-slate-100 text-blue-850 border-slate-200';
+      case 'ORTA': return 'bg-slate-100 text-slate-800 border-slate-200';
       default: return 'bg-slate-100 text-slate-700 border-slate-200';
     }
   };
@@ -237,7 +237,7 @@ export const PlanliOrganizasyonScreen: React.FC = () => {
                   {t.status !== 'DONE' && (
                     <button 
                       onClick={() => handleMoveTask(t, 'forward')}
-                      className="bg-blue-550 hover:bg-slate-900 text-white py-1 px-2 rounded-lg font-bold text-[9px] transition cursor-pointer"
+                      className="bg-slate-900 hover:bg-slate-900 text-white py-1 px-2 rounded-lg font-bold text-[9px] transition cursor-pointer"
                     >
                       İleri ▶
                     </button>

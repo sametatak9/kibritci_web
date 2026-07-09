@@ -952,7 +952,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                 <div className="lg:col-span-2 bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
                   <div className="flex justify-between items-center border-b border-slate-200 pb-2">
                     <span className="font-display font-black text-xs text-white uppercase tracking-widest block">👥 ŞANTİYE PERSONEL GİRİŞ PANELİ</span>
-                    <span className="bg-blue-950 text-slate-600 text-[9px] font-mono font-bold py-0.5 px-2 rounded">REALTIME</span>
+                    <span className="bg-slate-900 text-slate-600 text-[9px] font-mono font-bold py-0.5 px-2 rounded">REALTIME</span>
                   </div>
 
                   <div className="relative">

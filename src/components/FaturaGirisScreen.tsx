@@ -533,10 +533,10 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
           <div className="w-full lg:w-[440px] bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
             
             {/* AI parse box */}
-            <div className="bg-gradient-to-tr from-blue-50 to-indigo-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+            <div className="bg-gradient-to-tr from-slate-50 to-slate-100 border border-slate-200 rounded-2xl p-4 space-y-3">
               <span className="font-extrabold text-slate-800 tracking-wide text-[9px] uppercase block">🤖 YAPAY ZEKA DESTEKLİ FATURA OKUYUCU</span>
               <p className="text-[10px] text-slate-800 font-medium">Fatura belgenizi yükleyin; no, firma ve kalemleri yapay zeka ile otomatik dolduralım.</p>
-              <div className="relative border-2 border-dashed border-slate-200 rounded-xl p-4 text-center bg-white hover:bg-blue-50/20 transition cursor-pointer">
+              <div className="relative border-2 border-dashed border-slate-200 rounded-xl p-4 text-center bg-white hover:bg-slate-50/20 transition cursor-pointer">
                 <input 
                   type="file"
                   accept="image/*,application/pdf"

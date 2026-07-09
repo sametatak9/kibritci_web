@@ -249,7 +249,7 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
     switch (durum) {
       case 'Geldi': return 'bg-emerald-500 text-white';
       case 'Yok': return 'bg-rose-500 text-white';
-      case 'İzinli': return 'bg-blue-400 text-white';
+      case 'İzinli': return 'bg-slate-200 text-white';
       case 'Raporlu': return 'bg-amber-400 text-slate-900';
       case 'Pazar': case 'Tatil': return 'bg-slate-300 text-slate-700';
       default: return 'bg-slate-100 text-slate-400';
@@ -318,10 +318,10 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
             
             {/* General Card Profile */}
             <div className="bg-white border border-[#e2e8f0] rounded-2xl p-5 shadow-sm space-y-4 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-blue-550/5 rounded-full -mr-8 -mt-8"></div>
+              <div className="absolute top-0 right-0 w-24 h-24 bg-slate-900/5 rounded-full -mr-8 -mt-8"></div>
               
               <div className="flex items-center space-x-4">
-                <div className="w-14 h-14 bg-gradient-to-tr from-blue-600 to-blue-550 rounded-2xl flex items-center justify-center text-white text-lg font-black shadow-md border border-slate-800/20">
+                <div className="w-14 h-14 bg-gradient-to-tr from-slate-100 to-slate-900 rounded-2xl flex items-center justify-center text-white text-lg font-black shadow-md border border-slate-800/20">
                   {selectedPersonnel.ad[0]}{selectedPersonnel.soyad[0]}
                 </div>
                 <div className="space-y-1">
@@ -477,7 +477,7 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
                 <div className="flex gap-2 text-[8px] font-bold">
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-emerald-500 block"></span>Geldi</span>
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-rose-500 block"></span>Yok</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-blue-400 block"></span>İzin</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-slate-200 block"></span>İzin</span>
                 </div>
               </div>
 

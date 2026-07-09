@@ -1944,7 +1944,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
               {/* Creator form drawer */}
               <div className="w-full lg:w-[380px] lg:shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
                 <div className="bg-[#2563EB] text-slate-100 p-4 shrink-0">
-                  <span className="text-[10px] font-bold tracking-widest text-blue-200 uppercase">Zimmet &amp; Envanter</span>
+                  <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Zimmet &amp; Envanter</span>
                   <h3 className="font-display font-semibold text-sm">🚛 Demirbaş / Araç Ekle</h3>
                 </div>
 
@@ -2334,7 +2334,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   <h4 className="font-display font-bold text-sm text-slate-800 uppercase tracking-widest">
                     Kronolojik Sefer Sayacı Raporları
                   </h4>
-                  <span className="text-[10px] text-slate-800 font-bold bg-slate-50 border border-blue-105 px-2.5 py-0.5 rounded-full">
+                  <span className="text-[10px] text-slate-800 font-bold bg-slate-50 border border-slate-200 px-2.5 py-0.5 rounded-full">
                     Aradaki Fark Kilometresi Otomatik Hesaplanır
                   </span>
                 </div>
@@ -2552,7 +2552,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           {/* Left panel: Room Creation Form & Global stats */}
           <div className="w-full lg:w-[360px] lg:shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
             <div className="bg-[#2563EB] text-slate-100 p-4 shrink-0">
-              <span className="text-[10px] font-bold tracking-widest text-blue-200 uppercase">Kamp &amp; Barınma</span>
+              <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Kamp &amp; Barınma</span>
               <h3 className="font-display font-semibold text-sm">🏕️ Oda Açma &amp; Kamp Yönetimi</h3>
             </div>
 
@@ -2989,7 +2989,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 </div>
 
                 <div className="p-5 space-y-4 text-xs">
-                  <div className="p-3 bg-slate-50 rounded-xl border border-blue-150">
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
                     <span className="font-bold text-[9px] text-slate-600 block mb-0.5">Atanacak Hedef Oda ve Kat:</span>
                     <p className="font-bold text-slate-800">{selectedRoomToAssign.yerleskeAdi}</p>
                     <span className="text-[10px] text-slate-600 block">{selectedRoomToAssign.kogusNo} · Oda No: {selectedRoomToAssign.odaNo}</span>
@@ -3127,7 +3127,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           {/* Creator drawer */}
           <div className="w-full lg:w-[380px] lg:shrink-0 lg:self-start bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
             <div className="bg-[#2563EB] text-slate-100 p-4 shrink-0">
-              <span className="text-[10px] font-bold tracking-widest text-blue-200 uppercase">Saha Görev Kaydı</span>
+              <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Saha Görev Kaydı</span>
               <h3 className="font-display font-semibold text-sm">🏗️ Günlük İmalat Girişi</h3>
             </div>
 
@@ -3344,7 +3344,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                       {sahaFotoBase64 ? "✓ Gerçek fotoğraf yüklendi" : photoSelectedSim ? "✓ foto_saha.jpg seçildi" : "Görsel yüklenmedi"}
                     </span>
                   </div>
-                  <label className="bg-slate-900 hover:bg-blue-750 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center space-x-1 cursor-pointer shadow-sm transition">
+                  <label className="bg-slate-900 hover:bg-slate-900 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center space-x-1 cursor-pointer shadow-sm transition">
                     <FileUp size={12} />
                     <span>Dosya Seç</span>
                     <input 
@@ -3472,10 +3472,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 </div>
               )}
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => setSahaSubTab('tum')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'tum' ? 'bg-slate-900 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}>Tüm Kayıtlar</button>
-                <button type="button" onClick={() => setSahaSubTab('formen')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'formen' ? 'bg-slate-900 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}>Formen Gönderimleri</button>
-                <button type="button" onClick={() => setSahaSubTab('takvim')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'takvim' ? 'bg-slate-900 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}>Tarih Cetveli</button>
-                <button type="button" onClick={() => setSahaSubTab('gun_arsiv')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'gun_arsiv' ? 'bg-slate-900 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-250'}`}>Gün Rapor Arşivi</button>
+                <button type="button" onClick={() => setSahaSubTab('tum')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'tum' ? 'bg-slate-900 text-white border-slate-800' : 'bg-white text-slate-700 border-slate-250'}`}>Tüm Kayıtlar</button>
+                <button type="button" onClick={() => setSahaSubTab('formen')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'formen' ? 'bg-slate-900 text-white border-slate-800' : 'bg-white text-slate-700 border-slate-250'}`}>Formen Gönderimleri</button>
+                <button type="button" onClick={() => setSahaSubTab('takvim')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'takvim' ? 'bg-slate-900 text-white border-slate-800' : 'bg-white text-slate-700 border-slate-250'}`}>Tarih Cetveli</button>
+                <button type="button" onClick={() => setSahaSubTab('gun_arsiv')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'gun_arsiv' ? 'bg-slate-900 text-white border-slate-800' : 'bg-white text-slate-700 border-slate-250'}`}>Gün Rapor Arşivi</button>
                 <button type="button" onClick={() => setSahaSubTab('parsel_analiz')} className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${sahaSubTab === 'parsel_analiz' ? 'bg-violet-600 text-white border-violet-700' : 'bg-white text-slate-700 border-slate-250'}`}>Parsel Blok Analiz</button>
               </div>
               {sahaSubTab === 'tum' && (
@@ -3694,7 +3694,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           {/* Creator drawer */}
           <div className="w-full lg:w-[380px] lg:shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
             <div className="bg-[#2563EB] text-slate-100 p-4 shrink-0">
-              <span className="text-[10px] font-bold tracking-widest text-blue-200 uppercase">Hukuki Belgeler</span>
+              <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Hukuki Belgeler</span>
               <h3 className="font-display font-semibold text-sm">📜 Yeni Tutanak Oluştur</h3>
             </div>
 
@@ -4460,7 +4460,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           {/* Creator drawer */}
           <div className="w-full lg:w-[380px] lg:shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
             <div className="bg-[#2563EB] text-slate-100 p-4 shrink-0">
-              <span className="text-[10px] font-bold tracking-widest text-blue-200 uppercase">Haberleşme Havuzu</span>
+              <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Haberleşme Havuzu</span>
               <h3 className="font-display font-semibold text-sm">📧 Rapor E-Postala</h3>
             </div>
 
@@ -4810,7 +4810,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                         <div className="my-auto">
                           {currentOnay.hazirlayanSigned ? (
                             <div className="relative group">
-                              <span className="font-serif italic font-black text-slate-800 text-sm tracking-wide block py-1 bg-blue-50/50 rounded border border-dashed border-slate-200 shadow-3xs">
+                              <span className="font-serif italic font-black text-slate-800 text-sm tracking-wide block py-1 bg-slate-50/50 rounded border border-dashed border-slate-200 shadow-3xs">
                                 ✍️ {currentOnay.hazirlayanName}
                               </span>
                               <span className="text-[7px] text-emerald-600 font-bold block mt-1">
@@ -4866,7 +4866,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                         <div className="my-auto">
                           {currentOnay.kontrolEdenSigned ? (
                             <div className="relative group">
-                              <span className="font-serif italic font-black text-slate-800 text-sm tracking-wide block py-1 bg-blue-50/50 rounded border border-dashed border-slate-200 shadow-3xs">
+                              <span className="font-serif italic font-black text-slate-800 text-sm tracking-wide block py-1 bg-slate-50/50 rounded border border-dashed border-slate-200 shadow-3xs">
                                 ✍️ {currentOnay.kontrolEdenName}
                               </span>
                               <span className="text-[7px] text-emerald-600 font-bold block mt-1">
@@ -4922,7 +4922,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                         <div className="my-auto">
                           {currentOnay.onaylayanSigned ? (
                             <div className="relative group">
-                              <span className="font-serif italic font-black text-slate-800 text-sm tracking-wide block py-1 bg-blue-50/50 rounded border border-dashed border-slate-200 shadow-3xs">
+                              <span className="font-serif italic font-black text-slate-800 text-sm tracking-wide block py-1 bg-slate-50/50 rounded border border-dashed border-slate-200 shadow-3xs">
                                 ✍️ {currentOnay.onaylayanName}
                               </span>
                               <span className="text-[7px] text-emerald-600 font-bold block mt-1">
@@ -5235,7 +5235,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
 
                 {/* Sinyal Widgets */}
                 <div className="kamp-kroki-stats grid grid-cols-3 gap-4 text-center">
-                  <div className="bg-slate-50 border border-blue-150 rounded-xl p-3">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                     <span className="text-[8px] text-slate-800 font-bold block uppercase tracking-wide">TOPLAM YATAK KAPASİTESİ</span>
                     <span className="text-base font-extrabold text-[#2563EB] block mt-0.5">
                       {kampOdalari.reduce((acc, current) => acc + current.kapasite, 0)} Adet

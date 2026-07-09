@@ -1171,7 +1171,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               </button>
               <button 
                 onClick={() => handleBulkOvertime(2)}
-                className="text-[10px] bg-slate-50 text-slate-800 hover:bg-slate-100 border border-blue-150 rounded-lg px-2 py-1 font-bold cursor-pointer transition"
+                className="text-[10px] bg-slate-50 text-slate-800 hover:bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 font-bold cursor-pointer transition"
                 title="Her iş gününe stabil 2 saat fazla mesai yazar"
               >
                 ⏱ Herkese +2sa Mesai Girişi
@@ -1425,7 +1425,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               </div>
 
               {aiLoading && (
-                <div className="p-4 bg-slate-50 border border-blue-150 rounded-xl flex items-center justify-center space-x-2.5 animate-pulse text-xs font-bold text-slate-800">
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-center space-x-2.5 animate-pulse text-xs font-bold text-slate-800">
                   <RefreshCw size={14} className="animate-spin text-slate-800" />
                   <span>Gemini AI Evrağı Çözümlüyor...</span>
                 </div>
@@ -1818,7 +1818,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                         
                         {/* Static Personel Name column */}
                         <td
-                          className="px-3 py-3 whitespace-nowrap font-medium text-slate-900 sticky left-0 bg-white shadow-[2px_0_5px_rgba(0,0,0,0.02)] z-10 border-r cursor-pointer hover:bg-blue-50/40 transition-colors select-none"
+                          className="px-3 py-3 whitespace-nowrap font-medium text-slate-900 sticky left-0 bg-white shadow-[2px_0_5px_rgba(0,0,0,0.02)] z-10 border-r cursor-pointer hover:bg-slate-50/40 transition-colors select-none"
                           title="Çift tık: saha faaliyetleri ve fotoğraflar"
                           onDoubleClick={() => handlePersonDoubleClick(p)}
                         >

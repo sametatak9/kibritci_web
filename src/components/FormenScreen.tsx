@@ -1228,7 +1228,7 @@ ${satirlar
                   
                   {/* Status Indicator stats bar */}
                   <div className="bg-white p-2.5 rounded-2xl border border-slate-200/60 shadow-xs grid grid-cols-3 gap-2 text-center">
-                    <div className="bg-blue-50/50 p-1.5 rounded-xl">
+                    <div className="bg-slate-50/50 p-1.5 rounded-xl">
                       <span className="text-[10px] text-slate-500 font-bold block">Havuz (Kalan)</span>
                       <strong className="text-sm font-black text-slate-800 block">{remainingStaff.length}</strong>
                     </div>
@@ -2458,7 +2458,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                           
                           {/* Updates */}
                           {isGuncellemeTalepleriList.map(item => (
-                            <div key={item.id} className="border border-slate-100 rounded-2xl p-2.5 bg-blue-50/30 text-[9px] space-y-1">
+                            <div key={item.id} className="border border-slate-100 rounded-2xl p-2.5 bg-slate-50/30 text-[9px] space-y-1">
                               <div className="flex justify-between items-start">
                                 <div>
                                   <span className="font-black text-slate-800 text-[8px] uppercase tracking-wider block mb-0.5">📝 BİLGİ GÜNCELLEME TALEBİ</span>
@@ -2540,7 +2540,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                             className={`py-2 px-3 rounded-xl font-bold text-[9px] border transition flex items-center justify-center space-x-1 ${
                               showGuncellemeForm 
                                 ? 'bg-slate-50 text-slate-800 border-slate-200' 
-                                : 'bg-white text-slate-800 border-slate-200 hover:bg-blue-50/50'
+                                : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50/50'
                             }`}
                           >
                             <span>📝 Bilgileri Güncelle</span>
@@ -2615,7 +2615,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
 
                         {/* Form B: Bilgileri Güncelleme Talebi */}
                         {showGuncellemeForm && (
-                          <div className="border border-slate-200 rounded-2xl p-3 bg-blue-50/10 space-y-3 animate-in fade-in duration-150">
+                          <div className="border border-slate-200 rounded-2xl p-3 bg-slate-50/10 space-y-3 animate-in fade-in duration-150">
                             <span className="font-extrabold text-[8px] text-slate-800 uppercase block tracking-wider">📝 BİLGİ DÜZELTME & GÜNCELLEME FORMU</span>
                             
                             <div className="space-y-2 max-h-56 overflow-y-auto pr-1">

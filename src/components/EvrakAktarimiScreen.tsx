@@ -811,7 +811,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
       <div className="max-w-4xl mx-auto space-y-6">
         
         {/* Header banner */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-slate-200 p-6 rounded-3xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200 p-6 rounded-3xl flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <span className="text-[10px] font-black uppercase text-slate-800 tracking-widest block">YAPAY ZEKA ENTEGRASYONU</span>
             <h1 className="font-display font-black text-xl text-slate-850 tracking-tight uppercase leading-none">Eski Evrakları Programa Aktar</h1>
@@ -921,7 +921,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-slate-705">
-                    Sürükleyip Bırakın veya <label className="text-slate-800 hover:text-blue-550 cursor-pointer underline">Göz Atın<input type="file" onChange={handleFileChange} accept=".pdf,.png,.jpg,.jpeg" className="hidden" /></label>
+                    Sürükleyip Bırakın veya <label className="text-slate-800 hover:text-slate-700 cursor-pointer underline">Göz Atın<input type="file" onChange={handleFileChange} accept=".pdf,.png,.jpg,.jpeg" className="hidden" /></label>
                   </h4>
                   <p className="text-xs text-slate-500 mt-1">PDF, PNG, JPG, JPEG (Maks. 10MB)</p>
                 </div>
@@ -983,7 +983,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
                       onClick={() => setDocType(type.key as any)}
                       className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer flex gap-3 items-start ${
                         isSelected 
-                          ? 'bg-slate-50 border-slate-800 text-slate-800 ring-2 ring-blue-500/10 font-bold shadow-xs' 
+                          ? 'bg-slate-50 border-slate-800 text-slate-800 ring-2 ring-slate-800/10 font-bold shadow-xs' 
                           : 'bg-slate-50 border-slate-200 hover:border-slate-350 text-slate-650'
                       }`}
                     >
@@ -1012,7 +1012,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
           {/* Step 3: Çözümleme Loading Animasyonu */}
           {parsing && (
             <div className="bg-white border border-slate-200 rounded-3xl p-8 text-center space-y-4 shadow-sm">
-              <div className="flex justify-center text-blue-550">
+              <div className="flex justify-center text-slate-700">
                 <RefreshCw size={26} className="animate-spin" />
               </div>
               <div className="space-y-1">
@@ -1551,7 +1551,7 @@ export const EvrakAktarimiScreen: React.FC<EvrakAktarimiScreenProps> = ({
                 <button
                   disabled={importing}
                   onClick={handleImportToSystem}
-                  className="w-full mt-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-blue-800/40 text-slate-800 font-black text-xs py-3.5 rounded-xl transition tracking-wide flex items-center justify-center space-x-2 shadow-lg shadow-blue-500/10 cursor-pointer"
+                  className="w-full mt-4 bg-gradient-to-r from-slate-100 to-indigo-600 hover:from-slate-100 hover:to-indigo-700 disabled:from-slate-100 text-slate-800 font-black text-xs py-3.5 rounded-xl transition tracking-wide flex items-center justify-center space-x-2 shadow-lg shadow-slate-500/10 cursor-pointer"
                 >
                   {importing ? <RefreshCw size={13} className="animate-spin" /> : <Check size={14} />}
                   <span>DOĞRULANAN VERİLERİ ŞANTİYE SİSTEMİNE AKTAR</span>

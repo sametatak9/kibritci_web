@@ -59,7 +59,7 @@ export const EvrakBaglamaWizard: React.FC<EvrakBaglamaWizardProps> = ({
   const tabBilgi = 'evrak-baglama';
 
   const accentBtn = accent === 'emerald' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-900 hover:bg-slate-900';
-  const accentRing = accent === 'emerald' ? 'ring-emerald-500' : 'ring-blue-500';
+  const accentRing = accent === 'emerald' ? 'ring-emerald-500' : 'ring-slate-800';
 
   const selectedSa = satinAlmaTalepleri.find((s) => s.saId === saId);
   const selectedIrs = irsaliyeler.filter((ir) => irIds.includes(ir.id));

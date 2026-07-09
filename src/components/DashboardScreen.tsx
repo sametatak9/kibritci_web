@@ -137,7 +137,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       title: "Aktif Kadro (Personel)",
       value: `${activePersonelCount} / ${totalPersonel}`,
       color: "text-slate-800",
-      bg: "bg-blue-50/70 border-slate-200",
+      bg: "bg-slate-50/70 border-slate-200",
       icon: Users,
       trend: "Canlı Şantiye Kadrosu",
       trendColor: "text-emerald-600"
@@ -182,7 +182,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         <div className="relative z-10 space-y-2 flex items-center space-x-4">
           <KibritciLogo size="lg" className="mr-2" />
           <div className="space-y-1">
-            <span className="bg-[#1E4E78]/25 text-blue-300 text-[10px] font-bold tracking-widest px-2.5 py-0.5 rounded-full border border-[#1E4E78]/30 uppercase block w-fit">
+            <span className="bg-[#1E4E78]/25 text-slate-500 text-[10px] font-bold tracking-widest px-2.5 py-0.5 rounded-full border border-[#1E4E78]/30 uppercase block w-fit">
               BULUT YÖNETSEL ÖZET PANELİ
             </span>
             <h2 className="font-display font-black text-xl tracking-tight text-white">
@@ -239,7 +239,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       </div>
 
       {/* 📘 Şantiye Hızlı Kılavuz & Sistem Rehberi */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4 relative overflow-hidden bg-gradient-to-r from-blue-50/20 to-transparent">
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4 relative overflow-hidden bg-gradient-to-r from-slate-50/20 to-transparent">
         <div className="absolute right-0 top-0 w-32 h-32 bg-slate-500 rounded-full mix-blend-multiply filter blur-3xl opacity-5 -translate-y-10 translate-x-10" />
         <div className="space-y-1">
           <span className="bg-slate-500/10 text-slate-800 text-[9px] font-black tracking-wider px-2.5 py-0.5 rounded-full border border-slate-800/10 uppercase">
@@ -256,7 +256,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
           <div 
             onClick={() => onNavigate("yoklama")} 
-            className="p-3.5 rounded-2xl bg-slate-50 hover:bg-blue-55/40 border border-slate-100 hover:border-slate-200 transition duration-200 cursor-pointer space-y-1.5 group"
+            className="p-3.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-100 hover:border-slate-200 transition duration-200 cursor-pointer space-y-1.5 group"
           >
             <div className="flex items-center justify-between text-slate-800 font-bold text-xs">
               <span className="group-hover:underline">1. Yoklama &amp; Puantaj</span>
@@ -332,12 +332,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </div>
 
             {[
-              { label: "01 Haz", height: "h-20", value: "3", fill: "bg-gradient-to-t from-blue-500 to-blue-400" },
-              { label: "05 Haz", height: "h-28", value: "5", fill: "bg-gradient-to-t from-[#1E4E78] to-blue-500" },
+              { label: "01 Haz", height: "h-20", value: "3", fill: "bg-gradient-to-t from-slate-100 to-slate-50" },
+              { label: "05 Haz", height: "h-28", value: "5", fill: "bg-gradient-to-t from-[#1E4E78] to-slate-50" },
               { label: "10 Haz", height: "h-14", value: "2", fill: "bg-gradient-to-t from-[#8B1E1E] to-red-500" },
               { label: "15 Haz", height: "h-36", value: "8", fill: "bg-gradient-to-t from-emerald-500 to-emerald-400" },
-              { label: "20 Haz", height: "h-28", value: "6", fill: "bg-gradient-to-t from-[#1E4E78] to-blue-500" },
-              { label: "25 Haz", height: "h-32", value: "7", fill: "bg-gradient-to-t from-blue-500 to-blue-450" },
+              { label: "20 Haz", height: "h-28", value: "6", fill: "bg-gradient-to-t from-[#1E4E78] to-slate-50" },
+              { label: "25 Haz", height: "h-32", value: "7", fill: "bg-gradient-to-t from-slate-100 to-slate-900" },
               { label: "30 Haz", height: "h-40", value: "9", fill: "bg-gradient-to-t from-[#1E4E78] to-[#8B1E1E]" },
             ].map((bar, idx) => (
               <div key={idx} className="flex flex-col items-center space-y-2 group relative z-10 w-12">
@@ -611,7 +611,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                 <p class="text-base font-mono font-black">${traceData.attendance.izinli}</p>
                                 <span class="text-[10px] text-slate-400 font-normal">İzinli Gün</span>
                               </div>
-                              <div class="bg-slate-50 border border-blue-150 text-slate-800 p-3 rounded-xl">
+                              <div class="bg-slate-50 border border-slate-200 text-slate-800 p-3 rounded-xl">
                                 <p class="text-base font-mono font-black">${traceData.attendance.raporlu}</p>
                                 <span class="text-[10px] text-slate-400 font-normal">Raporlu Gün</span>
                               </div>
@@ -758,7 +758,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
               <span className="text-[18px] font-bold font-mono text-slate-800 block leading-none">{totalRooms}</span>
               <span className="text-[8px] font-bold text-slate-400 uppercase block mt-1">Toplam Oda</span>
             </div>
-            <div className="p-3 bg-slate-50 border border-blue-105 rounded-xl">
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
               <span className="text-[18px] font-bold font-mono text-slate-800 block leading-none">{totalBeds}</span>
               <span className="text-[8px] font-bold text-slate-400 uppercase block mt-1">Yatak Kapasitesi</span>
             </div>
@@ -771,11 +771,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           <div className="space-y-1.5 pt-1">
             <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
               <span className="uppercase">Genel Yatak Doluluk Oranı</span>
-              <span className="text-blue-750 font-mono font-bold">%{fillRatio} Görüntüleniyor</span>
+              <span className="text-slate-800 font-mono font-bold">%{fillRatio} Görüntüleniyor</span>
             </div>
             <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden border border-slate-200">
               <div 
-                className="bg-gradient-to-r from-blue-500 to-blue-600 h-full rounded-full transition-all duration-500" 
+                className="bg-gradient-to-r from-slate-100 to-slate-50 h-full rounded-full transition-all duration-500" 
                 style={{ width: `${Math.min(100, fillRatio)}%` }} 
               />
             </div>
@@ -874,7 +874,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 </div>
 
                 <div className="text-right">
-                  <span className="text-blue-750 font-bold text-xs">{p.departman}</span>
+                  <span className="text-slate-800 font-bold text-xs">{p.departman}</span>
                   <p className="text-[9px] text-slate-400 font-mono">Giriş: {p.iseGirisTarihi || 'Belirtilmedi'}</p>
                 </div>
               </div>
