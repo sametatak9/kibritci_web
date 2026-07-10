@@ -66,8 +66,14 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     reader.onload = async () => {
       try {
         const rawBase64 = reader.result as string;
-        // Keep the raw image as irsaliyeFoto base64 so they can see/submit it
-        setIrsaliyeFoto(rawBase64);
+        
+        let displayBase64 = rawBase64;
+        if (file.type.startsWith('image/')) {
+          displayBase64 = await compressImage(rawBase64);
+        }
+        
+        // Keep the compressed image as irsaliyeFoto base64 so they can see/submit it
+        setIrsaliyeFoto(displayBase64);
 
         const base64Data = rawBase64.split(',')[1];
         
@@ -886,23 +892,16 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                         <span>{irsaliyeFoto ? '✓ Evrak Fotoğrafı Seçildi (Değiştir)' : 'Evrak Fotoğrafı Çek / Seç'}</span>
                         <input 
                           type="file"
-                          accept="image/*"
+                          accept="image/*,application/pdf"
                           capture="environment"
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              const r = new FileReader();
-                              r.onload = async (ev) => {
-                                if (ev.target?.result) {
-                                  const rawBase64 = ev.target.result as string;
-                                  const compressed = await compressImage(rawBase64);
-                                  setIrsaliyeFoto(compressed);
-                                }
-                              };
-                              r.readAsDataURL(file);
+                              processSecurityDocumentAi(file);
                             }
                           }}
                           className="hidden"
+                          disabled={isAiParsing}
                         />
                       </label>
                       {irsaliyeFoto && (

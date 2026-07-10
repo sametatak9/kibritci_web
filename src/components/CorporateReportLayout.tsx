@@ -13,6 +13,29 @@ export interface CorporateReportLayoutProps {
   className?: string;
 }
 
+const headerLogoStyle: React.CSSProperties = {
+  height: '75px',
+  width: 'auto',
+  maxWidth: '220px', /* Reduced to hide the right part containing Teknik Mühendislik */
+  display: 'block',
+  objectFit: 'cover',
+  objectPosition: 'left center',
+  marginLeft: '0px',
+};
+
+const watermarkStyle: React.CSSProperties = {
+  position: 'absolute',
+  right: '1.5%',
+  top: '50%',
+  transform: 'translateY(-50%)',
+  width: '420px',
+  maxWidth: '52%',
+  height: 'auto',
+  opacity: 1,
+  pointerEvents: 'none',
+  zIndex: 0,
+};
+
 export const CorporateReportLayout: React.FC<CorporateReportLayoutProps> = ({
   children,
   docCode,
@@ -28,33 +51,49 @@ export const CorporateReportLayout: React.FC<CorporateReportLayoutProps> = ({
     <div
       className={`corporate-report corporate-report--${orientation} ${className}`}
       data-orientation={orientation}
+      style={{ position: 'relative', background: '#fff' }}
     >
       <img
         src={KIBRITCI_REPORT_WATERMARK_DATA_URL}
         alt=""
         aria-hidden
         draggable={false}
+        style={watermarkStyle}
         className="corporate-report-watermark-img"
       />
 
-      <header className="corporate-report-header">
+      <header
+        className="corporate-report-header"
+        style={{
+          position: 'relative',
+          zIndex: 2,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          paddingBottom: '12px',
+          marginBottom: '16px',
+        }}
+      >
         <img
           src={KIBRITCI_REPORT_HEADER_DATA_URL}
           alt="Kibritçi İnşaat"
           draggable={false}
+          style={headerLogoStyle}
           className="corporate-report-logo-img"
         />
         {docCode && (
-          <div className="corporate-report-meta">
+          <div className="corporate-report-meta" style={{ textAlign: 'right' }}>
             <span className="corporate-report-doc-code">{docCode}</span>
             <span className="corporate-report-date">Baskı: {printDateStr}</span>
           </div>
         )}
       </header>
 
-      <main className="corporate-report-body">{children}</main>
+      <main className="corporate-report-body" style={{ position: 'relative', zIndex: 1 }}>
+        {children}
+      </main>
 
-      <footer className="corporate-report-footer">
+      <footer className="corporate-report-footer" style={{ position: 'relative', zIndex: 2 }}>
         <div className="corporate-report-footer-line" />
         <div className="corporate-report-footer-grid">
           <div className="corporate-report-footer-col">

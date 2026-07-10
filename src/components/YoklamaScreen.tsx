@@ -43,10 +43,11 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   sahaFaaliyetleri = []
 }) => {
   const MAX_MESAI_SAATI = 14;
-  const [selectedMonth, setSelectedMonth] = useState(5); // Mayıs 2026
-  const [selectedYear, setSelectedYear] = useState(2026);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [searchTerm, setSearchTerm] = useState("");
   const [personelListTab, setPersonelListTab] = useState<'TUM' | 'FAALIYET'>('TUM');
+  const [isEditMode, setIsEditMode] = useState(false);
   
   // Custom Overtime state variables
   const [overtimeStaffId, setOvertimeStaffId] = useState<string>("ALL");
@@ -627,7 +628,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     }
   };
 
-  const [printModal, setPrintModal] = useState<'NONE' | 'BOS' | 'DOLU' | 'GUNLUK_BOS'>('NONE');
+  const [printModal, setPrintModal] = useState<'NONE' | 'MAAS_RAPORU'>('NONE');
 
   const filteredPersonel = useMemo(() => {
     const term = searchTerm.toLowerCase();
@@ -656,7 +657,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     return Array.from(byName.values());
   }, [monthPersoneller, faaliyetPersoneller, searchTerm, personelListTab]);
 
-  const handleExportExcelTables = async () => {
+  const handleExportExcelTables = async (emptyMode: boolean = false) => {
     const { Workbook } = await import('exceljs');
 
     const wb = new Workbook();
@@ -819,14 +820,16 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
         const statusCell = ws.getCell(row, col);
         const mesaiCell = ws.getCell(row + 1, col);
-        statusCell.value = active ? toStatusSymbol(d.durum) : '-';
-        mesaiCell.value = active && mesai > 0 ? mesai : '';
-        if (active && mesai > 0) mesaiCell.numFmt = '0.0';
+        statusCell.value = active ? (emptyMode ? '' : toStatusSymbol(d.durum)) : '-';
+        mesaiCell.value = active && mesai > 0 && !emptyMode ? mesai : '';
+        if (active && mesai > 0 && !emptyMode) mesaiCell.numFmt = '0.0';
         let hasSpecialDayStyle = false;
 
         if (!active) {
           statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
           mesaiCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+        } else if (emptyMode) {
+          statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
         } else if (d.durum === 'Geldi') {
           statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
         } else if (d.durum === 'Yok') {
@@ -842,7 +845,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
             right: { style: 'medium', color: { argb: 'FF22C55E' } },
             bottom: { style: 'medium', color: { argb: 'FF22C55E' } },
           };
-          mesaiCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
+          mesaiCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: emptyMode ? 'FFFFFFFF' : 'FFDCFCE7' } };
           mesaiCell.border = {
             top: { style: 'medium', color: { argb: 'FF22C55E' } },
             left: { style: 'medium', color: { argb: 'FF22C55E' } },
@@ -852,14 +855,14 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
         }
         if (exitDay === day) {
           hasSpecialDayStyle = true;
-          statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+          statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: emptyMode ? 'FFFFFFFF' : 'FFFEE2E2' } };
           statusCell.border = {
             top: { style: 'medium', color: { argb: 'FFDC2626' } },
             left: { style: 'medium', color: { argb: 'FFDC2626' } },
             right: { style: 'medium', color: { argb: 'FFDC2626' } },
             bottom: { style: 'medium', color: { argb: 'FFDC2626' } },
           };
-          mesaiCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+          mesaiCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: emptyMode ? 'FFFFFFFF' : 'FFFEE2E2' } };
           mesaiCell.border = {
             top: { style: 'medium', color: { argb: 'FFDC2626' } },
             left: { style: 'medium', color: { argb: 'FFDC2626' } },
@@ -876,16 +879,16 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       const tahminiMaas = dailyWage * hakedisGun;
       const tahminiMesai = mesaiToplam * (dailyWage / 7.5) * 1.5;
       const tahminiToplam = tahminiMaas + tahminiMesai;
-      const summaryValues = [geldiGun, yokGun, Number(mesaiToplam.toFixed(1)), Number(p.maas || 0), tahminiMaas, tahminiMesai, tahminiToplam];
+      const summaryValues = emptyMode ? ['', '', '', '', '', '', ''] : [geldiGun, yokGun, Number(mesaiToplam.toFixed(1)), Number(p.maas || 0), tahminiMaas, tahminiMesai, tahminiToplam];
       summaryValues.forEach((v, i) => {
         const cell = ws.getCell(row, summaryStart + i);
         cell.value = v;
-        if (i >= 2) cell.numFmt = '#,##0.00';
+        if (i >= 2 && !emptyMode) cell.numFmt = '#,##0.00';
       });
       ws.mergeCells(row + 1, summaryStart, row + 1, summaryStart + summaryLabels.length - 1);
       ws.getCell(row + 1, summaryStart).value = '';
       ws.mergeCells(row + 2, baseCols + 1, row + 2, baseCols + daysInMonth);
-      ws.getCell(row + 2, baseCols + 1).value =
+      ws.getCell(row + 2, baseCols + 1).value = emptyMode ? '' :
         `Gün Hak: ${tahminiMaas.toFixed(2)} TL | Mesai Hak: ${tahminiMesai.toFixed(2)} TL | Toplam: ${tahminiToplam.toFixed(2)} TL`;
       ws.mergeCells(row + 2, summaryStart, row + 2, summaryStart + summaryLabels.length - 1);
       ws.getCell(row + 2, summaryStart).value =
@@ -1232,48 +1235,33 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               <span>Yoklama Arşivi</span>
             </button>
             <button
-              onClick={() => setPrintModal('GUNLUK_BOS')}
-              className="text-[11px] bg-slate-800 hover:bg-slate-900 text-white border border-slate-700 rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
-              title="Şantiyede günlük elle doldurmak için boş tek günlük puantaj cetveli şablonu yazdırır."
+              onClick={() => setIsEditMode(prev => !prev)}
+              className={`text-[11px] rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm ${
+                isEditMode 
+                  ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300' 
+                  : 'bg-slate-800 hover:bg-slate-900 text-white border border-slate-700'
+              }`}
+              title="Yanlışlıkla tıklamaları önlemek için tabloyu kilitler veya açar."
             >
-              <FileText size={13} className="text-amber-500" />
-              <span>📄 Boş Günlük Şablon (Baskı)</span>
+              <span>{isEditMode ? '🔓 Düzenleme Modu Açık' : '🔒 Yoklama Başlat'}</span>
             </button>
             <button
-              onClick={() => setPrintModal('BOS')}
-              className="text-[11px] bg-white text-slate-700 hover:bg-slate-50 border border-slate-250 rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
-              title="Şantiyede elle doldurmak için boş aylık puantaj cetveli şablonu yazdırır."
-            >
-              <FileText size={13} className="text-rose-500" />
-              <span>📄 Boş Aylık Puantaj</span>
-            </button>
-            <button
-              onClick={() => setPrintModal('DOLU')}
-              className="text-[11px] bg-amber-500 hover:bg-amber-600 text-white border border-amber-600 rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
-              title="Kayıtlı ve girilmiş fiili puantajları imza çizgileriyle yazdırır."
+              onClick={() => handleExportExcelTables(true)}
+              className="text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
+              title="Şantiyede günlük elle doldurmak için boş aylık puantaj cetvelini Excel olarak indirir."
             >
               <FileText size={13} className="text-white" />
-              <span>📊 Dolu Aylık Rapor</span>
+              <span>Boş Excel Puantaj Raporu</span>
             </button>
             <button
-              onClick={() => setShowAiUpload(prev => !prev)}
-              className="text-[11px] bg-slate-900 hover:bg-slate-900 text-white rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
-              title="Formenlerin doldurduğu günlük yoklama kağıdını fotoğraf çekip AI ile sisteme yükleyin."
+              onClick={() => setPrintModal('MAAS_RAPORU')}
+              className="text-[11px] bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
+              title="Puantaj ve maaş detaylarını içeren genel rapor."
             >
-              <span>🤖 AI ile Günlük Yoklama Yükle</span>
+              <FileText size={13} className="text-white" />
+              <span>Puantaj Raporu</span>
             </button>
-            <button
-              onClick={() => {
-                setShowBireyselModal(true);
-                if (personeller.length > 0 && !bireyselStaffId) {
-                  setBireyselStaffId(personeller[0].id);
-                }
-              }}
-              className="text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-1.5 font-bold cursor-pointer transition flex items-center space-x-1 shadow-sm"
-              title="Bireysel aylık puantaj kartını pop-up olarak görüntüler ve düzenler."
-            >
-              <span>👤 Bireysel Yoklama</span>
-            </button>
+
 
             {/* Search */}
             <div className="relative w-full sm:w-40 sm:ml-2">
@@ -1768,14 +1756,14 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                         <td key={day} className={`${tdClass} relative`}>
                           <button
                             type="button"
-                            disabled={!isActiveDay}
-                            onClick={() => isActiveDay && handleCellClick(p.id, day)}
+                            disabled={!isActiveDay || !isEditMode}
+                            onClick={() => isActiveDay && isEditMode && handleCellClick(p.id, day)}
                             className={`w-7 h-7 rounded-md border font-bold text-[9px] flex items-center justify-center transition shadow-sm ${
                               isActiveDay
-                                ? `hover:scale-105 active:scale-95 cursor-pointer ${getStatusColor(dayData.durum)} ${
+                                ? `${isEditMode ? 'hover:scale-105 active:scale-95 cursor-pointer' : 'cursor-default opacity-90 hover:opacity-100'} ${getStatusColor(dayData.durum)} ${
                                     isHoliday ? (isOfficial ? 'ring-1 ring-purple-300' : 'ring-1 ring-orange-300') : ''
                                   }`
-                                : 'bg-violet-100 border-violet-300 text-violet-700 opacity-95'
+                                : 'bg-violet-100 border-violet-300 text-violet-700 opacity-95 cursor-not-allowed'
                             }`}
                           >
                             {isActiveDay ? getStatusAbbreviation(dayData.durum) : '■'}
@@ -1794,14 +1782,14 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                           <div className="mt-1 flex items-center justify-center">
                             <input 
                               type="text"
-                              disabled={!isActiveDay}
+                              disabled={!isActiveDay || !isEditMode}
                               inputMode="decimal"
                               pattern="^\\d+([.,]\\d{0,2})?$"
                               title={`0 ile ${MAX_MESAI_SAATI} saat arası girin (0.5 adım).`}
                               maxLength={5}
                               value={isActiveDay ? (dayData.mesaiSaati || "") : ""}
                               placeholder="-"
-                              onChange={(e) => isActiveDay && handleMesaiChange(p.id, day, parseMesaiInput(e.target.value))}
+                              onChange={(e) => isActiveDay && isEditMode && handleMesaiChange(p.id, day, parseMesaiInput(e.target.value))}
                               className={`w-7 text-[8px] font-bold font-mono text-center rounded border py-0.5 focus:outline-none ${
                                 isActiveDay
                                   ? `${isHoliday ? (isOfficial ? 'bg-purple-50 border-purple-200 text-purple-700' : 'bg-orange-50 border-orange-200 text-orange-700') : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600'} `
@@ -1856,31 +1844,17 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
       {/* 📄 REPORT OVERLAYS: BOŞ PUANTAJ REPORT & DOLU GÜNCEL PUANTAJ REPORT & GUNLUK_BOS */}
       {/* ========================================================================= */}
-      {printModal !== 'NONE' && (
+      {printModal === 'MAAS_RAPORU' && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/80 flex items-start justify-center p-6 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl w-full max-w-7xl shadow-2xl flex flex-col overflow-hidden my-4">
+          <div className="bg-white rounded-2xl w-full max-w-[1400px] shadow-2xl flex flex-col overflow-hidden my-4">
             
             {/* Modal Actions Header */}
             <div className="bg-slate-900 text-white p-4 flex flex-wrap justify-between items-center gap-3 px-6 shrink-0 print:hidden">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xl">🖨️</span>
                 <h3 className="font-display font-bold text-sm">
-                  {printModal === 'BOS' ? 'Boş Şablon Şantiye Puantaj Cetveli Baskı Önizleme' : printModal === 'GUNLUK_BOS' ? 'Boş Günlük Şablon Şantiye Puantaj Cetveli' : 'Dolu Güncel Şantiye Puantaj Cetveli Raporu'}
+                  Genel Puantaj ve Maaş Hakediş Raporu
                 </h3>
-                <div className="flex items-center space-x-1.5 bg-slate-800 border border-slate-700 p-1 rounded-xl">
-                  <button 
-                    onClick={() => setReportType('NORMAL')} 
-                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition ${reportType === 'NORMAL' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
-                  >
-                    NORMAL
-                  </button>
-                  <button 
-                    onClick={() => setReportType('E-IMZALI')} 
-                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition ${reportType === 'E-IMZALI' ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:text-white'}`}
-                  >
-                    E-İMZALI
-                  </button>
-                </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
@@ -1893,12 +1867,12 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                   onClick={() => {
                     const el = document.querySelector('.printable-document');
                     if (el) {
-                      const heading = "Kibritci_Insaat_Santiye_Puantaj_Cetveli";
+                      const heading = "Kibritci_Insaat_Maas_Raporu";
                       const blob = new Blob([`
                         <html>
                           <head>
                             <meta charset="utf-8">
-                            <title>Şantiye Raporu</title>
+                            <title>Maaş Raporu</title>
                             <script src="https://cdn.tailwindcss.com"></script>
                             <style>
                               @media print { .no-print { display: none; } }
@@ -1915,7 +1889,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                       a.download = `${heading}_${selectedMonth}_${selectedYear}.html`;
                       a.click();
                       URL.revokeObjectURL(url);
-                      alert("GÜNCEL PUANTAJ RAPORU BAŞARIYLA DERLENDİ\n\nKibritçi İnşaat Taahhüt A.Ş. onaylı puantaj cetveli masaüstünüze HTML/Yazdırılabilir formatta başarıyla kaydedildi.");
+                      alert("GÜNCEL MAAŞ RAPORU BAŞARIYLA DERLENDİ\\n\\nKibritçi İnşaat Taahhüt A.Ş. onaylı puantaj cetveli masaüstünüze HTML/Yazdırılabilir formatta başarıyla kaydedildi.");
                     }
                   }}
                   className="bg-slate-900 hover:bg-slate-900 text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow cursor-pointer"
@@ -1935,265 +1909,108 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
             <div className="flex-1 overflow-auto bg-white p-4 sm:p-8 lg:p-12 text-slate-900 printable-document font-sans">
               <CorporateReportLayout
                 orientation="landscape"
-                docCode={`BELGE NO: KBR-PNT-2026-${printModal === 'BOS' ? 'BLANK' : printModal === 'GUNLUK_BOS' ? 'DAILY-BLANK' : 'FILLED'}`}
+                docCode={`BELGE NO: KBR-MAAS-2026-${selectedMonth}`}
               >
               {/* Birim & dönem bilgisi */}
               <div className="mb-4 pb-3 border-b border-slate-200">
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">ŞANTİYE VE MERKEZ BORDRO VE PUANTAJ DENETLEME ŞEFLİĞİ</p>
                 <p className="text-[10px] text-slate-600 mt-0.5">Dönem: <strong className="text-slate-900 font-bold">{selectedMonth}. Ay / {selectedYear}</strong></p>
-                {reportType === 'E-IMZALI' && (
-                  <div className="mt-2 inline-flex items-center space-x-1 bg-emerald-55/10 border border-emerald-500/20 text-emerald-700 text-[8px] font-mono font-bold px-2 py-0.5 rounded">
-                    <span>✓ E-İMZALI SECURE REF: {Math.random().toString(36).substring(2, 8).toUpperCase()}</span>
-                  </div>
-                )}
+
               </div>
 
               {/* Title Header Section */}
               <div className="text-center mb-6">
                 <h2 className="text-sm font-bold text-slate-900 tracking-wider uppercase border-y border-slate-200 py-2.5 bg-slate-50">
-                  KİBRİTÇİ İNŞAAT {selectedMonth}. AY / {selectedYear} YOKLAMA PUANTAJ RAPORU
+                  KİBRİTÇİ İNŞAAT {selectedMonth}. AY / {selectedYear} GENEL PUANTAJ VE MAAŞ HAKEDİŞ RAPORU
                 </h2>
               </div>
 
               {/* Printable Matrix Table */}
               <div className="border border-slate-350 rounded-md overflow-hidden mb-8">
-                {printModal === 'GUNLUK_BOS' ? (
-                  <table className="w-full text-[9px] border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 text-slate-800 border-b border-slate-300">
-                        <th className="p-2 text-center border-r border-slate-300 w-16 font-bold">Sıra No</th>
-                        <th className="p-2 text-left border-r border-slate-300 w-48 font-bold">Hizmet Kodu</th>
-                        <th className="p-2 text-left border-r border-slate-300 w-48 font-bold">Görev / Ünvan</th>
-                        <th className="p-2 text-center border-r border-slate-300 w-32 font-bold">Yoklama (G/Y/İ/R)</th>
-                        <th className="p-2 text-center border-r border-slate-300 w-32 font-bold">Fazla Mesai (Saat)</th>
-                        <th className="p-2 text-center font-bold">İmza</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredPersonel.map((p, idx) => (
-                        <tr key={p.id} className="border-b border-slate-200 h-10 hover:bg-slate-50">
-                          <td className="p-2 text-center border-r border-slate-300 font-mono">{idx + 1}</td>
-                          <td className="p-2 border-r border-slate-300 font-bold text-slate-900">{p.ad} {p.soyad}</td>
-                          <td className="p-2 border-r border-slate-300 text-slate-700 uppercase font-medium">{p.gorev} · {p.departman}</td>
-                          <td className="p-2 border-r border-slate-300 text-center text-slate-300">[ &nbsp; &nbsp; &nbsp; ]</td>
-                          <td className="p-2 border-r border-slate-300 text-center text-slate-300">. . . . . . .</td>
-                          <td className="p-2 text-center text-slate-300 italic text-[7px]">imza:</td>
-                        </tr>
-                      ))}
-                      {/* Add blank extra rows for handwritten additions */}
-                      {Array.from({ length: 6 }).map((_, extraIdx) => (
-                        <tr key={`extra_daily_${extraIdx}`} className="border-b border-slate-200 h-10">
-                          <td className="p-2 text-center border-r border-slate-300 font-mono">{filteredPersonel.length + extraIdx + 1}</td>
-                          <td className="p-2 border-r border-slate-300 text-slate-300 italic text-[8px]">Yeni Personel</td>
-                          <td className="p-2 border-r border-slate-300"></td>
-                          <td className="p-2 border-r border-slate-300 text-center text-slate-300">[ &nbsp; &nbsp; &nbsp; ]</td>
-                          <td className="p-2 border-r border-slate-300 text-center text-slate-300">. . . . . . .</td>
-                          <td className="p-2 text-center text-slate-300 italic text-[7px]">imza:</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <table className="w-full text-[9px] border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 text-slate-800 border-b border-slate-300">
-                        <th className="p-1 px-2 text-left border-r border-slate-300 w-48 font-bold">Hizmet Kodu &amp; Görevi</th>
-                        {daysArray.map(day => {
-                          const { isHoliday, name, isOfficial } = isSundayOrPublicHoliday(day);
-                          let cellBg = "";
-                          if (isHoliday) {
-                            cellBg = isOfficial ? "bg-purple-100 font-extrabold text-purple-900 border-x border-purple-200" : "bg-orange-100 font-extrabold text-orange-900 border-x border-orange-200";
-                          }
-                          return (
-                            <th 
-                              key={day} 
-                              className={`p-0.5 text-center border-r border-slate-300 font-bold text-[8px] ${cellBg}`}
-                              style={{ width: '22px' }}
-                              title={name}
-                            >
-                              {day}
-                            </th>
-                          );
-                        })}
-                        <th className="p-1 text-center w-12 border-l border-slate-300 font-bold">Giriş Gün</th>
-                        <th className="p-1 text-center w-12 border-l border-slate-300 font-bold">Eksik (Yok)</th>
-                        <th className="p-1 text-center w-12 border-l border-slate-300 font-bold">Mesai Saati</th>
-                        <th className="p-1 text-center w-24 font-bold">Personel İmza</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {/* Render actual loaded/filtered staff list */}
-                      {filteredPersonel.map((p, idx) => {
-                        const personYoklama = draftYoklamalar[p.id] || {};
-                        let totalGeldi = 0;
-                        let totalYok = 0;
-                        let totalMesai = 0;
+                <table className="w-full text-[9px] border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-800 border-b border-slate-300">
+                      <th className="p-2 text-center border-r border-slate-300 w-10 font-bold">Sıra</th>
+                      <th className="p-2 text-left border-r border-slate-300 w-48 font-bold">Personel Adı Soyadı</th>
+                      <th className="p-2 text-left border-r border-slate-300 w-28 font-bold">TC Kimlik</th>
+                      <th className="p-2 text-left border-r border-slate-300 w-28 font-bold">Görevi</th>
+                      <th className="p-2 text-right border-r border-slate-300 w-24 font-bold">Aylık Maaş</th>
+                      <th className="p-2 text-center border-r border-slate-300 w-20 font-bold">Gün<br/>Hak.</th>
+                      <th className="p-2 text-center border-r border-slate-300 w-20 font-bold">Mesai<br/>Hak. (Saat)</th>
+                      <th className="p-2 text-right border-r border-slate-300 w-28 font-bold">Günlük Yevmiye</th>
+                      <th className="p-2 text-right border-r border-slate-300 w-28 font-bold text-indigo-700 bg-indigo-50/50">Maaş Hakedişi</th>
+                      <th className="p-2 text-right border-r border-slate-300 w-28 font-bold text-amber-700 bg-amber-50/50">Mesai Hakedişi</th>
+                      <th className="p-2 text-right border-r border-slate-300 w-32 font-black text-emerald-800 bg-emerald-50/50">Toplam Hakediş</th>
+                      <th className="p-2 text-center font-bold w-24">İmza</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredPersonel.map((p, idx) => {
+                      const personYoklama = draftYoklamalar[p.id] || {};
+                      let geldiGun = 0;
+                      let hakedisGun = 0;
+                      let mesaiToplam = 0;
 
-                        // Pre-scan to count
-                        daysArray.forEach(day => {
-                          const dayData = getYoklamaDay(personYoklama, selectedYear, selectedMonth, day) || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 };
-                          if (isDayActiveForEmployee(p, day)) {
-                            if (dayData.durum === 'Geldi') totalGeldi++;
-                            if (dayData.durum === 'Yok') totalYok++;
-                            totalMesai += dayData.mesaiSaati;
-                          }
-                        });
+                      daysArray.forEach(day => {
+                        const dayData = getYoklamaDay(personYoklama, selectedYear, selectedMonth, day) || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 };
+                        if (isDayActiveForEmployee(p, day)) {
+                          if (dayData.durum === 'Geldi') geldiGun++;
+                          if (dayData.durum === 'Geldi' || dayData.durum === 'İzinli' || dayData.durum === 'Pazar' || dayData.durum === 'Tatil') hakedisGun++;
+                          mesaiToplam += dayData.mesaiSaati;
+                        }
+                      });
 
-                        return (
-                          <React.Fragment key={p.id}>
-                            <tr className="border-b border-slate-200 hover:bg-slate-50">
-                              <td className="p-1.5 px-2 border-r border-slate-300 font-bold text-slate-900 bg-slate-50/50">
-                                <div>{p.ad} {p.soyad}</div>
-                                <div className="text-[8px] text-slate-800 uppercase font-bold">{p.gorev} · {p.departman}</div>
-                                <div className="text-[7px] text-slate-550 font-mono font-normal">
-                                  Giriş: {p.iseGirisTarihi || '-'} {p.istenCikisTarihi ? `· Çıkış: ${p.istenCikisTarihi}` : ''}
-                                </div>
-                              </td>
-                              
-                              {daysArray.map(day => {
-                                const isActiveDay = isDayActiveForEmployee(p, day);
-                                const dayData = getYoklamaDay(personYoklama, selectedYear, selectedMonth, day) || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 };
-                                let displayChar = "-";
-                                
-                                if (!isActiveDay) {
-                                  displayChar = "Ç"; // Çalışmıyor/Hizmet dışı
-                                } else if (printModal === 'DOLU') {
-                                  displayChar = getStatusAbbreviation(dayData.durum);
-                                }
+                      const maas = Number(p.maas || 0);
+                      const dailyWage = maas / Math.max(daysInMonth, 1);
+                      const tahminiMaas = dailyWage * hakedisGun;
+                      const tahminiMesai = mesaiToplam * (dailyWage / 7.5) * 1.5;
+                      const tahminiToplam = tahminiMaas + tahminiMesai;
 
-                                const { isHoliday, isOfficial } = isSundayOrPublicHoliday(day);
-                                let tdBg = "";
-                                if (!isActiveDay) {
-                                  tdBg = "bg-slate-100 text-slate-400 font-semibold";
-                                } else if (isHoliday) {
-                                  tdBg = isOfficial ? "bg-purple-50/60 font-bold text-purple-900 border-x border-purple-200/30" : "bg-orange-50/60 font-bold text-orange-950 border-x border-orange-200/30";
-                                }
-
-                                return (
-                                  <td key={day} className={`p-0.5 text-center border-r border-slate-300 text-[8px] font-mono relative ${tdBg}`}>
-                                    <div className={`font-bold ${isActiveDay && dayData.durum === 'Yok' ? 'text-rose-600' : ''}`}>{displayChar}</div>
-                                    {isActiveDay && dayData.gonderen && (
-                                      <span className="absolute top-0 right-0 text-[5px] text-amber-500 font-bold" title="Formen Gönderdi">👷</span>
-                                    )}
-                                    {isActiveDay && printModal === 'DOLU' && dayData.mesaiSaati > 0 && (
-                                      <div className="text-[7px] text-amber-600 font-bold">+{dayData.mesaiSaati}</div>
-                                    )}
-                                  </td>
-                                );
-                              })}
-
-                              <td className="p-1.5 text-center border-r border-slate-300 font-bold text-slate-800">
-                                {printModal === 'DOLU' ? `${totalGeldi} G` : ""}
-                              </td>
-                              <td className="p-1.5 text-center border-r border-slate-300 font-bold font-mono text-rose-700 bg-rose-50/20">
-                                {printModal === 'DOLU' ? `${totalYok} Gün` : ""}
-                              </td>
-                              <td className="p-1.5 text-center text-slate-300 italic text-[7px]">imza:</td>
-                            </tr>
-                            {printModal === 'DOLU' && (
-                              <tr className="bg-slate-50/70 border-b border-slate-200 text-[8px]">
-                                <td colSpan={daysInMonth + 5} className="p-2.5 px-4 text-slate-700 font-normal">
-                                  <div className="flex flex-col space-y-2.5 py-1">
-                                    {/* Overtime hours (Mesai Cetveli) */}
-                                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 w-full">
-                                      <div className="flex items-center space-x-2 min-w-0 flex-1">
-                                        <span className="shrink-0 inline-flex items-center justify-start font-black text-[9px] text-slate-700 uppercase tracking-wider bg-slate-100 border border-slate-200 px-2 py-1 rounded-md h-7 font-sans">
-                                          ⏰ MESAİ CETVELİ:
-                                        </span>
-                                        <div className="flex flex-nowrap overflow-x-auto gap-1 pb-1 pr-2 max-w-[280px] sm:max-w-[450px] md:max-w-[600px] lg:max-w-none scrollbar-thin scrollbar-thumb-slate-300">
-                                          {daysArray.map(day => {
-                                            const isActiveDay = isDayActiveForEmployee(p, day);
-                                            const dayData = getYoklamaDay(personYoklama, selectedYear, selectedMonth, day) || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 };
-                                            const hasOvertime = isActiveDay && dayData.mesaiSaati > 0;
-
-                                            const { isHoliday, isOfficial } = isSundayOrPublicHoliday(day);
-                                            let boxStyle = "bg-slate-50 text-slate-400 border-slate-150";
-                                            
-                                            if (!isActiveDay) {
-                                              boxStyle = "bg-slate-200 text-slate-400 border-slate-350";
-                                            } else if (hasOvertime) {
-                                              boxStyle = "bg-slate-100 text-slate-800 border-slate-200 font-bold";
-                                            } else if (isHoliday) {
-                                              boxStyle = isOfficial 
-                                                ? "bg-purple-100 text-purple-700 border-purple-200 font-semibold" 
-                                                : "bg-orange-100 text-orange-700 border-orange-200 font-semibold";
-                                            }
-
-                                            return (
-                                              <div key={day} className={`flex-shrink-0 flex flex-col items-center justify-center w-6.5 h-6.5 rounded-sm border text-[7px] font-mono leading-none ${boxStyle}`}>
-                                                <span className="text-[5px] text-slate-400 block">{day}</span>
-                                                <span className="mt-0.5">{!isActiveDay ? 'Ç' : hasOvertime ? `+${dayData.mesaiSaati}` : '0'}</span>
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                      <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-                                        <span className="text-[8.5px] font-bold text-emerald-800 font-mono bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200 whitespace-nowrap">
-                                          Gelen: {totalGeldi} Gün
-                                        </span>
-                                        <span className="text-[8.5px] font-bold text-rose-800 font-mono bg-rose-50 px-2.5 py-1 rounded border border-rose-200 whitespace-nowrap">
-                                          Gelmeyen: {totalYok} Gün
-                                        </span>
-                                        <span className="text-[8.5px] font-bold text-slate-800 font-mono bg-slate-50 px-2.5 py-1 rounded border border-slate-200 whitespace-nowrap">
-                                          Mesai: {totalMesai} Saat
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
-
-                      {/* Additional empty rows for handwriting additions if it's the blank ticket */}
-                      {printModal === 'BOS' && Array.from({ length: 6 }).map((_, extraIdx) => (
-                        <tr key={`extra_${extraIdx}`} className="border-b border-slate-200 h-8">
-                          <td className="p-1.5 px-2 border-r border-slate-300 text-slate-350 italic text-[8px]">
-                            {extraIdx + 1}. İlave Personel Ekleme Satırı:
+                      return (
+                        <tr key={p.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors">
+                          <td className="p-2 text-center border-r border-slate-300 font-mono text-slate-500">{idx + 1}</td>
+                          <td className="p-2 border-r border-slate-300 font-bold text-slate-900">
+                            <div>{p.ad} {p.soyad}</div>
+                            {p.ibanNo && <div className="text-[7px] text-slate-400 font-mono mt-0.5">IBAN: {p.ibanNo}</div>}
                           </td>
-                          {daysArray.map(day => (
-                            <td key={day} className="p-0.5 text-center border-r border-slate-300"></td>
-                          ))}
-                          <td className="p-1.5 text-center border-r border-slate-300"></td>
-                          <td className="p-1.5 text-center border-r border-slate-300"></td>
-                          <td className="p-1.5 text-center border-r border-slate-300"></td>
-                          <td className="p-1 rounded text-slate-300 italic text-[7px]">imza:</td>
+                          <td className="p-2 border-r border-slate-300 font-mono text-slate-600">{p.tcNo || '-'}</td>
+                          <td className="p-2 border-r border-slate-300 text-slate-700 uppercase">{p.gorev}</td>
+                          <td className="p-2 text-right border-r border-slate-300 font-medium">
+                            {maas.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
+                          </td>
+                          <td className="p-2 text-center border-r border-slate-300 font-bold">{hakedisGun}</td>
+                          <td className="p-2 text-center border-r border-slate-300 font-bold text-slate-700">{mesaiToplam.toFixed(1)}</td>
+                          <td className="p-2 text-right border-r border-slate-300 font-mono text-slate-500">
+                            {dailyWage.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
+                          </td>
+                          <td className="p-2 text-right border-r border-slate-300 font-bold text-indigo-700 bg-indigo-50/30">
+                            {tahminiMaas.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
+                          </td>
+                          <td className="p-2 text-right border-r border-slate-300 font-bold text-amber-700 bg-amber-50/30">
+                            {tahminiMesai.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
+                          </td>
+                          <td className="p-2 text-right border-r border-slate-300 font-black text-emerald-800 bg-emerald-50/50">
+                            {tahminiToplam.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
+                          </td>
+                          <td className="p-2 text-center text-slate-300 italic text-[7px] align-bottom pb-2">imza:</td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
                                 {/* Official Sign-off Approval Bars arranged in strict order specified by user */}
               <div className="mt-12 text-xs">
-                <div className="grid grid-cols-5 gap-3 text-center">
+                <div className="grid grid-cols-2 max-w-2xl mx-auto gap-8 text-center">
                   
-                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50 flex flex-col justify-between h-28">
-                    <span className="font-extrabold text-slate-800 tracking-wider uppercase text-[10px] block">HAZIRLAYAN</span>
-                    <div className="h-10 border-b border-dashed border-slate-300 w-16 mx-auto my-2"></div>
+                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50 flex flex-col justify-between h-28 shadow-sm">
+                    <span className="font-extrabold text-slate-800 tracking-wider uppercase text-[11px] block">ŞANTİYE ŞEFİ</span>
+                    <div className="h-10 border-b border-dashed border-slate-300 w-32 mx-auto my-2"></div>
                   </div>
 
-                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50 flex flex-col justify-between h-28">
-                    <span className="font-extrabold text-slate-800 tracking-wider uppercase text-[10px] block">MUHASEBE</span>
-                    <div className="h-10 border-b border-dashed border-slate-300 w-16 mx-auto my-2"></div>
-                  </div>
-
-                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50 flex flex-col justify-between h-28">
-                    <span className="font-extrabold text-slate-800 tracking-wider uppercase text-[10px] block">İDARİ İŞLER</span>
-                    <div className="h-10 border-b border-dashed border-slate-300 w-16 mx-auto my-2"></div>
-                  </div>
-
-                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50 flex flex-col justify-between h-28">
-                    <span className="font-extrabold text-slate-800 tracking-wider uppercase text-[10px] block">ŞANTİYE ŞEFİ</span>
-                    <div className="h-10 border-b border-dashed border-slate-300 w-16 mx-auto my-2"></div>
-                  </div>
-
-                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50 flex flex-col justify-between h-28">
-                    <span className="font-extrabold text-slate-800 tracking-wider uppercase text-[10px] block">PROJE MÜDÜRÜ</span>
-                    <div className="h-10 border-b border-dashed border-slate-300 w-16 mx-auto my-2"></div>
+                  <div className="border border-slate-200 p-3 rounded-xl bg-slate-50 flex flex-col justify-between h-28 shadow-sm">
+                    <span className="font-extrabold text-slate-800 tracking-wider uppercase text-[11px] block">PROJE MÜDÜRÜ</span>
+                    <div className="h-10 border-b border-dashed border-slate-300 w-32 mx-auto my-2"></div>
                   </div>
 
                 </div>

@@ -2873,13 +2873,13 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                     <p className="text-[7.5px] text-slate-500 font-mono tracking-wider uppercase">Merkez Ofis &amp; Şantiye İşleri Koordinatörlüğü</p>
                   </div>
                   <div className="bg-slate-900 text-white font-black px-2 py-1 text-[8.5px] rounded tracking-widest font-mono shrink-0">
-                    GÜNLÜK RAPOR
+                    GÜNLÜK SAHA FAALİYET RAPORU
                   </div>
                 </div>
 
                 {/* Document Subtitle */}
                 <div className="text-center space-y-1 py-1 bg-slate-50 border rounded-lg relative z-10">
-                  <h2 className="text-xs font-black tracking-wide text-slate-900">ŞANTİYE GÜNLÜK FİİLİ FAALİYET RAPORU</h2>
+                  <h2 className="text-xs font-black tracking-wide text-slate-900">GÜNLÜK SAHA FAALİYET RAPORU</h2>
                   <p className="text-[7.5px] text-slate-500 font-medium">Bu rapor, Formen tarafından sahadan girilen anlık verilerle dinamik olarak üretilmiştir.</p>
                 </div>
 
