@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Users, Wallet, ShoppingCart, Truck, RefreshCw, 
   FileText, BarChart, ArrowUpRight, ArrowDownRight, Compass, Settings,
-  Search, ClipboardList, Briefcase, CalendarCheck2, ChevronRight, UserCheck, AlertTriangle
+  Search, ClipboardList, Briefcase, CalendarCheck2, ChevronRight, UserCheck, AlertTriangle, Tent
 } from 'lucide-react';
 import { Personel, KasaHareketi, SatinAlmaTalebi, AracBakim, AylikYoklamaMap, KampOdasi, KampKaydi } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
@@ -236,6 +236,78 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </div>
           );
         })}
+      </div>
+
+      {/* Visual Analytics Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Attendance Progress */}
+        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-slate-800 text-xs">Puantaj Katılım Durumu</h3>
+            <CalendarCheck2 size={16} className="text-slate-400" />
+          </div>
+          <div>
+            <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1.5">
+              <span>Genel Katılım</span>
+              <span className="text-slate-700">% {attendanceRate}</span>
+            </div>
+            <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200">
+              <div 
+                className="bg-gradient-to-r from-rose-400 to-[#8B1E1E] h-full rounded-full transition-all duration-1000 ease-out" 
+                style={{ width: `${Math.max(0, Math.min(100, attendanceRate))}%` }} 
+              />
+            </div>
+          </div>
+          <p className="text-[10px] text-slate-400 leading-relaxed">
+            Bu ayki yoklama verilerine göre personelin sahada bulunma oranını gösterir.
+          </p>
+        </div>
+
+        {/* Camp Occupancy */}
+        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-slate-800 text-xs">Kamp & Lojman Doluluğu</h3>
+            <Tent size={16} className="text-slate-400" />
+          </div>
+          <div>
+            <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1.5">
+              <span>Dolu Yatak</span>
+              <span className="text-slate-700">{occupiedBeds} / {totalBeds} Yatak</span>
+            </div>
+            <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200">
+              <div 
+                className="bg-gradient-to-r from-emerald-400 to-emerald-600 h-full rounded-full transition-all duration-1000 ease-out" 
+                style={{ width: `${Math.max(0, Math.min(100, fillRatio))}%` }} 
+              />
+            </div>
+          </div>
+          <p className="text-[10px] text-slate-400 leading-relaxed">
+            Kamp alanındaki aktif konaklama oranını ve kullanılabilir kapasiteyi gösterir.
+          </p>
+        </div>
+
+        {/* Personnel Status */}
+        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-slate-800 text-xs">Kadro Aktivasyon Durumu</h3>
+            <Users size={16} className="text-slate-400" />
+          </div>
+          <div>
+            <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1.5">
+              <span>Aktif Çalışanlar</span>
+              <span className="text-slate-700">{activePersonelCount} / {totalPersonel} Kişi</span>
+            </div>
+            <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200">
+              <div 
+                className="bg-gradient-to-r from-[#1E4E78] to-blue-600 h-full rounded-full transition-all duration-1000 ease-out" 
+                style={{ width: `${totalPersonel > 0 ? Math.round((activePersonelCount / totalPersonel) * 100) : 0}%` }} 
+              />
+            </div>
+          </div>
+          <p className="text-[10px] text-slate-400 leading-relaxed">
+            Sisteme kayıtlı toplam personel ile şu anda aktif çalışan personelin oranını gösterir.
+          </p>
+        </div>
       </div>
 
       {/* 📘 Şantiye Hızlı Kılavuz & Sistem Rehberi */}

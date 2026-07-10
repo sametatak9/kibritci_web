@@ -242,11 +242,15 @@ export interface KampSarf {
 
 export interface KampFaaliyet {
   id: string;
-  personelId: string;
+  personelId?: string;
   tarih: string;
   faaliyetTipi: 'TEMİZLİK' | 'YEMEK' | 'GÜVENLİK' | 'BAKIM' | 'DİĞER';
+  faaliyetGrubu?: 'NORMAL' | 'MESAI';
+  personelMesaiSaatleri?: Record<string, number>;
   aciklama: string;
   yerleskeAdi: string;
+  fotoUrl?: string | null;
+  kaydedenKampci?: string;
 }
 
 export type SahaFaaliyetTipi = 'NORMAL' | 'MESAI_SAHA';

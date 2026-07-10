@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Building2, Users, CalendarCheck2, CreditCard, ShoppingCart, Truck, KeySquare, FileText, Tent, Mail, ChartBar as BarChart3, BookOpen, Contact as Contact2, Package, LogOut, Moon, Sun, Wallet, Hop as Home, ShieldCheck, PenTool, MessageSquare, Smartphone, HardHat, Banknote, Images, Sparkles, Link2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Building2, Users, CalendarCheck2, CreditCard, ShoppingCart, Truck, KeySquare, FileText, Tent, Mail, ChartBar as BarChart3, BookOpen, Contact as Contact2, Package, LogOut, Moon, Sun, Wallet, Hop as Home, ShieldCheck, PenTool, MessageSquare, Smartphone, HardHat, Banknote, Images, Sparkles, Link2, ChevronDown, ChevronRight, Search, Pin, PinOff } from 'lucide-react';
 import { getRoleAllowedTabs, normalizeYetki } from '../lib/yetkiUtils';
 
 interface SidebarProps {
@@ -32,6 +32,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const GROUP_STATE_KEY = 'kibritci_sidebar_group_state_v1';
   const normalizedYetki = normalizeYetki(userYetki);
   const roleAllowedTabs = getRoleAllowedTabs(normalizedYetki);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('kibritci_sidebar_favorites_v1');
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return [];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('kibritci_sidebar_favorites_v1', JSON.stringify(favorites));
+    } catch {}
+  }, [favorites]);
 
   const menuItems = [
     {
@@ -171,14 +185,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }
 
         return true;
+      }).filter(item => {
+        if (!searchTerm) return true;
+        return item.label.toLowerCase().includes(searchTerm.toLowerCase());
       })
     };
   }).filter(group => {
-    if (group.group === "ADMİNİSTRATOR") {
-      return isPrivilegedAdmin;
+    if (group.group === "ADMİNİSTRATOR" && !isPrivilegedAdmin) {
+      return false;
     }
     return group.items.length > 0;
   });
+
+  const favItems = menuItems.flatMap(g => g.items).filter(item => favorites.includes(item.key)).filter(item => {
+    // Only show if user is allowed
+    return filteredMenuItems.some(g => g.items.some(it => it.key === item.key));
+  });
+
+  const displayMenuItems = favItems.length > 0 && !searchTerm
+    ? [{ group: "SIK KULLANILANLAR", items: favItems }, ...filteredMenuItems]
+    : filteredMenuItems;
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => {
     try {
@@ -187,7 +213,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     } catch {
       /* ignore */
     }
-    return Object.fromEntries(menuItems.map((g) => [g.group, true]));
+    return Object.fromEntries(menuItems.map((g) => [g.group, false]));
   });
 
   useEffect(() => {
@@ -199,13 +225,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }, [expandedGroups]);
 
   useEffect(() => {
-    const activeGroup = filteredMenuItems.find((g) => g.items.some((it) => it.key === activeTab));
+    const activeGroup = displayMenuItems.find((g) => g.items.some((it) => it.key === activeTab));
     if (!activeGroup) return;
     setExpandedGroups((prev) => {
       if (prev[activeGroup.group]) return prev;
       return { ...prev, [activeGroup.group]: true };
     });
-  }, [activeTab, filteredMenuItems]);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (searchTerm) {
+      const allExpanded = Object.fromEntries(displayMenuItems.map(g => [g.group, true]));
+      setExpandedGroups(prev => ({ ...prev, ...allExpanded }));
+    }
+  }, [searchTerm]);
 
   return (
     <>
@@ -251,12 +284,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
           <div className="px-3">
+            <div className="relative mb-2">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search size={14} className="text-slate-400" />
+              </div>
+              <input
+                type="text"
+                placeholder="Modül ara..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-700 rounded-xl pl-9 pr-3 py-2.5 outline-none focus:border-slate-400 focus:bg-white transition-colors"
+              />
+            </div>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
               Modüller
             </span>
           </div>
 
-          {filteredMenuItems.map((group, grpIdx) => (
+          {displayMenuItems.map((group, grpIdx) => (
             <div key={grpIdx} className="space-y-1.5">
               <button
                 type="button"
@@ -271,27 +316,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {expandedGroups[group.group] && group.items.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.key;
+                const isFav = favorites.includes(item.key);
                 return (
-                  <button
-                    key={item.key}
-                    onClick={() => {
-                      setActiveTab(item.key);
-                      if (onClose) onClose();
-                    }}
-                    className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-[13px] transition-all duration-200 group text-left cursor-pointer ${
-                      isActive
-                        ? "bg-slate-900 text-white shadow-md shadow-slate-900/10 font-bold"
-                        : "text-slate-600 font-medium hover:bg-slate-50 hover:text-slate-900"
-                    }`}
-                  >
-                    <Icon
-                      size={16}
-                      className={`shrink-0 transition-transform group-hover:scale-105 ${
-                        isActive ? "text-slate-200" : "text-slate-400 group-hover:text-slate-600"
+                  <div key={item.key} className="relative group flex items-center">
+                    <button
+                      onClick={() => {
+                        setActiveTab(item.key);
+                        if (onClose) onClose();
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[13px] transition-all duration-200 text-left cursor-pointer ${
+                        isActive
+                          ? "bg-slate-900 text-white shadow-md shadow-slate-900/10 font-bold"
+                          : "text-slate-600 font-medium hover:bg-slate-50 hover:text-slate-900"
                       }`}
-                    />
-                    <span className="truncate">{item.label}</span>
-                  </button>
+                    >
+                      <div className="flex items-center space-x-3 truncate">
+                        <Icon
+                          size={16}
+                          className={`shrink-0 transition-transform group-hover:scale-105 ${
+                            isActive ? "text-slate-200" : "text-slate-400 group-hover:text-slate-600"
+                          }`}
+                        />
+                        <span className="truncate pr-4">{item.label}</span>
+                      </div>
+                    </button>
+                    
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFavorites(prev => 
+                          isFav ? prev.filter(k => k !== item.key) : [...prev, item.key]
+                        );
+                      }}
+                      className={`absolute right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ${
+                        isActive ? "hover:bg-slate-800 text-amber-400" : "hover:bg-slate-200 text-slate-400 hover:text-amber-500"
+                      } ${isFav ? "opacity-100 text-amber-400" : ""}`}
+                      title={isFav ? "Favorilerden Çıkar" : "Sık Kullanılanlara Ekle"}
+                    >
+                      {isFav ? <PinOff size={14} /> : <Pin size={14} />}
+                    </button>
+                  </div>
                 );
               })}
             </div>

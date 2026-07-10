@@ -13,7 +13,8 @@ import { buildWhatsAppUrl } from '../lib/mobilOnayUtils';
 import { KampHaftalikYoklamaTab } from './KampHaftalikYoklamaTab';
 import { KampGunlukYoklamaTab } from './KampGunlukYoklamaTab';
 import { collection, onSnapshot, doc, updateDoc, setDoc, query, orderBy } from 'firebase/firestore';
-
+import { applySahaMesaiToYoklama, normalizeMesaiHours } from '../lib/sahaFaaliyetUtils';
+import { isTaseronPersonel } from '../lib/yoklamaUtils';
 interface KampciScreenProps {
   kampOdalari: KampOdasi[];
   setKampOdalari: React.Dispatch<React.SetStateAction<KampOdasi[]>>;
@@ -342,6 +343,8 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   // ─────────────────────────────────────────────────────────────
   const [gunlukFaaliyetler, setGunlukFaaliyetler] = useState<any[]>([]);
   const [faaliyetTipi, setFaaliyetTipi] = useState<'TEMİZLİK' | 'YEMEK' | 'GÜVENLİK' | 'BAKIM' | 'DİĞER'>('TEMİZLİK');
+  const [faaliyetGrubu, setFaaliyetGrubu] = useState<'NORMAL' | 'MESAI'>('NORMAL');
+  const [personelMesaiSaatleri, setPersonelMesaiSaatleri] = useState<Record<string, number>>({});
   const [faaliyetYerleske, setFaaliyetYerleske] = useState('');
   const [faaliyetAciklama, setFaaliyetAciklama] = useState('');
   const [faaliyetFoto, setFaaliyetFoto] = useState<string | null>(null);
@@ -853,21 +856,51 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   // ─────────────────────────────────────────────────────────────
   // 🧹 ACTIONS: DAILY ROUTINE ACTIVITIES (GÜNLÜK FAALİYET)
   // ─────────────────────────────────────────────────────────────
+  const syncKampMesaiFromFaaliyet = async (
+    tarih: string,
+    mesaiMap: Record<string, number> | undefined
+  ) => {
+    const hasNew = mesaiMap && Object.values(mesaiMap).some((h) => Number(h) > 0);
+    if (!hasNew) return;
+
+    let next = { ...yoklamalar };
+    const gonderen = currentUser?.email || 'KAMP_MOBIL';
+    next = applySahaMesaiToYoklama(next, tarih, mesaiMap, gonderen, 'add');
+    
+    if (saveYoklamalarNow) {
+      await saveYoklamalarNow(next);
+    } else if (setYoklamalar) {
+      setYoklamalar(next);
+    }
+  };
+
   const handleSaveActivity = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!faaliyetAciklama.trim()) {
       showStatus('error', 'Lütfen faaliyet açıklamasını doldurun!');
       return;
     }
+    
+    if (faaliyetGrubu === 'MESAI') {
+      const hasMesai = Object.values(personelMesaiSaatleri).some(h => Number(h) > 0);
+      if (!hasMesai) {
+        showStatus('error', 'Mesai Faaliyeti için en az bir personele mesai saati girmelisiniz!');
+        return;
+      }
+    }
 
     setLoadingFaaliyet(true);
     try {
       const actId = `act_${Date.now()}`;
+      const bugunTarih = new Date().toISOString().slice(0, 10);
+      
       const actData = {
         id: actId,
-        tarih: new Date().toISOString().slice(0, 10),
-        kaydeden: currentUser?.email || 'kamp_sorumlusu',
+        tarih: bugunTarih,
+        kaydedenKampci: currentUser?.email || 'kamp_sorumlusu',
         faaliyetTipi,
+        faaliyetGrubu,
+        personelMesaiSaatleri: faaliyetGrubu === 'MESAI' ? personelMesaiSaatleri : undefined,
         yerleskeAdi: faaliyetYerleske,
         aciklama: faaliyetAciklama.trim(),
         fotoUrl: faaliyetFoto || null,
@@ -877,6 +910,11 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       };
 
       await saveDocument('kampGunlukFaaliyetleri', actData);
+      
+      if (faaliyetGrubu === 'MESAI') {
+        await syncKampMesaiFromFaaliyet(bugunTarih, personelMesaiSaatleri);
+      }
+
       if (addNotification) {
         addNotification(`Kamp günlük faaliyet raporu (${faaliyetTipi}) sisteme girildi.`);
       }
@@ -884,6 +922,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       // Reset
       setFaaliyetAciklama('');
       setFaaliyetFoto(null);
+      setPersonelMesaiSaatleri({});
       showStatus('success', 'Günlük faaliyet başarıyla kaydedildi, Onay Havuzuna iletildi!');
     } catch (err) {
       console.error(err);
@@ -1820,6 +1859,28 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
             </div>
 
             <form onSubmit={handleSaveActivity} className="space-y-4">
+              {/* FAALİYET GRUBU TOGGLE */}
+              <div className="flex bg-slate-100 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setFaaliyetGrubu('NORMAL')}
+                  className={`flex-1 py-2 text-[10px] font-black uppercase tracking-wider rounded-lg transition-colors ${
+                    faaliyetGrubu === 'NORMAL' ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:bg-slate-200'
+                  }`}
+                >
+                  Normal Faaliyet
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFaaliyetGrubu('MESAI')}
+                  className={`flex-1 py-2 text-[10px] font-black uppercase tracking-wider rounded-lg transition-colors ${
+                    faaliyetGrubu === 'MESAI' ? 'bg-amber-500 text-slate-900 shadow' : 'text-slate-500 hover:bg-slate-200'
+                  }`}
+                >
+                  Mesai Faaliyeti
+                </button>
+              </div>
+
               <div className="space-y-1.5">
                 <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Faaliyet Kategorisi *</label>
                 <select
@@ -1835,6 +1896,48 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                   <option value="DİĞER">📝 DİĞER (Sosyal alanlar, Genel)</option>
                 </select>
               </div>
+
+              {faaliyetGrubu === 'MESAI' && (
+                <div className="space-y-1.5 bg-amber-50/40 border border-amber-200 p-3 rounded-xl">
+                  <label className="text-[9px] font-extrabold text-amber-800 uppercase tracking-wider block">İlgili Personeller & Mesai Saati *</label>
+                  <p className="text-[8px] text-amber-700/70 leading-tight mb-2">Taşeron ve kamp personelleri listelenmektedir. Yalnızca mesaiye kalanların saatini artırın.</p>
+                  
+                  <div className="max-h-48 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                    {personeller.filter(p => isTaseronPersonel(p) || kampKayitlari.some(k => k.personelId === p.id && k.durum === 'AKTIF')).length === 0 ? (
+                      <div className="text-[9px] text-slate-400 italic p-2 text-center">İlgili personel bulunamadı.</div>
+                    ) : (
+                      personeller.filter(p => isTaseronPersonel(p) || kampKayitlari.some(k => k.personelId === p.id && k.durum === 'AKTIF')).map(p => {
+                        const hrs = personelMesaiSaatleri[p.id] || 0;
+                        return (
+                          <div key={p.id} className={`flex items-center justify-between gap-2 border rounded-lg px-2 py-1.5 transition-colors ${hrs > 0 ? 'bg-amber-100 border-amber-300' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-[9px] font-bold text-slate-800 truncate">{p.ad} {p.soyad}</span>
+                              <span className="text-[7px] font-semibold text-slate-500 truncate">{p.gorev} • {p.firmaTipi === 'TASERON' ? 'Taşeron' : 'Kamp'}</span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <input
+                                type="number"
+                                min={0}
+                                max={14}
+                                step={0.5}
+                                value={hrs}
+                                onChange={(e) =>
+                                  setPersonelMesaiSaatleri((prev) => ({
+                                    ...prev,
+                                    [p.id]: normalizeMesaiHours(parseFloat(e.target.value) || 0),
+                                  }))
+                                }
+                                className="w-14 text-center bg-white border border-slate-300 rounded-lg py-1 text-[9px] font-mono font-bold"
+                              />
+                              <span className="text-[8px] text-slate-500 font-bold">sa</span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Kamp Yerleşkesi *</label>
@@ -1978,8 +2081,25 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                         {act.aciklama}
                       </p>
 
+                      {act.faaliyetGrubu === 'MESAI' && act.personelMesaiSaatleri && (
+                        <div className="mt-2 space-y-1 bg-amber-50/50 p-2 rounded-lg border border-amber-100">
+                          <span className="text-[8px] font-black text-amber-700 uppercase">Girilen Mesailer:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {Object.entries(act.personelMesaiSaatleri).map(([pid, hrs]) => {
+                              const p = personeller.find(x => x.id === pid);
+                              if (!p || !hrs) return null;
+                              return (
+                                <span key={pid} className="text-[9px] bg-white border border-amber-200 text-amber-800 px-1.5 py-0.5 rounded shadow-sm">
+                                  {p.ad} {p.soyad}: <strong>{hrs as number}sa</strong>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
                       {act.fotoUrl && (
-                        <div className="border border-slate-200 rounded bg-white p-1 max-h-24 overflow-hidden flex items-center justify-center">
+                        <div className="border border-slate-200 rounded bg-white p-1 max-h-24 overflow-hidden flex items-center justify-center mt-2">
                           <img src={act.fotoUrl} alt="Activity" className="max-h-20 object-contain rounded" />
                         </div>
                       )}
