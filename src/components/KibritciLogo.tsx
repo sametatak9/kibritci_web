@@ -46,8 +46,7 @@ export const KibritciLogo: React.FC<KibritciLogoProps> = ({
       <img
         src={KIBRITCI_LOGO_PATH}
         alt="Kibritçi İnşaat"
-        className="h-full w-auto object-contain"
-        style={{ background: 'transparent' }}
+        className="h-full w-auto object-contain bg-transparent"
         draggable={false}
       />
     </div>

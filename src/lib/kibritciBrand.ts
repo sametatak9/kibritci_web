@@ -1,5 +1,7 @@
-/** Kibritçi kurumsal logo — antetli Word şablonundan kırpılmış */
-export const KIBRITCI_LOGO_PATH = '/kibritci-report-header.png';
+/** Kibritçi UI logosu — saydam PNG (koyu/açık arka planda kutu yok) */
+export const KIBRITCI_LOGO_PATH = '/kibritci-logo.png';
+/** Rapor üst logosu — beyaz zeminli antet kırpımı (yazdırma) */
+export const KIBRITCI_REPORT_HEADER_PATH = '/kibritci-report-header.png';
 export const KIBRITCI_WATERMARK_PATH = '/kibritci-report-watermark.png';
 
 export function getKibritciLogoUrl(): string {
