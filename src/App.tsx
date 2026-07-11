@@ -1628,7 +1628,7 @@ export default function App() {
   };
 
   const setSahaFaaliyetleriWithSync = (
-    updater: SahaFaaliyetiType[] | ((s: SahaFaaliyetType[]) => SahaFaaliyetType[])
+    updater: SahaFaaliyetiType[] | ((s: SahaFaaliyetiType[]) => SahaFaaliyetiType[])
   ) => {
     setSahaFaaliyetleri((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
