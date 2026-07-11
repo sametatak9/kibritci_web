@@ -1044,10 +1044,25 @@ export default function App() {
       };
       
       if (dbStatus === 'synced') {
-        saveKullanici(newKullanici).catch(console.error);
-        setKullanicilar(prev => {
-          if (prev.some(u => u.email.toLowerCase() === emailLower)) return prev;
-          return dedupeKullanicilarByEmail([...prev, newKullanici]);
+        // CRITICAL FIX: Make sure the document doesn't actually exist in Firestore
+        // before overwriting it with a MİSAFİR payload, in case `kullanicilar` array failed to load.
+        getDoc(doc(db, 'kullanicilar', emailLower)).then(snap => {
+          if (!snap.exists()) {
+            saveKullanici(newKullanici).catch(console.error);
+            setKullanicilar(prev => {
+              if (prev.some(u => u.email.toLowerCase() === emailLower)) return prev;
+              return dedupeKullanicilarByEmail([...prev, newKullanici]);
+            });
+          } else {
+            // User exists in Firestore but not in local state (network issue or timeout)
+            // Bring them into state safely
+            setKullanicilar(prev => {
+              if (prev.some(u => u.email.toLowerCase() === emailLower)) return prev;
+              return dedupeKullanicilarByEmail([...prev, snap.data() as Kullanici]);
+            });
+          }
+        }).catch(err => {
+          console.warn('Otomatik kayıt kontrolü başarısız:', err);
         });
       } else {
         setKullanicilar(prev => {
