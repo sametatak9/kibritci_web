@@ -891,7 +891,7 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
           {editId ? (
             <div className="p-4 space-y-3 text-xs flex-1 overflow-y-auto">
               {(() => {
-                const f = fotolar.find((x) => x.id === editId);
+                const f = allFotolar.find((x) => x.id === editId);
                 if (!f) return null;
                 return (
                   <>
