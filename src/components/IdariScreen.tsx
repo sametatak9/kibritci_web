@@ -361,7 +361,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   }, [campuses, campusFloors, kampOdalari]);
 
   const taseronCariler = useMemo(
-    () => cariKartlar.filter((c) => c.kartTipi === 'TASERON' && c.durum === 'AKTIF'),
+    () => cariKartlar.filter((c) => {
+      const tip = String((c as any).kartTipi || (c as any).tur || '').trim().toLocaleUpperCase('tr-TR');
+      return tip === 'TASERON' && c.durum === 'AKTIF';
+    }),
     [cariKartlar]
   );
 
@@ -2914,10 +2917,12 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     const countsByFirm = new Map();
                     
                     activeKampKayitlari.forEach(k => {
-                      let firmaAdi = k.calistigiFirma?.trim() || '';
-                      if (!firmaAdi) {
-                        const p = personeller.find(p => p.id === k.personelId);
-                        firmaAdi = p?.firmaAdi?.trim() || (k.firmaTipi === 'TASERON' || p?.firmaTipi === 'TASERON' ? 'Taşeron (Belirtilmemiş)' : 'KİBRİTÇİ İNŞAAT');
+                      const p = personeller.find(p => p.id === k.personelId);
+                      let firmaAdi = '';
+                      if (p) {
+                          firmaAdi = p.firmaTipi === 'TASERON' ? (p.firmaAdi?.trim() || 'Taşeron (Belirtilmemiş)') : 'KİBRİTÇİ İNŞAAT';
+                      } else {
+                          firmaAdi = k.calistigiFirma?.trim() || (k.firmaTipi === 'TASERON' ? 'Taşeron (Belirtilmemiş)' : 'KİBRİTÇİ İNŞAAT');
                       }
                       
                       const current = countsByFirm.get(firmaAdi) || { personnel: 0, rooms: new Set() };
@@ -3007,10 +3012,12 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                           const roomFirmMap = new Map();
                           floorOccupants.forEach(cr => {
                             const rid = cr.roomId || cr.odaId || '';
-                            let firmaAdi = cr.calistigiFirma?.trim() || '';
-                            if (!firmaAdi) {
-                                const p = personeller.find(p => p.id === cr.personelId);
-                                firmaAdi = p?.firmaAdi?.trim() || (cr.firmaTipi === 'TASERON' || p?.firmaTipi === 'TASERON' ? 'Taşeron' : 'KİBRİTÇİ İNŞAAT');
+                            const p = personeller.find(p => p.id === cr.personelId);
+                            let firmaAdi = '';
+                            if (p) {
+                                firmaAdi = p.firmaTipi === 'TASERON' ? (p.firmaAdi?.trim() || 'Taşeron (Belirtilmemiş)') : 'KİBRİTÇİ İNŞAAT';
+                            } else {
+                                firmaAdi = cr.calistigiFirma?.trim() || (cr.firmaTipi === 'TASERON' ? 'Taşeron (Belirtilmemiş)' : 'KİBRİTÇİ İNŞAAT');
                             }
                             if (firmaAdi.length > 15) firmaAdi = firmaAdi.substring(0, 15) + '..';
                             
@@ -3200,9 +3207,18 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                           onClick={() => {
                             setResidentInputName(`${p.ad} ${p.soyad}`);
                             setResidentPersonelId(p.id);
-                            if (p.calistigiFirma || p.firma) {
+                            if (p.firmaTipi) {
+                              setResidentFirmaTipi(p.firmaTipi);
+                              if (p.firmaTipi === 'TASERON') {
+                                setResidentFirmaKaynak('DB');
+                                setResidentInputFirma(p.firmaAdi || (p as any).calistigiFirma || (p as any).firma || '');
+                              }
+                            } else if ((p as any).calistigiFirma || (p as any).firma) {
                               setResidentFirmaTipi('TASERON');
-                              setResidentInputFirma(p.calistigiFirma || p.firma || '');
+                              setResidentFirmaKaynak('DB');
+                              setResidentInputFirma((p as any).calistigiFirma || (p as any).firma || '');
+                            } else {
+                              setResidentFirmaTipi('ANA_FIRMA');
                             }
                           }}
                           className="text-[10px] text-left bg-white border border-slate-200 hover:bg-slate-50 p-1.5 rounded font-medium text-slate-700 transition cursor-pointer flex items-center space-x-1"
