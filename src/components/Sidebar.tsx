@@ -7,7 +7,6 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   currentUser?: any;
   onSignOut?: () => void;
-  onSignatureEdit?: () => void;
   isYonetici?: boolean;
   userYetki?: string;
   isOpen?: boolean;
@@ -21,7 +20,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   currentUser,
   onSignOut,
-  onSignatureEdit,
   isYonetici = false,
   userYetki,
   isOpen = false,
@@ -362,15 +360,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <div className="p-4 border-t border-slate-100 space-y-2">
-          {onSignatureEdit && (
-            <button
-              onClick={onSignatureEdit}
-              className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-[13px] font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition cursor-pointer"
-            >
-              <PenTool size={16} className="text-slate-400" />
-              <span>Üyelik Bilg. Güncelle</span>
-            </button>
-          )}
+
           {onToggleMobileMode && (
             <button
               onClick={onToggleMobileMode}

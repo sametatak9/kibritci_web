@@ -11,6 +11,7 @@ interface TopbarProps {
   bildirimler?: any[];
   onClearNotifications?: () => void;
   onToggleMobileMode?: () => void;
+  onProfileClick?: () => void;
 }
 
 export const Topbar: React.FC<TopbarProps> = ({ 
@@ -21,7 +22,8 @@ export const Topbar: React.FC<TopbarProps> = ({
   onToggleSidebar,
   bildirimler = [],
   onClearNotifications,
-  onToggleMobileMode
+  onToggleMobileMode,
+  onProfileClick
 }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showDropdown, setShowDropdown] = useState(false);
@@ -205,7 +207,10 @@ export const Topbar: React.FC<TopbarProps> = ({
 
         {/* User Card with Avatar Initials */}
         {currentUser && (
-          <div className="flex items-center space-x-2 bg-slate-100 border border-slate-200 hover:bg-slate-200/80 transition duration-150 rounded-xl p-1 pr-2 md:pr-3 max-w-[140px] sm:max-w-[190px] md:max-w-none">
+          <div 
+            onClick={onProfileClick}
+            className="flex items-center space-x-2 bg-slate-100 border border-slate-200 hover:bg-slate-200/80 transition duration-150 rounded-xl p-1 pr-2 md:pr-3 max-w-[140px] sm:max-w-[190px] md:max-w-none cursor-pointer"
+          >
             <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-amber-500 to-orange-600 text-white font-black text-[10px] flex items-center justify-center shadow-sm shrink-0">
               {userInitials}
             </div>

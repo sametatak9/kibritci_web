@@ -4863,9 +4863,12 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
 
               {sahaReportType === 'GUNLUK' && (() => {
                 const parts = sahaReportDate.split('-');
-                const dayNum = parseInt(parts[2]);
+                const y = parseInt(parts[0], 10);
+                const m = parseInt(parts[1], 10);
+                const d = parseInt(parts[2], 10);
+
                 const activePersonel = personeller.filter(
-                  (p) => (p.durum === true || String(p.durum) === 'true')
+                  (p) => (p.durum === true || String(p.durum) === 'true') && !isTaseronPersonel(p)
                 );
                 let countGeldi = 0;
                 let countYok = 0;
@@ -4874,8 +4877,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 let countGirilmedi = 0;
 
                 activePersonel.forEach(p => {
-                  const pYoklama = yoklamalar[p.id] || {};
-                  const dayData = pYoklama[sahaReportDate] ?? pYoklama[String(dayNum)] ?? pYoklama[dayNum];
+                  const dayData = getYoklamaDay(yoklamalar[p.id], y, m, d);
                   if (dayData) {
                     if (dayData.durum === 'Geldi') countGeldi++;
                     else if (dayData.durum === 'Yok') countYok++;
@@ -4986,13 +4988,15 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 {/* DYNAMIC SITE ACTIVE ROSTER AT THE BOTTOM */}
                 {sahaReportType === 'GUNLUK' && (() => {
                   const parts = sahaReportDate.split('-');
-                  const dayNum = parseInt(parts[2]);
+                  const y = parseInt(parts[0], 10);
+                  const m = parseInt(parts[1], 10);
+                  const d = parseInt(parts[2], 10);
+
                   const activePersonel = personeller.filter(
-                    (p) => (p.durum === true || String(p.durum) === 'true') && p.firmaTipi !== 'TASERON'
+                    (p) => (p.durum === true || String(p.durum) === 'true') && !isTaseronPersonel(p)
                   );
                   const sahadakiAktifKadro = activePersonel.filter(p => {
-                    const pYoklama = yoklamalar[p.id] || {};
-                    const dayData = pYoklama[sahaReportDate] ?? pYoklama[String(dayNum)] ?? pYoklama[dayNum];
+                    const dayData = getYoklamaDay(yoklamalar[p.id], y, m, d);
                     return dayData && dayData.durum === 'Geldi';
                   });
 

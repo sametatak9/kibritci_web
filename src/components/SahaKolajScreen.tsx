@@ -92,8 +92,10 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
       const urls = sf.fotoUrls || (sf.fotoUrl ? [sf.fotoUrl] : []);
       urls.forEach((url, i) => {
         if (!url) return;
+        const id = `sf_${sf.id}_${i}`;
+        if (list.some(x => x.id === id)) return;
         list.push({
-          id: `sf_${sf.id}_${i}`,
+          id,
           albumKey,
           yil,
           ay,
@@ -114,10 +116,12 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
     // Programli Faaliyetlerden gelen fotolar
     programliFaaliyetler.forEach((pf) => {
       if (!pf.tarih || !pf.tarih.startsWith(albumKey)) return;
-      pf.asamalar?.forEach((asama) => {
+      pf.asamalar?.forEach((asama, i) => {
         if (!asama.tamamlandi || !asama.fotoUrl) return;
+        const id = `pf_${pf.id}_${asama.adim}`;
+        if (list.some(x => x.id === id)) return;
         list.push({
-          id: `pf_${pf.id}_${asama.adim}`,
+          id,
           albumKey,
           yil,
           ay,
@@ -160,10 +164,6 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
   const kolajGruplar = useMemo(() => groupKolajFotolari(allFotolar), [allFotolar]);
 
   const openEdit = (f: SahaKolajFoto & { isReadonly?: boolean }) => {
-    if (f.isReadonly) {
-      alert('Bu kayıt otomatik olarak gelmiştir, düzenlenemez.');
-      return;
-    }
     setEditId(f.id);
     setEditBaslik(f.baslik || '');
     setEditAciklama(f.aciklama || '');
@@ -174,16 +174,30 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
 
   const handleSaveEdit = async () => {
     if (!editId) return;
-    const f = fotolar.find((x) => x.id === editId);
-    if (!f) return;
+    
+    let f = fotolar.find((x) => x.id === editId);
+    if (!f) {
+      const original = allFotolar.find(x => x.id === editId);
+      if (!original) return;
+      f = { ...original };
+    }
+
     const updated: SahaKolajFoto = {
       ...f,
-      baslik: editBaslik.trim() || undefined,
-      aciklama: editAciklama.trim() || undefined,
-      grupAdi: editGrup.trim() || undefined,
-      parsel: editParsel || undefined,
-      blok: editBlok || undefined,
+      baslik: editBaslik.trim(),
+      aciklama: editAciklama.trim(),
+      grupAdi: editGrup.trim(),
+      parsel: editParsel,
+      blok: editBlok,
+      isReadonly: false,
     };
+
+    if (fotolar.some(x => x.id === editId)) {
+      setFotolar((prev) => prev.map((x) => (x.id === editId ? updated : x)));
+    } else {
+      setFotolar((prev) => [...prev, updated]);
+    }
+
     await saveDocument('sahaKolajFotolari', updated);
     setEditId(null);
   };

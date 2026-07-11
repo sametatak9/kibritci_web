@@ -135,6 +135,7 @@ export default function App() {
       /* no-op */
     }
   };
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<string>(() => {
     return readLastTab();
   });
@@ -1627,7 +1628,7 @@ export default function App() {
   };
 
   const setSahaFaaliyetleriWithSync = (
-    updater: SahaFaaliyetiType[] | ((s: SahaFaaliyetiType[]) => SahaFaaliyetiType[])
+    updater: SahaFaaliyetiType[] | ((s: SahaFaaliyetType[]) => SahaFaaliyetType[])
   ) => {
     setSahaFaaliyetleri((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -2083,7 +2084,27 @@ export default function App() {
       )}
 
       {/* Main Content Container wrapper Column */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex h-screen bg-slate-50 font-sans overflow-hidden flex-1 flex-col">
+      {/* Profile Modal */}
+      {isProfileModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-opacity">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl h-[90vh] overflow-hidden flex flex-col relative animate-in fade-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setIsProfileModalOpen(false)}
+              className="absolute top-4 right-4 z-10 p-2 bg-slate-100/50 hover:bg-rose-100 text-slate-500 hover:text-rose-600 rounded-full transition-colors"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <ProfilScreen 
+              currentUser={currentUser}
+              kullanicilar={kullanicilar}
+              setKullanicilar={setKullanicilarWithSync}
+              onSignOut={handleSignOut}
+              isStandalone={false}
+            />
+          </div>
+        </div>
+      )}
         
         {/* Top bar with Breadcrumbs / real-time clock indicator */}
         {!hideSidebarAndTopbar && (
@@ -2532,15 +2553,6 @@ export default function App() {
                 ) : renderAccessDenied()
               )}
 
-              {activeTab === "profil" && (
-                <ProfilScreen 
-                  currentUser={currentUser}
-                  kullanicilar={kullanicilar}
-                  setKullanicilar={setKullanicilarWithSync}
-                  onSignOut={handleSignOut}
-                  isStandalone={hideSidebarAndTopbar}
-                />
-              )}
 
               {activeTab === "yetki_verme" && (
                 isPrivilegedAdmin ? (
