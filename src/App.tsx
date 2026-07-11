@@ -1038,7 +1038,7 @@ export default function App() {
       const newKullanici: Kullanici = {
         id: emailLower,
         email: currentUser.email,
-        yetki: isSamet || isSecondaryAdmin || isDefaultAdmin ? 'YÖNETİCİ' : 'MİSAFİR',
+        yetki: isSamet || isSecondaryAdmin || isDefaultAdmin ? 'KURUCU' : 'MİSAFİR',
         durum: 'AKTİF',
         kayitTarihi: new Date().toISOString().split('T')[0]
       };
@@ -1812,6 +1812,8 @@ export default function App() {
   const isSecondaryAdmin = emailLower === SECONDARY_ADMIN_EMAIL;
   const isPrivilegedAdmin = isFounderAccount || isSecondaryAdmin;
   const isYonetici = userYetki === 'YÖNETİCİ' || 
+                     userYetki === 'KURUCU' ||
+                     userYetki === 'PROJE_MÜDÜRÜ' ||
                      isPrivilegedAdmin || 
                      emailLower === 'santiye@kibritci.com';
 

@@ -59,14 +59,14 @@ async function completeEmailLogin(
 ) {
   let cred;
   try {
-    cred = await withAuthTimeout(signInWithEmailAndPassword(auth, emailLower, passTrim), 8000);
+    cred = await withAuthTimeout(signInWithEmailAndPassword(auth, emailLower, passTrim), 12000);
   } catch (signErr: unknown) {
     const code = (signErr as { code?: string })?.code;
     if (code === 'auth/user-not-found' || code === 'auth/invalid-credential' || code === 'auth/wrong-password') {
       try {
         cred = await withAuthTimeout(
           createUserWithEmailAndPassword(auth, emailLower, passTrim),
-          10000
+          15000
         );
       } catch (createErr: any) {
         if (createErr.code === 'auth/email-already-in-use') {

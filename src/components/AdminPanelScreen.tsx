@@ -32,6 +32,7 @@ export interface Kullanici {
   id: string; // auth uid
   email: string;
   yetki: 
+    | 'KURUCU'
     | 'YÖNETİCİ' 
     | 'MUHASEBE' 
     | 'İDARİ_İŞLER' 
@@ -689,6 +690,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                             <td className="p-3">
                               <div className="flex flex-col gap-1.5">
                                 <select 
+                                  disabled={user.yetki === 'KURUCU' && currentUser?.email !== 'sametatak9@gmail.com'}
                                   className={`p-1.5 text-[11px] font-bold rounded-lg border bg-slate-50 outline-none cursor-pointer text-slate-855  ${
                                     pendingRoles[user.email] && pendingRoles[user.email] !== user.yetki
                                       ? 'border-amber-400 ring-1 ring-amber-300'
@@ -702,6 +704,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                                     }))
                                   }
                                 >
+                                  <option value="KURUCU">👑 Kurucu (Nihai Yetkili)</option>
                                   <option value="YÖNETİCİ">👑 Sistem Yöneticisi / Müdür</option>
                                   <option value="MUHASEBE">💰 Muhasebe (Finans)</option>
                                   <option value="İDARİ_İŞLER">🏡 İdari İşler (İK)</option>
@@ -827,14 +830,15 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                             }))
                           }
                         >
-                          <option value="MİSAFİR">MİSAFİR</option>
-                          <option value="KAMPÇI">KAMPÇI</option>
+                          <option value="KURUCU">KURUCU</option>
+                          <option value="YÖNETİCİ">YÖNETİCİ</option>
+                          <option value="MUHASEBE">MUHASEBE</option>
                           <option value="FORMEN">FORMEN</option>
                           <option value="GÜVENLİK">GÜVENLİK</option>
                           <option value="LOJİSTİK">LOJİSTİK</option>
                           <option value="DEPOCU">DEPOCU</option>
-                          <option value="MUHASEBE">MUHASEBE</option>
-                          <option value="YÖNETİCİ">YÖNETİCİ</option>
+                          <option value="MİSAFİR">MİSAFİR</option>
+                          <option value="KAMPÇI">KAMPÇI</option>
                         </select>
                         <button
                           type="button"
@@ -932,13 +936,14 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                   onChange={(e) => setCreateYetki(e.target.value)}
                   className="w-full mt-1 p-2.5 text-xs font-bold border rounded-xl bg-slate-50"
                 >
-                  <option value="KAMPÇI">KAMPÇI</option>
+                  <option value="KURUCU">KURUCU</option>
+                  <option value="YÖNETİCİ">YÖNETİCİ</option>
+                  <option value="MUHASEBE">MUHASEBE</option>
                   <option value="FORMEN">FORMEN</option>
                   <option value="GÜVENLİK">GÜVENLİK</option>
                   <option value="LOJİSTİK">LOJİSTİK</option>
                   <option value="DEPOCU">DEPOCU</option>
-                  <option value="MUHASEBE">MUHASEBE</option>
-                  <option value="YÖNETİCİ">YÖNETİCİ</option>
+                  <option value="KAMPÇI">KAMPÇI</option>
                   <option value="MİSAFİR">MİSAFİR</option>
                 </select>
               </div>

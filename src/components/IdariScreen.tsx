@@ -746,6 +746,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [sahaReportType, setSahaReportType] = useState<'GUNLUK' | 'AYLIK'>('GUNLUK');
   const [sahaReportDate, setSahaReportDate] = useState(new Date().toISOString().split('T')[0]);
   const [sahaReportMonth, setSahaReportMonth] = useState(6); // June
+  const [expandedFoto, setExpandedFoto] = useState<string | null>(null);
 
   // ─────────────────────────────────────────────────────────────
   // ✍️ SAHA RAPORU ELEKTRONİK ONAY SİSTEMİ STATES & FUNCTIONS
@@ -4906,12 +4907,18 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                             <td className="p-2 leading-relaxed font-normal">
                               <p className="whitespace-pre-line leading-relaxed">{sf.aciklama}</p>
                               {getSahaFaaliyetFotoUrl(sf) && (
-                                <div className="mt-3 inline-block border border-black p-1 bg-white max-w-[160px]">
+                                <div 
+                                  className="mt-3 inline-block border border-black p-1 bg-white max-w-[160px] cursor-pointer hover:opacity-90 transition group relative"
+                                  onClick={() => setExpandedFoto(getSahaFaaliyetFotoUrl(sf))}
+                                >
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center z-10">
+                                    <span className="text-white text-[10px] font-bold tracking-wider pointer-events-none">🔍 BÜYÜT</span>
+                                  </div>
                                   <img 
                                     src={getSahaFaaliyetFotoUrl(sf)} 
                                     alt="İmalat Saha Fotoğrafı" 
                                     referrerPolicy="no-referrer"
-                                    className="h-24 w-auto object-cover block mx-auto"
+                                    className="h-24 w-auto object-cover block mx-auto relative z-0"
                                   />
                                   <span className="text-[8px] block mt-1 tracking-wider text-center font-mono font-bold uppercase">SAHA İMALAT GÖRSELİ</span>
                                 </div>
@@ -5554,6 +5561,32 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {expandedFoto && (
+        <div 
+          className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4 cursor-zoom-out backdrop-blur-sm"
+          onClick={() => setExpandedFoto(null)}
+        >
+          <img 
+            src={expandedFoto} 
+            alt="Büyütülmüş Fotoğraf" 
+            className="max-w-full max-h-[90vh] object-contain cursor-default select-none shadow-2xl rounded-sm"
+            onClick={(e) => e.stopPropagation()}
+            referrerPolicy="no-referrer"
+          />
+          <button 
+            type="button"
+            className="absolute top-6 right-6 bg-white/10 hover:bg-red-500 hover:text-white text-white/70 rounded-full p-2.5 transition backdrop-blur-md cursor-pointer border border-white/20 shadow-lg"
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpandedFoto(null);
+            }}
+            title="Kapat"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
         </div>
       )}
 
