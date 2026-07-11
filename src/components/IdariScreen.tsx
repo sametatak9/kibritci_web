@@ -11,7 +11,8 @@ import {
   SahaFaaliyeti, HazirTutanak, CariKart, StokKart, EpostaGonderim, Personel,
   KampYerleske, KampKat, SahaGunRaporArsiv, SahaFaaliyetTipi, AylikYoklamaMap
 } from '../types/erp';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase';
+import { SahaKolajScreen } from './SahaKolajScreen';
 import {
   createKampYerleske,
   createKampKat,
@@ -666,6 +667,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   // ─────────────────────────────────────────────────────────────
   // 🏢 3. SAHA FAALİYETLERİ STATES & EVENTS
   // ─────────────────────────────────────────────────────────────
+  const [sahaTabView, setSahaTabView] = useState<'KOLAJ' | 'KAYIT'>('KOLAJ');
   const [sahaKayitTarihi, setSahaKayitTarihi] = useState(todayDateKey());
   const [sahaNitelik, setSahaNitelik] = useState("");
   const [sahaParsel, setSahaParsel] = useState("GENEL SAHA");
@@ -3296,7 +3298,31 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           🏗️ VIEW: SAHA FAALİYETLERİ
           ───────────────────────────────────────────────────────────── */}
       {currentSubTab === 'saha' && (
-        <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0 lg:items-start">
+        <div className="flex-1 flex flex-col min-h-0 relative">
+          
+          <div className="flex bg-slate-100 p-1.5 rounded-xl w-max mb-4 shrink-0 mx-auto lg:mx-0">
+            <button 
+              className={`px-5 py-2 rounded-lg text-xs font-black tracking-wide transition-all duration-200 ${sahaTabView === 'KOLAJ' ? 'bg-white shadow text-[#2563EB]' : 'text-slate-500 hover:text-slate-800'}`}
+              onClick={() => setSahaTabView('KOLAJ')}
+            >
+              📷 Güncel Faaliyetler (Kolaj)
+            </button>
+            <button 
+              className={`px-5 py-2 rounded-lg text-xs font-black tracking-wide transition-all duration-200 ${sahaTabView === 'KAYIT' ? 'bg-white shadow text-[#2563EB]' : 'text-slate-500 hover:text-slate-800'}`}
+              onClick={() => setSahaTabView('KAYIT')}
+            >
+              📝 Veri Girişi & Yönetim
+            </button>
+          </div>
+
+          {sahaTabView === 'KOLAJ' && (
+            <div className="flex-1 bg-white border shadow-sm rounded-2xl overflow-hidden relative">
+              <SahaKolajScreen currentUser={auth.currentUser || undefined} sahaFaaliyetleri={sahaFaaliyetleri} programliFaaliyetler={[]} />
+            </div>
+          )}
+
+          {sahaTabView === 'KAYIT' && (
+            <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0 lg:items-start">
           
           {/* Creator drawer */}
           <div className="w-full lg:w-[380px] lg:shrink-0 lg:self-start bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
@@ -3854,6 +3880,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   ))}
                 </div>
               </div>
+            </div>
+          )}
             </div>
           )}
         </div>
