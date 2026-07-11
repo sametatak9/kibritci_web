@@ -9,10 +9,12 @@ import { kibritciLogoHtml } from '../lib/kibritciBrand';
 import { 
   AracBakim, Demisbas, Tahsis, KampOdasi, KampKaydi, KampSarf, KampFaaliyet,
   SahaFaaliyeti, HazirTutanak, CariKart, StokKart, EpostaGonderim, Personel,
-  KampYerleske, KampKat, SahaGunRaporArsiv, SahaFaaliyetTipi, AylikYoklamaMap
+  KampYerleske, KampKat, SahaGunRaporArsiv, SahaFaaliyetTipi, AylikYoklamaMap,
+  ProgramliFaaliyet
 } from '../types/erp';
 import { db, auth } from '../lib/firebase';
 import { SahaKolajScreen } from './SahaKolajScreen';
+import { ProgramliFaaliyetScreen } from './ProgramliFaaliyetScreen';
 import {
   createKampYerleske,
   createKampKat,
@@ -88,6 +90,10 @@ interface IdariScreenProps {
   yoklamalar?: AylikYoklamaMap;
   setYoklamalar?: React.Dispatch<React.SetStateAction<AylikYoklamaMap>>;
   saveYoklamalarNow?: (next: AylikYoklamaMap) => Promise<void>;
+  programliFaaliyetler?: ProgramliFaaliyet[];
+  setProgramliFaaliyetler?: (
+    updater: ProgramliFaaliyet[] | ((prev: ProgramliFaaliyet[]) => ProgramliFaaliyet[])
+  ) => void;
 }
 
 interface FormenGunlukRaporKaydi {
@@ -125,6 +131,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   yoklamalar = {},
   setYoklamalar,
   saveYoklamalarNow,
+  programliFaaliyetler = [],
+  setProgramliFaaliyetler
 }) => {
 
   // ─────────────────────────────────────────────────────────────
@@ -667,7 +675,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   // ─────────────────────────────────────────────────────────────
   // 🏢 3. SAHA FAALİYETLERİ STATES & EVENTS
   // ─────────────────────────────────────────────────────────────
-  const [sahaTabView, setSahaTabView] = useState<'KOLAJ' | 'KAYIT'>('KOLAJ');
+  const [sahaTabView, setSahaTabView] = useState<'KOLAJ' | 'KAYIT' | 'PROGRAM'>('KOLAJ');
   const [sahaKayitTarihi, setSahaKayitTarihi] = useState(todayDateKey());
   const [sahaNitelik, setSahaNitelik] = useState("");
   const [sahaParsel, setSahaParsel] = useState("GENEL SAHA");
@@ -3313,11 +3321,27 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
             >
               📝 Veri Girişi & Yönetim
             </button>
+            <button 
+              className={`px-5 py-2 rounded-lg text-xs font-black tracking-wide transition-all duration-200 ${sahaTabView === 'PROGRAM' ? 'bg-white shadow text-[#2563EB]' : 'text-slate-500 hover:text-slate-800'}`}
+              onClick={() => setSahaTabView('PROGRAM')}
+            >
+              📅 İş Programı Yönetimi
+            </button>
           </div>
 
           {sahaTabView === 'KOLAJ' && (
             <div className="flex-1 bg-white border shadow-sm rounded-2xl overflow-hidden relative">
               <SahaKolajScreen currentUser={auth.currentUser || undefined} sahaFaaliyetleri={sahaFaaliyetleri} programliFaaliyetler={[]} />
+            </div>
+          )}
+
+          {sahaTabView === 'PROGRAM' && setProgramliFaaliyetler && (
+            <div className="flex-1 bg-white border shadow-sm rounded-2xl overflow-hidden relative">
+              <ProgramliFaaliyetScreen 
+                programliFaaliyetler={programliFaaliyetler}
+                setProgramliFaaliyetler={setProgramliFaaliyetler}
+                currentUser={auth.currentUser || undefined}
+              />
             </div>
           )}
 

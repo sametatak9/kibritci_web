@@ -92,7 +92,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { key: "arac", label: "Araç ve Demirbaş", icon: Truck },
         { key: "kamp", label: "Kamp Yönetimi", icon: Tent },
         { key: "saha", label: "Saha Faaliyetleri", icon: Building2 },
-        { key: "rapor_programlama", label: "Raporlama & Programlama", icon: BookOpen },
         { key: "tutanak", label: "Hazır Tutanaklar", icon: FileText },
         { key: "formen_ekrani", label: "Formen Mobil Paneli", icon: Contact2 },
         { key: "guvenlik_ekrani", label: "Güvenlik & Kapı Kontrol", icon: ShieldCheck },

@@ -39,7 +39,7 @@ import { MobileManagerScreen } from './components/MobileManagerScreen';
 import { KibarHakedisScreen } from './components/KibarHakedisScreen';
 import { SahaKolajScreen } from './components/SahaKolajScreen';
 import { ProgramliFaaliyetScreen } from './components/ProgramliFaaliyetScreen';
-import { RaporlamaProgramlamaScreen } from './components/RaporlamaProgramlamaScreen';
+
 import { KibritciLogo } from './components/KibritciLogo';
 
 // Type definitions
@@ -2338,16 +2338,6 @@ export default function App() {
                   currentUser={currentUser}
                 />
               )}
-              {activeTab === "rapor_programlama" && (
-                isYonetici ? (
-                  <RaporlamaProgramlamaScreen 
-                    programliFaaliyetler={programliFaaliyetler}
-                    setProgramliFaaliyetler={setProgramliFaaliyetlerWithSync}
-                    sahaFaaliyetleri={sahaFaaliyetleri}
-                    currentUser={currentUser}
-                  />
-                ) : renderAccessDenied()
-              )}
 
               {activeTab === "personel_kartlari" && (
                 <PersonelKartlariScreen 
@@ -2386,6 +2376,8 @@ export default function App() {
                   kampKatlari={kampKatlari}
                   sahaFaaliyetleri={sahaFaaliyetleri}
                   setSahaFaaliyetleri={setSahaFaaliyetleriWithSync}
+                  programliFaaliyetler={programliFaaliyetler}
+                  setProgramliFaaliyetler={setProgramliFaaliyetlerWithSync}
                   saveSahaFaaliyetNow={saveSahaFaaliyetNow}
                   removeSahaFaaliyetNow={removeSahaFaaliyetNow}
                   hazirTutanaklar={hazirTutanaklar}
