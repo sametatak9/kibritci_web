@@ -1194,7 +1194,6 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
             )}
           </div>
         </div>
-        </div>
       )}
 
       {/* Expanded Image Modal */}

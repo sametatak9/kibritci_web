@@ -2122,6 +2122,7 @@ export default function App() {
               localStorage.setItem('kibritci_mobile_mode', 'true');
               localStorage.setItem('kibritci_mobile_direct', 'false');
             }}
+            onProfileClick={() => setIsProfileModalOpen(true)}
           />
         )}
 
