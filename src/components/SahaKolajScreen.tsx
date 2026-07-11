@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookOpen, Calendar, FileUp, Grid3X3, Images, Loader2, Pencil, Printer,
-  Trash2, X, Check, Layers, Eye, AlertCircle, Plus, Camera, Search, Filter, FileDown, CheckCircle2, ChevronRight, MessageSquare, History
+  Trash2, X, Check, Layers, Eye, AlertCircle, Plus, Camera, Search, Filter, FileDown, CheckCircle2, ChevronRight, MessageSquare, History, ZoomIn
 } from 'lucide-react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db, removeDocument, saveDocument } from '../lib/firebase';
@@ -55,6 +55,9 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
   const [showPreview, setShowPreview] = useState(false);
   const [filterGrup, setFilterGrup] = useState<string>('');
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  
+  // Resim büyütme state
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const printRef = useRef<HTMLDivElement>(null);
@@ -849,16 +852,24 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
                     <div className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
                       <button
                         type="button"
-                        onClick={() => openEdit(f)}
-                        className="p-1 bg-white/90 rounded text-slate-700"
+                        onClick={(e) => { e.stopPropagation(); setExpandedImage(f.imageUrl); }}
+                        className="p-1 bg-white/90 rounded text-slate-700 hover:text-blue-600"
+                        title="Büyüt"
+                      >
+                        <ZoomIn size={11} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); openEdit(f); }}
+                        className="p-1 bg-white/90 rounded text-slate-700 hover:text-amber-600"
                         title="Düzenle"
                       >
                         <Pencil size={11} />
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDelete(f.id)}
-                        className="p-1 bg-white/90 rounded text-rose-600"
+                        onClick={(e) => { e.stopPropagation(); handleDelete(f.id); }}
+                        className="p-1 bg-white/90 rounded text-rose-600 hover:bg-rose-50"
                         title="Sil"
                       >
                         <Trash2 size={11} />
@@ -1181,6 +1192,29 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
                 ))}
               </div>
             )}
+          </div>
+        </div>
+        </div>
+      )}
+
+      {/* Expanded Image Modal */}
+      {expandedImage && (
+        <div 
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm cursor-zoom-out animate-in fade-in duration-200"
+          onClick={() => setExpandedImage(null)}
+        >
+          <div className="relative max-w-7xl max-h-screen w-full h-full flex items-center justify-center">
+            <button 
+              className="absolute top-4 right-4 text-white hover:text-rose-500 bg-black/50 hover:bg-black p-3 rounded-full transition-all z-10"
+              onClick={() => setExpandedImage(null)}
+            >
+              <X size={24} />
+            </button>
+            <img 
+              src={expandedImage} 
+              alt="Büyük Görünüm" 
+              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-200" 
+            />
           </div>
         </div>
       )}
