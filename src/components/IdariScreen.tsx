@@ -369,7 +369,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [selectedKat, setSelectedKat] = useState("");
   
   const [campCreationStep, setCampCreationStep] = useState<'campus' | 'floor' | 'room'>('room');
-  const [kampMainView, setKampMainView] = useState<'odalar' | 'faaliyet'>('odalar');
+  const [kampMainView, setKampMainView] = useState<'odalar' | 'faaliyet' | 'personel'>('odalar');
+  const [kampPersonelSearch, setKampPersonelSearch] = useState('');
   const [newCampusInput, setNewCampusInput] = useState("");
   const [newFloorInput, setNewFloorInput] = useState("");
 

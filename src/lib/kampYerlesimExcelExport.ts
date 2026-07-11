@@ -17,7 +17,7 @@ export interface KampYerlesimExportInput {
   personeller?: Personel[];
 }
 
-const ANA_FIRMA_LABEL = 'Kibritçi İnşaat (Ana Firma)';
+const ANA_FIRMA_LABEL = 'KİBRİTÇİ İNŞAAT';
 const ROOMS_PER_ROW = 4;
 const ROOM_BLOCK_ROWS = 4;
 
