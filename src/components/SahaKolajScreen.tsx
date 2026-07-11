@@ -982,7 +982,7 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
                     <div key={f.id} className="flex flex-col gap-1">
                       <img src={f.imageUrl} alt="" className="w-full aspect-[4/3] object-cover rounded border" />
                       {f.baslik && <p className="text-[10px] font-bold text-slate-800">{f.baslik}</p>}
-                      {f.aciklama && <p className="text-[9px] text-slate-600 line-clamp-2">{f.aciklama}</p>}
+                      {f.aciklama && <p className="text-[10px] text-slate-700 leading-snug break-words">{f.aciklama}</p>}
                     </div>
                   ))}
                 </div>

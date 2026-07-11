@@ -28,20 +28,20 @@ export function groupKolajFotolari(fotolar: SahaKolajFoto[]): KolajGrup[] {
   const sorted = [...fotolar].sort((a, b) => a.sira - b.sira || a.yuklemeTarihi.localeCompare(b.yuklemeTarihi));
 
   for (const f of sorted) {
-    const key = (f.grupAdi || '').trim() || '__genel__';
+    const p = f.parsel || 'Genel Saha';
+    const b = f.blok || 'Belirtilmedi';
+    const key = `${p} / ${b}`;
+    
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(f);
   }
 
   const groups: KolajGrup[] = [];
-  const genel = map.get('__genel__');
-  if (genel?.length) groups.push({ ad: 'Genel Saha Faaliyetleri', fotolar: genel });
-
   for (const [key, fotos] of map) {
-    if (key === '__genel__') continue;
     groups.push({ ad: key, fotolar: fotos });
   }
-  return groups;
+  
+  return groups.sort((a, b) => a.ad.localeCompare(b.ad));
 }
 
 export type MagazinePageType = 'cover' | 'toc' | 'section' | 'spread' | 'collage' | 'summary';
