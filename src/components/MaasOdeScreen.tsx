@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Banknote, Search, CircleCheck as CheckCircle, Circle as XCircle, ListFilter as Filter, Download, Printer, Calendar, User, CreditCard, TriangleAlert as AlertTriangle, Save, ChevronDown, ChevronUp } from 'lucide-react';
+import { Banknote, Search, CircleCheck as CheckCircle, Circle as XCircle, ListFilter as Filter, Download, Printer, Calendar, User, CreditCard, TriangleAlert as AlertTriangle, Save, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { Personel, AylikYoklamaMap, MaaşOdeme, MaasKesinti } from '../types/erp';
 import { iterateMonthYoklama, buildPersonelListForMonth, isDayActiveForPersonel } from '../lib/yoklamaUtils';
 import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
@@ -214,6 +214,24 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
     setKesintiModal(null);
     setKesintiAciklama('');
     setKesintiTutar('');
+  };
+
+  const handleKesintiSil = (personelId: string, kesintiId: string) => {
+    if (!confirm('Bu kesintiyi silmek istediğinize emin misiniz?')) return;
+    
+    setMaasOdemeleri(prev => prev.map(m => {
+      if (m.personelId === personelId && m.ay === selectedAy && m.yil === selectedYil) {
+        const yeniKesintiler = m.kesintiler.filter(k => k.id !== kesintiId);
+        const yeniKesintiToplam = yeniKesintiler.reduce((s, k) => s + k.tutar, 0);
+        return {
+          ...m,
+          kesintiler: yeniKesintiler,
+          kesintiToplami: yeniKesintiToplam,
+          netOdeme: m.toplamHakedis - yeniKesintiToplam
+        };
+      }
+      return m;
+    }));
   };
 
   const handleOdemeIptal = (personelId: string) => {
@@ -482,9 +500,16 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
                     ) : (
                       <div className="space-y-1">
                         {odeme.kesintiler.map(k => (
-                          <div key={k.id} className="flex justify-between text-[10px] bg-white rounded-lg p-2 border border-slate-100">
+                          <div key={k.id} className="flex justify-between items-center text-[10px] bg-white rounded-lg p-2 border border-slate-100 group">
                             <span><strong>{k.tur}:</strong> {k.aciklama}</span>
-                            <span className="text-rose-600 font-bold">-{k.tutar.toFixed(2)} TL</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-rose-600 font-bold">-{k.tutar.toFixed(2)} TL</span>
+                              {!odeme.odendi && (
+                                <button onClick={() => handleKesintiSil(personel.id, k.id)} className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition" title="Kesintiyi Sil">
+                                  <Trash2 size={12} />
+                                </button>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
