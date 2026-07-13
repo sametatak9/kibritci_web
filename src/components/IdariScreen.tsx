@@ -143,6 +143,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [selectedAracForPdf, setSelectedAracForPdf] = useState<AracBakim | null>(null);
   const [showKampKrokiModal, setShowKampKrokiModal] = useState(false);
   const [exportingKampExcel, setExportingKampExcel] = useState(false);
+  const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
 
 
 

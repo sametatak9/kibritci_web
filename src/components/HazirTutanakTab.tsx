@@ -63,7 +63,7 @@ export const HazirTutanakTab: React.FC<HazirTutanakTabProps> = ({
           return {
             ...ht,
             tutanakTipi: tutanakType,
-            personelId: tututanakPerson,
+            personelId: tutanakPerson,
             konu: tutanakSubject,
             icerik: tutanakText,
             taseronAdi: taseronAdi,
