@@ -219,8 +219,6 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const monthPersonelList = buildPersonelListForMonth(personeller, yoklamalar, year, month);
   const activeStaff = monthPersonelList.filter((p) => {
     if (isTaseronPersonel(p)) return false;
-    const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
-    if (!isAktif && !p.istenCikisTarihi) return false;
     // Kampçı, Tesisatçı ve Mermerci personeller Kampçı ekranında listelenecektir.
     if (isKampciTesisatciMermerci(p.gorev)) return false;
     return isDayActiveForPersonel(p, year, month, day, yoklamalar[p.id] as any);

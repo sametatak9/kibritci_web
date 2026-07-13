@@ -155,7 +155,8 @@ export function isPersonelVisibleInMonth(
   month: number,
   personMap?: PersonelYoklamaMap
 ): boolean {
-  const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true' || String(p.durum).toLowerCase() === 'aktif';
+  const durumNorm = normalizeTurkishName(String(p.durum || ''));
+  const isAktif = p.durum === true || durumNorm === 'TRUE' || durumNorm === 'AKTIF';
   const hireTarih = p.iseGirisTarihi || (p as any).girisTarihi || (p as any).kayitTarihi;
   const hire = parseFlexibleDateParts(hireTarih);
   if (hire) {

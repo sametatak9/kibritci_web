@@ -58,8 +58,6 @@ export const KampGunlukYoklamaTab: React.FC<KampGunlukYoklamaTabProps> = ({
   const activeStaff = useMemo(() => {
     return monthPersonelList.filter((p) => {
       if (isTaseronPersonel(p)) return false;
-      const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true' || String(p.durum).toLowerCase() === 'aktif';
-      if (!isAktif && !p.istenCikisTarihi) return false;
       // SADECE Kampçı, Tesisatçı ve Mermerci personelleri listele
       if (!isKampciTesisatciMermerci(p.gorev)) return false;
       return isDayActiveForPersonel(p, year, month, day, yoklamalar[p.id] as any);
