@@ -134,6 +134,17 @@ function parseFlexibleDateParts(
     }
   }
 
+  // dd.mm / dd/mm / dd-mm (without year)
+  const dm = v.match(/^(\d{1,2})[-/.](\d{1,2})$/);
+  if (dm) {
+    const day = Number(dm[1]);
+    const month = Number(dm[2]);
+    const year = new Date().getFullYear();
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return { year, month, day };
+    }
+  }
+
   return null;
 }
 
@@ -145,18 +156,20 @@ export function isPersonelVisibleInMonth(
   personMap?: PersonelYoklamaMap
 ): boolean {
   const isAktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
-  const hire = parseFlexibleDateParts(p.iseGirisTarihi);
+  const hireTarih = p.iseGirisTarihi || (p as any).girisTarihi || (p as any).kayitTarihi;
+  const hire = parseFlexibleDateParts(hireTarih);
   if (hire) {
     const hireY = hire.year;
     const hireM = hire.month;
     if (hireY > year || (hireY === year && hireM > month)) return false;
   }
-  const exit = parseFlexibleDateParts(p.istenCikisTarihi);
+  const exitTarih = p.istenCikisTarihi || (p as any).cikisTarihi;
+  const exit = parseFlexibleDateParts(exitTarih);
   if (exit) {
     const exitY = exit.year;
     const exitM = exit.month;
     if (exitY < year || (exitY === year && exitM < month)) return false;
-  } else if (!isAktif && !p.istenCikisTarihi) {
+  } else if (!isAktif && !exitTarih) {
     return false;
   }
   if (personMap && personHasYoklamaInMonth(personMap, year, month)) return true;
