@@ -121,6 +121,15 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
     const hesap = hesaplaMaas(personel);
     const mevcutOdeme = maasOdemeleri.find(m => m.personelId === personel.id && m.ay === selectedAy && m.yil === selectedYil);
 
+    const yatirilanInput = prompt(`${personel.ad} ${personel.soyad} için hesaba yatırılan net tutarı giriniz (Hesaplanan Net: ${hesap.net} TL):`, hesap.net.toString());
+    if (yatirilanInput === null) return; // İptal edildi
+
+    const yatirilanTutar = parseFloat(yatirilanInput.replace(',', '.'));
+    if (isNaN(yatirilanTutar) || yatirilanTutar < 0) {
+      alert('Lütfen geçerli bir tutar giriniz.');
+      return;
+    }
+
     const yeniOdeme: MaaşOdeme = {
       id: mevcutOdeme?.id || `mo_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
       personelId: personel.id,
@@ -132,6 +141,7 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
       toplamHakedis: hesap.brut + hesap.mesai,
       kesintiToplami: hesap.kesinti,
       netOdeme: hesap.net,
+      yatirilanTutar: yatirilanTutar,
       odendi: true,
       odemeTarihi: new Date().toISOString().split('T')[0],
       odemeYapanKullanici: currentUser?.email || 'Sistem',
@@ -243,6 +253,8 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
                 <th style="padding: 8px; border: 1px solid #ddd;">Mesai</th>
                 <th style="padding: 8px; border: 1px solid #ddd;">Kesinti</th>
                 <th style="padding: 8px; border: 1px solid #ddd;">Net Ödeme</th>
+                <th style="padding: 8px; border: 1px solid #ddd;">Yatırılan</th>
+                <th style="padding: 8px; border: 1px solid #ddd;">Eksik Tutar</th>
                 <th style="padding: 8px; border: 1px solid #ddd;">IBAN</th>
                 <th style="padding: 8px; border: 1px solid #ddd;">Ödeme Tarihi</th>
               </tr>
@@ -257,6 +269,8 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
                   <td style="padding: 6px; border: 1px solid #ddd; text-align: right;">${m.mesaiUcreti.toFixed(2)}</td>
                   <td style="padding: 6px; border: 1px solid #ddd; text-align: right; color: #c00;">${m.kesintiToplami.toFixed(2)}</td>
                   <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-weight: bold;">${m.netOdeme.toFixed(2)}</td>
+                  <td style="padding: 6px; border: 1px solid #ddd; text-align: right; color: #059669; font-weight: bold;">${(m.yatirilanTutar ?? m.netOdeme).toFixed(2)}</td>
+                  <td style="padding: 6px; border: 1px solid #ddd; text-align: right; color: #dc2626; font-weight: bold;">${(m.netOdeme - (m.yatirilanTutar ?? m.netOdeme)).toFixed(2)}</td>
                   <td style="padding: 6px; border: 1px solid #ddd; font-family: monospace; font-size: 10px;">${m.iban}</td>
                   <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">${m.odemeTarihi}</td>
                 </tr>
@@ -398,7 +412,7 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
                         {odeme?.odendi ? 'ÖDENDİ' : 'BEKLİYOR'}
                       </span>
                     </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 text-[10px]">
+            <div className={`grid grid-cols-2 ${odeme?.odendi ? 'md:grid-cols-3 lg:grid-cols-6' : 'md:grid-cols-4'} gap-2 mt-2 text-[10px]`}>
                       <div className="bg-slate-50 rounded-lg p-2">
                         <span className="text-slate-400 block">Brüt Maaş</span>
                         <span className="font-bold text-slate-800">{hesap.brut.toFixed(2)} TL</span>
@@ -415,6 +429,18 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
                         <span className="text-slate-600 block">Net Ödeme</span>
                         <span className="font-bold text-slate-800">{hesap.net.toFixed(2)} TL</span>
                       </div>
+                      {odeme?.odendi && (
+                        <>
+                          <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-200">
+                            <span className="text-emerald-600 block">Yatırılan</span>
+                            <span className="font-bold text-emerald-800">{(odeme.yatirilanTutar ?? hesap.net).toFixed(2)} TL</span>
+                          </div>
+                          <div className="bg-rose-50 rounded-lg p-2 border border-rose-200">
+                            <span className="text-rose-600 block">Eksik Tutar</span>
+                            <span className="font-bold text-rose-800">{(hesap.net - (odeme.yatirilanTutar ?? hesap.net)).toFixed(2)} TL</span>
+                          </div>
+                        </>
+                      )}
                     </div>
                     <div className="flex items-center gap-3 mt-2 text-[10px] text-slate-500">
                       <span className={`flex items-center gap-1 ${tcValid ? 'text-emerald-600' : 'text-rose-500'}`}>

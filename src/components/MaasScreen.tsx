@@ -509,8 +509,10 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                       <th className="p-2 text-right border-r border-slate-300 text-[#1E4E78]">Günden Doğan Kazanç (₺)</th>
                       <th className="p-2 text-right border-r border-slate-300 text-slate-800">Mesayiden Doğan Kazanç (₺)</th>
                       <th className="p-2 text-right border-r border-slate-300 text-rose-800">Kesinti / Avans / Borç (₺)</th>
+                      <th className="p-2 text-right text-emerald-800 font-bold bg-slate-55 w-28">Hesaplanan Net (₺)</th>
+                      <th className="p-2 text-right text-emerald-800 font-bold bg-emerald-50 w-28">Yatırılan (₺)</th>
+                      <th className="p-2 text-right text-rose-800 font-bold bg-rose-50 w-28">Eksik Tutar (₺)</th>
                       <th className="p-2 text-left border-r border-slate-300">Banka Bilgisi</th>
-                      <th className="p-2 text-right text-emerald-800 font-bold bg-slate-55 w-28">En Son Alacağı Maaş (Net ₺)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -525,12 +527,27 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                             <td className="p-2 text-center border-r border-slate-300">{hakedisDays} Gün</td>
                             <td className="p-2 text-center border-r border-slate-300 font-mono text-slate-800">{totalOvertimeHours} st</td>
                             <td className="p-2 text-right border-r border-slate-300 font-mono">₺{totalBaseHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
-                            <td className="p-2 text-right border-r border-slate-300 font-mono text-slate-800">₺{totalOvertimeHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-2 text-right border-r border-slate-300 text-slate-800">₺{totalOvertimeHakedis.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
                             <td className="p-2 text-right border-r border-slate-300 text-rose-700 font-mono">-₺{cutAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
-                            <td className="p-2 border-r border-slate-300 text-slate-500 text-[8px] truncate max-w-[120px]">{personel.bankaAdi} · {personel.ibanNo || "IBAN_YOK"}</td>
                             <td className="p-2 text-right text-emerald-755 font-bold bg-emerald-50/40 font-mono">
                               ₺{netPayable.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                             </td>
+                            {(() => {
+                              const periodPayment = maasOdemeleri.find((m) => m.personelId === personel.id && m.ay === selectedMonth && m.yil === selectedYear);
+                              const yatirilan = periodPayment?.yatirilanTutar ?? netPayable;
+                              const eksik = netPayable - yatirilan;
+                              return (
+                                <>
+                                  <td className="p-2 text-right text-emerald-700 font-bold bg-emerald-100/40 font-mono">
+                                    ₺{yatirilan.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="p-2 text-right text-rose-700 font-bold bg-rose-100/40 font-mono">
+                                    ₺{eksik.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                                  </td>
+                                </>
+                              );
+                            })()}
+                            <td className="p-2 border-r border-slate-300 text-slate-500 text-[8px] truncate max-w-[120px]">{personel.bankaAdi} · {personel.ibanNo || "IBAN_YOK"}</td>
                           </tr>
                           {/* Gün Detayı + Mesai Detayı */}
                           <tr className="border-b border-slate-300 bg-slate-50/40 text-[7px] text-slate-500">

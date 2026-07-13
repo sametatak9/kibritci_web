@@ -491,6 +491,7 @@ export interface MaaşOdeme {
   toplamHakedis: number;
   kesintiToplami: number;
   netOdeme: number;
+  yatirilanTutar?: number;
   odendi: boolean;
   odemeTarihi?: string;
   odemeYapanKullanici?: string;
