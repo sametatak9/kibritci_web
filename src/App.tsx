@@ -272,10 +272,7 @@ export default function App() {
   const [sendingError, setSendingError] = useState(false);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [assistantMessages, setAssistantMessages] = useState<Array<{ sender: 'user' | 'assistant', text: string }>>([
-    { sender: 'assistant', text: 'Merhaba! Ben Kibritçi Şantiye Yapay Zeka Asistanıyım. Size bugün nasıl yardımcı olabilirim?' }
-  ]);
-  const [assistantLoading, setAssistantLoading] = useState(false);
+
   const roleHomeRoutedRef = useRef(false);
   const claimsSyncedRef = useRef(false);
   const bootstrapDoneRef = useRef(false);
@@ -1343,30 +1340,7 @@ export default function App() {
     });
   };
 
-  const handleSendAssistantMessage = async () => {
-    if (!assistantInput.trim() || assistantLoading) return;
-    const userMsg = assistantInput.trim();
-    setAssistantInput("");
-    setAssistantMessages(prev => [...prev, { sender: 'user', text: userMsg }]);
-    setAssistantLoading(true);
 
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg })
-      });
-      if (!response.ok) {
-        throw new Error("Asistan ile haberleşirken hata oluştu.");
-      }
-      const data = await response.json();
-      setAssistantMessages(prev => [...prev, { sender: 'assistant', text: data.text || 'Cevap alınamadı.' }]);
-    } catch (err: any) {
-      setAssistantMessages(prev => [...prev, { sender: 'assistant', text: `Hata: ${err.message || 'Bir sorun oluştu. Gemini API etkin olduğundan emin olun.'}` }]);
-    } finally {
-      setAssistantLoading(false);
-    }
-  };
 
   const setCariKartlarWithSync = (updater: CariKart[] | ((c: CariKart[]) => CariKart[])) => {
     setCariKartlar(prev => {
