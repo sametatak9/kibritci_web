@@ -837,8 +837,8 @@ export const SahaKolajScreen: React.FC<SahaKolajScreenProps> = ({
                     <img
                       src={f.imageUrl}
                       alt={f.baslik || f.dosyaAdi || 'saha'}
-                      className={`w-full aspect-square object-cover ${(f as any).isReadonly ? 'cursor-default' : 'cursor-pointer'}`}
-                      onClick={() => openEdit(f)}
+                      className={`w-full aspect-square object-cover cursor-pointer`}
+                      onClick={() => setExpandedImage(f.imageUrl)}
                     />
                     <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-1.5 opacity-0 group-hover:opacity-100 transition">
                       <p className="text-[9px] text-white font-bold truncate">

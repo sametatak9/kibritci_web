@@ -57,6 +57,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   // Statistical numbers
   const totalPersonel = personeller.length;
   const activePersonelCount = personeller.filter(p => p.durum === true || String(p.durum) === 'true').length;
+  const anaFirmaActiveCount = personeller.filter(p => (p.durum === true || String(p.durum) === 'true') && p.firmaTipi !== 'TASERON').length;
+  const taseronActiveCount = personeller.filter(p => (p.durum === true || String(p.durum) === 'true') && p.firmaTipi === 'TASERON').length;
   
   // Calculate attendance rate (Geldi ratio) for the current month
   let totalCheckedDays = 0;
@@ -135,12 +137,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const stats = [
     {
       title: "Aktif Kadro (Personel)",
-      value: `${activePersonelCount} / ${totalPersonel}`,
-      color: "text-white",
-      bg: "bg-white/5/70 border-slate-200",
+      value: `${activePersonelCount} Kişi`,
+      color: "text-slate-800",
+      bg: "bg-blue-50 border-blue-100",
       icon: Users,
-      trend: "Canlı Şantiye Kadrosu",
-      trendColor: "text-emerald-600"
+      trend: `Ana Firma: ${anaFirmaActiveCount} | Taşeron: ${taseronActiveCount}`,
+      trendColor: "text-blue-600 font-semibold"
     },
     {
       title: "Lojman Doluluk Oranı",

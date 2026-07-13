@@ -675,7 +675,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   // ─────────────────────────────────────────────────────────────
   // 🏢 3. SAHA FAALİYETLERİ STATES & EVENTS
   // ─────────────────────────────────────────────────────────────
-  const [sahaTabView, setSahaTabView] = useState<'KOLAJ' | 'KAYIT' | 'PROGRAM'>('KOLAJ');
+  const [sahaTabView, setSahaTabView] = useState<'KOLAJ' | 'KAYIT' | 'PROGRAM'>('KAYIT');
   const [sahaKayitTarihi, setSahaKayitTarihi] = useState(todayDateKey());
   const [sahaNitelik, setSahaNitelik] = useState("");
   const [sahaParsel, setSahaParsel] = useState("GENEL SAHA");
@@ -1450,103 +1450,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   );
 
   // ─────────────────────────────────────────────────────────────
-  // 📜 4. HAZIR TUTANAKLAR STATES & EVENTS
+  // 📜 4. HAZIR TUTANAKLAR (Taşındı -> PersonelIzinScreen)
   // ─────────────────────────────────────────────────────────────
-  const [tutanakType, setTutanakType] = useState<'TAHSİS' | 'TESLİM' | 'SEVK' | 'HASAR' | 'GENEL' | 'CEZA'>("TAHSİS");
-  const [tutanakSubject, setTutanakSubject] = useState("");
-  const [tutanakPerson, setTutanakPerson] = useState("p1");
-  const [tutanakText, setTutanakText] = useState("");
-  const [taseronAdi, setTaseronAdi] = useState("");
-  const [cezaTutari, setCezaTutari] = useState<number>(0);
 
-  const [tutanakSearch, setTutanakSearch] = useState("");
-  const [editingTutanakId, setEditingTutanakId] = useState<string | null>(null);
-  const [deleteConfirmTutanakId, setDeleteConfirmTutanakId] = useState<string | null>(null);
 
-  const handleSaveTutanak = () => {
-    if (!tutanakSubject || !tutanakText) {
-      alert("Lütfen tutanak konusu ve metin içeriğini doldurun.");
-      return;
-    }
-
-    if (editingTutanakId) {
-      setHazirTutanaklar(prev => prev.map(ht => {
-        if (ht.id === editingTutanakId) {
-          return {
-            ...ht,
-            tutanakTipi: tutanakType,
-            personelId: tutanakPerson,
-            konu: tutanakSubject,
-            icerik: tutanakText,
-            taseronAdi: taseronAdi,
-            cezaTutari: cezaTutari
-          };
-        }
-        return ht;
-      }));
-      setEditingTutanakId(null);
-      setTutanakSubject("");
-      setTutanakText("");
-      setTaseronAdi("");
-      setCezaTutari(0);
-      alert("Tutanak başarıyla güncellendi.");
-    } else {
-      const docNo = `TUT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-      const newDoc: HazirTutanak = {
-        id: `t_${Date.now()}`,
-        tutanakTipi: tutanakType,
-        belgeNo: docNo,
-        personelId: tutanakPerson,
-        konu: tutanakSubject,
-        tarih: new Date().toISOString().split('T')[0],
-        icerik: tutanakText,
-        durum: "TASLAK",
-        aciklama: "Yeni tutanak taslağı açıldı.",
-        taseronAdi: taseronAdi,
-        cezaTutari: cezaTutari
-      };
-
-      setHazirTutanaklar(prev => [newDoc, ...prev]);
-      setTutanakSubject("");
-      setTutanakText("");
-      setTaseronAdi("");
-      setCezaTutari(0);
-      alert(`${docNo} numaralı resmi tutanak taslağı başarıyla kaydedildi.`);
-    }
-  };
-
-  const handleStartEditTutanak = (ht: HazirTutanak) => {
-    setEditingTutanakId(ht.id);
-    setTutanakType(ht.tutanakTipi);
-    setTutanakSubject(ht.konu);
-    setTutanakPerson(ht.personelId || "p1");
-    setTutanakText(ht.icerik);
-    setTaseronAdi(ht.taseronAdi || "");
-    setCezaTutari(ht.cezaTutari || 0);
-  };
-
-  const handleCancelEditTutanak = () => {
-    setEditingTutanakId(null);
-    setTutanakSubject("");
-    setTutanakText("");
-    setTaseronAdi("");
-    setCezaTutari(0);
-  };
-
-  const handleDeleteTutanak = (id: string) => {
-    if (deleteConfirmTutanakId === id) {
-      setHazirTutanaklar(prev => prev.filter(t => t.id !== id));
-      setDeleteConfirmTutanakId(null);
-      if (editingTutanakId === id) {
-        handleCancelEditTutanak();
-      }
-    } else {
-      setDeleteConfirmTutanakId(id);
-      setTimeout(() => {
-        setDeleteConfirmTutanakId(prev => prev === id ? null : prev);
-      }, 4000);
-    }
-  };
 
   // ─────────────────────────────────────────────────────────────
   // 🏢 5. CARI & STOK STATES & EVENTS
@@ -3912,334 +3819,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          📜 VIEW: HAZIR TUTANAKLAR
+          📜 VIEW: HAZIR TUTANAKLAR (Taşındı -> PersonelIzinScreen)
           ───────────────────────────────────────────────────────────── */}
-      {currentSubTab === 'tutanak' && (
-        <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
-          
-          {/* Creator drawer */}
-          <div className="w-full lg:w-[380px] lg:shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
-            <div className="bg-[#2563EB] text-slate-100 p-4 shrink-0">
-              <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Hukuki Belgeler</span>
-              <h3 className="font-display font-semibold text-sm">📜 Yeni Tutanak Oluştur</h3>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Tutanak Şablon Tipi</label>
-                <select 
-                  className="w-full text-xs font-bold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
-                  value={tutanakType}
-                  onChange={(e) => setTutanakType(e.target.value as any)}
-                >
-                  <option value="TAHSİS">Tahsis / Zimmet Tutanağı</option>
-                  <option value="TESLİM">Malzeme Teslim Tutanağı</option>
-                  <option value="SEVK">Sevk / Sevkiyat Tutanağı</option>
-                  <option value="HASAR">Zarar / Hasar Tespit Protokolü</option>
-                  <option value="GENEL">Normal Şantiye Genel Tutanağı</option>
-                  <option value="CEZA">Ceza İhtar Tutanağı</option>
-                </select>
-              </div>
-
-              {tutanakType === 'CEZA' && (
-                <div className="space-y-4 bg-red-50/50 p-3.5 rounded-xl border border-red-200 animate-in fade-in duration-150">
-                  <span className="font-bold text-[9px] text-red-800 uppercase tracking-widest block">⚠️ CEZA UYGULAMA BİLGİLERİ</span>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Ceza Kesilecek Taşeron Firma</label>
-                    <div className="flex gap-2 mt-1">
-                      <select 
-                        className="flex-1 text-xs font-semibold p-2 bg-white border border-[#e2e8f0] rounded-lg"
-                        value={taseronAdi}
-                        onChange={(e) => setTaseronAdi(e.target.value)}
-                      >
-                        <option value="">-- Taşeron Seç (Cari Rehber) --</option>
-                        {cariKartlar.map(c => (
-                          <option key={c.id} value={c.unvan}>{c.unvan}</option>
-                        ))}
-                      </select>
-                      <input 
-                        type="text"
-                        placeholder="Veya manuel yazın"
-                        className="w-1/2 text-xs font-semibold p-2 bg-white border border-[#e2e8f0] rounded-lg"
-                        value={taseronAdi}
-                        onChange={(e) => setTaseronAdi(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Uygulanacak Ceza Tutarı (₺)</label>
-                    <input 
-                      type="number" 
-                      min={0}
-                      className="w-full text-xs font-semibold mt-1 p-2 bg-white border border-[#e2e8f0] rounded-lg"
-                      placeholder="₺0.00"
-                      value={cezaTutari || ""}
-                      onChange={(e) => setCezaTutari(parseFloat(e.target.value) || 0)}
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Tutanak Konusu / Başlığı *</label>
-                <input 
-                  type="text" 
-                  className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
-                  placeholder="Örn: Transit Kaza Hasar Tespit"
-                  value={tutanakSubject}
-                  onChange={(e) => setTutanakSubject(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Muhatap Personel</label>
-                <select 
-                  className="w-full text-xs font-semibold mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg"
-                  value={tutanakPerson}
-                  onChange={(e) => setTutanakPerson(e.target.value)}
-                >
-                  {personeller.map(p => (
-                    <option key={p.id} value={p.id}>{p.ad} {p.soyad} ({p.gorev})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="bg-gradient-to-tr from-purple-50 to-indigo-50 border border-indigo-150 rounded-xl p-3.5 space-y-2">
-                <span className="font-extrabold text-indigo-900 tracking-wide text-[9px] uppercase block">🧙‍♂️ YAPAY ZEKA TUTANAK SİHİRBAZI</span>
-                <p className="text-[10px] text-indigo-700 font-medium">Olayı kısaca anlatıp yapay zekaya resmi hukuk dilinde tutanak yazdırın.</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    id="ai-tutanak-prompt"
-                    placeholder="Örn: Hasan Usta baret takmadığı için uyarıldı"
-                    className="flex-grow p-1.5 border border-indigo-250 bg-white rounded-lg text-[10px]"
-                  />
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const promptInput = document.getElementById('ai-tutanak-prompt') as HTMLInputElement;
-                      if (!promptInput || !promptInput.value.trim()) {
-                        alert("Lütfen olay detaylarını yazınız.");
-                        return;
-                      }
-                      try {
-                        const response = await fetch('/api/generate-tutanak', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            konu: tutanakSubject || "Şantiye Durum Tespit",
-                            detaylar: promptInput.value,
-                            muhatap: tutanakPerson ? personeller.find(p => p.id === tutanakPerson)?.ad : ""
-                          })
-                        });
-                        const data = await response.json();
-                        if (data.success) {
-                          setTutanakText(data.text);
-                          alert("Tutanak taslağı başarıyla oluşturuldu!");
-                        } else {
-                          throw new Error(data.error);
-                        }
-                      } catch (err: any) {
-                        alert("Yapay zeka hatası: " + err.message);
-                      }
-                    }}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] px-3.5 py-1.5 rounded-lg transition cursor-pointer"
-                  >
-                    Yazdır
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Tutanak Metin İçeriği *</label>
-                <textarea 
-                  className="w-full text-xs mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg resize-none font-sans"
-                  rows={6}
-                  placeholder="Hukuki dili koruyarak şantiye kurallarına göre tutanak detaylarını yazın..."
-                  value={tutanakText}
-                  onChange={(e) => setTutanakText(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="p-4 border-t bg-slate-50">
-              {editingTutanakId ? (
-                <div className="flex flex-col space-y-2">
-                  <button 
-                    onClick={handleSaveTutanak}
-                    className="w-full bg-[#3b82f6] hover:bg-[#2563eb] text-white font-bold text-xs py-2.5 rounded-xl shadow transition cursor-pointer"
-                  >
-                    Tutanak Taslağını Güncelle
-                  </button>
-                  <button 
-                    onClick={handleCancelEditTutanak}
-                    className="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs py-2 rounded-xl transition cursor-pointer"
-                  >
-                    Düzenlemeyi İptal Et
-                  </button>
-                </div>
-              ) : (
-                <button 
-                  onClick={handleSaveTutanak}
-                  className="w-full bg-[#10b981] hover:bg-[#059669] text-white font-bold text-xs py-2.5 rounded-xl shadow transition cursor-pointer"
-                >
-                  Tutanak Taslağını Kaydet
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* List waybills screen column */}
-          <div className="flex-1 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
-            <div className="p-4 border-b border-[#e2e8f0] bg-slate-50/50 flex flex-col space-y-2.5">
-              <div className="flex items-center space-x-2">
-                <FileText size={16} className="text-[#2563EB]" />
-                <h4 className="font-display font-bold text-sm text-slate-800 uppercase tracking-widest">Hazır Şantiye Tutanakları</h4>
-              </div>
-              <div className="relative">
-                <input 
-                  type="text"
-                  placeholder="Belge no, konu, içerik veya tip ara..."
-                  value={tutanakSearch}
-                  onChange={(e) => setTutanakSearch(e.target.value)}
-                  className="w-full bg-white text-xs text-slate-800 border border-slate-250 rounded-lg py-1.5 pl-3 pr-8 placeholder-slate-400 focus:outline-none  transition font-medium"
-                />
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {hazirTutanaklar
-                .filter(ht => {
-                  const keyword = tutanakSearch.toLowerCase().trim();
-                  if (!keyword) return true;
-                  return (
-                    ht.belgeNo.toLowerCase().includes(keyword) ||
-                    ht.konu.toLowerCase().includes(keyword) ||
-                    ht.icerik.toLowerCase().includes(keyword) ||
-                    ht.tutanakTipi.toLowerCase().includes(keyword)
-                  );
-                })
-                .map(ht => {
-                  const targetP = personeller.find(p => p.id === ht.personelId);
-                return (
-                  <div key={ht.id} className="border border-slate-150 rounded-xl p-5 bg-white space-y-4 hover:shadow transition">
-                    <div className="flex justify-between items-center text-xs border-b pb-2.5">
-                      <div>
-                        <span className="font-mono bg-slate-100 rounded px-2.5 py-0.5 text-slate-700 font-bold border border-slate-200">{ht.belgeNo}</span>
-                        <p className="text-[9px] text-[#2563EB] font-bold mt-1.5 uppercase">TİP: {ht.tutanakTipi} · {ht.tarih}</p>
-                      </div>
-                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
-                        {ht.durum}
-                      </span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <h4 className="font-bold text-slate-900 text-xs">{ht.konu}</h4>
-                      <p className="text-xs text-slate-500 font-medium">Birlikte Tutulan Kişi: <strong className="text-slate-700">{targetP ? `${targetP.ad} ${targetP.soyad}` : "Genel"}</strong></p>
-                    </div>
-
-                    <p className="text-xs text-slate-600 bg-slate-50 border p-3 rounded-lg font-sans tracking-tight leading-relaxed italic">
-                      "{ht.icerik}"
-                    </p>
-
-                    {ht.tutanakTipi === 'CEZA' && (
-                      <div className="bg-red-50 border border-red-200 p-3 rounded-xl text-[10.5px] space-y-1">
-                        <span className="font-bold text-red-800 uppercase block">⚠️ CEZA DETAYLARI:</span>
-                        <p><strong>Cezalı Taşeron:</strong> {ht.taseronAdi || 'Belirtilmemiş'}</p>
-                        <p><strong>Uygulanan Para Cezası:</strong> ₺{(ht.cezaTutari || 0).toLocaleString('tr-TR')}</p>
-                      </div>
-                    )}
-
-                    {ht.imzaliEvrakUrl && (
-                      <div className="border border-slate-200 rounded-xl overflow-hidden max-h-32">
-                        <img src={ht.imzaliEvrakUrl} alt="İmzalı Belge Görseli" className="w-full h-full object-cover" />
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap justify-end gap-2 pt-2 border-t text-[10px]">
-                      {/* Physical Signed Doc Upload */}
-                      <label className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-1 px-2.5 rounded-lg flex items-center space-x-1 cursor-pointer transition">
-                        <Upload size={11} />
-                        <span>{ht.imzaliEvrakUrl ? "İmza Güncelle" : "İmzalı Belge Yükle"}</span>
-                        <input 
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onloadend = async () => {
-                                const rawBase64 = reader.result as string;
-                                const compressed = await compressImage(rawBase64);
-                                setHazirTutanaklar(prev => prev.map(item => {
-                                  if (item.id === ht.id) {
-                                    return {
-                                      ...item,
-                                      imzaliEvrakUrl: compressed,
-                                      durum: 'ONAYLANDI'
-                                    };
-                                  }
-                                  return item;
-                                }));
-                                alert("Islak imzalı tutanak başarıyla sisteme yüklendi!");
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                        />
-                      </label>
-
-                      {/* E-Posta Gönder button if signed */}
-                      {(ht.imzaliEvrakUrl || ht.durum === 'ONAYLANDI') && (
-                        <button
-                          type="button"
-                          onClick={() => alert(`${ht.belgeNo} nolu ıslak imzalı ${ht.tutanakTipi} tutanağı merkez ofise (merkez@kibritci.com) e-posta ile başarıyla gönderildi!`)}
-                          className="bg-sky-600 hover:bg-sky-700 text-white font-bold py-1 px-2.5 rounded-lg transition cursor-pointer flex items-center space-x-1"
-                        >
-                          <Send size={11} />
-                          <span>E-Posta Gönder</span>
-                        </button>
-                      )}
-
-                      <button 
-                        onClick={() => handleStartEditTutanak(ht)}
-                        className="bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold py-1 px-2.5 rounded-lg transition cursor-pointer"
-                      >
-                        ✏️ Düzenle
-                      </button>
-
-                      {deleteConfirmTutanakId === ht.id ? (
-                        <button 
-                          onClick={() => handleDeleteTutanak(ht.id)}
-                          className="bg-red-650 hover:bg-red-700 text-white font-extrabold py-1 px-2.5 rounded-lg transition animate-pulse cursor-pointer"
-                          title="Silmek için tekrar tıklayın"
-                        >
-                          Emin misiniz? Sil
-                        </button>
-                      ) : (
-                        <button 
-                          onClick={() => handleDeleteTutanak(ht.id)}
-                          className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold py-1 px-2.5 rounded-lg transition cursor-pointer"
-                        >
-                          🗑️ Sil
-                        </button>
-                      )}
-
-                      <button 
-                        onClick={() => alert("Hukuki imzalı kopya yazıcıya gönderildi.")}
-                        className="bg-slate-800 hover:bg-slate-700 text-white font-bold py-1 px-3 rounded-lg transition cursor-pointer"
-                      >
-                        🖨️ Islak İmzalı Çıkart
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ─────────────────────────────────────────────────────────────
           💼 VIEW: CARI & STOK KARTLARI
@@ -5643,6 +5224,29 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          📸 MODAL: IMAGE FULLSCREEN VIEWER
+          ───────────────────────────────────────────────────────────── */}
+      {fullScreenImage && (
+        <div 
+          className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-4 md:p-10"
+          onClick={() => setFullScreenImage(null)}
+        >
+          <button 
+            className="absolute top-6 right-6 text-white bg-black/50 hover:bg-black/80 rounded-full w-10 h-10 flex items-center justify-center text-xl transition cursor-pointer"
+            onClick={() => setFullScreenImage(null)}
+          >
+            ✕
+          </button>
+          <img 
+            src={fullScreenImage} 
+            alt="Büyük Görüntü" 
+            className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
+            onClick={(e) => e.stopPropagation()} 
+          />
         </div>
       )}
 

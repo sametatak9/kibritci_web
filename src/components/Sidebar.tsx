@@ -79,18 +79,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ]
     },
     {
-      group: "İŞ MAKİNESİ & OPERATÖR",
-      items: [
-        { key: "operator", label: "Operatör Faaliyetleri", icon: HardHat },
-      ]
-    },
-    {
       group: "İDARİ İŞLER & SAHA",
       items: [
         { key: "arac", label: "Araç ve Demirbaş", icon: Truck },
         { key: "kamp", label: "Kamp Yönetimi", icon: Tent },
         { key: "saha", label: "Saha Faaliyetleri", icon: Building2 },
-        { key: "tutanak", label: "Hazır Tutanaklar", icon: FileText },
+        { key: "operator", label: "Operatör Faaliyetleri", icon: HardHat },
         { key: "formen_ekrani", label: "Formen Mobil Paneli", icon: Contact2 },
         { key: "guvenlik_ekrani", label: "Güvenlik & Kapı Kontrol", icon: ShieldCheck },
         { key: "kampci_ekrani", label: "Kampçı Mobil Paneli", icon: Tent },

@@ -5,6 +5,7 @@ import {
 import { db } from '../lib/firebase';
 import { CorporateReportLayout } from './CorporateReportLayout';
 import { collection, query, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { HazirTutanakTab } from './HazirTutanakTab';
 
 interface IzinFormu {
   id: string;
@@ -33,9 +34,20 @@ interface Personel {
 interface PersonelIzinScreenProps {
   personeller: Personel[];
   currentUser: any;
+  hazirTutanaklar?: any[];
+  setHazirTutanaklar?: any;
+  cariKartlar?: any[];
 }
 
-export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({ personeller, currentUser }) => {
+export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({ 
+  personeller, 
+  currentUser, 
+  hazirTutanaklar = [], 
+  setHazirTutanaklar,
+  cariKartlar = []
+}) => {
+  const [activeTab, setActiveTab] = useState<'izin' | 'tutanak'>('izin');
+  
   const [izinFormlari, setIzinFormlari] = useState<IzinFormu[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -256,7 +268,32 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({ personel
         </div>
       </div>
 
-      <div className="flex-grow overflow-hidden flex flex-col lg:flex-row p-6 gap-6 relative">
+      {/* Sub Tabs */}
+      <div className="flex items-center space-x-1 mb-0 border-b border-slate-200 bg-white px-6 pt-2">
+        <button
+          onClick={() => setActiveTab('izin')}
+          className={`px-4 py-2.5 text-xs font-bold transition border-b-2 ${
+            activeTab === 'izin' 
+              ? 'border-[#10b981] text-[#059669] bg-emerald-50/50' 
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+          }`}
+        >
+          Personel İzin Formları
+        </button>
+        <button
+          onClick={() => setActiveTab('tutanak')}
+          className={`px-4 py-2.5 text-xs font-bold transition border-b-2 ${
+            activeTab === 'tutanak' 
+              ? 'border-[#10b981] text-[#059669] bg-emerald-50/50' 
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+          }`}
+        >
+          Hazır Tutanaklar
+        </button>
+      </div>
+
+      {activeTab === 'izin' && (
+        <div className="flex-grow overflow-hidden flex flex-col lg:flex-row p-6 gap-6 relative">
         
         {/* Left Side: Create form card */}
         <div className="w-full lg:w-[410px] bg-white border border-[#e2e8f0] rounded-2xl p-5 flex flex-col overflow-y-auto shrink-0 shadow-sm">
@@ -515,6 +552,18 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({ personel
           </div>
         </div>
       </div>
+      )}
+
+      {activeTab === 'tutanak' && (
+        <div className="flex-grow p-6 h-[calc(100vh-210px)]">
+          <HazirTutanakTab 
+            hazirTutanaklar={hazirTutanaklar}
+            setHazirTutanaklar={setHazirTutanaklar}
+            personeller={personeller}
+            cariKartlar={cariKartlar}
+          />
+        </div>
+      )}
 
       {/* 🏡 PDF / ONIZLEME MODAL */}
       {selectedIzinForPdf && (

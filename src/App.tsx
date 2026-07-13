@@ -271,8 +271,7 @@ export default function App() {
   const [errorUserNote, setErrorUserNote] = useState('');
   const [sendingError, setSendingError] = useState(false);
 
-  const [showAiAssistant, setShowAiAssistant] = useState(false);
-  const [assistantInput, setAssistantInput] = useState("");
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [assistantMessages, setAssistantMessages] = useState<Array<{ sender: 'user' | 'assistant', text: string }>>([
     { sender: 'assistant', text: 'Merhaba! Ben Kibritçi Şantiye Yapay Zeka Asistanıyım. Size bugün nasıl yardımcı olabilirim?' }
   ]);
@@ -2256,6 +2255,8 @@ export default function App() {
                 <PersonelIzinScreen 
                   personeller={personeller} 
                   currentUser={currentUser}
+                  hazirTutanaklar={hazirTutanaklar}
+                  setHazirTutanaklar={setHazirTutanaklarWithSync}
                 />
               )}
 
@@ -2828,105 +2829,6 @@ export default function App() {
           </div>
         </div>
       )}
-      {/* 🤖 FLOATING AI ASSISTANT WIDGET */}
-      <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end">
-        {showAiAssistant && (
-          <div className="bg-slate-900/95 backdrop-blur-md border border-slate-800 text-white rounded-3xl w-80 sm:w-96 h-[450px] shadow-2xl flex flex-col mb-4 overflow-hidden animate-in slide-in-from-bottom duration-200">
-            {/* Header */}
-            <div className="bg-slate-950 p-4 border-b border-slate-800 flex justify-between items-center">
-              <div className="flex items-center space-x-2">
-                <span className="text-xl">✨</span>
-                <div>
-                  <h4 className="font-display font-semibold text-xs text-white">Kibritçi Şantiye Asistanı</h4>
-                  <span className="text-[9px] text-slate-400">Yapay Zeka Destekli Şantiye Yönetimi</span>
-                </div>
-              </div>
-              <button 
-                onClick={() => setShowAiAssistant(false)}
-                className="text-slate-400 hover:text-white text-xs cursor-pointer"
-              >
-                ✖
-              </button>
-            </div>
-
-            {/* Quick Metrics Summary */}
-            <div className="bg-slate-950/60 p-3 border-b border-slate-850 grid grid-cols-3 gap-2 text-[10px] text-center text-slate-300">
-              <div className="bg-slate-900/40 p-1.5 rounded-lg border border-slate-800/50">
-                <p className="text-slate-500 font-bold uppercase text-[8px]">Personel</p>
-                <p className="font-mono font-bold text-emerald-400 mt-0.5">{personeller.length} Kişi</p>
-              </div>
-              <div className="bg-slate-900/40 p-1.5 rounded-lg border border-slate-800/50">
-                <p className="text-slate-500 font-bold uppercase text-[8px]">Onay Bekleyen</p>
-                <p className="font-mono font-bold text-amber-400 mt-0.5">
-                  {satinAlmaTalepleri.filter(sa => sa.onayDurumu === 'ONAY BEKLİYOR').length + 
-                   irsaliyeler.filter(ir => ir.onayDurumu === 'ONAY BEKLİYOR').length} Adet
-                </p>
-              </div>
-              <div className="bg-slate-900/40 p-1.5 rounded-lg border border-slate-800/50">
-                <p className="text-slate-500 font-bold uppercase text-[8px]">Kritik Stok</p>
-                <p className="font-mono font-bold text-rose-400 mt-0.5">
-                  {stokKartlar.filter(s => (s.miktar || 0) <= (s.kritikSeviye || 5)).length} Kalem
-                </p>
-              </div>
-            </div>
-
-            {/* Message Log */}
-            <div className="flex-1 p-4 overflow-y-auto space-y-3 text-[11px] leading-relaxed">
-              {assistantMessages.map((msg, idx) => (
-                <div 
-                  key={idx} 
-                  className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div className={`max-w-[80%] p-3 rounded-2xl ${
-                    msg.sender === 'user' 
-                      ? 'bg-emerald-600 text-white rounded-br-none' 
-                      : 'bg-slate-800 text-slate-100 rounded-bl-none border border-slate-750'
-                  }`}>
-                    {msg.text}
-                  </div>
-                </div>
-              ))}
-              {assistantLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-slate-800 text-slate-400 p-3 rounded-2xl rounded-bl-none border border-slate-750 flex items-center space-x-1.5">
-                    <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                    <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                    <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Input Bar */}
-            <form 
-              onSubmit={(e) => { e.preventDefault(); handleSendAssistantMessage(); }}
-              className="p-3 border-t border-slate-800 bg-slate-950 flex space-x-2"
-            >
-              <input 
-                type="text"
-                placeholder="Şantiye hakkında soru sorun..."
-                value={assistantInput}
-                onChange={(e) => setAssistantInput(e.target.value)}
-                className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-              />
-              <button 
-                type="submit"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer"
-              >
-                Gönder
-              </button>
-            </form>
-          </div>
-        )}
-
-        <button 
-          onClick={() => setShowAiAssistant(!showAiAssistant)}
-          className="bg-emerald-600 hover:bg-emerald-500 text-white p-3.5 rounded-full shadow-2xl transition duration-150 flex items-center justify-center cursor-pointer hover:scale-105"
-        >
-          <span className="text-xl">🤖</span>
-        </button>
-      </div>
-
     </div>
   );
 }

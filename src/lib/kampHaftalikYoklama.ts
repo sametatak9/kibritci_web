@@ -7,6 +7,7 @@ import {
   YoklamaDurum,
 } from '../types/erp';
 import { saveDocument } from './firebase';
+import { isTaseronPersonel } from './yoklamaUtils';
 
 export interface HaftalikGunKaydi {
   gunNo: number;
@@ -67,6 +68,10 @@ export function buildOdaYoklamaSatirlari(
     );
     for (const reg of occupants) {
       const pid = resolvePersonelId(reg, personeller);
+      if (pid) {
+        const pObj = personeller.find(p => p.id === pid);
+        if (pObj && isTaseronPersonel(pObj)) continue;
+      }
       const personYok = pid ? yoklamalar[pid] : undefined;
       const gunler: HaftalikGunKaydi[] = gunNumaralari.map((gunNo) => {
         const existing = personYok?.[gunNo];
