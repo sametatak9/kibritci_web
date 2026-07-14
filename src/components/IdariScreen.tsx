@@ -385,11 +385,14 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     const firms = new Set<string>();
     kampKayitlari.filter(k => k.durum === 'AKTIF').forEach(k => {
       const p = personeller.find(p => p.id === k.personelId);
-      const fType = k.firmaTipi || p?.firmaTipi;
-      if (fType === 'TASERON') {
-        const fName = k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') || p?.firmaAdi?.trim().toLocaleUpperCase('tr-TR');
-        if (fName) firms.add(fName);
-      }
+      const isAnaFirma = k.firmaTipi === 'ANA_FIRMA' || 
+        (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'KİBRİTÇİ İNŞAAT') ||
+        (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'ANA FİRMA') ||
+        (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'ANA FIRMA') ||
+        (p?.firmaTipi === 'ANA_FIRMA');
+      
+      const fName = isAnaFirma ? 'KİBRİTÇİ İNŞAAT' : (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') || p?.firmaAdi?.trim().toLocaleUpperCase('tr-TR') || 'TAŞERON');
+      firms.add(fName);
     });
     return Array.from(firms).sort();
   }, [kampKayitlari, personeller]);
@@ -2546,17 +2549,18 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     onClick={() => {
                       const activeTaserons = kampKayitlari.filter(k => k.durum === 'AKTIF').filter(k => {
                         const p = personeller.find(p => p.id === k.personelId);
-                        const fType = k.firmaTipi || p?.firmaTipi;
-                        return fType === 'TASERON';
-                      }).filter(k => {
-                        const p = personeller.find(p => p.id === k.personelId);
-                        const firm = (k.calistigiFirma || p?.firmaAdi || '').trim().toLocaleUpperCase('tr-TR');
+                        const isAnaFirma = k.firmaTipi === 'ANA_FIRMA' || 
+                          (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'KİBRİTÇİ İNŞAAT') ||
+                          (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'ANA FİRMA') ||
+                          (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'ANA FIRMA') ||
+                          (p?.firmaTipi === 'ANA_FIRMA');
+                        const firm = isAnaFirma ? 'KİBRİTÇİ İNŞAAT' : (k.calistigiFirma || p?.firmaAdi || 'TAŞERON').trim().toLocaleUpperCase('tr-TR');
                         if (kampPersonelFirmFilter && firm !== kampPersonelFirmFilter) {
                           return false;
                         }
                         if (!kampPersonelSearch.trim()) return true;
                         const s = kampPersonelSearch.toLowerCase();
-                        const name = (p ? `${p.ad} ${p.soyad}` : (k.isimSoyisim || '')).toLowerCase();
+                        const name = (p ? `${p.ad} ${p.soyad}` : (k.personelIsim || '')).toLowerCase();
                         const tc = (p?.tcNo || '').toLowerCase();
                         return name.includes(s) || tc.includes(s);
                       });
@@ -2579,7 +2583,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     onChange={(e) => setKampPersonelFirmFilter(e.target.value)}
                     className="py-1.5 px-3 text-xs font-semibold rounded-lg bg-white/10 text-white border border-white/20 focus:outline-none focus:ring-1 focus:ring-white [&>option]:text-slate-800"
                   >
-                    <option value="">-- Tüm Taşeronlar --</option>
+                    <option value="">-- Tüm Firmalar --</option>
                     {uniqueTaseronFirms.map((firm) => (
                       <option key={firm} value={firm}>{firm}</option>
                     ))}
@@ -2610,24 +2614,32 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   <tbody className="divide-y divide-slate-100">
                     {kampKayitlari.filter(k => k.durum === 'AKTIF').filter(k => {
                       const p = personeller.find(p => p.id === k.personelId);
-                      const fType = k.firmaTipi || p?.firmaTipi;
-                      return fType === 'TASERON';
-                    }).filter(k => {
-                      const p = personeller.find(p => p.id === k.personelId);
-                      const firm = (k.calistigiFirma || p?.firmaAdi || '').trim().toLocaleUpperCase('tr-TR');
+                      const isAnaFirma = k.firmaTipi === 'ANA_FIRMA' || 
+                        (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'KİBRİTÇİ İNŞAAT') ||
+                        (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'ANA FİRMA') ||
+                        (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'ANA FIRMA') ||
+                        (p?.firmaTipi === 'ANA_FIRMA');
+                      
+                      const firm = isAnaFirma ? 'KİBRİTÇİ İNŞAAT' : (k.calistigiFirma || p?.firmaAdi || 'TAŞERON').trim().toLocaleUpperCase('tr-TR');
+                      
                       if (kampPersonelFirmFilter && firm !== kampPersonelFirmFilter) {
                         return false;
                       }
                       if (!kampPersonelSearch.trim()) return true;
                       const s = kampPersonelSearch.toLowerCase();
-                      const name = (p ? `${p.ad} ${p.soyad}` : (k.isimSoyisim || '')).toLowerCase();
+                      const name = (p ? `${p.ad} ${p.soyad}` : (k.personelIsim || '')).toLowerCase();
                       const tc = (p?.tcNo || '').toLowerCase();
                       return name.includes(s) || tc.includes(s);
                     }).map(k => {
                       const p = personeller.find(p => p.id === k.personelId);
-                      const name = p ? `${p.ad} ${p.soyad}` : (k.isimSoyisim || 'Bilinmiyor');
+                      const name = p ? `${p.ad} ${p.soyad}` : (k.personelIsim || 'Bilinmiyor');
                       const tc = p?.tcNo ? `TC: ${p.tcNo}` : '';
-                      const firm = k.calistigiFirma?.trim() || p?.firmaAdi?.trim() || (k.firmaTipi === 'TASERON' ? 'Taşeron (Bilinmiyor)' : 'KİBRİTÇİ İNŞAAT');
+                      const isAnaFirma = k.firmaTipi === 'ANA_FIRMA' || 
+                        (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'KİBRİTÇİ İNŞAAT') ||
+                        (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'ANA FİRMA') ||
+                        (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'ANA FIRMA') ||
+                        (p?.firmaTipi === 'ANA_FIRMA');
+                      const firm = isAnaFirma ? 'KİBRİTÇİ İNŞAAT' : k.calistigiFirma?.trim() || p?.firmaAdi?.trim() || 'TAŞERON';
                       const room = kampOdalari.find(r => r.id === (k.odaId || k.roomId));
                       
                       return (

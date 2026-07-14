@@ -11,7 +11,12 @@ export function generateKampPersonelPdfHtml(
 
   activeResidents.forEach((k) => {
     const p = personeller.find((x) => x.id === k.personelId);
-    const firmName = (k.calistigiFirma || p?.firmaAdi || 'TAŞERON').trim().toLocaleUpperCase('tr-TR');
+    const isAnaFirma = k.firmaTipi === 'ANA_FIRMA' || 
+      (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'KİBRİTÇİ İNŞAAT') ||
+      (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'ANA FİRMA') ||
+      (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'ANA FIRMA') ||
+      (p?.firmaTipi === 'ANA_FIRMA');
+    const firmName = isAnaFirma ? 'KİBRİTÇİ İNŞAAT' : (k.calistigiFirma || p?.firmaAdi || 'TAŞERON').trim().toLocaleUpperCase('tr-TR');
     const name = p ? `${p.ad} ${p.soyad}` : (k.personelIsim || 'Bilinmiyor');
     const tc = p?.tcNo || '';
     const room = kampOdalari.find((r) => r.id === (k.odaId || k.roomId));
@@ -31,7 +36,7 @@ export function generateKampPersonelPdfHtml(
   // 2. Build HTML body
   let bodyHtml = `
     <div class="mb-6">
-      <h2 class="text-xl font-bold text-[#1e4e78] border-b pb-2 uppercase tracking-wide">KAMP SAKİNLERİ YERLEŞİM RAPORU (TAŞERON)</h2>
+      <h2 class="text-xl font-bold text-[#1e4e78] border-b pb-2 uppercase tracking-wide">KAMP SAKİNLERİ YERLEŞİM RAPORU</h2>
     </div>
   `;
 
