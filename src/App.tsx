@@ -457,8 +457,13 @@ export default function App() {
 
   // Son görülme tarihini güncelle (Her 5 dakikada bir en fazla)
   useEffect(() => {
-    if (currentUser?.uid && !currentUser.isMock && kullanicilar.length > 0) {
-      const dbUser = kullanicilar.find(u => u.id === currentUser.uid);
+    if (!currentUser || currentUser.isMock || kullanicilar.length === 0) return;
+
+    const updateLastSeen = () => {
+      const userEmailNorm = currentUser.email?.trim().toLowerCase();
+      const dbUser = kullanicilar.find(
+        (u) => u.email?.trim().toLowerCase() === userEmailNorm || u.id === currentUser.uid
+      );
       if (dbUser) {
         const now = new Date();
         const lastSeen = dbUser.sonGorulmeTarihi ? new Date(dbUser.sonGorulmeTarihi) : new Date(0);
@@ -466,8 +471,15 @@ export default function App() {
           saveKullanici({ ...dbUser, sonGorulmeTarihi: now.toISOString() }).catch(console.error);
         }
       }
-    }
-  }, [currentUser?.uid, kullanicilar.length]);
+    };
+
+    // Run once on tab change or mount
+    updateLastSeen();
+
+    // Check periodically every 1 minute
+    const interval = setInterval(updateLastSeen, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [currentUser?.uid, currentUser?.email, kullanicilar.length, activeTab]);
 
   // 1. Core Synchronization Sync Loader
   useEffect(() => {
@@ -1219,6 +1231,16 @@ export default function App() {
       claimsSyncedRef.current = false;
       bootstrapDoneRef.current = false;
       localStorage.removeItem('kibritci_portal_session');
+
+      // Update last seen before sign out
+      if (currentUser?.email && kullanicilar.length > 0) {
+        const userEmailNorm = currentUser.email.trim().toLowerCase();
+        const dbUser = kullanicilar.find(u => u.email?.trim().toLowerCase() === userEmailNorm);
+        if (dbUser) {
+          await saveKullanici({ ...dbUser, sonGorulmeTarihi: new Date().toISOString() }).catch(console.error);
+        }
+      }
+
       await signOut(auth);
       setCurrentUser(null);
     } catch (err) {
