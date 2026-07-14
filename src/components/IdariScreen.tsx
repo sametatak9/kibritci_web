@@ -31,6 +31,7 @@ import {
 } from '../lib/kampYapisi';
 import { assignKampResident, evictKampResident, suggestPersonelKaydi } from '../lib/kampPlacementUtils';
 import { exportKampYerlesimExcel } from '../lib/kampYerlesimExcelExport';
+import { generateKampPersonelPdfHtml } from '../lib/kampPersonelPdfExport';
 import { openKampKrokiPrintWindow, type KampKrokiPageFormat } from '../lib/kampKrokiPrintHtml';
 import { compressImage } from '../lib/imageCompress';
 import { warnIfDuplicateCari, warnIfDuplicateStok } from '../lib/duplicateNameUtils';
@@ -2540,6 +2541,38 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   <h3 className="font-display font-semibold text-sm">👤 Kamp Yönetimi Personel Listesi</h3>
                 </div>
                 <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => {
+                      const activeTaserons = kampKayitlari.filter(k => k.durum === 'AKTIF').filter(k => {
+                        const p = personeller.find(p => p.id === k.personelId);
+                        const fType = k.firmaTipi || p?.firmaTipi;
+                        return fType === 'TASERON';
+                      }).filter(k => {
+                        const p = personeller.find(p => p.id === k.personelId);
+                        const firm = (k.calistigiFirma || p?.firmaAdi || '').trim().toLocaleUpperCase('tr-TR');
+                        if (kampPersonelFirmFilter && firm !== kampPersonelFirmFilter) {
+                          return false;
+                        }
+                        if (!kampPersonelSearch.trim()) return true;
+                        const s = kampPersonelSearch.toLowerCase();
+                        const name = (p ? `${p.ad} ${p.soyad}` : (k.isimSoyisim || '')).toLowerCase();
+                        const tc = (p?.tcNo || '').toLowerCase();
+                        return name.includes(s) || tc.includes(s);
+                      });
+                      
+                      const pdfHtml = generateKampPersonelPdfHtml(activeTaserons, personeller, kampOdalari);
+                      const w = window.open('', '_blank');
+                      if (w) {
+                        w.document.write(pdfHtml);
+                        w.document.close();
+                      } else {
+                        alert('Pop-up engelleyiciyi kaldırıp tekrar deneyin.');
+                      }
+                    }}
+                    className="py-1.5 px-3 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer transition active:scale-95 flex items-center space-x-1"
+                  >
+                    <span>🖨️ PDF YAZDIR</span>
+                  </button>
                   <select
                     value={kampPersonelFirmFilter}
                     onChange={(e) => setKampPersonelFirmFilter(e.target.value)}
