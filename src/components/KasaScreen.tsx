@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { KasaHareketi } from '../types/erp';
 import { CorporateReportLayout } from './CorporateReportLayout';
+import { exportKasaExcel } from '../lib/kasaExcelExport';
 import { compressImage } from '../lib/imageCompress';
 
 interface KasaScreenProps {
@@ -303,8 +304,8 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
                 value={newType}
                 onChange={(e) => setNewType(e.target.value as any)}
               >
-                <option value="GİRİŞ">📈 GİRİŞ (Gelir / Hakediş)</option>
-                <option value="ÇIKIŞ">📉 ÇIKIŞ (Fişli Gider / Avans)</option>
+                <option value="GİRİŞ">📈 GİRİŞ</option>
+                <option value="ÇIKIŞ">📉 ÇIKIŞ</option>
               </select>
             </div>
 
@@ -338,35 +339,9 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
               />
             </div>
 
-            {/* Referans Tipi */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-500 uppercase block">🔗 Referans Tipi</label>
-              <select 
-                className="w-full text-xs font-semibold p-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer outline-none"
-                value={newRefType}
-                onChange={(e) => setNewRefType(e.target.value as any)}
-              >
-                <option value="DİĞER">DİĞER</option>
-                <option value="FATURA">FATURA</option>
-                <option value="İRSALİYE">İRSALİYE</option>
-                <option value="MAAS">PERSONEL MAAŞI</option>
-                <option value="SATIN ALMA">SATIN ALMA</option>
-              </select>
-            </div>
+            
 
-            {/* Referans ID */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center space-x-1">
-                <span>🆔 Referans ID</span>
-              </label>
-              <input 
-                type="text"
-                placeholder="İsteğe bağlı döküman no veya referans kodu..."
-                className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-xl outline-none "
-                value={newRefId}
-                onChange={(e) => setNewRefId(e.target.value)}
-              />
-            </div>
+            
 
             {/* Fiş/Fotoğraf Dropzone Drag & Drop */}
             <div className="space-y-1">
@@ -499,7 +474,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
               <div>Tarih</div>
               <div>Tip</div>
               <div>Tutar</div>
-              <div className="col-span-2">Açıklama &amp; Referans &amp; İşlem Barları</div>
+              <div className="col-span-2">Açıklama &amp; İşlem Barları</div>
             </div>
 
             {filteredHareketler.length === 0 ? (
@@ -705,7 +680,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
                 docCode={`KOD: KBR-KASA-${Date.now().toString().substring(0, 8)}`}
               >
               <div className="mb-4 pb-3 border-b border-slate-200">
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">ŞANTİYE MERKEZ VE MUHASEBE VE FİNANSAL HAKEDİŞ DAİRESİ</p>
+                
                 <p className="text-[10px] text-slate-650 mt-1">Sorgu Aralığı: <strong className="text-slate-900 font-black">{appliedStartDate} / {appliedEndDate}</strong></p>
               </div>
 
@@ -740,7 +715,7 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
                       <th className="p-2 border-r border-slate-300 w-24 text-left">Tarih</th>
                       <th className="p-2 border-r border-slate-300 w-24 text-left">İşlem Tipi</th>
                       <th className="p-2 border-r border-slate-300 text-left">Açıklama</th>
-                      <th className="p-2 border-r border-slate-300 w-32 text-left">Referans / Evrak No</th>
+                      
                       <th className="p-2 text-right w-36">İşlem Tutarı</th>
                     </tr>
                   </thead>
@@ -801,28 +776,28 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
                   
                   <div className="border border-slate-200 p-3 rounded-xl bg-slate-50/50">
                     <span className="font-extrabold text-[#8B1E1E] tracking-wider uppercase block mb-1">1. MUHASEBE</span>
-                    <span className="text-[10px] text-slate-500 block mb-6">Finansal hakediş ve kasa girişi</span>
+                    
                     <div className="h-10 border-b border-dashed border-slate-200 w-24 mx-auto mb-2"></div>
                     <span className="text-[10px] font-bold text-slate-800 block">Bordro Yetkilisi</span>
                   </div>
 
                   <div className="border border-slate-200 p-3 rounded-xl bg-slate-50/50">
                     <span className="font-extrabold text-[#1E4E78] tracking-wider uppercase block mb-1">2. İDARİ İŞLER</span>
-                    <span className="text-[10px] text-slate-500 block mb-6">Şantiye Şefliği</span>
+                    
                     <div className="h-10 border-b border-dashed border-slate-200 w-24 mx-auto mb-2"></div>
                     <span className="text-[10px] font-bold text-slate-800 block">İdari İşler Şefi</span>
                   </div>
 
                   <div className="border border-slate-200 p-3 rounded-xl bg-slate-50/50">
                     <span className="font-extrabold text-[#1E4E78] tracking-wider uppercase block mb-1">3. ŞANTİYE ŞEFİ</span>
-                    <span className="text-[10px] text-slate-500 block mb-6">Saha organizasyonu fiili kontrol</span>
+                    
                     <div className="h-10 border-b border-dashed border-slate-200 w-24 mx-auto mb-2"></div>
                     <span className="text-[10px] font-bold text-slate-800 block">Şantiye Şefi</span>
                   </div>
 
                   <div className="border border-slate-150 p-3 rounded-xl bg-slate-50">
                     <span className="font-extrabold text-[#8B1E1E] tracking-wider uppercase block mb-1">4. PROJE MÜDÜRÜ</span>
-                    <span className="text-[10px] text-slate-500 block mb-6">Müteahhit ve Nihai Onaycı Müdür</span>
+                    
                     <div className="h-10 border-b border-dashed border-slate-200 w-24 mx-auto mb-2"></div>
                     <span className="text-[10px] font-bold text-slate-800 block">Proje Müdürü</span>
                   </div>

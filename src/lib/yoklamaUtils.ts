@@ -139,7 +139,8 @@ function parseFlexibleDateParts(
   if (dm) {
     const day = Number(dm[1]);
     const month = Number(dm[2]);
-    const year = new Date().getFullYear();
+    // Kibritci ERP verileri 2024 yılı çıkışlı olduğundan yıl belirtilmeyen tarihleri 2024 kabul ediyoruz.
+    const year = 2024;
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
       return { year, month, day };
     }
