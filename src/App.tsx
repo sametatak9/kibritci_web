@@ -454,6 +454,20 @@ export default function App() {
     });
   }, [authLoading, currentUser?.email, currentUser?.uid]);
 
+  // Son görülme tarihini güncelle (Her 5 dakikada bir en fazla)
+  useEffect(() => {
+    if (currentUser?.uid && !currentUser.isMock && kullanicilar.length > 0) {
+      const dbUser = kullanicilar.find(u => u.id === currentUser.uid);
+      if (dbUser) {
+        const now = new Date();
+        const lastSeen = dbUser.sonGorulmeTarihi ? new Date(dbUser.sonGorulmeTarihi) : new Date(0);
+        if (now.getTime() - lastSeen.getTime() > 5 * 60 * 1000) {
+          saveKullanici({ ...dbUser, sonGorulmeTarihi: now.toISOString() }).catch(console.error);
+        }
+      }
+    }
+  }, [currentUser?.uid, kullanicilar.length]);
+
   // 1. Core Synchronization Sync Loader
   useEffect(() => {
     if (authLoading || !currentUser || bootstrapDoneRef.current) return;

@@ -58,6 +58,7 @@ export interface Kullanici {
   soyad?: string;
   tcNo?: string;
   imzaText?: string;
+  sonGorulmeTarihi?: string;
   imzaStyle?: string;
   imzaCanvas?: string;
   matchedPersonelId?: string;
