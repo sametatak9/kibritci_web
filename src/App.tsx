@@ -191,6 +191,7 @@ export default function App() {
     };
   }, []);
 
+
   useEffect(() => {
     if (currentUser) {
       setIsMobileMode(localStorage.getItem('kibritci_mobile_mode') === 'true');
@@ -1239,7 +1240,13 @@ export default function App() {
 
   const setPersonellerWithSync = (updater: Personel[] | ((p: Personel[]) => Personel[])) => {
     setPersoneller(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
+      const nextRaw = typeof updater === 'function' ? updater(prev) : updater;
+      const next = nextRaw.map(p => 
+        (p.ad === 'MURAT' && p.soyad === 'ÇÖREKÇİ' && p.iseGirisTarihi === '2026-08-06') 
+          ? { ...p, iseGirisTarihi: '2026-06-08' } 
+          : p
+      );
+
       const prevIds = new Set(prev.map((p) => p.id as string));
       const nextIds = new Set(next.map((p) => p.id as string));
       let added = 0;
@@ -1253,6 +1260,16 @@ export default function App() {
       return next;
     });
   };
+
+  // One-time patch for Murat Çörekçi's date bug
+  useEffect(() => {
+    if (personeller.length > 0) {
+      const wrongMurat = personeller.find(p => p.ad === 'MURAT' && p.soyad === 'ÇÖREKÇİ' && p.iseGirisTarihi === '2026-08-06');
+      if (wrongMurat) {
+        setPersonellerWithSync(prev => prev.map(p => p.id === wrongMurat.id ? { ...p, iseGirisTarihi: '2026-06-08' } : p));
+      }
+    }
+  }, [personeller]);
 
   const setSatinAlmaTalepleriWithSync = (updater: SatinAlmaTalebi[] | ((s: SatinAlmaTalebi[]) => SatinAlmaTalebi[])) => {
     setSatinAlmaTalepleri(prev => {
