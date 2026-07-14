@@ -1274,15 +1274,24 @@ export default function App() {
   // Recovery: Auto-create missing personeller from active kampKayitlari & Uppercase all company names to prevent duplicate casings
   useEffect(() => {
     if (personeller.length > 0 && kampKayitlari.length > 0) {
-      // 1. Capitalize all company names in personeller
+      // 1. Capitalize all company names in personeller & convert "ANA FİRMA"/"ANA FIRMA" to "KİBRİTÇİ İNŞAAT"
       const needsPersonelFirmaFix = personeller.some(
-        (p) => p.firmaAdi && p.firmaAdi !== p.firmaAdi.toLocaleUpperCase('tr-TR')
+        (p) => {
+          const upper = (p.firmaAdi || '').trim().toLocaleUpperCase('tr-TR');
+          return p.firmaAdi && (p.firmaAdi !== upper || upper === 'ANA FİRMA' || upper === 'ANA FIRMA' || (p.firmaTipi === 'ANA_FIRMA' && p.firmaAdi !== 'KİBRİTÇİ İNŞAAT'));
+        }
       );
       if (needsPersonelFirmaFix) {
         setPersonellerWithSync((prev) =>
           prev.map((p) => {
+            if (p.firmaTipi === 'ANA_FIRMA') {
+              return { ...p, firmaAdi: 'KİBRİTÇİ İNŞAAT' };
+            }
             if (p.firmaAdi) {
-              const upper = p.firmaAdi.toLocaleUpperCase('tr-TR');
+              let upper = p.firmaAdi.trim().toLocaleUpperCase('tr-TR');
+              if (upper === 'ANA FİRMA' || upper === 'ANA FIRMA') {
+                return { ...p, firmaTipi: 'ANA_FIRMA', firmaAdi: 'KİBRİTÇİ İNŞAAT' };
+              }
               if (p.firmaAdi !== upper) {
                 return { ...p, firmaAdi: upper };
               }
@@ -1292,14 +1301,27 @@ export default function App() {
         );
       }
 
-      // 2. Capitalize all calistigiFirma in kampKayitlari & sync them
+      // 2. Capitalize all calistigiFirma in kampKayitlari, convert "ANA FİRMA"/"ANA FIRMA" to "KİBRİTÇİ İNŞAAT" & sync them
       const needsKampFirmaFix = kampKayitlari.some(
-        (k) => k.calistigiFirma && k.calistigiFirma !== k.calistigiFirma.toLocaleUpperCase('tr-TR')
+        (k) => {
+          const upper = (k.calistigiFirma || '').trim().toLocaleUpperCase('tr-TR');
+          return k.calistigiFirma && (k.calistigiFirma !== upper || upper === 'ANA FİRMA' || upper === 'ANA FIRMA' || (k.firmaTipi === 'ANA_FIRMA' && k.calistigiFirma !== 'KİBRİTÇİ İNŞAAT'));
+        }
       );
       if (needsKampFirmaFix) {
         const nextKayitlar = kampKayitlari.map((k) => {
+          if (k.firmaTipi === 'ANA_FIRMA') {
+            const updated = { ...k, calistigiFirma: 'KİBRİTÇİ İNŞAAT' };
+            void saveDocument('kampKayitlari', updated);
+            return updated;
+          }
           if (k.calistigiFirma) {
-            const upper = k.calistigiFirma.toLocaleUpperCase('tr-TR');
+            let upper = k.calistigiFirma.trim().toLocaleUpperCase('tr-TR');
+            if (upper === 'ANA FİRMA' || upper === 'ANA FIRMA') {
+              const updated = { ...k, firmaTipi: 'ANA_FIRMA' as const, calistigiFirma: 'KİBRİTÇİ İNŞAAT' };
+              void saveDocument('kampKayitlari', updated);
+              return updated;
+            }
             if (k.calistigiFirma !== upper) {
               const updated = { ...k, calistigiFirma: upper };
               void saveDocument('kampKayitlari', updated);
@@ -1313,7 +1335,7 @@ export default function App() {
 
       // 3. Find active residents who don't exist in personeller and create them
       const activeResidents = kampKayitlari.filter(
-        (k) => k.durum === 'AKTIF' && k.firmaTipi === 'TASERON'
+        (k) => k.durum === 'AKTIF'
       );
       const toCreate: Personel[] = [];
 
@@ -1335,6 +1357,11 @@ export default function App() {
           const parts = nameClean.split(/\s+/);
           const ad = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0];
           const soyad = parts.length > 1 ? parts[parts.length - 1] : '';
+
+          const isAnaFirma = k.firmaTipi === 'ANA_FIRMA' || 
+            (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'KİBRİTÇİ İNŞAAT') ||
+            (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'ANA FİRMA') ||
+            (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'ANA FIRMA');
 
           const newP: Personel = {
             id: k.personelId || `p_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -1359,8 +1386,8 @@ export default function App() {
             subeAdi: '',
             ibanNo: '',
             durum: true,
-            firmaTipi: 'TASERON',
-            firmaAdi: k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') || 'TAŞERON',
+            firmaTipi: isAnaFirma ? 'ANA_FIRMA' : 'TASERON',
+            firmaAdi: isAnaFirma ? 'KİBRİTÇİ İNŞAAT' : (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') || 'TAŞERON'),
           };
           toCreate.push(newP);
         }

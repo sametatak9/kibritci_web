@@ -645,7 +645,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
 
     const firma =
       residentFirmaTipi === 'ANA_FIRMA'
-        ? 'Ana Firma'
+        ? 'KİBRİTÇİ İNŞAAT'
         : residentFirmaKaynak === 'DB'
           ? residentInputFirma
           : residentInputFirma.trim();
@@ -667,8 +667,9 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
         kampKayitlari,
       });
 
-      if (!residentPersonelId && residentFirmaTipi === 'TASERON') {
-        suggestPersonelKaydi(residentInputName.trim(), firma, () => {
+      if (!residentPersonelId) {
+        const targetFirma = residentFirmaTipi === 'ANA_FIRMA' ? 'KİBRİTÇİ İNŞAAT' : firma;
+        suggestPersonelKaydi(residentInputName.trim(), targetFirma, () => {
           if (setPersoneller) {
             const isimTrim = residentInputName.trim();
             const parts = isimTrim.split(/\s+/);
@@ -698,11 +699,11 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
               subeAdi: '',
               ibanNo: '',
               durum: true,
-              firmaTipi: 'TASERON' as const,
-              firmaAdi: firma,
+              firmaTipi: residentFirmaTipi,
+              firmaAdi: targetFirma,
             };
             setPersoneller(prev => [newPersonel, ...prev]);
-            alert(`"${isimTrim}" isimli personel Taşeron firma (${firma}) kaydıyla Personel veritabanına eklendi.`);
+            alert(`"${isimTrim}" isimli personel ${targetFirma} kaydıyla Personel veritabanına eklendi.`);
           }
         });
       }
