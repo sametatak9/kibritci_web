@@ -30,6 +30,7 @@ export interface KullaniciLike {
   yetki?: string;
   durum?: string;
   kayitTarihi?: string;
+  sonGorulmeTarihi?: string;
   ad?: string;
   soyad?: string;
   tcNo?: string;

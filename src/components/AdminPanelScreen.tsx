@@ -622,12 +622,14 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                   <p className="text-xs font-semibold">Kayıtlı kullanıcı hesabı bulunamadı.</p>
                 </div>
               ) : (
-                <div className="border border-slate-100 rounded-2xl overflow-hidden bg-white max-w-5xl mx-auto w-full">
-                  <table className="w-full text-left text-xs text-slate-700">
-                    <thead>
-                      <tr className="bg-slate-50 uppercase text-[9px] font-black text-slate-400 tracking-wider">
+                <div className="border border-slate-100 rounded-2xl bg-white max-w-5xl mx-auto w-full overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[750px] text-left text-xs text-slate-700">
+                      <thead>
+                        <tr className="bg-slate-50 uppercase text-[9px] font-black text-slate-400 tracking-wider">
                         <th className="p-3">Kullanıcı Hesabı (E-Posta)</th>
                         <th className="p-3">Kayıt Tarihi</th>
+                        <th className="p-3">Son Görülme</th>
                         <th className="p-3">Görev / Yetki Rolü</th>
                         <th className="p-3 text-center">Durum</th>
                         <th className="p-3 text-right">Eylemler</th>
@@ -688,6 +690,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                               </div>
                             </td>
                             <td className="p-3 font-mono text-slate-400">{user.kayitTarihi || new Date().toISOString().split('T')[0]}</td>
+                            <td className="p-3 font-mono text-emerald-600 font-bold">{user.sonGorulmeTarihi ? new Date(user.sonGorulmeTarihi).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
                             <td className="p-3">
                               <div className="flex flex-col gap-1.5">
                                 <select 
@@ -777,6 +780,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                       })}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               )}
             </div>
