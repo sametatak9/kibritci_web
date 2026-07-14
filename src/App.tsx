@@ -1271,6 +1271,125 @@ export default function App() {
     }
   }, [personeller]);
 
+  // Recovery: Auto-create missing personeller from active kampKayitlari & Uppercase all company names to prevent duplicate casings
+  useEffect(() => {
+    if (personeller.length > 0 && kampKayitlari.length > 0) {
+      // 1. Capitalize all company names in personeller
+      const needsPersonelFirmaFix = personeller.some(
+        (p) => p.firmaAdi && p.firmaAdi !== p.firmaAdi.toLocaleUpperCase('tr-TR')
+      );
+      if (needsPersonelFirmaFix) {
+        setPersonellerWithSync((prev) =>
+          prev.map((p) => {
+            if (p.firmaAdi) {
+              const upper = p.firmaAdi.toLocaleUpperCase('tr-TR');
+              if (p.firmaAdi !== upper) {
+                return { ...p, firmaAdi: upper };
+              }
+            }
+            return p;
+          })
+        );
+      }
+
+      // 2. Capitalize all calistigiFirma in kampKayitlari & sync them
+      const needsKampFirmaFix = kampKayitlari.some(
+        (k) => k.calistigiFirma && k.calistigiFirma !== k.calistigiFirma.toLocaleUpperCase('tr-TR')
+      );
+      if (needsKampFirmaFix) {
+        const nextKayitlar = kampKayitlari.map((k) => {
+          if (k.calistigiFirma) {
+            const upper = k.calistigiFirma.toLocaleUpperCase('tr-TR');
+            if (k.calistigiFirma !== upper) {
+              const updated = { ...k, calistigiFirma: upper };
+              void saveDocument('kampKayitlari', updated);
+              return updated;
+            }
+          }
+          return k;
+        });
+        setKampKayitlari(nextKayitlar);
+      }
+
+      // 3. Find active residents who don't exist in personeller and create them
+      const activeResidents = kampKayitlari.filter(
+        (k) => k.durum === 'AKTIF' && k.firmaTipi === 'TASERON'
+      );
+      const toCreate: Personel[] = [];
+
+      activeResidents.forEach((k) => {
+        const nameClean = k.personelIsim.trim();
+        if (!nameClean) return;
+
+        const exists = personeller.some((p) => {
+          const fullName = `${p.ad} ${p.soyad}`.trim().toLocaleLowerCase('tr-TR');
+          return fullName === nameClean.toLocaleLowerCase('tr-TR');
+        });
+
+        const alreadyQueued = toCreate.some((p) => {
+          const fullName = `${p.ad} ${p.soyad}`.trim().toLocaleLowerCase('tr-TR');
+          return fullName === nameClean.toLocaleLowerCase('tr-TR');
+        });
+
+        if (!exists && !alreadyQueued) {
+          const parts = nameClean.split(/\s+/);
+          const ad = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0];
+          const soyad = parts.length > 1 ? parts[parts.length - 1] : '';
+
+          const newP: Personel = {
+            id: k.personelId || `p_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            tcNo: '',
+            ad: ad,
+            soyad: soyad,
+            babaAdi: '',
+            dogumTarihi: '',
+            telefonNo: '',
+            eposta: '',
+            adres: '',
+            il: '',
+            ilce: '',
+            departman: 'ŞANTİYE',
+            gorev: 'DÜZ İŞÇİ',
+            iseGirisTarihi: k.girisTarihi || new Date().toISOString().split('T')[0],
+            cinsiyet: 'Erkek',
+            maas: 30000,
+            ucretTipi: 'Aylık',
+            sgkDurumu: "SGK'lı",
+            bankaAdi: '',
+            subeAdi: '',
+            ibanNo: '',
+            durum: true,
+            firmaTipi: 'TASERON',
+            firmaAdi: k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') || 'TAŞERON',
+          };
+          toCreate.push(newP);
+        }
+      });
+
+      if (toCreate.length > 0) {
+        console.log(`Auto-creating ${toCreate.length} missing personeller from active kampKayitlari...`, toCreate);
+        setPersonellerWithSync((prev) => [...toCreate, ...prev]);
+
+        const nextKayitlar = kampKayitlari.map((k) => {
+          if (k.durum === 'AKTIF') {
+            const matchedCreated = toCreate.find((p) => {
+              const fullName = `${p.ad} ${p.soyad}`.trim().toLocaleLowerCase('tr-TR');
+              return fullName === k.personelIsim.trim().toLocaleLowerCase('tr-TR');
+            });
+            if (matchedCreated && !k.personelId) {
+              const updated = { ...k, personelId: matchedCreated.id };
+              void saveDocument('kampKayitlari', updated);
+              return updated;
+            }
+          }
+          return k;
+        });
+        setKampKayitlari(nextKayitlar);
+      }
+    }
+  }, [personeller, kampKayitlari]);
+
+
   const setSatinAlmaTalepleriWithSync = (updater: SatinAlmaTalebi[] | ((s: SatinAlmaTalebi[]) => SatinAlmaTalebi[])) => {
     setSatinAlmaTalepleri(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
