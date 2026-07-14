@@ -380,12 +380,26 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     [cariKartlar]
   );
 
+  const uniqueTaseronFirms = useMemo(() => {
+    const firms = new Set<string>();
+    kampKayitlari.filter(k => k.durum === 'AKTIF').forEach(k => {
+      const p = personeller.find(p => p.id === k.personelId);
+      const fType = k.firmaTipi || p?.firmaTipi;
+      if (fType === 'TASERON') {
+        const fName = k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') || p?.firmaAdi?.trim().toLocaleUpperCase('tr-TR');
+        if (fName) firms.add(fName);
+      }
+    });
+    return Array.from(firms).sort();
+  }, [kampKayitlari, personeller]);
+
   const [selectedYerleske, setSelectedYerleske] = useState("");
   const [selectedKat, setSelectedKat] = useState("");
   
   const [campCreationStep, setCampCreationStep] = useState<'campus' | 'floor' | 'room'>('room');
   const [kampMainView, setKampMainView] = useState<'odalar' | 'faaliyet' | 'personel'>('odalar');
   const [kampPersonelSearch, setKampPersonelSearch] = useState('');
+  const [kampPersonelFirmFilter, setKampPersonelFirmFilter] = useState('');
   const [newCampusInput, setNewCampusInput] = useState("");
   const [newFloorInput, setNewFloorInput] = useState("");
 
@@ -2525,18 +2539,30 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   <span className="text-[10px] font-bold tracking-widest text-slate-300 uppercase">Kamp & Barınma</span>
                   <h3 className="font-display font-semibold text-sm">👤 Kamp Yönetimi Personel Listesi</h3>
                 </div>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="İsim, TC veya Firma Ara..."
-                    value={kampPersonelSearch}
-                    onChange={(e) => setKampPersonelSearch(e.target.value)}
-                    className="w-64 pl-8 py-1.5 text-xs font-semibold rounded-lg bg-white/10 text-white placeholder-slate-300 border border-white/20 focus:outline-none focus:ring-1 focus:ring-white"
-                  />
-                  <span className="absolute left-2.5 top-2 text-slate-300">🔍</span>
+                <div className="flex items-center space-x-2">
+                  <select
+                    value={kampPersonelFirmFilter}
+                    onChange={(e) => setKampPersonelFirmFilter(e.target.value)}
+                    className="py-1.5 px-3 text-xs font-semibold rounded-lg bg-white/10 text-white border border-white/20 focus:outline-none focus:ring-1 focus:ring-white [&>option]:text-slate-800"
+                  >
+                    <option value="">-- Tüm Taşeronlar --</option>
+                    {uniqueTaseronFirms.map((firm) => (
+                      <option key={firm} value={firm}>{firm}</option>
+                    ))}
+                  </select>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="İsim veya TC Ara..."
+                      value={kampPersonelSearch}
+                      onChange={(e) => setKampPersonelSearch(e.target.value)}
+                      className="w-48 pl-8 py-1.5 text-xs font-semibold rounded-lg bg-white/10 text-white placeholder-slate-300 border border-white/20 focus:outline-none focus:ring-1 focus:ring-white"
+                    />
+                    <span className="absolute left-2.5 top-2 text-slate-300">🔍</span>
+                  </div>
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto p-0">
+              <div className="flex-grow overflow-y-auto p-0">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
                     <tr>
@@ -2549,13 +2575,20 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {kampKayitlari.filter(k => k.durum === 'AKTIF').filter(k => {
+                      const p = personeller.find(p => p.id === k.personelId);
+                      const fType = k.firmaTipi || p?.firmaTipi;
+                      return fType === 'TASERON';
+                    }).filter(k => {
+                      const p = personeller.find(p => p.id === k.personelId);
+                      const firm = (k.calistigiFirma || p?.firmaAdi || '').trim().toLocaleUpperCase('tr-TR');
+                      if (kampPersonelFirmFilter && firm !== kampPersonelFirmFilter) {
+                        return false;
+                      }
                       if (!kampPersonelSearch.trim()) return true;
                       const s = kampPersonelSearch.toLowerCase();
-                      const p = personeller.find(p => p.id === k.personelId);
                       const name = (p ? `${p.ad} ${p.soyad}` : (k.isimSoyisim || '')).toLowerCase();
                       const tc = (p?.tcNo || '').toLowerCase();
-                      const firm = (k.calistigiFirma || p?.firmaAdi || k.firmaTipi || '').toLowerCase();
-                      return name.includes(s) || tc.includes(s) || firm.includes(s);
+                      return name.includes(s) || tc.includes(s);
                     }).map(k => {
                       const p = personeller.find(p => p.id === k.personelId);
                       const name = p ? `${p.ad} ${p.soyad}` : (k.isimSoyisim || 'Bilinmiyor');
