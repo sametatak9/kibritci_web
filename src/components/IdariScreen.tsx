@@ -85,6 +85,7 @@ interface IdariScreenProps {
   epostaGonderimleri: EpostaGonderim[];
   setEpostaGonderimleri: React.Dispatch<React.SetStateAction<EpostaGonderim[]>>;
   personeller: Personel[];
+  setPersoneller?: React.Dispatch<React.SetStateAction<Personel[]>>;
   aracKmLoglari: any[];
   setAracKmLoglari: (updater: any) => void;
   yoklamalar?: AylikYoklamaMap;
@@ -126,6 +127,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   stokKartlar, setStokKartlar,
   epostaGonderimleri, setEpostaGonderimleri,
   personeller,
+  setPersoneller,
   aracKmLoglari,
   setAracKmLoglari,
   yoklamalar = {},
@@ -651,7 +653,43 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       });
 
       if (!residentPersonelId && residentFirmaTipi === 'TASERON') {
-        suggestPersonelKaydi(residentInputName.trim(), firma);
+        suggestPersonelKaydi(residentInputName.trim(), firma, () => {
+          if (setPersoneller) {
+            const isimTrim = residentInputName.trim();
+            const parts = isimTrim.split(/\s+/);
+            const ad = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0];
+            const soyad = parts.length > 1 ? parts[parts.length - 1] : '';
+            
+            const newPersonel = {
+              id: `p_${Date.now()}`,
+              tcNo: '',
+              ad: ad,
+              soyad: soyad,
+              babaAdi: '',
+              dogumTarihi: '',
+              telefonNo: '',
+              eposta: '',
+              adres: '',
+              il: '',
+              ilce: '',
+              departman: 'ŞANTİYE',
+              gorev: 'DÜZ İŞÇİ',
+              iseGirisTarihi: new Date().toISOString().split('T')[0],
+              cinsiyet: 'Erkek',
+              maas: 30000,
+              ucretTipi: 'Aylık' as const,
+              sgkDurumu: "SGK'lı" as const,
+              bankaAdi: '',
+              subeAdi: '',
+              ibanNo: '',
+              durum: true,
+              firmaTipi: 'TASERON' as const,
+              firmaAdi: firma,
+            };
+            setPersoneller(prev => [newPersonel, ...prev]);
+            alert(`"${isimTrim}" isimli personel Taşeron firma (${firma}) kaydıyla Personel veritabanına eklendi.`);
+          }
+        });
       }
 
       resetAssignModal();

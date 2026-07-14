@@ -2417,6 +2417,7 @@ export default function App() {
                   epostaGonderimleri={epostaGonderimleri}
                   setEpostaGonderimleri={setEpostaGonderimleriWithSync}
                   personeller={personeller}
+                  setPersoneller={setPersonellerWithSync}
                   aracKmLoglari={aracKmLoglari}
                   setAracKmLoglari={setAracKmLoglariWithSync}
                   yoklamalar={yoklamalar}
