@@ -258,6 +258,29 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [newMuayene, setNewMuayene] = useState("");
   const [newYagKm, setNewYagKm] = useState(10000);
   const [newBakimKm, setNewBakimKm] = useState(15000);
+  const [editingAracId, setEditingAracId] = useState<string | null>(null);
+
+  const handleStartEditArac = (ar: AracBakim) => {
+    setEditingAracId(ar.id);
+    setNewPlaka(ar.plaka);
+    setNewModel(ar.markaModel);
+    setNewAracType(ar.aracTipi as any);
+    setNewSorumlu(ar.sorumluPersonelId || "");
+    setNewMuayene(ar.muayeneTarihi || "");
+    setNewYagKm(ar.yagBakimKm || 10000);
+    setNewBakimKm(ar.kmBakimAraligi || 15000);
+  };
+
+  const handleCancelEditArac = () => {
+    setEditingAracId(null);
+    setNewPlaka("");
+    setNewModel("");
+    setNewAracType("ARAC");
+    setNewSorumlu("p2");
+    setNewMuayene("");
+    setNewYagKm(10000);
+    setNewBakimKm(15000);
+  };
 
   const handleMileageUpdate = (id: string, currentVal: number) => {
     const updatedVal = currentVal + 1200; // Simulating kilometers accumulation
@@ -270,24 +293,54 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       alert("Lütfen araç plakasını yazın.");
       return;
     }
-    const brandNew: AracBakim = {
-      id: `a_${Date.now()}`,
-      plaka: newPlaka.toUpperCase(),
-      aracTipi: newAracType,
-      markaModel: newModel || "Standart Model",
-      sorumluPersonelId: newSorumlu,
-      mevcutKm: 1200,
-      kmBakimAraligi: Number(newBakimKm) || 10000,
-      yagBakimKm: Number(newYagKm) || 11200,
-      muayeneTarihi: newMuayene || new Date(Date.now() + 300 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      sigortaTarihi: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      durum: "AKTIF",
-      notlar: "Sisteme yeni eklenen şantiye demirbaşı."
-    };
-    setAraclar(prev => [brandNew, ...prev]);
+
+    if (editingAracId) {
+      // Edit Mode
+      setAraclar(prev => prev.map(a => {
+        if (a.id === editingAracId) {
+          return {
+            ...a,
+            plaka: newPlaka.toUpperCase(),
+            aracTipi: newAracType,
+            markaModel: newModel || "Standart Model",
+            sorumluPersonelId: newSorumlu,
+            kmBakimAraligi: Number(newBakimKm) || 10000,
+            yagBakimKm: Number(newYagKm) || 11200,
+            muayeneTarihi: newMuayene,
+          };
+        }
+        return a;
+      }));
+      setEditingAracId(null);
+      alert("Araç / demirbaş başarıyla güncellendi.");
+    } else {
+      // Create Mode
+      const brandNew: AracBakim = {
+        id: `a_${Date.now()}`,
+        plaka: newPlaka.toUpperCase(),
+        aracTipi: newAracType,
+        markaModel: newModel || "Standart Model",
+        sorumluPersonelId: newSorumlu,
+        mevcutKm: 1200,
+        kmBakimAraligi: Number(newBakimKm) || 10000,
+        yagBakimKm: Number(newYagKm) || 11200,
+        muayeneTarihi: newMuayene || new Date(Date.now() + 300 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        sigortaTarihi: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        durum: "AKTIF",
+        notlar: "Sisteme yeni eklenen şantiye demirbaşı."
+      };
+      setAraclar(prev => [brandNew, ...prev]);
+      alert("Yeni araç / makine başarıyla kaydedildi.");
+    }
+
+    // Reset Form Fields
     setNewPlaka("");
     setNewModel("");
-    alert("Yeni araç / makine başarıyla kaydedildi.");
+    setNewAracType("ARAC");
+    setNewSorumlu("p2");
+    setNewMuayene("");
+    setNewYagKm(10000);
+    setNewBakimKm(15000);
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -1923,9 +1976,11 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
               
               {/* Creator form drawer */}
               <div className="w-full lg:w-[380px] lg:shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-0">
-                <div className="bg-[#2563EB] text-slate-100 p-4 shrink-0">
-                  <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Zimmet &amp; Envanter</span>
-                  <h3 className="font-display font-semibold text-sm">🚛 Demirbaş / Araç Ekle</h3>
+                <div className={`p-4 shrink-0 text-white ${editingAracId ? 'bg-amber-600' : 'bg-[#2563EB]'}`}>
+                  <span className="text-[10px] font-bold tracking-widest opacity-80 uppercase block">Zimmet &amp; Envanter</span>
+                  <h3 className="font-display font-semibold text-sm">
+                    {editingAracId ? "✏️ Demirbaş / Araç Düzenle" : "🚛 Demirbaş / Araç Ekle"}
+                  </h3>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
@@ -2013,12 +2068,22 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   </div>
                 </div>
 
-                <div className="p-4 border-t bg-slate-50">
+                <div className="p-4 border-t bg-slate-50 flex gap-2">
+                  {editingAracId && (
+                    <button 
+                      onClick={handleCancelEditArac}
+                      className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs py-2.5 rounded-xl shadow cursor-pointer transition active:scale-95"
+                    >
+                      İptal
+                    </button>
+                  )}
                   <button 
                     onClick={handleCreateArac}
-                    className="w-full bg-[#10b981] hover:bg-[#059669] text-white font-bold text-xs py-2.5 rounded-xl shadow cursor-pointer transition active:scale-95"
+                    className={`flex-1 text-white font-bold text-xs py-2.5 rounded-xl shadow cursor-pointer transition active:scale-95 ${
+                      editingAracId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-[#10b981] hover:bg-[#059669]'
+                    }`}
                   >
-                    Araç / Demirbaşı Kaydet
+                    {editingAracId ? "Değişiklikleri Kaydet" : "Araç / Demirbaşı Kaydet"}
                   </button>
                 </div>
               </div>
@@ -2176,6 +2241,14 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                             className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 py-1 rounded font-bold transition flex items-center justify-center space-x-1 cursor-pointer"
                           >
                             <span>📊 Geçmiş Raporla</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditArac(ar)}
+                            className="bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 py-1 px-2.5 rounded font-bold transition flex items-center justify-center cursor-pointer"
+                            title="Aracı Düzenle"
+                          >
+                            <span>✏️ Düzenle</span>
                           </button>
                           <button
                             type="button"

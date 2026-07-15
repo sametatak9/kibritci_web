@@ -815,7 +815,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     <div className="flex-grow p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col lg:flex-row font-sans gap-6 select-none bg-slate-50/50">
       
       {/* LEFT FORM PANEL */}
-      <div className="w-full lg:w-[420px] shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
+      <div className="w-full lg:w-[420px] lg:h-[680px] shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
         <div className="bg-slate-900 text-white p-4 shrink-0 flex items-center gap-2">
           <ShoppingCart size={18} className="text-amber-500" />
           <div>

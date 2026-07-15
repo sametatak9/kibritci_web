@@ -560,8 +560,17 @@ export const KasaScreen: React.FC<KasaScreenProps> = ({
             )}
           </div>
 
-          {/* PDF Download summary bar */}
-          <div className="p-3 border-t bg-slate-50/50 flex justify-end shrink-0 select-none">
+          {/* PDF & Excel Download summary bar */}
+          <div className="p-3 border-t bg-slate-50/50 flex justify-end gap-2 shrink-0 select-none">
+            <button 
+              onClick={() => {
+                exportKasaExcel(filteredHareketler, appliedStartDate, appliedEndDate);
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 border border-emerald-700 text-white text-[11px] font-bold py-1.5 px-3 rounded-lg flex items-center space-x-1.5 transition cursor-pointer text-left"
+            >
+              <FileText size={12} />
+              <span>📥 Kasa Excel Raporu Al</span>
+            </button>
             <button 
               onClick={() => setShowWeeklyReportModal(true)}
               className="bg-amber-500 hover:bg-amber-600 border border-amber-600 text-white text-[11px] font-bold py-1.5 px-3 rounded-lg flex items-center space-x-1.5 transition cursor-pointer text-left"

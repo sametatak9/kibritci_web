@@ -41,6 +41,10 @@ export function shouldBlockMassDelete(
   oldArrayLength: number,
   newArrayLength: number
 ): boolean {
+  // Allow normal deletions/wipes for transactions & inventories
+  if (['kasaHareketleri', 'araclar', 'demirbaslar'].includes(collectionName)) {
+    return false;
+  }
   if (oldArrayLength < 3) return false;
   if (newArrayLength === 0 && oldArrayLength >= 3) {
     console.warn(
