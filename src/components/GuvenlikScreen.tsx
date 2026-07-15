@@ -33,90 +33,52 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   const [viewMode, setViewMode] = useState<'web' | 'mobile'>('web');
   
   // ─────────────────────────────────────────────────────────────
-  // 📄 1. İRSALİYE & EVRAK GİRİŞ STATE
+  // 📄 1. RE-DESIGNED EVRAK GİRİŞ STATE
   // ─────────────────────────────────────────────────────────────
-  const [evrakTuru, setEvrakTuru] = useState<'İRSALİYE' | 'FATURA' | 'MAKBUZ' | 'GENEL_EVRAK'>('İRSALİYE');
-  const [irsaliyeNo, setIrsaliyeNo] = useState('');
-  const [firma, setFirma] = useState('');
-  const [kalemUrunAdi, setKalemUrunAdi] = useState('');
-  const [kalemMiktar, setKalemMiktar] = useState<number | ''>('');
-  const [kalemBirim, setKalemBirim] = useState('Adet');
-  const [eklenenKalemler, setEklenenKalemler] = useState<any[]>([]);
-  const [irsaliyeFoto, setIrsaliyeFoto] = useState<string | null>(null);
+  const [uploadQueue, setUploadQueue] = useState<any[]>([]);
   const [loadingIrsaliye, setLoadingIrsaliye] = useState(false);
   const [gelenEvraklar, setGelenEvraklar] = useState<any[]>([]);
 
-  // Yapay Zeka (AI) Evrak Okuyucu State'leri
-  const [isAiParsing, setIsAiParsing] = useState(false);
-  const [aiParseError, setAiParseError] = useState<string | null>(null);
-  const [aiParseSuccess, setAiParseSuccess] = useState<string | null>(null);
+  // Search & Filter States
+  const [docSearch, setDocSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'HEPSİ' | 'BEKLEMEDE' | 'ONAYLANDI' | 'REDDEDİLDİ'>('HEPSİ');
+  const [typeFilter, setTypeFilter] = useState<'HEPSİ' | 'FATURA' | 'İRSALİYE' | 'MAKBUZ' | 'GENEL_EVRAK'>('HEPSİ');
 
-  const processSecurityDocumentAi = (file: File) => {
-    const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
-    if (!allowedTypes.includes(file.type)) {
-      setAiParseError("Lütfen sadece PDF veya Görsel (PNG, JPG, WEBP) formatında evrak yükleyiniz.");
-      return;
-    }
+  // Edit Mode States
+  const [editingEvrak, setEditingEvrak] = useState<any | null>(null);
+  const [editEvrakTuru, setEditEvrakTuru] = useState<'FATURA' | 'İRSALİYE' | 'MAKBUZ' | 'GENEL_EVRAK'>('İRSALİYE');
+  const [editAciklama, setEditAciklama] = useState('');
 
-    setIsAiParsing(true);
-    setAiParseError(null);
-    setAiParseSuccess(null);
-
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    const files = Array.from(e.target.files) as File[];
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = async () => {
         const rawBase64 = reader.result as string;
-        
         let displayBase64 = rawBase64;
+        
         if (file.type.startsWith('image/')) {
-          displayBase64 = await compressImage(rawBase64);
-        }
-        
-        // Keep the compressed image as irsaliyeFoto base64 so they can see/submit it
-        setIrsaliyeFoto(displayBase64);
-
-        const base64Data = rawBase64.split(',')[1];
-        
-        // Use parse-fatura or parse-irsaliye based on selected type
-        const endpoint = (evrakTuru === 'FATURA') ? '/api/parse-fatura' : '/api/parse-irsaliye';
-        
-        const resData = await fetchApiJson<{ success: boolean; data?: any; error?: string }>(
-          endpoint,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fileBase64: base64Data, mimeType: file.type }),
+          try {
+            displayBase64 = await compressImage(rawBase64);
+          } catch (err) {
+            console.error('Image compression failed, using original', err);
           }
-        );
-        if (!resData.success) {
-          throw new Error(resData.error || 'Evrak yapay zeka tarafından çözümlenirken bir sorun oluştu.');
         }
-
-        const parsed = resData.data;
-
-        // Populate fields
-        setIrsaliyeNo(parsed.irsaliyeNo || parsed.faturaNo || "");
-        if (parsed.firma) setFirma(parsed.firma);
         
-        if (parsed.kalemler && parsed.kalemler.length > 0) {
-          const formattedItems = parsed.kalemler.map((x: any, idx: number) => ({
-            id: `item_${Date.now()}_${idx}`,
-            urunAdi: x.urunAdi || "Tanımsız Malzeme",
-            miktar: Number(x.miktar) || 0,
-            birim: x.birim || "ADET"
-          }));
-          setEklenenKalemler(formattedItems);
-        }
-
-        setAiParseSuccess(`Yapay Zeka Çözümlemesi Başarılı!\nNo: ${parsed.irsaliyeNo || parsed.faturaNo || ''} ve Firma: ${parsed.firma || ''} bilgileri ile ${parsed.kalemler?.length || 0} adet malzeme kalemi otomatik dolduruldu.`);
-      } catch (err: any) {
-        console.error("Security Document AI parsing error:", err);
-        setAiParseError(err.message || "Belge çözümlenemedi. Lütfen geçerli bir evrak yükleyin.");
-      } finally {
-        setIsAiParsing(false);
-      }
-    };
-    reader.readAsDataURL(file);
+        setUploadQueue(prev => [...prev, {
+          id: `q_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          fileName: file.name,
+          fileType: file.type,
+          dataUrl: displayBase64,
+          evrakTuru: 'İRSALİYE',
+          aciklama: ''
+        }]);
+      };
+      reader.readAsDataURL(file);
+    });
+    // Clear input
+    e.target.value = '';
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -308,24 +270,67 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   // ─────────────────────────────────────────────────────────────
   // 💾 İRSALİYE GÖNDERİM EVENTİ
   // ─────────────────────────────────────────────────────────────
-  const handleAddIrsaliyeItem = () => {
-    if (!kalemUrunAdi || !kalemMiktar) {
-      alert("Malzeme adı ve miktarını yazın!");
+  // ─────────────────────────────────────────────────────────────
+  // 💾 EVRAK GÖNDERİM EVENTLERİ
+  // ─────────────────────────────────────────────────────────────
+  const handleSendQueueToManager = async () => {
+    if (uploadQueue.length === 0) {
+      alert("Gönderilecek evrak bulunmuyor. Lütfen önce dosya yükleyin!");
       return;
     }
-    const newItem = {
-      id: `item_${Date.now()}`,
-      urunAdi: kalemUrunAdi,
-      miktar: Number(kalemMiktar),
-      birim: kalemBirim
-    };
-    setEklenenKalemler(prev => [...prev, newItem]);
-    setKalemUrunAdi('');
-    setKalemMiktar('');
+
+    setLoadingIrsaliye(true);
+    try {
+      for (const item of uploadQueue) {
+        const uniqueId = `EVR-${islemTarihi.replace(/-/g, '')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+        const newEvrak = {
+          id: uniqueId,
+          evrakNo: "",
+          evrakTuru: item.evrakTuru, // 'İRSALİYE' | 'FATURA' | 'MAKBUZ' | 'GENEL_EVRAK'
+          firma: "",
+          tarih: islemTarihi,
+          saat: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+          fotoUrl: item.dataUrl || "",
+          fileName: item.fileName,
+          fileType: item.fileType,
+          durum: 'BEKLEMEDE',
+          aciklama: item.aciklama || `Güvenlik kapısı evrak teslim alımı (${item.evrakTuru})`,
+          kaydeden: currentUser?.email || 'nobetci_guvenlik'
+        };
+        await setDoc(doc(db, 'guvenlikGelenEvraklar', uniqueId), newEvrak);
+      }
+
+      if (addNotification) {
+        addNotification(`Güvenlik kapısından ${uploadQueue.length} adet yeni evrak yöneticiye gönderildi.`);
+      }
+
+      setUploadQueue([]);
+      showStatus('success', 'Evraklar başarıyla kaydedildi ve yöneticiye gönderildi!');
+    } catch (err) {
+      console.error(err);
+      showStatus('error', 'Veritabanına kaydedilirken bir hata oluştu!');
+    } finally {
+      setLoadingIrsaliye(false);
+    }
   };
 
-  const handleRemoveIrsaliyeItem = (id: string) => {
-    setEklenenKalemler(prev => prev.filter(x => x.id !== id));
+  const handleUpdateGelenEvrak = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEvrak) return;
+
+    try {
+      await setDoc(doc(db, 'guvenlikGelenEvraklar', editingEvrak.id), {
+        ...editingEvrak,
+        evrakTuru: editEvrakTuru,
+        aciklama: editAciklama
+      }, { merge: true });
+
+      showStatus('success', 'Evrak bilgileri güncellendi.');
+      setEditingEvrak(null);
+    } catch (err) {
+      console.error(err);
+      alert('Güncellenemedi.');
+    }
   };
 
   const handleArchiveNobetGunu = async (notes: string) => {
@@ -372,106 +377,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     }
   };
 
-  const handleSaveIrsaliye = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!irsaliyeNo || !firma) {
-      showStatus('error', `Lütfen ${evrakTuru === 'İRSALİYE' ? 'İrsaliye' : evrakTuru === 'FATURA' ? 'Fatura' : evrakTuru === 'MAKBUZ' ? 'Makbuz' : 'Evrak'} Numarasını ve Firma adını belirtin!`);
-      return;
-    }
-    if (eklenenKalemler.length === 0) {
-      showStatus('error', 'Lütfen en az bir malzeme kalemi ekleyin!');
-      return;
-    }
 
-    setLoadingIrsaliye(true);
-    try {
-      const uniqueId = `EVR-${islemTarihi.replace(/-/g, '')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-      
-      // 1. Save to the general received documents pool (Guvenlik Gelen Evraklar)
-      const newEvrak = {
-        id: uniqueId,
-        evrakNo: irsaliyeNo,
-        evrakTuru, // 'İRSALİYE' | 'FATURA' | 'MAKBUZ' | 'GENEL_EVRAK'
-        firma,
-        tarih: islemTarihi,
-        saat: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
-        fotoUrl: irsaliyeFoto || "",
-        durum: 'BEKLEMEDE',
-        kalemler: eklenenKalemler.map(x => ({
-          id: x.id,
-          urunAdi: x.urunAdi,
-          miktar: x.miktar,
-          birim: x.birim
-        })),
-        aciklama: `Güvenlik kapısı evrak teslim alımı (${evrakTuru})`,
-        kaydeden: currentUser?.email || 'nobetci_guvenlik'
-      };
-
-      await setDoc(doc(db, 'guvenlikGelenEvraklar', uniqueId), newEvrak);
-
-      if (addNotification) {
-        addNotification(`Güvenlik kapısında yeni evrak (${evrakTuru}, Firma: ${firma}) teslim alındı.`);
-      }
-
-      // 2. If it is a Waybill (İrsaliye), also save to legacy irsaliyeler collection for instant office review!
-      if (evrakTuru === 'İRSALİYE') {
-        const newIrsaliye: Irsaliye = {
-          id: uniqueId,
-          irsaliyeId: uniqueId,
-          irsaliyeNo,
-          firma,
-          saId: "", // Removed preselected PO match from gate - matched in office instead!
-          tarih: islemTarihi,
-          onayDurumu: 'ONAY BEKLİYOR',
-          fisEvrakUrl: irsaliyeFoto || "",
-          kalemler: eklenenKalemler.map(x => ({
-            id: x.id,
-            urunAdi: x.urunAdi,
-            miktar: x.miktar,
-            birim: x.birim
-          }))
-        };
-        await setDoc(doc(db, 'irsaliyeler', uniqueId), newIrsaliye);
-      } else if (evrakTuru === 'FATURA') {
-        const newFatura: Fatura = {
-          id: uniqueId,
-          faturaNo: irsaliyeNo,
-          tarih: islemTarihi,
-          cariKartId: "",
-          cariUnvan: firma,
-          toplamTutar: 0,
-          kdvTutar: 0,
-          genelToplam: 0,
-          durum: 'KONTROL BEKLEYOR',
-          evrakUrl: irsaliyeFoto || "",
-          kalemler: eklenenKalemler.map(x => ({
-            id: x.id,
-            urunAdi: x.urunAdi,
-            miktar: x.miktar,
-            birim: x.birim,
-            birimFiyat: 0,
-            kdvOran: 20,
-            toplam: 0
-          })),
-          bagliIrsaliyeler: []
-        };
-        await setDoc(doc(db, 'faturalar', uniqueId), newFatura);
-      }
-      
-      // Clear inputs
-      setIrsaliyeNo('');
-      setFirma('');
-      setEklenenKalemler([]);
-      setIrsaliyeFoto(null);
-
-      showStatus('success', `${evrakTuru} başarıyla kaydedildi ve Ofis Havuzuna gönderildi!`);
-    } catch (err) {
-      console.error(err);
-      showStatus('error', 'Veritabanına kaydedilirken bir hata oluştu!');
-    } finally {
-      setLoadingIrsaliye(false);
-    }
-  };
 
   // ─────────────────────────────────────────────────────────────
   // 👥 PERSONEL GİRİŞ-ÇIKIŞ EVENTİ
@@ -776,298 +682,375 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         {/* Right workspace details area */}
         <div className="flex-1 bg-slate-50 p-6 overflow-y-auto space-y-6">
           
-          {/* ─────────────────────────────────────────────────────────────
-              TAB 1: İRSALİYE GİRİŞLERİ
-              ───────────────────────────────────────────────────────────── */}
           {activeTab === 'irsaliye' && (
             <div className="space-y-6">
               
-              <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
-                <span className="font-display font-black text-xs text-slate-805 uppercase tracking-widest block border-b pb-2">📄 YENİ İRSALİYE &amp; TESLİMAT EVRAKI GİRİŞİ</span>
+              {/* 1. YENİ EVRAK YÜKLEME ALANI */}
+              <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4 shadow-sm">
+                <span className="font-display font-black text-xs text-slate-800 uppercase tracking-widest block border-b pb-2">
+                  📄 YÖNETİCİ ONAYINA EVRAK GÖNDER (ÇOKLU YÜKLEME)
+                </span>
                 
-                {/* AI Document Scanner block */}
-                <div className="bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-700 rounded-3xl p-5 space-y-4 text-white shadow-xl shadow-indigo-500/20 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 rounded-full bg-white opacity-5 blur-2xl"></div>
-                  <div className="absolute bottom-0 left-0 -ml-8 -mb-8 w-24 h-24 rounded-full bg-blue-300 opacity-10 blur-xl"></div>
-                  <div className="flex justify-between items-center relative z-10">
-                    <span className="font-extrabold text-white tracking-wide uppercase text-[11px] flex items-center gap-2">
-                      <span className="text-xl">🤖</span> YAPAY ZEKA EVRAK OKUYUCU
-                    </span>
-                    <span className="font-bold text-[9px] bg-white/20 text-white backdrop-blur-sm border border-white/30 px-3 py-1 rounded-full uppercase tracking-wider shadow-sm">
-                      Gemini AI
+                <div className="relative border-2 border-dashed border-indigo-200 rounded-2xl p-6 text-center bg-indigo-50/30 hover:bg-indigo-50/70 transition duration-300 cursor-pointer group">
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    onChange={handleFileChange}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className="space-y-2 py-2 transform group-hover:scale-105 transition duration-300">
+                    <div className="bg-indigo-600 w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-2 shadow-md">
+                      <FileUp size={24} className="text-white" />
+                    </div>
+                    <span className="text-[13px] font-bold text-slate-850 block">Dosyaları Seçin veya Sürükleyin</span>
+                    <span className="text-[10px] text-slate-500 block">
+                      Birden fazla fotoğraf (PNG, JPG), PDF veya Word dosyası seçebilirsiniz
                     </span>
                   </div>
-                  <p className="text-[11px] text-indigo-100 leading-relaxed font-medium relative z-10">
-                    Evrakın (Fatura, İrsaliye vb.) fotoğrafını çekin veya yükleyin. Sistem belge türünü, numarasını, firmasını ve içindeki tüm kalemleri <strong className="text-white">saniyeler içinde otomatik</strong> dolduracaktır.
-                  </p>
-                  
-                  <div className="relative border-2 border-dashed border-white/40 rounded-2xl p-5 text-center bg-white/10 hover:bg-white/20 backdrop-blur-md transition-all duration-300 cursor-pointer group z-10">
-                    <input
-                      type="file"
-                      accept="image/*,application/pdf"
-                      capture="environment"
-                      onChange={(e) => {
-                        if (e.target.files?.[0]) {
-                          processSecurityDocumentAi(e.target.files[0]);
-                        }
-                      }}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      disabled={isAiParsing}
-                    />
-                    {isAiParsing ? (
-                      <div className="flex flex-col items-center justify-center space-y-3 py-2">
-                        <div className="animate-spin rounded-full h-8 w-8 border-4 border-white/20 border-t-white"></div>
-                        <span className="text-[11px] font-bold text-white animate-pulse tracking-wide">Yapay zeka analiz ediyor, lütfen bekleyin...</span>
-                      </div>
-                    ) : (
-                      <div className="space-y-2 py-1 transform group-hover:scale-105 transition-transform duration-300">
-                        <div className="bg-white/20 w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-2 shadow-inner">
-                          <Camera size={24} className="text-white" />
-                        </div>
-                        <span className="text-[13px] font-bold text-white block">Fotoğraf Çek veya Seç</span>
-                        <span className="text-[10px] text-indigo-200 block font-medium">Kamera, PDF, PNG, JPG Desteklenir</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {aiParseError && (
-                    <div className="bg-red-500/20 border border-red-500/50 backdrop-blur-sm text-red-100 p-3 rounded-xl text-[11px] font-semibold relative z-10 flex items-start gap-2">
-                      <AlertTriangle size={14} className="text-red-300 flex-shrink-0 mt-0.5" />
-                      <span>{aiParseError}</span>
-                    </div>
-                  )}
-                  {aiParseSuccess && (
-                    <div className="bg-emerald-500/20 border border-emerald-500/50 backdrop-blur-sm text-emerald-50 p-3 rounded-xl text-[11px] whitespace-pre-line font-semibold leading-relaxed relative z-10 flex items-start gap-2">
-                      <Check size={14} className="text-emerald-300 flex-shrink-0 mt-0.5" />
-                      <span>{aiParseSuccess}</span>
-                    </div>
-                  )}
                 </div>
 
-                <form onSubmit={handleSaveIrsaliye} className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                  <div className="space-y-1.5">
-                    <label className="text-slate-500 font-bold uppercase text-[9px]">Evrak Türü *</label>
-                    <select
-                      value={evrakTuru}
-                      onChange={(e) => setEvrakTuru(e.target.value as any)}
-                      className="w-full bg-slate-50 border border-slate-200 text-amber-400 p-2.5 rounded-xl font-bold text-xs"
-                    >
-                      <option value="İRSALİYE">📄 İRSALİYE GİRİŞİ</option>
-                      <option value="FATURA">💰 FATURA GİRİŞİ</option>
-                      <option value="MAKBUZ">🎫 MAKBUZ GİRİŞİ</option>
-                      <option value="GENEL_EVRAK">📦 GENEL EVRAK / KARGO ALIMI</option>
-                    </select>
-                  </div>
+                {/* Yükleme Kuyruğu (Upload Queue) */}
+                {uploadQueue.length > 0 && (
+                  <div className="space-y-3 pt-3 border-t border-slate-100">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-[10px] text-indigo-600 uppercase tracking-wider">
+                        Kuyruktaki Evraklar ({uploadQueue.length})
+                      </span>
+                      <button
+                        onClick={() => setUploadQueue([])}
+                        className="text-[10px] text-rose-600 hover:text-rose-700 font-bold"
+                      >
+                        Tümünü Temizle
+                      </button>
+                    </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-slate-500 font-bold uppercase text-[9px]">Evrak Numarası / Kod *</label>
-                    <input 
-                      type="text"
-                      required
-                      placeholder="Örn: IRS-2026-9874 veya FAT-4521"
-                      value={irsaliyeNo}
-                      onChange={(e) => setIrsaliyeNo(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold font-mono text-xs uppercase"
-                    />
-                  </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {uploadQueue.map((item, index) => (
+                        <div key={item.id} className="bg-slate-50 border border-slate-200 p-3 rounded-2xl flex flex-col justify-between gap-3 shadow-sm relative">
+                          <div className="flex gap-3">
+                            {/* File Preview */}
+                            <div className="w-16 h-16 bg-white border border-slate-200 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center">
+                              {item.fileType.startsWith('image/') ? (
+                                <img src={item.dataUrl} alt="preview" className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="text-2xl">📄</div>
+                              )}
+                            </div>
+                            
+                            {/* Details Fields */}
+                            <div className="flex-grow space-y-2 text-xs">
+                              <div className="font-semibold text-slate-700 truncate max-w-[200px]" title={item.fileName}>
+                                {item.fileName}
+                              </div>
+                              
+                              <div className="space-y-1">
+                                <label className="text-[8px] font-black text-slate-500 uppercase block">Evrak Türü</label>
+                                <select
+                                  value={item.evrakTuru}
+                                  onChange={(e) => {
+                                    const next = [...uploadQueue];
+                                    next[index].evrakTuru = e.target.value;
+                                    setUploadQueue(next);
+                                  }}
+                                  className="w-full bg-white border border-slate-200 p-1.5 rounded-lg text-xs"
+                                >
+                                  <option value="İRSALİYE">📄 İRSALİYE</option>
+                                  <option value="FATURA">💰 FATURA</option>
+                                  <option value="MAKBUZ">🎫 MAKBUZ</option>
+                                  <option value="GENEL_EVRAK">📦 GENEL EVRAK</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-slate-500 font-bold uppercase text-[9px]">Tedarikçi / Gönderen Firma *</label>
-                    <input 
-                      type="text"
-                      required
-                      placeholder="Örn: Kibritçi Çimento A.Ş."
-                      value={firma}
-                      onChange={(e) => setFirma(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold text-xs"
-                    />
-                  </div>
+                          <div className="space-y-1 text-xs">
+                            <label className="text-[8px] font-black text-slate-500 uppercase block">Açıklama (Zorunlu) *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="Evrak hakkında kısa bilgi girin..."
+                              value={item.aciklama}
+                              onChange={(e) => {
+                                const next = [...uploadQueue];
+                                next[index].aciklama = e.target.value;
+                                setUploadQueue(next);
+                              }}
+                              className="w-full bg-white border border-slate-200 p-1.5 rounded-lg text-xs"
+                            />
+                          </div>
 
-                  {/* Attachment Waybill Image */}
-                  <div className="md:col-span-3 bg-slate-900/60 p-4 rounded-2xl border border-slate-200/80 space-y-3">
-                    <span className="font-bold text-[10px] text-slate-350 uppercase block tracking-wider">📷 İrsaliye Evrak Fotoğrafı / Taraması Yükle</span>
-                    <div className="flex flex-col md:flex-row md:items-center gap-4">
-                      <label className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs py-3 px-6 rounded-xl flex items-center justify-center space-x-2.5 cursor-pointer transition shrink-0">
-                        <Camera size={16} className="text-amber-500" />
-                        <span>{irsaliyeFoto ? '✓ Evrak Fotoğrafı Seçildi (Değiştir)' : 'Evrak Fotoğrafı Çek / Seç'}</span>
-                        <input 
-                          type="file"
-                          accept="image/*,application/pdf"
-                          capture="environment"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              processSecurityDocumentAi(file);
-                            }
-                          }}
-                          className="hidden"
-                          disabled={isAiParsing}
-                        />
-                      </label>
-                      {irsaliyeFoto && (
-                        <div className="w-24 h-24 bg-white rounded-xl overflow-hidden border border-slate-200 relative group shrink-0">
-                          <img src={irsaliyeFoto} alt="Preview" className="w-full h-full object-cover" />
-                          <button 
-                            type="button" 
-                            onClick={() => setIrsaliyeFoto(null)}
-                            className="absolute inset-0 bg-black/75 flex items-center justify-center opacity-0 group-hover:opacity-100 text-[10px] text-rose-500 font-black uppercase transition"
+                          <button
+                            onClick={() => setUploadQueue(prev => prev.filter(x => x.id !== item.id))}
+                            className="absolute top-2 right-2 text-rose-500 hover:bg-rose-50 p-1 rounded-full"
+                            title="Listeden Kaldır"
                           >
-                            Sil
+                            <X size={14} />
                           </button>
                         </div>
-                      )}
-                      <p className="text-[10px] text-slate-500 leading-relaxed italic">
-                        "Şantiyeye giren her malzemenin teslim faturasının/irsaliyesinin okunaklı bir fotoğrafını çekip sisteme yükleyin. Bu evraklar muhasebe paneline ve proje müdürünün onay havuzuna eş zamanlı düşecektir."
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Add materials section */}
-                  <div className="md:col-span-3 border-t border-slate-200 pt-4 space-y-3">
-                    <span className="font-bold text-[10px] text-amber-500 uppercase block tracking-wider">📦 SEVK EDİLEN MALZEME KALEMLERİ EKLE</span>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-900/40 p-3 rounded-2xl border border-slate-200">
-                      <div className="space-y-1">
-                        <label className="text-[8px] font-bold text-slate-500 block uppercase">Malzeme / Ürün Adı</label>
-                        <input 
-                          type="text"
-                          placeholder="Örn: C30 Hazır Beton"
-                          value={kalemUrunAdi}
-                          onChange={(e) => setKalemUrunAdi(e.target.value)}
-                          className="w-full bg-white border border-slate-200 text-slate-805 p-2 rounded-xl text-xs"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[8px] font-bold text-slate-500 block uppercase">Miktar</label>
-                        <input 
-                          type="number"
-                          placeholder="Örn: 15"
-                          value={kalemMiktar}
-                          onChange={(e) => setKalemMiktar(e.target.value === '' ? '' : Number(e.target.value))}
-                          className="w-full bg-white border border-slate-200 text-slate-805 p-2 rounded-xl text-xs"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[8px] font-bold text-slate-500 block uppercase">Birim</label>
-                        <select 
-                          value={kalemBirim}
-                          onChange={(e) => setKalemBirim(e.target.value)}
-                          className="w-full bg-white border border-slate-200 text-slate-805 p-2 rounded-xl text-xs"
-                        >
-                          <option value="Adet">Adet</option>
-                          <option value="m³ (Metreküp)">m³ (Metreküp)</option>
-                          <option value="Ton">Ton</option>
-                          <option value="Torba">Torba</option>
-                          <option value="Kg">Kg</option>
-                          <option value="Metre">Metre</option>
-                        </select>
-                      </div>
-                      <div className="flex items-end">
-                        <button
-                          type="button"
-                          onClick={handleAddIrsaliyeItem}
-                          className="w-full bg-slate-850 hover:bg-slate-800 text-amber-500 font-extrabold text-xs py-2 px-3 rounded-xl border border-slate-750 transition cursor-pointer flex items-center justify-center space-x-1.5"
-                        >
-                          <PlusCircle size={14} />
-                          <span>Kalem Ekle</span>
-                        </button>
-                      </div>
+                      ))}
                     </div>
 
-                    {/* Added items list */}
-                    {eklenenKalemler.length > 0 && (
-                      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                        <table className="w-full text-xs text-left border-collapse">
-                          <thead>
-                            <tr className="bg-slate-50 text-slate-500 font-black uppercase text-[9px] border-b border-slate-200">
-                              <th className="p-3">Malzeme Açıklaması</th>
-                              <th className="p-3 text-right">Miktar</th>
-                              <th className="p-3">Birim</th>
-                              <th className="p-3 text-center">İşlem</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {eklenenKalemler.map((item, i) => (
-                              <tr key={item.id} className="border-b border-slate-900 text-slate-700">
-                                <td className="p-3 font-bold">{item.urunAdi}</td>
-                                <td className="p-3 text-right font-mono font-bold text-amber-450">{item.miktar}</td>
-                                <td className="p-3 text-slate-500">{item.birim}</td>
-                                <td className="p-3 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveIrsaliyeItem(item.id)}
-                                    className="text-rose-500 hover:text-rose-400 font-black font-mono px-2 py-1"
-                                  >
-                                    Sil
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Submit Button */}
-                  <div className="md:col-span-3 pt-3 flex justify-end">
-                    <button
-                      type="submit"
-                      disabled={loadingIrsaliye}
-                      className="bg-amber-600 hover:bg-amber-700 active:scale-95 text-slate-950 font-black text-xs py-3 px-8 rounded-xl cursor-pointer border-b-2 border-amber-800 transition shadow-lg shadow-amber-600/10"
-                    >
-                      {loadingIrsaliye ? 'Kaydediliyor...' : 'EVRAKI ONAY HAVUZUNA GÖNDER'}
-                    </button>
-                  </div>
-                </form>
-              </div>
-              
-              {/* Geçmiş Evraklarım Listesi (Sadece günlük / kendi gönderdikleri) */}
-              <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4 mt-6">
-                <span className="font-display font-black text-xs text-amber-500 uppercase tracking-widest block border-b border-slate-200 pb-2">
-                  BUGÜN GÖNDERDİĞİM EVRAKLAR
-                </span>
-                {gelenEvraklar.filter(e => {
-                  const todayStr = islemTarihi;
-                  return e.tarih === todayStr && e.kaydeden === (currentUser?.email || 'nobetci_guvenlik');
-                }).length === 0 ? (
-                  <div className="text-center py-6 text-[10px] text-slate-400 font-bold">Bugün henüz evrak göndermediniz.</div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {gelenEvraklar
-                      .filter(e => {
-                        const todayStr = islemTarihi;
-                        return e.tarih === todayStr && e.kaydeden === (currentUser?.email || 'nobetci_guvenlik');
-                      })
-                      .map(e => (
-                        <div key={e.id} className="bg-slate-50 border border-slate-200 p-3 rounded-2xl flex flex-col justify-between gap-3 relative">
-                          <div>
-                            <div className="flex justify-between items-start">
-                              <span className="text-[10px] font-black text-slate-800">{e.evrakTuru} - {e.evrakNo}</span>
-                              <span className={`text-[8px] px-2 py-0.5 rounded-full font-bold uppercase ${e.durum === 'BEKLEMEDE' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                {e.durum}
-                              </span>
-                            </div>
-                            <div className="text-[10px] text-slate-500 font-bold mt-1">{e.firma}</div>
-                            <div className="text-[9px] text-slate-400 mt-0.5">{e.kalemler?.length || 0} Kalem Malzeme</div>
-                          </div>
-                          
-                          {e.durum === 'BEKLEMEDE' && (
-                            <button
-                              onClick={() => handleDeleteEvrak(e.id)}
-                              className="w-full mt-2 text-[10px] py-1.5 font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition cursor-pointer"
-                            >
-                              🗑 Sil (İptal Et)
-                            </button>
-                          )}
-                        </div>
-                    ))}
+                    <div className="flex justify-end pt-2">
+                      <button
+                        onClick={handleSendQueueToManager}
+                        disabled={loadingIrsaliye || uploadQueue.some(x => !x.aciklama.trim())}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs py-2.5 px-6 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1.5"
+                      >
+                        {loadingIrsaliye ? (
+                          <span>Gönderiliyor...</span>
+                        ) : (
+                          <>
+                            <span>🚀 YÖNETİCİ ONAYINA GÖNDER</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
 
+              {/* 2. ARŞİV & GÖNDERİLEN EVRAKLAR LİSTESİ */}
+              <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4 shadow-sm">
+                <div className="flex flex-col md:flex-row md:items-center justify-between border-b pb-2 gap-3">
+                  <div>
+                    <span className="font-display font-black text-xs text-slate-800 uppercase tracking-widest block">
+                      🗂️ GÖNDERİLEN EVRAK HAREKETLERİ LİSTESİ
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-bold block mt-0.5">
+                      Onaylanan, reddedilen veya bekleyen tüm kayıtlar.
+                    </span>
+                  </div>
+
+                  {/* Arama ve Filtreler */}
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-2 text-slate-400" size={13} />
+                      <input
+                        type="text"
+                        placeholder="Evrak / Firma / Açıklama Ara..."
+                        value={docSearch}
+                        onChange={(e) => setDocSearch(e.target.value)}
+                        className="pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs w-48 focus:outline-none"
+                      />
+                    </div>
+                    
+                    <select
+                      value={typeFilter}
+                      onChange={(e) => setTypeFilter(e.target.value as any)}
+                      className="border border-slate-200 py-1.5 px-2 rounded-lg text-xs bg-white"
+                    >
+                      <option value="HEPSİ">Tüm Türler</option>
+                      <option value="İRSALİYE">İrsaliye</option>
+                      <option value="FATURA">Fatura</option>
+                      <option value="MAKBUZ">Makbuz</option>
+                      <option value="GENEL_EVRAK">Genel Evrak</option>
+                    </select>
+
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value as any)}
+                      className="border border-slate-200 py-1.5 px-2 rounded-lg text-xs bg-white"
+                    >
+                      <option value="HEPSİ">Tüm Durumlar</option>
+                      <option value="BEKLEMEDE">Beklemede</option>
+                      <option value="ONAYLANDI">Onaylandı</option>
+                      <option value="REDDEDİLDİ">Reddedildi</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Evrak Log Tablosu */}
+                {gelenEvraklar.filter(e => {
+                  // Apply search
+                  const q = docSearch.toLowerCase();
+                  const matchesSearch = 
+                    (e.fileName || '').toLowerCase().includes(q) ||
+                    (e.aciklama || '').toLowerCase().includes(q) ||
+                    (e.evrakNo || '').toLowerCase().includes(q) ||
+                    (e.firma || '').toLowerCase().includes(q) ||
+                    (e.kaydeden || '').toLowerCase().includes(q);
+
+                  // Apply type filter
+                  const matchesType = typeFilter === 'HEPSİ' || e.evrakTuru === typeFilter;
+
+                  // Apply status filter
+                  const matchesStatus = statusFilter === 'HEPSİ' || e.durum === statusFilter;
+
+                  return matchesSearch && matchesType && matchesStatus;
+                }).length === 0 ? (
+                  <div className="text-center py-10 text-[11px] text-slate-400 font-bold">
+                    Aranan kriterlere uygun evrak kaydı bulunamadı.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-500 font-bold uppercase text-[9px] border-b border-slate-200">
+                          <th className="p-3">Evrak Bilgisi / Dosya</th>
+                          <th className="p-3">Tür</th>
+                          <th className="p-3">Açıklama</th>
+                          <th className="p-3">Tarih / Saat</th>
+                          <th className="p-3">Durum</th>
+                          <th className="p-3 text-center">İşlemler</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-150">
+                        {gelenEvraklar
+                          .filter(e => {
+                            const q = docSearch.toLowerCase();
+                            const matchesSearch = 
+                              (e.fileName || '').toLowerCase().includes(q) ||
+                              (e.aciklama || '').toLowerCase().includes(q) ||
+                              (e.evrakNo || '').toLowerCase().includes(q) ||
+                              (e.firma || '').toLowerCase().includes(q) ||
+                              (e.kaydeden || '').toLowerCase().includes(q);
+                            const matchesType = typeFilter === 'HEPSİ' || e.evrakTuru === typeFilter;
+                            const matchesStatus = statusFilter === 'HEPSİ' || e.durum === statusFilter;
+                            return matchesSearch && matchesType && matchesStatus;
+                          })
+                          .map(e => (
+                            <tr key={e.id} className="hover:bg-slate-50/50 transition">
+                              <td className="p-3 font-medium">
+                                <div className="text-slate-800 font-bold truncate max-w-[180px]">{e.fileName || 'Belge'}</div>
+                                <div className="text-[10px] text-indigo-500 font-mono mt-0.5">{e.id}</div>
+                                {e.fotoUrl && (
+                                  <a
+                                    href={e.fotoUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-[9px] text-indigo-600 hover:underline flex items-center gap-0.5 mt-1"
+                                  >
+                                    <span>👁️ Evrakı Görüntüle</span>
+                                  </a>
+                                )}
+                              </td>
+                              <td className="p-3">
+                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded border ${
+                                  e.evrakTuru === 'FATURA' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                  e.evrakTuru === 'İRSALİYE' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                  e.evrakTuru === 'MAKBUZ' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                  'bg-slate-50 text-slate-700 border-slate-200'
+                                }`}>
+                                  {e.evrakTuru}
+                                </span>
+                              </td>
+                              <td className="p-3 text-slate-600 max-w-[200px] truncate" title={e.aciklama}>
+                                {e.aciklama || '-'}
+                              </td>
+                              <td className="p-3 text-slate-500 font-mono text-[10px]">
+                                <div>{e.tarih}</div>
+                                <div className="text-[9px] mt-0.5">{e.saat}</div>
+                              </td>
+                              <td className="p-3">
+                                <span className={`text-[9px] font-extrabold px-2.5 py-0.5 rounded-full ${
+                                  e.durum === 'ONAYLANDI' ? 'bg-emerald-100 text-emerald-800' :
+                                  e.durum === 'REDDEDİLDİ' ? 'bg-rose-100 text-rose-800' :
+                                  'bg-amber-100 text-amber-800'
+                                }`}>
+                                  {e.durum}
+                                </span>
+                              </td>
+                              <td className="p-3 text-center">
+                                <div className="flex justify-center items-center gap-1.5">
+                                  {e.durum === 'BEKLEMEDE' && (
+                                    <>
+                                      <button
+                                        onClick={() => {
+                                          setEditingEvrak(e);
+                                          setEditEvrakTuru(e.evrakTuru);
+                                          setEditAciklama(e.aciklama || '');
+                                        }}
+                                        className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2.5 py-1 rounded transition cursor-pointer"
+                                      >
+                                        ✏️ Değiştir
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteEvrak(e.id)}
+                                        className="bg-rose-50 hover:bg-rose-105 text-rose-600 text-[10px] font-bold px-2.5 py-1 rounded transition cursor-pointer"
+                                      >
+                                        🗑️ Sil
+                                      </button>
+                                    </>
+                                  )}
+                                  {e.durum !== 'BEKLEMEDE' && (
+                                    <span className="text-[10px] text-slate-400 italic">Değiştirilemez</span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* DÜZENLEME MODAL (Editing Modal Overlay) */}
+              {editingEvrak && (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                  <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-slate-200 shadow-2xl space-y-4">
+                    <div className="flex justify-between items-center border-b pb-2">
+                      <h3 className="font-display font-black text-sm text-slate-800 uppercase tracking-wider">
+                        ✏️ EVRAK BİLGİLERİNİ DÜZENLE
+                      </h3>
+                      <button
+                        onClick={() => setEditingEvrak(null)}
+                        className="text-slate-400 hover:text-slate-600 p-1"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleUpdateGelenEvrak} className="space-y-4 text-xs">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Evrak Türü</label>
+                        <select
+                          value={editEvrakTuru}
+                          onChange={(e) => setEditEvrakTuru(e.target.value as any)}
+                          className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl font-bold text-xs"
+                        >
+                          <option value="İRSALİYE">📄 İRSALİYE</option>
+                          <option value="FATURA">💰 FATURA</option>
+                          <option value="MAKBUZ">🎫 MAKBUZ</option>
+                          <option value="GENEL_EVRAK">📦 GENEL EVRAK</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Açıklama</label>
+                        <input
+                          type="text"
+                          required
+                          value={editAciklama}
+                          onChange={(e) => setEditAciklama(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-medium text-slate-800"
+                        />
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingEvrak(null)}
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded-xl transition"
+                        >
+                          İptal
+                        </button>
+                        <button
+                          type="submit"
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-5 py-2 rounded-xl transition"
+                        >
+                          Değişiklikleri Kaydet
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+
             </div>
           )}
+
 
           {/* ─────────────────────────────────────────────────────────────
               TAB 2: PERSONEL GİRİŞ ÇIKIŞ TAKİBİ

@@ -89,6 +89,7 @@ import {
   isStandaloneMobileRole,
   isTabRestrictedForUser,
   sanitizeKisitliSayfalar,
+  guessRoleFromEmail,
 } from './lib/yetkiUtils';
 import {
   dedupeKullanicilarByEmail,
@@ -457,7 +458,7 @@ export default function App() {
 
   // Son görülme tarihini güncelle (Her 5 dakikada bir en fazla)
   useEffect(() => {
-    if (!currentUser || currentUser.isMock || kullanicilar.length === 0) return;
+    if (!currentUser || kullanicilar.length === 0) return;
 
     const updateLastSeen = () => {
       const userEmailNorm = currentUser.email?.trim().toLowerCase();
@@ -1055,14 +1056,10 @@ export default function App() {
     // Check if user is in DB list of accounts
     const exists = !!findKullaniciByEmail(kullanicilar, emailLower);
     if (!exists && (dbStatus === 'synced' || dbStatus === 'offline')) {
-      const isSamet = emailLower === 'sametatak9@gmail.com';
-      const isSecondaryAdmin = emailLower === SECONDARY_ADMIN_EMAIL;
-      const isDefaultAdmin = emailLower === 'santiye@kibritci.com';
-      
       const newKullanici: Kullanici = {
         id: emailLower,
         email: currentUser.email,
-        yetki: isSamet || isSecondaryAdmin || isDefaultAdmin ? 'KURUCU' : 'MİSAFİR',
+        yetki: guessRoleFromEmail(emailLower) as any,
         durum: 'AKTİF',
         kayitTarihi: new Date().toISOString().split('T')[0]
       };

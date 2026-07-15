@@ -189,3 +189,33 @@ export function applyRoleDefaults<T extends { yetki?: string; kisitliSayfalar?: 
     kisitliSayfalar: sanitizeKisitliSayfalar(yetki, user.kisitliSayfalar ?? []),
   };
 }
+
+export function guessRoleFromEmail(email: string): string {
+  const norm = email.toLowerCase().trim();
+  if (
+    norm === 'sametatak9@gmail.com' ||
+    norm === 'santiye@kibritci.com' ||
+    norm === 'sekreter@kibritci.com'
+  ) {
+    return 'KURUCU';
+  }
+  if (norm.includes('guven') || norm.includes('security') || norm.includes('kapi')) {
+    return 'GÜVENLİK';
+  }
+  if (norm.includes('formen')) {
+    return 'FORMEN';
+  }
+  if (norm.includes('kamp') || norm.includes('camp')) {
+    return 'KAMPÇI';
+  }
+  if (norm.includes('depo') || norm.includes('store')) {
+    return 'DEPOCU';
+  }
+  if (norm.includes('lojistik') || norm.includes('logistics')) {
+    return 'LOJİSTİK';
+  }
+  if (norm.includes('sofor') || norm.includes('driver')) {
+    return 'ŞOFÖR';
+  }
+  return 'MİSAFİR';
+}

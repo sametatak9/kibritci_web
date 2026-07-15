@@ -17,6 +17,8 @@ import {
   normalizeKampSayimForDisplay,
 } from '../lib/mobilOnayUtils';
 import { wrapCorporateReportHtml } from '../lib/corporateReportHtml';
+import { fetchApiJson } from '../lib/apiClient';
+import { GuvenlikEvrakOnayHavuzu } from './GuvenlikEvrakOnayHavuzu';
 
 interface OnayIslemleriScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
@@ -68,6 +70,61 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
   const [aracOnayTalepleri, setAracOnayTalepleri] = useState<any[]>([]);
   const [yolHarcamalari, setYolHarcamalari] = useState<any[]>([]);
+
+  // Security Gate Document Approval States
+  const [gelenEvraklar, setGelenEvraklar] = useState<any[]>([]);
+  const [activeGateDoc, setActiveGateDoc] = useState<any | null>(null);
+  
+  // Approval Wizard States
+  const [approvalStep, setApprovalStep] = useState<'SELECT_METHOD' | 'FORM'>('SELECT_METHOD');
+  const [selectedDocType, setSelectedDocType] = useState<'FATURA' | 'İRSALİYE' | 'MAKBUZ' | 'GENEL_EVRAK'>('İRSALİYE');
+  const [isAiResolving, setIsAiResolving] = useState(false);
+
+  // Form Fields for different types
+  const [faturaNo, setFaturaNo] = useState('');
+  const [faturaFirma, setFaturaFirma] = useState('');
+  const [faturaTarih, setFaturaTarih] = useState('');
+  const [faturaToplam, setFaturaToplam] = useState<number>(0);
+  const [faturaKdv, setFaturaKdv] = useState<number>(0);
+  const [faturaGenelToplam, setFaturaGenelToplam] = useState<number>(0);
+  const [faturaKalemler, setFaturaKalemler] = useState<any[]>([]);
+
+  const [irsaliyeNo, setIrsaliyeNo] = useState('');
+  const [irsaliyeFirma, setIrsaliyeFirma] = useState('');
+  const [irsaliyeTarih, setIrsaliyeTarih] = useState('');
+  const [irsaliyeKalemler, setIrsaliyeKalemler] = useState<any[]>([]);
+
+  const [makbuzRefNo, setMakbuzRefNo] = useState('');
+  const [makbuzFirma, setMakbuzFirma] = useState('');
+  const [makbuzTarih, setMakbuzTarih] = useState('');
+  const [makbuzTutar, setMakbuzTutar] = useState<number>(0);
+  const [makbuzAciklama, setMakbuzAciklama] = useState('');
+  const [makbuzTip, setMakbuzTip] = useState<'GİRİŞ' | 'ÇIKIŞ'>('ÇIKIŞ');
+
+  const [genelAciklama, setGenelAciklama] = useState('');
+
+  // Item adding states (Fatura / Irsaliye items)
+  const [itemUrunAdi, setItemUrunAdi] = useState('');
+  const [itemMiktar, setItemMiktar] = useState<number | ''>('');
+  const [itemBirim, setItemBirim] = useState('Adet');
+  const [itemBirimFiyat, setItemBirimFiyat] = useState<number | ''>('');
+  const [itemKdvOran, setItemKdvOran] = useState<number>(20);
+
+  // Subscribe to Security Gate Documents
+  useEffect(() => {
+    const unsubGelenEvrak = onSnapshot(collection(db, 'guvenlikGelenEvraklar'), (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((docItem) => {
+        list.push({ id: docItem.id, ...docItem.data() });
+      });
+      list.sort((a, b) => new Date(b.tarih || 0).getTime() - new Date(a.tarih || 0).getTime());
+      setGelenEvraklar(list);
+    });
+
+    return () => {
+      unsubGelenEvrak();
+    };
+  }, []);
 
   const [stokKartTalepleri, setStokKartTalepleri] = useState<any[]>([]);
   const [depoSayimTalepleri, setDepoSayimTalepleri] = useState<any[]>([]);
@@ -878,7 +935,9 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   const pendingSayimCount = depoSayimTalepleri.length;
   const pendingDepocuCount = pendingStokCount + pendingSayimCount;
 
-  const totalPendingCount = pendingRequests.length + pendingWaybills.length + pendingInvoices.length + pendingPersonelCount + pendingKampSayimlar.length + pendingKampFaaliyetler.length + pendingGunlukAkis.length + pendingSoforCount + pendingDepocuCount;
+  const pendingGateDocs = gelenEvraklar.filter(x => x.durum === 'BEKLEMEDE');
+
+  const totalPendingCount = pendingRequests.length + pendingWaybills.length + pendingInvoices.length + pendingPersonelCount + pendingKampSayimlar.length + pendingKampFaaliyetler.length + pendingGunlukAkis.length + pendingSoforCount + pendingDepocuCount + pendingGateDocs.length;
 
   // Gecmis onaylar list (approved or updated documents)
   const approvedRequests = satinAlmaTalepleri.filter(doc => doc.onayDurumu.includes('TAMAMLANDI') || doc.onayDurumu === 'ONAYLANDI' || doc.onayDurumu === 'DİJİTAL ONAYLANDI');
@@ -1020,6 +1079,267 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
     }
     alert("Belge reddedildi.");
     setActiveDocForDetail(null);
+  };
+
+  const handleRejectGateDoc = async (id: string) => {
+    if (!window.confirm("Bu güvenlik evrakını reddetmek istediğinize emin misiniz?")) return;
+    try {
+      await updateDoc(doc(db, 'guvenlikGelenEvraklar', id), {
+        durum: 'REDDEDİLDİ',
+        onaylayanYonetici: currentUser?.email || 'Yönetici'
+      });
+      alert("Evrak reddedildi.");
+    } catch (err) {
+      console.error(err);
+      alert("Hata oluştu.");
+    }
+  };
+
+  const handleOpenGateDocApproval = (docItem: any) => {
+    setActiveGateDoc(docItem);
+    setSelectedDocType(docItem.evrakTuru || 'İRSALİYE');
+    setApprovalStep('SELECT_METHOD');
+    setIsAiResolving(false);
+    
+    // Clear all forms
+    setFaturaNo('');
+    setFaturaFirma('');
+    setFaturaTarih('');
+    setFaturaToplam(0);
+    setFaturaKdv(0);
+    setFaturaGenelToplam(0);
+    setFaturaKalemler([]);
+
+    setIrsaliyeNo('');
+    setIrsaliyeFirma('');
+    setIrsaliyeTarih('');
+    setIrsaliyeKalemler([]);
+
+    setMakbuzRefNo('');
+    setMakbuzFirma('');
+    setMakbuzTarih('');
+    setMakbuzTutar(0);
+    setMakbuzAciklama('');
+    setMakbuzTip('ÇIKIŞ');
+
+    setGenelAciklama('');
+  };
+
+  const handleStartManualGateDocApproval = () => {
+    if (activeGateDoc) {
+      const type = selectedDocType;
+      const todayStr = new Date().toISOString().split('T')[0];
+      
+      if (type === 'FATURA') {
+        setFaturaNo(activeGateDoc.evrakNo || '');
+        setFaturaFirma(activeGateDoc.firma || '');
+        setFaturaTarih(activeGateDoc.tarih || todayStr);
+        setFaturaKalemler(activeGateDoc.kalemler || []);
+      } else if (type === 'İRSALİYE') {
+        setIrsaliyeNo(activeGateDoc.evrakNo || '');
+        setIrsaliyeFirma(activeGateDoc.firma || '');
+        setIrsaliyeTarih(activeGateDoc.tarih || todayStr);
+        setIrsaliyeKalemler(activeGateDoc.kalemler || []);
+      } else if (type === 'MAKBUZ') {
+        setMakbuzRefNo(activeGateDoc.evrakNo || '');
+        setMakbuzFirma(activeGateDoc.firma || '');
+        setMakbuzTarih(activeGateDoc.tarih || todayStr);
+        setMakbuzAciklama(activeGateDoc.aciklama || '');
+      } else if (type === 'GENEL_EVRAK') {
+        setGenelAciklama(activeGateDoc.aciklama || '');
+      }
+    }
+    setApprovalStep('FORM');
+  };
+
+  const handleAnalyzeGateDocWithAi = async () => {
+    if (!activeGateDoc || !activeGateDoc.fotoUrl) {
+      alert("Evrak içeriği veya fotoğrafı bulunamadı!");
+      return;
+    }
+
+    const parts = activeGateDoc.fotoUrl.split(',');
+    if (parts.length < 2) {
+      alert("Evrak içeriği geçersiz (Base64 verisi bulunamadı)!");
+      return;
+    }
+    const mimeMatch = parts[0].match(/data:(.*?);base64/);
+    const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    const fileBase64 = parts[1];
+
+    let docTypeParam = 'general';
+    if (selectedDocType === 'FATURA') docTypeParam = 'fatura';
+    if (selectedDocType === 'İRSALİYE') docTypeParam = 'irsaliye';
+    if (selectedDocType === 'MAKBUZ') docTypeParam = 'makbuz';
+
+    setIsAiResolving(true);
+    try {
+      const response: any = await fetchApiJson('/api/parse-legacy-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileBase64,
+          mimeType,
+          docType: docTypeParam
+        })
+      });
+
+      if (response && !response.error) {
+        const parsed = response;
+        const todayStr = new Date().toISOString().split('T')[0];
+        
+        if (selectedDocType === 'FATURA') {
+          setFaturaNo(parsed.faturaNo || activeGateDoc.evrakNo || '');
+          setFaturaFirma(parsed.cariUnvan || activeGateDoc.firma || '');
+          setFaturaTarih(parsed.tarih || activeGateDoc.tarih || todayStr);
+          setFaturaToplam(parsed.toplamTutar || 0);
+          setFaturaKdv(parsed.kdvTutar || 0);
+          setFaturaGenelToplam(parsed.genelToplam || 0);
+          setFaturaKalemler(parsed.kalemler || []);
+        } else if (selectedDocType === 'İRSALİYE') {
+          setIrsaliyeNo(parsed.irsaliyeNo || activeGateDoc.evrakNo || '');
+          setIrsaliyeFirma(parsed.firma || activeGateDoc.firma || '');
+          setIrsaliyeTarih(parsed.tarih || activeGateDoc.tarih || todayStr);
+          setIrsaliyeKalemler(parsed.kalemler || []);
+        } else if (selectedDocType === 'MAKBUZ') {
+          setMakbuzRefNo(parsed.referansId || activeGateDoc.evrakNo || '');
+          setMakbuzFirma(parsed.firma || activeGateDoc.firma || '');
+          setMakbuzTarih(parsed.tarih || activeGateDoc.tarih || todayStr);
+          setMakbuzTutar(parsed.tutar || 0);
+          setMakbuzAciklama(parsed.aciklama || activeGateDoc.aciklama || '');
+          setMakbuzTip(parsed.hareketTipi === 'GİRİŞ' ? 'GİRİŞ' : 'ÇIKIŞ');
+        }
+        
+        setApprovalStep('FORM');
+        alert("Yapay Zeka evrakı başarıyla çözümledi! Lütfen bilgileri kontrol edip onaylayın.");
+      } else {
+        alert("Yapay Zeka çözümleme yapamadı: " + (response?.error || 'Bilinmeyen hata'));
+        handleStartManualGateDocApproval();
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Yapay Zeka servisiyle iletişim kurulurken hata oluştu! Manuel girişe yönlendiriliyorsunuz.");
+      handleStartManualGateDocApproval();
+    } finally {
+      setIsAiResolving(false);
+    }
+  };
+
+  const handleSaveGateDocApproval = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeGateDoc) return;
+
+    try {
+      const type = selectedDocType;
+      const docId = activeGateDoc.id;
+
+      if (type === 'FATURA') {
+        if (!faturaNo || !faturaFirma || !faturaTarih) {
+          alert("Lütfen Fatura No, Firma ve Tarih alanlarını doldurun!");
+          return;
+        }
+        const newFatura = {
+          id: docId,
+          faturaNo,
+          tarih: faturaTarih,
+          cariKartId: "",
+          cariUnvan: faturaFirma,
+          toplamTutar: Number(faturaToplam),
+          kdvTutar: Number(faturaKdv),
+          genelToplam: Number(faturaGenelToplam),
+          durum: 'ONAYLANDI',
+          evrakUrl: activeGateDoc.fotoUrl || "",
+          kalemler: faturaKalemler.map(x => ({
+            urunAdi: x.urunAdi,
+            amount: Number(x.miktar),
+            miktar: Number(x.miktar),
+            birim: x.birim || 'Adet',
+            birimFiyat: Number(x.birimFiyat || 0),
+            kdvOran: Number(x.kdvOran || 20),
+            toplam: Number(x.toplam || 0)
+          })),
+          bagliIrsaliyeler: [],
+          onaylayanYonetici: currentUser?.email || 'Yönetici',
+          onayTarihi: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'faturalar', docId), newFatura);
+
+      } else if (type === 'İRSALİYE') {
+        if (!irsaliyeNo || !irsaliyeFirma || !irsaliyeTarih) {
+          alert("Lütfen İrsaliye No, Firma ve Tarih alanlarını doldurun!");
+          return;
+        }
+        const newIrsaliye = {
+          id: docId,
+          irsaliyeId: docId,
+          irsaliyeNo,
+          firma: irsaliyeFirma,
+          saId: "",
+          tarih: irsaliyeTarih,
+          onayDurumu: 'ONAYLANDI',
+          fisEvrakUrl: activeGateDoc.fotoUrl || "",
+          kalemler: irsaliyeKalemler.map(x => ({
+            urunAdi: x.urunAdi,
+            miktar: Number(x.miktar),
+            birim: x.birim || 'Adet'
+          })),
+          onaylayanYonetici: currentUser?.email || 'Yönetici',
+          onayTarihi: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'irsaliyeler', docId), newIrsaliye);
+
+      } else if (type === 'MAKBUZ') {
+        if (!makbuzRefNo || !makbuzFirma || !makbuzTarih || !makbuzTutar) {
+          alert("Lütfen Fiş/Makbuz No, Muhatap Firma, Tarih ve Tutar alanlarını doldurun!");
+          return;
+        }
+        const newKasaHareket = {
+          id: docId,
+          referansNo: makbuzRefNo,
+          tarih: makbuzTarih,
+          cariUnvan: makbuzFirma,
+          tutar: Number(makbuzTutar),
+          aciklama: makbuzAciklama || 'Güvenlik kapısı makbuzu',
+          hareketTipi: makbuzTip,
+          kategori: 'GÜVENLİK_MAKBUZ',
+          evrakUrl: activeGateDoc.fotoUrl || "",
+          durum: 'ONAYLANDI',
+          kaydeden: activeGateDoc.kaydeden || '',
+          onaylayanYonetici: currentUser?.email || 'Yönetici',
+          onayTarihi: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'kasaHareketleri', docId), newKasaHareket);
+
+      } else if (type === 'GENEL_EVRAK') {
+        const newGenelLog = {
+          id: docId,
+          tarih: new Date().toISOString().split('T')[0],
+          saat: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+          evrakNo: activeGateDoc.evrakNo || 'GENEL',
+          aciklama: genelAciklama || activeGateDoc.aciklama || 'Genel Evrak Teslimi',
+          fotoUrl: activeGateDoc.fotoUrl || '',
+          durum: 'ONAYLANDI',
+          onayleyen: currentUser?.email || 'Yönetici'
+        };
+        await setDoc(doc(db, 'guvenlikGenelEvraklar', docId), newGenelLog);
+      }
+
+      await updateDoc(doc(db, 'guvenlikGelenEvraklar', docId), {
+        durum: 'ONAYLANDI',
+        onaylayanYonetici: currentUser?.email || 'Yönetici',
+        islenenEvrakTuru: type
+      });
+
+      if (addNotification) {
+        addNotification(`Güvenlik kapısından gelen evrak (${type}, Ref: ${activeGateDoc.id}) onaylandı ve arşivlendi.`);
+      }
+
+      alert("Evrak başarıyla onaylandı ve ilgili arşive kaydedildi!");
+      setActiveGateDoc(null);
+    } catch (err) {
+      console.error(err);
+      alert("Kaydedilirken veritabanı hatası oluştu!");
+    }
   };
 
   return (
@@ -1247,137 +1567,71 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           )}
 
           {activeTab === 'guvenlik_belgeleri' && (
-            <div className="space-y-6">
-              <div className="border bg-slate-950 p-4.5 rounded-2xl border-slate-800/80 flex justify-between items-center text-xs">
-                <div className="space-y-1">
-                  <span className="text-emerald-500 font-bold block text-[11px] tracking-widest uppercase">🛡️ GÜVENLİK BELGELERİ (İRSALİYE &amp; FATURA)</span>
-                  <p className="text-slate-405 leading-relaxed text-[11px]">
-                    Kapıdaki güvenlik personelleri ve kantardan giriş yapılan sevkiyat irsaliyeleri ile muhasebe faturalarının kontrol ve onay paneli.
-                  </p>
-                </div>
-              </div>
-
-              {(pendingWaybills.length === 0 && pendingInvoices.length === 0) ? (
-                <div className="bg-slate-950 rounded-3xl p-15 text-center flex flex-col items-center justify-center space-y-4 border border-slate-800/50">
-                  <span className="text-4xl">🎉</span>
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-200">Onay bekleyen irsaliye veya fatura belgesi bulunmuyor.</h3>
-                    <p className="text-xs text-slate-500 mt-1">Sistem tamamen güncel ve mutabıktır.</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {/* İrsaliyeler Grid */}
-                  {pendingWaybills.length > 0 && (
-                    <div className="space-y-3">
-                      <h3 className="font-display font-black text-xs text-slate-350 tracking-wider flex items-center space-x-2 uppercase">
-                        <Truck size={14} className="text-emerald-500" />
-                        <span>Gelen İrsaliye Teslimat Onayları ({pendingWaybills.length})</span>
-                      </h3>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {pendingWaybills.map(doc => (
-                          <div key={doc.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition space-y-3">
-                            <div>
-                              <div className="flex justify-between items-start">
-                                <span className="font-mono bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                                  {doc.irsaliyeNo}
-                                </span>
-                                <span className="text-[10px] text-slate-500 font-mono font-bold">{doc.tarih}</span>
-                              </div>
-                              <p className="text-xs text-slate-200 font-bold mt-2.5">Gönderen Şantiyeci / Firma: {doc.firma}</p>
-                              <p className="text-[10.5px] text-slate-400 mt-1">İlişkili Sipariş No: {doc.saId || 'Doğrudan Sevkiyat'}</p>
-                              {doc.onayDurumu === 'FARK VAR — YÖNETİCİ BİLDİRİLDİ' && (
-                                <p className="text-[10px] mt-1.5 p-1 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded font-bold uppercase">⚠️ Teslimat Miktar Farkı Var!</p>
-                              )}
-
-                              <div className="mt-2.5 pt-2 border-t border-slate-805">
-                                <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block mb-1">Gelen Malzemeler</span>
-                                <div className="space-y-1 text-[10px] font-mono text-slate-400">
-                                  {doc.kalemler?.slice(0, 3).map((k, idx) => (
-                                    <div key={k.id || idx} className="flex justify-between">
-                                      <span className="truncate max-w-[150px]">{k.urunAdi}</span>
-                                      <span className="text-white font-bold">{k.miktar} {k.birim}</span>
-                                    </div>
-                                  ))}
-                                  {doc.kalemler?.length > 3 && <div className="text-[9px] text-slate-500">+ {doc.kalemler.length - 3} kalem daha</div>}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex gap-2 pt-2.5 border-t border-slate-900">
-                              <button 
-                                onClick={() => setActiveDocForDetail({ id: doc.id, type: 'waybill', data: doc })}
-                                className="flex-1 bg-slate-900 border border-slate-800 hover:bg-slate-800 hover:border-slate-705 text-white py-1.5 px-3 rounded-lg text-[10px] font-black tracking-wiest transition flex items-center justify-center space-x-1"
-                              >
-                                <Eye size={11} />
-                                <span>Detay İncele</span>
-                              </button>
-                              <button 
-                                onClick={() => handleApproveDocument('waybill', doc.id)}
-                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white py-1.5 px-3 rounded-lg text-[10px] font-black tracking-wiest transition flex items-center justify-center space-x-1"
-                              >
-                                <Check size={11} />
-                                <span>Onayla &amp; İmzala</span>
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Faturalar Grid */}
-                  {pendingInvoices.length > 0 && (
-                    <div className="space-y-3 pt-4">
-                      <h3 className="font-display font-black text-xs text-slate-350 tracking-wider flex items-center space-x-2 uppercase">
-                        <CreditCard size={14} className="text-purple-500" />
-                        <span>Fatura Girişleri &amp; Üçlü Mutabakat Onayları ({pendingInvoices.length})</span>
-                      </h3>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {pendingInvoices.map(doc => (
-                          <div key={doc.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition space-y-3">
-                            <div>
-                              <div className="flex justify-between items-start">
-                                <span className="font-mono bg-purple-500/10 border border-purple-200/20 text-purple-400 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                                  {doc.faturaNo}
-                                </span>
-                                <span className="text-[10px] text-slate-500 font-mono font-bold">{doc.tarih}</span>
-                              </div>
-                              <p className="text-xs text-slate-200 font-bold mt-2.5">Cari Unvan: {doc.cariUnvan}</p>
-                              <p className="text-[10.5px] text-slate-400 mt-1">Eşleşen İrsaliyeler: {doc.bagliIrsaliyeler?.join(', ') || 'Manuel Bağsız'}</p>
-                              
-                              <div className="mt-2.5 p-2 bg-purple-500/5 rounded border border-purple-500/10 flex justify-between items-center text-[10px]">
-                                <span className="text-slate-400 font-bold">Toplam Tutar:</span>
-                                <span className="text-purple-400 font-black font-mono">₺{doc.genelToplam?.toLocaleString()}</span>
-                              </div>
-                            </div>
-
-                            <div className="flex gap-2 pt-2.5 border-t border-slate-900">
-                              <button 
-                                onClick={() => setActiveDocForDetail({ id: doc.id, type: 'invoice', data: doc })}
-                                className="flex-1 bg-slate-900 border border-slate-800 hover:bg-slate-800 hover:border-slate-705 text-white py-1.5 px-3 rounded-lg text-[10px] font-black tracking-wiest transition flex items-center justify-center space-x-1"
-                              >
-                                <Eye size={11} />
-                                <span>Karşılaştır &amp; Gör</span>
-                              </button>
-                              <button 
-                                onClick={() => handleApproveDocument('invoice', doc.id)}
-                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white py-1.5 px-3 rounded-lg text-[10px] font-black tracking-wiest transition flex items-center justify-center space-x-1"
-                              >
-                                <Check size={11} />
-                                <span>Mutabakat Onayla</span>
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            <GuvenlikEvrakOnayHavuzu
+              pendingGateDocs={pendingGateDocs}
+              pendingWaybills={pendingWaybills}
+              pendingInvoices={pendingInvoices}
+              setActiveDocForDetail={setActiveDocForDetail}
+              handleApproveDocument={handleApproveDocument}
+              handleRejectGateDoc={handleRejectGateDoc}
+              handleOpenGateDocApproval={handleOpenGateDocApproval}
+              activeGateDoc={activeGateDoc}
+              setActiveGateDoc={setActiveGateDoc}
+              approvalStep={approvalStep}
+              setApprovalStep={setApprovalStep}
+              selectedDocType={selectedDocType}
+              setSelectedDocType={setSelectedDocType}
+              isAiResolving={isAiResolving}
+              handleAnalyzeGateDocWithAi={handleAnalyzeGateDocWithAi}
+              handleStartManualGateDocApproval={handleStartManualGateDocApproval}
+              handleSaveGateDocApproval={handleSaveGateDocApproval}
+              faturaNo={faturaNo}
+              setFaturaNo={setFaturaNo}
+              faturaFirma={faturaFirma}
+              setFaturaFirma={setFaturaFirma}
+              faturaTarih={faturaTarih}
+              setFaturaTarih={setFaturaTarih}
+              faturaToplam={faturaToplam}
+              setFaturaToplam={setFaturaToplam}
+              faturaKdv={faturaKdv}
+              setFaturaKdv={setFaturaKdv}
+              faturaGenelToplam={faturaGenelToplam}
+              setFaturaGenelToplam={setFaturaGenelToplam}
+              faturaKalemler={faturaKalemler}
+              setFaturaKalemler={setFaturaKalemler}
+              irsaliyeNo={irsaliyeNo}
+              setIrsaliyeNo={setIrsaliyeNo}
+              irsaliyeFirma={irsaliyeFirma}
+              setIrsaliyeFirma={setIrsaliyeFirma}
+              irsaliyeTarih={irsaliyeTarih}
+              setIrsaliyeTarih={setIrsaliyeTarih}
+              irsaliyeKalemler={irsaliyeKalemler}
+              setIrsaliyeKalemler={setIrsaliyeKalemler}
+              makbuzRefNo={makbuzRefNo}
+              setMakbuzRefNo={setMakbuzRefNo}
+              makbuzFirma={makbuzFirma}
+              setMakbuzFirma={setMakbuzFirma}
+              makbuzTarih={makbuzTarih}
+              setMakbuzTarih={setMakbuzTarih}
+              makbuzTutar={makbuzTutar}
+              setMakbuzTutar={setMakbuzTutar}
+              makbuzAciklama={makbuzAciklama}
+              setMakbuzAciklama={setMakbuzAciklama}
+              makbuzTip={makbuzTip}
+              setMakbuzTip={setMakbuzTip}
+              genelAciklama={genelAciklama}
+              setGenelAciklama={setGenelAciklama}
+              itemUrunAdi={itemUrunAdi}
+              setItemUrunAdi={setItemUrunAdi}
+              itemMiktar={itemMiktar}
+              setItemMiktar={setItemMiktar}
+              itemBirim={itemBirim}
+              setItemBirim={setItemBirim}
+              itemBirimFiyat={itemBirimFiyat}
+              setItemBirimFiyat={setItemBirimFiyat}
+              itemKdvOran={itemKdvOran}
+              setItemKdvOran={setItemKdvOran}
+            />
           )}
 
           {activeTab === 'kampci_belgeleri' && (

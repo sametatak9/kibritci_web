@@ -21,6 +21,7 @@ import { Building2, Lock, Mail, Loader2, ArrowRight, CheckCircle2, AlertTriangle
 import { syncAuthClaimsFromServer } from '../lib/authClaimsClient';
 import { isFounderEmail, verifyFounderCredentials } from '../lib/roleClaims';
 import { KibritciLogo } from './KibritciLogo';
+import { guessRoleFromEmail } from '../lib/yetkiUtils';
 
 function withReadTimeout<T>(promise: Promise<T>, ms = 8000): Promise<T> {
   return Promise.race([
@@ -398,11 +399,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           }
         }
 
+        const guessedRole = guessRoleFromEmail(emailLower);
         const userPayload = {
           email: emailLower,
           password: passTrim,
-          role: 'MİSAFİR',
-          yetki: 'MİSAFİR',
+          role: guessedRole,
+          yetki: guessedRole,
           ad: ad.trim(),
           soyad: soyad.trim(),
           tcNo: tcNo.trim(),
@@ -416,8 +418,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         const kullaniciPayload = {
           id: emailLower,
           email: emailLower,
-          yetki: 'MİSAFİR',
-          durum: 'ONAY BEKLİYOR' as const,
+          yetki: guessedRole as any,
+          durum: guessedRole === 'MİSAFİR' ? ('ONAY BEKLİYOR' as const) : ('AKTİF' as const),
           kayitTarihi: new Date().toISOString().split('T')[0],
           ad: ad.trim(),
           soyad: soyad.trim(),

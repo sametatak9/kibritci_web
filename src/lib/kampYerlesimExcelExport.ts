@@ -45,9 +45,23 @@ function resolveFirma(
   personelMap: Map<string, Personel>,
   room: KampOdasi
 ): string {
-  if (kayit.calistigiFirma?.trim()) return kayit.calistigiFirma.trim();
+  if (kayit.calistigiFirma?.trim()) {
+    const val = kayit.calistigiFirma.trim();
+    const upper = val.toLocaleUpperCase('tr-TR');
+    if (upper === 'ANA FİRMA' || upper === 'ANA FIRMA') {
+      return ANA_FIRMA_LABEL;
+    }
+    return val;
+  }
   const p = kayit.personelId ? personelMap.get(kayit.personelId) : undefined;
-  if (p?.firmaAdi?.trim()) return p.firmaAdi.trim();
+  if (p?.firmaAdi?.trim()) {
+    const val = p.firmaAdi.trim();
+    const upper = val.toLocaleUpperCase('tr-TR');
+    if (upper === 'ANA FİRMA' || upper === 'ANA FIRMA') {
+      return ANA_FIRMA_LABEL;
+    }
+    return val;
+  }
   if (kayit.firmaTipi === 'TASERON' || room.firmaTipi === 'TASERON' || p?.firmaTipi === 'TASERON') {
     return 'Taşeron (Belirtilmemiş)';
   }
@@ -107,7 +121,7 @@ function writeRoomBlock(
 ) {
   const lines: string[] = [
     `ODA ${room.odaNo}`,
-    `Kapasite ${occupants.length}/${room.kapasite} · ${room.firmaTipi === 'ANA_FIRMA' ? 'Ana Kadro' : 'Taşeron'}`,
+    `Kapasite ${occupants.length}/${room.kapasite} · ${room.firmaTipi === 'ANA_FIRMA' ? 'KİBRİTÇİ İNŞAAT' : 'Taşeron'}`,
   ];
 
   if (occupants.length === 0) {
@@ -154,13 +168,16 @@ async function buildYerleskeSheet(
   personelMap: Map<string, Personel>,
   logoBase64: string | null
 ) {
-  const totalCols = ROOMS_PER_ROW * 6;
+  const totalCols = ROOMS_PER_ROW * 2 - 1;
   const basim = new Date().toLocaleString('tr-TR');
   const reportNo = `KBR-KAMP-${Date.now().toString().slice(-6)}`;
 
-  ws.getColumn(1).width = 22;
-  for (let c = 2; c <= totalCols; c += 1) {
-    ws.getColumn(c).width = 22;
+  for (let c = 1; c <= totalCols; c += 1) {
+    if (c % 2 === 1) {
+      ws.getColumn(c).width = 24;
+    } else {
+      ws.getColumn(c).width = 4;
+    }
   }
 
   if (logoBase64) {
@@ -238,7 +255,7 @@ async function buildYerleskeSheet(
     for (let i = 0; i < floorRooms.length; i += ROOMS_PER_ROW) {
       const chunk = floorRooms.slice(i, i + ROOMS_PER_ROW);
       chunk.forEach((room, idx) => {
-        const col = idx * 6 + 1;
+        const col = idx * 2 + 1;
         const occ = activeOccupants(room, kayitlar);
         writeRoomBlock(ws, row, col, room, occ, personelMap);
       });
@@ -255,9 +272,10 @@ async function buildYerleskeSheet(
   row += 1;
 
   ws.getCell(row, 1).value = 'Firma / İşveren';
-  ws.getCell(row, 2).value = 'Personel Sayısı';
-  ws.getCell(row, 3).value = 'Oran (%)';
-  for (let c = 1; c <= 3; c += 1) {
+  ws.getCell(row, 3).value = 'Personel Sayısı';
+  ws.getCell(row, 5).value = 'Oran (%)';
+  const summaryCols = [1, 3, 5];
+  for (const c of summaryCols) {
     const cell = ws.getCell(row, c);
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     setFill(cell, 'FF334155');
@@ -269,28 +287,32 @@ async function buildYerleskeSheet(
   const yerleskeTotal = allYerleskeOccupants.length || 1;
 
   if (yerleskeCounts.length === 0) {
-    ws.mergeCells(row, 1, row, 3);
+    ws.mergeCells(row, 1, row, 5);
     ws.getCell(row, 1).value = 'Bu yerleşkede aktif konaklayan personel yok.';
     row += 2;
   } else {
     for (const item of yerleskeCounts) {
       ws.getCell(row, 1).value = item.firma;
-      ws.getCell(row, 2).value = item.count;
-      ws.getCell(row, 3).value = `${Math.round((item.count / yerleskeTotal) * 100)}%`;
-      ws.getCell(row, 2).alignment = { horizontal: 'center' };
+      ws.getCell(row, 3).value = item.count;
+      ws.getCell(row, 5).value = `${Math.round((item.count / yerleskeTotal) * 100)}%`;
       ws.getCell(row, 3).alignment = { horizontal: 'center' };
-      if (row % 2 === 0) setFill(ws.getCell(row, 1), 'FFF8FAFC');
+      ws.getCell(row, 5).alignment = { horizontal: 'center' };
+      if (row % 2 === 0) {
+        setFill(ws.getCell(row, 1), 'FFF8FAFC');
+        setFill(ws.getCell(row, 3), 'FFF8FAFC');
+        setFill(ws.getCell(row, 5), 'FFF8FAFC');
+      }
       row += 1;
     }
     ws.getCell(row, 1).value = 'TOPLAM';
     ws.getCell(row, 1).font = { bold: true };
-    ws.getCell(row, 2).value = allYerleskeOccupants.length;
-    ws.getCell(row, 2).font = { bold: true };
-    ws.getCell(row, 3).value = '100%';
+    ws.getCell(row, 3).value = allYerleskeOccupants.length;
     ws.getCell(row, 3).font = { bold: true };
+    ws.getCell(row, 5).value = '100%';
+    ws.getCell(row, 5).font = { bold: true };
     setFill(ws.getCell(row, 1), 'FFE2E8F0');
-    setFill(ws.getCell(row, 2), 'FFE2E8F0');
     setFill(ws.getCell(row, 3), 'FFE2E8F0');
+    setFill(ws.getCell(row, 5), 'FFE2E8F0');
   }
 }
 
@@ -341,13 +363,14 @@ export async function exportKampYerlesimExcel(input: KampYerlesimExportInput): P
   ozet.getColumn(3).width = 14;
   ozet.getColumn(4).width = 14;
   ozet.getColumn(5).width = 14;
+  ozet.getColumn(6).width = 50;
 
   if (logoBase64) {
     const logoId = wb.addImage({ base64: logoBase64, extension: 'png' });
     ozet.addImage(logoId, { tl: { col: 0.1, row: 0.05 }, ext: { width: 160, height: 62 } });
   }
 
-  ozet.mergeCells(1, 1, 1, 5);
+  ozet.mergeCells(1, 1, 1, 6);
   ozet.getCell(1, 1).value = 'KİBRİTÇİ İNŞAAT — TÜM YERLEŞKELER ÖZET';
   ozet.getCell(1, 1).font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
   ozet.getCell(1, 1).alignment = { horizontal: 'center', vertical: 'middle' };
