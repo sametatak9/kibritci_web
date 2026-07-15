@@ -13,13 +13,13 @@ import {
 import { 
   Users, KeySquare, ShieldAlert, Trash2, CheckCircle, 
   XOctagon, UserCheck, AlertCircle, RefreshCw, Key,
-  Eye, Check, Clipboard, CheckSquare, Save, Loader2, UserPlus, Clock, Database
+  Eye, Check, Clipboard, CheckSquare, Save, Loader2, UserPlus, Clock, Database, X
 } from 'lucide-react';
 import { AdminYetkiSablonTab } from './AdminYetkiSablonTab';
 import { isFirestoreWriteFailure } from '../lib/bekleyenUyelik';
 import { fetchCollection, removeDocument, saveDocument } from '../lib/firebase';
 import { getMobileRoleDisplayName, isMobileRole } from '../lib/yetkiUtils';
-import { provisionAuthUser, syncAuthClaimsFromServer } from '../lib/authClaimsClient';
+import { provisionAuthUser, syncAuthClaimsFromServer, adminUpdateUserPassword } from '../lib/authClaimsClient';
 import {
   createProgramVeriYedegi,
   fetchVeriKorumaOzeti,
@@ -126,6 +126,16 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
   const [backupLoading, setBackupLoading] = useState(false);
   const [backupOzeti, setBackupOzeti] = useState<Awaited<ReturnType<typeof fetchVeriKorumaOzeti>> | null>(null);
   const [programYedekleri, setProgramYedekleri] = useState<ProgramVeriYedegi[]>([]);
+
+  // User edit state
+  const [editingUser, setEditingUser] = useState<Kullanici | null>(null);
+  const [editAd, setEditAd] = useState('');
+  const [editSoyad, setEditSoyad] = useState('');
+  const [editTcNo, setEditTcNo] = useState('');
+  const [editYetki, setEditYetki] = useState<string>('MİSAFİR');
+  const [editDurum, setEditDurum] = useState<'AKTİF' | 'KISITLI' | 'ONAY BEKLİYOR'>('ONAY BEKLİYOR');
+  const [editPassword, setEditPassword] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const mergedPending = mergePendingLists(
     firestorePending,
@@ -346,6 +356,63 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
       alert('Kayıt reddedildi.');
     } catch {
       alert('Kayıt reddedilemedi.');
+    }
+  };
+
+  const handleStartEditUser = (user: Kullanici) => {
+    setEditingUser(user);
+    setEditAd(user.ad || '');
+    setEditSoyad(user.soyad || '');
+    setEditTcNo(user.tcNo || '');
+    setEditYetki(user.yetki || 'MİSAFİR');
+    setEditDurum(user.durum || 'ONAY BEKLİYOR');
+    setEditPassword('');
+  };
+
+  const handleSaveEditedUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+
+    if (editPassword && editPassword.length < 6) {
+      alert('Şifre en az 6 karakter olmalıdır.');
+      return;
+    }
+
+    setIsSavingEdit(true);
+    try {
+      if (editPassword) {
+        await adminUpdateUserPassword(editingUser.email, editPassword);
+      }
+
+      const updatedUser: Kullanici = {
+        ...editingUser,
+        ad: editAd.trim(),
+        soyad: editSoyad.trim(),
+        tcNo: editTcNo.trim(),
+        yetki: editYetki as any,
+        durum: editDurum,
+      };
+
+      const saved = await saveKullanici(updatedUser);
+      
+      setKullanicilar(prev =>
+        dedupeKullanicilarByEmail(
+          prev.map(u => u.email.toLowerCase() === editingUser.email.toLowerCase() ? { ...u, ...saved } : u)
+        )
+      );
+
+      await syncAuthClaimsFromServer(editingUser.email).catch(() => undefined);
+
+      alert(`✅ ${editingUser.email} kullanıcısının bilgileri başarıyla güncellendi!`);
+      if (addNotification) {
+        addNotification(`${editingUser.email} kullanıcısının kişisel bilgileri kurucu tarafından güncellendi.`);
+      }
+      setEditingUser(null);
+    } catch (err: any) {
+      console.error('Kullanıcı düzenleme hatası:', err);
+      alert(`Hata: ${err.message || 'Kullanıcı bilgileri güncellenemedi.'}`);
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -748,7 +815,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                             </td>
                             <td className="p-3 text-center">
                               <button
-                                onClick={() => handleToggleStatus(user.id)}
+              onClick={() => handleToggleStatus(user.id)}
                                 className={`px-3 py-1 text-[10px] font-bold rounded-full border transition active:scale-95 cursor-pointer ${
                                   user.durum === 'AKTİF'
                                     ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
@@ -761,7 +828,16 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                                 {user.durum === 'AKTİF' ? '● Aktif Erişim' : user.durum === 'ONAY BEKLİYOR' ? '⌛ Onay Bekliyor' : '✕ Kısıtlanmış'}
                               </button>
                             </td>
-                            <td className="p-3 text-right">
+                            <td className="p-3 text-right flex items-center justify-end gap-1.5">
+                              {currentUser?.email === 'sametatak9@gmail.com' && (
+                                <button
+                                  onClick={() => handleStartEditUser(user as any)}
+                                  className="p-2 rounded-lg border shadow-xs transition active:scale-95 bg-amber-50 border-amber-200 text-amber-600 hover:bg-amber-100 cursor-pointer"
+                                  title="Kullanıcı Bilgilerini ve Şifresini Düzenle"
+                                >
+                                  <Key size={13} />
+                                </button>
+                              )}
                               <button
                                 disabled={isSelf}
                                 onClick={() => handleDeleteUser(user.id, user.email)}
@@ -1230,6 +1306,145 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
 
         </div>
       </div>
+
+      {/* 🔐 USER PROFILE & CREDENTIALS EDIT MODAL (FOUNDER ONLY) */}
+      {editingUser && currentUser?.email === 'sametatak9@gmail.com' && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full shadow-2xl text-white p-6 animate-fade-in">
+            <div className="flex justify-between items-center mb-5 pb-3 border-b border-slate-800">
+              <div>
+                <h3 className="text-sm font-black tracking-wider text-amber-400 uppercase">👤 KULLANICI BİLGİLERİNİ DÜZENLE</h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">{editingUser.email}</p>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setEditingUser(null)}
+                className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedUser} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400">Ad</label>
+                  <input
+                    type="text"
+                    required
+                    value={editAd}
+                    onChange={(e) => setEditAd(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 outline-none focus:border-amber-400 transition"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400">Soyad</label>
+                  <input
+                    type="text"
+                    required
+                    value={editSoyad}
+                    onChange={(e) => setEditSoyad(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 outline-none focus:border-amber-400 transition"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400">TC Kimlik No</label>
+                <input
+                  type="text"
+                  maxLength={11}
+                  value={editTcNo}
+                  onChange={(e) => setEditTcNo(e.target.value.replace(/\D/g, ''))}
+                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 outline-none focus:border-amber-400 transition font-mono"
+                  placeholder="Seçmeli (11 hane)"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400">Görev / Yetki Rolü</label>
+                <select
+                  value={editYetki}
+                  onChange={(e) => setEditYetki(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-2.5 py-2 outline-none focus:border-amber-400 transition cursor-pointer"
+                >
+                  <option value="KURUCU">👑 Kurucu (Nihai Yetkili)</option>
+                  <option value="YÖNETİCİ">👑 Sistem Yöneticisi / Müdür</option>
+                  <option value="MUHASEBE">💰 Muhasebe (Finans)</option>
+                  <option value="İDARİ_İŞLER">🏡 İdari İşler (İK)</option>
+                  <option value="SATIN_ALMA">🛒 Satın Alma Şefi</option>
+                  <option value="ŞANTİYE_ŞEFİ">🚧 Şantiye Şefi</option>
+                  <option value="PROJE_MÜDÜRÜ">📋 Proje Müdürü</option>
+                  <option value="ELEKTRİK_ŞEFİ">⚡ Elektrik Şefi</option>
+                  <option value="TESİSAT_ŞEFİ">🔧 Tesisat Şefi</option>
+                  <option value="MEKANİK_ŞEFİ">⚙️ Mekanik Şefi</option>
+                  <option value="İNCE_İŞLER_ŞEFİ">🪜 İnce İşler Şefi</option>
+                  <option value="KABA_İŞLER_ŞEFİ">🧱 Kaba İşler Şefi</option>
+                  <option value="DİZAYN_ŞEFİ">📐 Dizayn Şefi</option>
+                  <option value="PARSEL_ŞEFİ">🗺️ Parsel Şefi</option>
+                  <option value="FORMEN">👷 FORMEN (Mobil)</option>
+                  <option value="KAMPÇI">⛺ KAMPÇI (Mobil)</option>
+                  <option value="GÜVENLİK">👮 GÜVENLİK (Mobil)</option>
+                  <option value="LOJİSTİK">🚚 ŞOFÖR / LOJİSTİK (Mobil)</option>
+                  <option value="DEPOCU">📦 DEPOCU (Mobil)</option>
+                  <option value="MİSAFİR">⏳ MİSAFİR (Erişimsiz)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400">Hesap Durumu</label>
+                <select
+                  value={editDurum}
+                  onChange={(e) => setEditDurum(e.target.value as any)}
+                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-2.5 py-2 outline-none focus:border-amber-400 transition cursor-pointer"
+                >
+                  <option value="AKTİF">🟢 Aktif Erişim</option>
+                  <option value="ONAY BEKLİYOR">⌛ Onay Bekliyor</option>
+                  <option value="KISITLI">🔴 Kısıtlanmış / Engelli</option>
+                </select>
+              </div>
+
+              <div className="space-y-1 pt-1.5 border-t border-slate-800">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold text-amber-400 flex items-center gap-1">
+                    <Key size={10} />
+                    <span>Şifreyi Değiştir (Firebase Auth)</span>
+                  </label>
+                </div>
+                <input
+                  type="text"
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 outline-none focus:border-amber-400 transition"
+                  placeholder="Yeni şifre (Değiştirmek istemiyorsanız boş bırakın)"
+                />
+              </div>
+
+              <div className="flex gap-2.5 pt-3.5">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 font-bold py-2.5 rounded-xl transition cursor-pointer text-center active:scale-95"
+                >
+                  İPTAL
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="flex-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-60"
+                >
+                  {isSavingEdit ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <CheckSquare size={13} />
+                  )}
+                  <span>KAYDET</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       
     </div>
   );

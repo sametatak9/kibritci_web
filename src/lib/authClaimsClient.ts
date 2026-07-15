@@ -62,3 +62,32 @@ export async function provisionAuthUser(
   const data = (await res.json()) as { claims: SyncedClaims };
   return data.claims;
 }
+
+/** Yönetici (sametatak9@gmail.com): bir kullanıcının şifresini Auth üzerinde günceller */
+export async function adminUpdateUserPassword(
+  email: string,
+  password: string
+): Promise<boolean> {
+  const user = auth.currentUser;
+  if (!user || user.isAnonymous) return false;
+
+  const idToken = await user.getIdToken();
+  const res = await fetch('/api/auth/admin/update-user', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: email.trim().toLowerCase(),
+      password,
+    }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Şifre güncellenemedi.');
+  }
+
+  return true;
+}

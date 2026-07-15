@@ -7,7 +7,7 @@ import {
   listPendingSignups,
   upsertPendingSignup,
 } from './pendingSignupsStore';
-import { isFirebaseAdminConfigured } from './firebaseAdmin';
+import { getFirebaseAdmin, isFirebaseAdminConfigured } from './firebaseAdmin';
 import {
   bootstrapFounderAccount,
   callerIsYonetici,
@@ -90,6 +90,50 @@ app.post('/api/auth/provision-user', async (req, res) => {
     return res.json({ success: true, claims });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Kullanıcı provision başarısız';
+    return res.status(500).json({ error: message });
+  }
+});
+
+app.post('/api/auth/admin/update-user', async (req, res) => {
+  if (!isFirebaseAdminConfigured()) {
+    return res.status(503).json({ error: 'Firebase Admin yapılandırılmamış' });
+  }
+  try {
+    const idToken = await readBearerToken(req);
+    if (!idToken) return res.status(401).json({ error: 'Authorization Bearer token gerekli' });
+    const decoded = await verifyIdToken(idToken);
+    const callerEmail = String(decoded.email || '').trim().toLowerCase();
+    
+    // Only "sametatak9@gmail.com" is allowed to update user passwords
+    if (callerEmail !== 'sametatak9@gmail.com') {
+      return res.status(403).json({ error: 'Yalnızca sametatak9@gmail.com bu işlemi yapabilir' });
+    }
+
+    const targetEmail = String(req.body?.email || '').trim().toLowerCase();
+    const newPassword = String(req.body?.password || '').trim();
+
+    if (!targetEmail) {
+      return res.status(400).json({ error: 'hedef e-posta (email) zorunludur' });
+    }
+
+    const admin = getFirebaseAdmin();
+    const userRecord = await admin.auth().getUserByEmail(targetEmail);
+    const updatePayload: any = {};
+
+    if (newPassword) {
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: 'Yeni şifre en az 6 karakter olmalıdır' });
+      }
+      updatePayload.password = newPassword;
+    }
+
+    if (Object.keys(updatePayload).length > 0) {
+      await admin.auth().updateUser(userRecord.uid, updatePayload);
+    }
+
+    return res.json({ success: true, message: 'Kullanıcı şifresi başarıyla güncellendi' });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Kullanıcı güncelleme başarısız';
     return res.status(500).json({ error: message });
   }
 });

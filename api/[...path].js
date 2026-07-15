@@ -559,6 +559,41 @@ function registerApiRoutes(app2) {
       return res.status(500).json({ error: message });
     }
   });
+  app2.post("/api/auth/admin/update-user", async (req, res) => {
+    if (!isFirebaseAdminConfigured()) {
+      return res.status(503).json({ error: "Firebase Admin yap\u0131land\u0131r\u0131lmam\u0131\u015F" });
+    }
+    try {
+      const idToken = await readBearerToken(req);
+      if (!idToken) return res.status(401).json({ error: "Authorization Bearer token gerekli" });
+      const decoded = await verifyIdToken(idToken);
+      const callerEmail = String(decoded.email || "").trim().toLowerCase();
+      if (callerEmail !== "sametatak9@gmail.com") {
+        return res.status(403).json({ error: "Yaln\u0131zca sametatak9@gmail.com bu i\u015Flemi yapabilir" });
+      }
+      const targetEmail = String(req.body?.email || "").trim().toLowerCase();
+      const newPassword = String(req.body?.password || "").trim();
+      if (!targetEmail) {
+        return res.status(400).json({ error: "hedef e-posta (email) zorunludur" });
+      }
+      const admin2 = getFirebaseAdmin();
+      const userRecord = await admin2.auth().getUserByEmail(targetEmail);
+      const updatePayload = {};
+      if (newPassword) {
+        if (newPassword.length < 6) {
+          return res.status(400).json({ error: "Yeni \u015Fifre en az 6 karakter olmal\u0131d\u0131r" });
+        }
+        updatePayload.password = newPassword;
+      }
+      if (Object.keys(updatePayload).length > 0) {
+        await admin2.auth().updateUser(userRecord.uid, updatePayload);
+      }
+      return res.json({ success: true, message: "Kullan\u0131c\u0131 \u015Fifresi ba\u015Far\u0131yla g\xFCncellendi" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Kullan\u0131c\u0131 g\xFCncelleme ba\u015Far\u0131s\u0131z";
+      return res.status(500).json({ error: message });
+    }
+  });
   app2.post("/api/auth/sync-claims", async (req, res) => {
     if (!isFirebaseAdminConfigured()) {
       return res.status(503).json({
