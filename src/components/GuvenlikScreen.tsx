@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShieldAlert, FileText, Users, Truck, UserCheck, Search, PlusCircle, Trash2, 
   Check, X, FileUp, Camera, Printer, Clock, AlertTriangle, Key, Download, ArrowRight, RefreshCw, Barcode,
-  Archive, Calendar, Lock
+  Archive, Calendar, Lock, ClipboardList
 } from 'lucide-react';
 import { Personel, Irsaliye, IrsaliyeItem, Fatura } from '../types/erp';
 import { db } from '../lib/firebase';
@@ -30,7 +30,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   isStandalone = false,
   addNotification
 }) => {
-  const [activeTab, setActiveTab] = useState<'irsaliye' | 'personel' | 'arac' | 'ziyaretci' | 'nobet_arsivi'>('irsaliye');
+  const [activeTab, setActiveTab] = useState<'irsaliye' | 'personel' | 'arac' | 'ziyaretci' | 'nobet_arsivi' | 'akvizyon_yoklama'>('irsaliye');
   const [viewMode, setViewMode] = useState<'web' | 'mobile'>('web');
   
   // ─────────────────────────────────────────────────────────────
@@ -131,6 +131,14 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   const [selectedArchive, setSelectedArchive] = useState<any | null>(null);
   const [nobetSearch, setNobetSearch] = useState('');
   const [isArchiving, setIsArchiving] = useState(false);
+  const [selectedVardiya, setSelectedVardiya] = useState<'GUNDUZ' | 'GECE'>('GUNDUZ');
+
+  // Akvizyon States
+  const [akvizyonYoklamaMap, setAkvizyonYoklamaMap] = useState<Record<string, 'Geldi' | 'Gelmedi'>>({});
+  const [akvizyonArchives, setAkvizyonArchives] = useState<any[]>([]);
+  const [selectedAkvizyonArchive, setSelectedAkvizyonArchive] = useState<any | null>(null);
+  const [selectedAkvizyonPersonel, setSelectedAkvizyonPersonel] = useState<Personel | null>(null);
+  const [loadingAkvizyonYoklama, setLoadingAkvizyonYoklama] = useState(false);
 
   // Status message
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -143,63 +151,54 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     return `${islemTarihi}T${hours}:${minutes}:${seconds}.000Z`; 
   };
 
-  const handleNobetRaporuAl = async () => {
+  const akvizyonPersoneller = (personeller || []).filter(p => {
+    const firm = (p.firmaAdi || p.calistigiFirma || '').trim().toLocaleLowerCase('tr-TR');
+    return firm.includes('akvizyon');
+  });
+
+  const canSaveAkvizyonYoklama = currentUser?.email === 'guven3@gmail.com';
+
+  const handleSaveAkvizyonYoklama = async () => {
+    if (!canSaveAkvizyonYoklama) {
+      alert("Hata: Akvizyon yoklama kaydı yalnızca 'guven3@gmail.com' hesabı tarafından yapılabilir.");
+      return;
+    }
+    setLoadingAkvizyonYoklama(true);
     try {
-      showStatus('success', 'Rapor oluşturuluyor, lütfen bekleyin...');
-      
-      const { default: html2canvas } = await import('html2canvas');
-      const { jsPDF } = await import('jspdf');
-      const { generateGuvenlikReportHtml } = await import('../lib/guvenlikReportHtml');
+      const finalMap = { ...akvizyonYoklamaMap };
+      akvizyonPersoneller.forEach(p => {
+        if (!finalMap[p.id]) {
+          finalMap[p.id] = 'Gelmedi';
+        }
+      });
 
-      const todayLogs = personelLoglar.filter(l => l.zaman && l.zaman.startsWith(islemTarihi));
-      const todayAraclar = [...iceridekiAraclar, ...aracGecmisLoglar].filter(a => a.girisZamani && a.girisZamani.startsWith(islemTarihi));
-      const todayZiyaretciler = [...aktifZiyaretciler, ...ziyaretciGecmisLoglar].filter(z => z.girisZamani && z.girisZamani.startsWith(islemTarihi));
-      const todayEvraklar = gelenEvraklar.filter(e => e.tarih === islemTarihi);
+      await setDoc(doc(db, 'akvizyonYoklamalari', islemTarihi), {
+        tarih: islemTarihi,
+        kayitZamani: getIslemZamani(),
+        kaydeden: currentUser?.email,
+        yoklama: finalMap
+      });
 
-      const htmlContent = generateGuvenlikReportHtml(
-        islemTarihi,
-        todayLogs,
-        todayAraclar,
-        todayZiyaretciler,
-        todayEvraklar
-      );
-
-      const container = document.createElement('div');
-      container.innerHTML = htmlContent;
-      container.style.position = 'absolute';
-      container.style.top = '-9999px';
-      container.style.left = '-9999px';
-      container.style.width = '1000px'; 
-      document.body.appendChild(container);
-
-      const canvas = await html2canvas(container, { scale: 2, useCORS: true });
-      document.body.removeChild(container);
-
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      
-      let heightLeft = pdfHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
-      heightLeft -= pdf.internal.pageSize.getHeight();
-
-      while (heightLeft >= 0) {
-        position = heightLeft - pdfHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
-        heightLeft -= pdf.internal.pageSize.getHeight();
+      if (addNotification) {
+        addNotification(`Akvizyon Taşeron firmasının ${islemTarihi} tarihli yoklaması kaydedildi.`);
       }
-
-      pdf.save(`Kibritci_Guvenlik_Raporu_${islemTarihi}.pdf`);
-      showStatus('success', 'Rapor başarıyla indirildi.');
-    } catch (error) {
-      console.error("PDF oluşturma hatası:", error);
-      showStatus('error', 'Rapor oluşturulurken bir hata oluştu.');
+      showStatus('success', 'Akvizyon yoklama verisi kaydedildi ve arşivlendi!');
+    } catch (err: any) {
+      console.error(err);
+      showStatus('error', 'Yoklama kaydedilemedi: ' + err.message);
+    } finally {
+      setLoadingAkvizyonYoklama(false);
     }
   };
+
+  useEffect(() => {
+    const existing = akvizyonArchives.find(a => a.tarih === islemTarihi);
+    if (existing && existing.yoklama) {
+      setAkvizyonYoklamaMap(existing.yoklama);
+    } else {
+      setAkvizyonYoklamaMap({});
+    }
+  }, [islemTarihi, akvizyonArchives]);
 
   const showStatus = (type: 'success' | 'error', text: string) => {
     setStatusMsg({ type, text });
@@ -259,18 +258,25 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       setNobetArsivleri(list);
     });
 
+    // 6. Akvizyon Yoklama Arşivleri
+    const akvizyonColl = collection(db, 'akvizyonYoklamalari');
+    const unsubAkvizyon = onSnapshot(akvizyonColl, (snap) => {
+      const list: any[] = [];
+      snap.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
+      list.sort((a, b) => b.tarih.localeCompare(a.tarih));
+      setAkvizyonArchives(list);
+    });
+
     return () => {
       unsubPLog();
       unsubArac();
       unsubViz();
       unsubEvrak();
       unsubNobet();
+      unsubAkvizyon();
     };
   }, []);
 
-  // ─────────────────────────────────────────────────────────────
-  // 💾 İRSALİYE GÖNDERİM EVENTİ
-  // ─────────────────────────────────────────────────────────────
   // ─────────────────────────────────────────────────────────────
   // 💾 EVRAK GÖNDERİM EVENTLERİ
   // ─────────────────────────────────────────────────────────────
@@ -334,31 +340,200 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     }
   };
 
+  const handleNobetRaporuAl = async () => {
+    try {
+      showStatus('success', 'Rapor oluşturuluyor, lütfen bekleyin...');
+      
+      const { default: html2canvas } = await import('html2canvas');
+      const { jsPDF } = await import('jspdf');
+      const { generateGuvenlikReportHtml } = await import('../lib/guvenlikReportHtml');
+
+      const todayStr = islemTarihi;
+      const baseDate = new Date(todayStr);
+      baseDate.setDate(baseDate.getDate() + 1);
+      const nextDayStr = baseDate.toISOString().split('T')[0];
+
+      const startLimit = selectedVardiya === 'GUNDUZ' ? `${todayStr}T08:00:00.000Z` : `${todayStr}T20:00:00.000Z`;
+      const endLimit = selectedVardiya === 'GUNDUZ' ? `${todayStr}T20:00:00.000Z` : `${nextDayStr}T08:00:00.000Z`;
+
+      const filterByTime = (timeStr: string) => {
+        if (!timeStr) return false;
+        return timeStr >= startLimit && timeStr < endLimit;
+      };
+
+      const todayLogs = personelLoglar.filter(l => filterByTime(l.zaman));
+      const todayAraclar = [...iceridekiAraclar, ...aracGecmisLoglar].filter(a => {
+        const inTime = a.girisZamani;
+        const outTime = a.cikisZamani || getIslemZamani();
+        return inTime < endLimit && outTime >= startLimit;
+      });
+      const todayZiyaretciler = [...aktifZiyaretciler, ...ziyaretciGecmisLoglar].filter(z => {
+        const inTime = z.girisZamani;
+        const outTime = z.cikisZamani || getIslemZamani();
+        return inTime < endLimit && outTime >= startLimit;
+      });
+      const todayEvraklar = gelenEvraklar.filter(e => {
+        if (!e.tarih || !e.saat) return false;
+        const evrakTime = `${e.tarih}T${e.saat}:00.000Z`;
+        return evrakTime >= startLimit && evrakTime < endLimit;
+      });
+
+      const htmlContent = generateGuvenlikReportHtml(
+        islemTarihi,
+        todayLogs,
+        todayAraclar,
+        todayZiyaretciler,
+        todayEvraklar,
+        selectedVardiya
+      );
+
+      const container = document.createElement('div');
+      container.innerHTML = htmlContent;
+      container.style.position = 'absolute';
+      container.style.top = '-9999px';
+      container.style.left = '-9999px';
+      container.style.width = '1000px'; 
+      document.body.appendChild(container);
+
+      const canvas = await html2canvas(container, { scale: 2, useCORS: true });
+      document.body.removeChild(container);
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      let heightLeft = pdfHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+      heightLeft -= pdf.internal.pageSize.getHeight();
+
+      while (heightLeft >= 0) {
+        position = heightLeft - pdfHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+        heightLeft -= pdf.internal.pageSize.getHeight();
+      }
+
+      const shiftSuffix = selectedVardiya ? `_${selectedVardiya}` : '';
+      pdf.save(`Kibritci_Guvenlik_Raporu_${islemTarihi}${shiftSuffix}.pdf`);
+      showStatus('success', 'Rapor başarıyla indirildi.');
+    } catch (error) {
+      console.error("PDF oluşturma hatası:", error);
+      showStatus('error', 'Rapor oluşturulurken bir hata oluştu.');
+    }
+  };
+
+  const handleArchivedNobetRaporuAl = async (archive: any) => {
+    try {
+      showStatus('success', 'Arşiv raporu oluşturuluyor, lütfen bekleyin...');
+      
+      const { default: html2canvas } = await import('html2canvas');
+      const { jsPDF } = await import('jspdf');
+      const { generateGuvenlikReportHtml } = await import('../lib/guvenlikReportHtml');
+
+      const htmlContent = generateGuvenlikReportHtml(
+        archive.tarih,
+        archive.personelLoglari || [],
+        archive.aracLoglari || [],
+        archive.ziyaretciLoglari || [],
+        archive.evrakLoglari || [],
+        archive.vardiya || 'TAM_GUN'
+      );
+
+      const container = document.createElement('div');
+      container.innerHTML = htmlContent;
+      container.style.position = 'absolute';
+      container.style.top = '-9999px';
+      container.style.left = '-9999px';
+      container.style.width = '1000px'; 
+      document.body.appendChild(container);
+
+      const canvas = await html2canvas(container, { scale: 2, useCORS: true });
+      document.body.removeChild(container);
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      let heightLeft = pdfHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+      heightLeft -= pdf.internal.pageSize.getHeight();
+
+      while (heightLeft >= 0) {
+        position = heightLeft - pdfHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+        heightLeft -= pdf.internal.pageSize.getHeight();
+      }
+
+      const shiftSuffix = archive.vardiya ? `_${archive.vardiya}` : '';
+      pdf.save(`Kibritci_Guvenlik_Raporu_${archive.tarih}${shiftSuffix}.pdf`);
+      showStatus('success', 'Arşiv raporu başarıyla indirildi.');
+    } catch (error) {
+      console.error("PDF oluşturma hatası:", error);
+      showStatus('error', 'Rapor oluşturulurken bir hata oluştu.');
+    }
+  };
+
   const handleArchiveNobetGunu = async (notes: string) => {
     setIsArchiving(true);
     try {
       const todayStr = islemTarihi;
-      const todayLogs = personelLoglar.filter(l => l.zaman && l.zaman.startsWith(todayStr));
-      const todayAraclar = [...iceridekiAraclar, ...aracGecmisLoglar].filter(a => a.girisZamani && a.girisZamani.startsWith(todayStr));
-      const todayZiyaretciler = [...aktifZiyaretciler, ...ziyaretciGecmisLoglar].filter(z => z.girisZamani && z.girisZamani.startsWith(todayStr));
-      const todayEvraklar = gelenEvraklar.filter(e => e.tarih === todayStr);
+      const baseDate = new Date(todayStr);
+      baseDate.setDate(baseDate.getDate() + 1);
+      const nextDayStr = baseDate.toISOString().split('T')[0];
+
+      const startLimit = selectedVardiya === 'GUNDUZ' ? `${todayStr}T08:00:00.000Z` : `${todayStr}T20:00:00.000Z`;
+      const endLimit = selectedVardiya === 'GUNDUZ' ? `${todayStr}T20:00:00.000Z` : `${nextDayStr}T08:00:00.000Z`;
+
+      const filterByTime = (timeStr: string) => {
+        if (!timeStr) return false;
+        return timeStr >= startLimit && timeStr < endLimit;
+      };
+
+      const filteredLogs = personelLoglar.filter(l => filterByTime(l.zaman));
+      const filteredAraclar = [...iceridekiAraclar, ...aracGecmisLoglar].filter(a => {
+        const inTime = a.girisZamani;
+        const outTime = a.cikisZamani || getIslemZamani();
+        return inTime < endLimit && outTime >= startLimit;
+      });
+      const filteredZiyaretciler = [...aktifZiyaretciler, ...ziyaretciGecmisLoglar].filter(z => {
+        const inTime = z.girisZamani;
+        const outTime = z.cikisZamani || getIslemZamani();
+        return inTime < endLimit && outTime >= startLimit;
+      });
+      const filteredEvraklar = gelenEvraklar.filter(e => {
+        if (!e.tarih || !e.saat) return false;
+        const evrakTime = `${e.tarih}T${e.saat}:00.000Z`;
+        return evrakTime >= startLimit && evrakTime < endLimit;
+      });
 
       const archiveRef = doc(collection(db, 'guvenlikNobetArsivleri'));
+      const archiveId = archiveRef.id;
+
       await setDoc(archiveRef, {
+        id: archiveId,
         tarih: todayStr,
+        vardiya: selectedVardiya,
         kayitZamani: getIslemZamani(),
         kaydeden: currentUser?.email || 'Nöbetçi Güvenlik',
         notlar: notes,
-        personelLoglari: todayLogs,
-        aracLoglari: todayAraclar,
-        ziyaretciLoglari: todayZiyaretciler,
-        evrakLoglari: todayEvraklar
+        personelLoglari: filteredLogs,
+        aracLoglari: filteredAraclar,
+        ziyaretciLoglari: filteredZiyaretciler,
+        evrakLoglari: filteredEvraklar
       });
 
       if (addNotification) {
-        addNotification(`Bugünkü güvenlik nöbeti (${currentUser?.email || 'Güvenlik'}) tarafından arşivlendi.`);
+        const shiftText = selectedVardiya === 'GUNDUZ' ? 'Gündüz Vardiyası' : 'Gece Vardiyası';
+        addNotification(`Bugünkü güvenlik nöbeti (${shiftText} - ${currentUser?.email || 'Güvenlik'}) tarafından arşivlendi.`);
       }
-      showStatus('success', '🎉 Bugünkü nöbet günü başarıyla kalıcı olarak arşivlendi!');
+      showStatus('success', '🎉 Nöbet günü başarıyla kalıcı olarak arşivlendi!');
     } catch (err: any) {
       console.error(err);
       showStatus('error', 'Nöbet günü arşivlenirken hata oluştu: ' + err.message);
@@ -667,6 +842,13 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'nobet_arsivi' ? 'bg-amber-600 text-slate-950 shadow-md shadow-amber-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <span className="flex items-center space-x-2"><Archive size={13} /> <span>5. Nöbet Kapat &amp; Arşiv</span></span>
+            </button>
+
+            <button 
+              onClick={() => setActiveTab('akvizyon_yoklama')}
+              className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'akvizyon_yoklama' ? 'bg-amber-600 text-slate-950 shadow-md shadow-amber-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+              <span className="flex items-center space-x-2"><ClipboardList size={13} /> <span>6. Akvizyon Yoklama</span></span>
             </button>
           </div>
 
@@ -1456,51 +1638,92 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                 {/* Sol Panel: Aktif Günü Arşivle */}
                 <div className="bg-white p-6 border border-slate-200 rounded-3xl space-y-5">
                   <span className="font-display font-black text-xs text-slate-805 uppercase tracking-widest block border-b border-slate-200 pb-2">
-                    🔒 BUGÜNKÜ NÖBET GÜNÜNÜ ARŞİVLE
+                    🔒 BUGÜNKÜ NÖBET VARDİYASINI ARŞİVLE
                   </span>
 
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    Nöbet değişimi veya gün sonu geldiğinde, bugünkü tüm aktif giriş-çıkış hareketlerini dondurup geriye dönük arama havuzuna kalıcı arşiv olarak kaydedebilirsiniz.
+                    Nöbet değişimi veya vardiya sonu geldiğinde, bu vardiya süresindeki tüm aktif giriş-çıkış ve evrak hareketlerini süzerek arşive kaydedebilirsiniz.
                   </p>
 
-                  {/* Bugünkü İstatistikler */}
-                  <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-3">
-                    <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">Bugünkü Hareketler Özeti</span>
-                    
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40">
-                        <span className="text-[9px] font-bold text-slate-500 block uppercase">Personel Hareketi</span>
-                        <span className="text-sm font-black text-slate-805 font-mono">
-                          {personelLoglar.filter(l => l.zaman && l.zaman.startsWith(islemTarihi)).length} Kayıt
-                        </span>
-                      </div>
-
-                      <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40">
-                        <span className="text-[9px] font-bold text-slate-500 block uppercase">Araç Kaydı</span>
-                        <span className="text-sm font-black text-slate-805 font-mono">
-                          {[...iceridekiAraclar, ...aracGecmisLoglar].filter(a => (a.girisZamani && a.girisZamani.startsWith(islemTarihi))).length} Araç
-                        </span>
-                      </div>
-
-                      <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40">
-                        <span className="text-[9px] font-bold text-slate-500 block uppercase">Misafir Sayısı</span>
-                        <span className="text-sm font-black text-slate-805 font-mono">
-                          {[...aktifZiyaretciler, ...ziyaretciGecmisLoglar].filter(z => (z.girisZamani && z.girisZamani.startsWith(islemTarihi))).length} Ziyaretçi
-                        </span>
-                      </div>
-
-                      <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40">
-                        <span className="text-[9px] font-bold text-slate-500 block uppercase">Evrak Alımı</span>
-                        <span className="text-sm font-black text-slate-805 font-mono">
-                          {gelenEvraklar.filter(e => e.tarih === islemTarihi).length} Evrak
-                        </span>
-                      </div>
-                    </div>
+                  {/* Vardiya Seçimi */}
+                  <div className="space-y-1.5 text-xs text-slate-705">
+                    <label className="text-[9px] font-bold text-slate-500 uppercase block font-sans">Arşivlenecek Vardiya *</label>
+                    <select
+                      value={selectedVardiya}
+                      onChange={(e) => setSelectedVardiya(e.target.value as any)}
+                      className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl font-bold text-xs text-slate-850"
+                    >
+                      <option value="GUNDUZ">☀️ Gündüz Vardiyası (08:00 - 20:00)</option>
+                      <option value="GECE">🌙 Gece Vardiyası (20:00 - 08:00)</option>
+                    </select>
                   </div>
+
+                  {/* Vardiyaya Göre Dinamik İstatistikler */}
+                  {(() => {
+                    const todayStr = islemTarihi;
+                    const baseDate = new Date(todayStr);
+                    baseDate.setDate(baseDate.getDate() + 1);
+                    const nextDayStr = baseDate.toISOString().split('T')[0];
+
+                    const startLimit = selectedVardiya === 'GUNDUZ' ? `${todayStr}T08:00:00.000Z` : `${todayStr}T20:00:00.000Z`;
+                    const endLimit = selectedVardiya === 'GUNDUZ' ? `${todayStr}T20:00:00.000Z` : `${nextDayStr}T08:00:00.000Z`;
+
+                    const filterByTime = (timeStr: string) => {
+                      if (!timeStr) return false;
+                      return timeStr >= startLimit && timeStr < endLimit;
+                    };
+
+                    const sLogs = personelLoglar.filter(l => filterByTime(l.zaman)).length;
+                    const sAraclar = [...iceridekiAraclar, ...aracGecmisLoglar].filter(a => {
+                      const inTime = a.girisZamani;
+                      const outTime = a.cikisZamani || getIslemZamani();
+                      return inTime < endLimit && outTime >= startLimit;
+                    }).length;
+                    const sGuests = [...aktifZiyaretciler, ...ziyaretciGecmisLoglar].filter(z => {
+                      const inTime = z.girisZamani;
+                      const outTime = z.cikisZamani || getIslemZamani();
+                      return inTime < endLimit && outTime >= startLimit;
+                    }).length;
+                    const sEvrak = gelenEvraklar.filter(e => {
+                      if (!e.tarih || !e.saat) return false;
+                      const evrakTime = `${e.tarih}T${e.saat}:00.000Z`;
+                      return evrakTime >= startLimit && evrakTime < endLimit;
+                    }).length;
+
+                    return (
+                      <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-3">
+                        <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider block font-sans">
+                          Vardiya İstatistikleri Özeti
+                        </span>
+                        
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40">
+                            <span className="text-[9px] font-bold text-slate-500 block uppercase font-sans">Personel</span>
+                            <span className="text-sm font-black text-slate-805 font-mono">{sLogs} Hareket</span>
+                          </div>
+
+                          <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40">
+                            <span className="text-[9px] font-bold text-slate-500 block uppercase font-sans">Araç</span>
+                            <span className="text-sm font-black text-slate-805 font-mono">{sAraclar} Giriş</span>
+                          </div>
+
+                          <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40">
+                            <span className="text-[9px] font-bold text-slate-500 block uppercase font-sans">Misafir</span>
+                            <span className="text-sm font-black text-slate-805 font-mono">{sGuests} Kayıt</span>
+                          </div>
+
+                          <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40">
+                            <span className="text-[9px] font-bold text-slate-500 block uppercase font-sans">Evrak</span>
+                            <span className="text-sm font-black text-slate-805 font-mono">{sEvrak} Belge</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Notlar */}
                   <div className="space-y-1.5">
-                    <label className="text-slate-500 font-bold uppercase text-[9px]">GÜN SONU / NÖBET NOTLARI</label>
+                    <label className="text-slate-500 font-bold uppercase text-[9px] font-sans">GÜN SONU / VARDİYA DEVİR NOTLARI</label>
                     <textarea
                       placeholder="Örn: Nöbette herhangi bir olumsuz durum yaşanmadı. Vardiya eksiksiz devredildi."
                       id="nobetNotlar"
@@ -1521,7 +1744,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                     className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-slate-800 text-slate-950 font-black text-xs py-3.5 rounded-2xl flex items-center justify-center space-x-2 border-b-2 border-amber-700 cursor-pointer transition uppercase tracking-wider"
                   >
                     <Archive size={14} />
-                    <span>{isArchiving ? 'Arşivleniyor...' : 'Nöbet Gününü Kalıcı Arşivle'}</span>
+                    <span>{isArchiving ? 'Arşivleniyor...' : 'Vardiya Raporunu Kalıcı Arşivle'}</span>
                   </button>
 
                 </div>
@@ -1566,6 +1789,13 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                             <div className="flex items-center space-x-2">
                               <Calendar size={13} className="text-amber-500" />
                               <span className="text-sm font-black text-white font-mono">{archive.tarih}</span>
+                              <span className={`text-[8px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wider ${
+                                archive.vardiya === 'GUNDUZ' ? 'bg-amber-100 text-amber-805 border border-amber-200' :
+                                archive.vardiya === 'GECE' ? 'bg-indigo-105 text-indigo-850 border border-indigo-200' :
+                                'bg-slate-100 text-slate-800 border border-slate-200'
+                              }`}>
+                                {archive.vardiya === 'GUNDUZ' ? '☀️ Gündüz' : archive.vardiya === 'GECE' ? '🌙 Gece' : 'Tüm Gün'}
+                              </span>
                               <span className="bg-white text-slate-500 text-[9px] px-2 py-0.5 rounded-lg border border-slate-200">
                                 {new Date(archive.kayitZamani).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
                               </span>
@@ -1618,6 +1848,225 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             </div>
           )}
 
+          {/* ─────────────────────────────────────────────────────────────
+              TAB 6: AKVİZYON TAŞERON YOKLAMA TAKİBİ
+              ───────────────────────────────────────────────────────────── */}
+          {activeTab === 'akvizyon_yoklama' && (
+            <div className="space-y-6 animate-in fade-in duration-150">
+              
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                {/* Sol Panel: Yoklama Alım Formu */}
+                <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4 shadow-sm">
+                  <span className="font-display font-black text-xs text-slate-805 uppercase tracking-widest block border-b border-slate-200 pb-2">
+                    📋 AKVİZYON TAŞERON YOKLAMA FORMU
+                  </span>
+
+                  {/* Tarih ve Yetki Uyarı Alanı */}
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase">Yoklama Tarihi:</span>
+                      <span className="font-mono font-black text-amber-600 bg-amber-500/10 px-2.5 py-0.5 rounded-lg border border-amber-500/20 text-xs">
+                        {islemTarihi}
+                      </span>
+                    </div>
+
+                    {!canSaveAkvizyonYoklama && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex items-start space-x-2 text-amber-800 text-[11px] leading-relaxed">
+                        <Lock size={16} className="shrink-0 mt-0.5 animate-pulse" />
+                        <p>
+                          <strong>Görüntüleme Modu:</strong> Yoklama alma/kaydetme yetkisi sadece <strong className="font-extrabold text-amber-950">guven3@gmail.com</strong> hesabına aittir. Diğer hesaplar sadece geçmiş kayıtları inceleyebilir.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Yoklama Listesi */}
+                  <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+                    {akvizyonPersoneller.map((item) => {
+                      const status = akvizyonYoklamaMap[item.id] || 'Girilmedi';
+                      return (
+                        <div key={item.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-3 flex justify-between items-center gap-2 hover:border-slate-350 transition">
+                          <div className="min-w-0">
+                            <h4 className="font-bold text-slate-805 text-xs truncate">{item.ad} {item.soyad}</h4>
+                            <span className="text-[9px] text-slate-500 block truncate font-mono mt-0.5">💼 {item.gorev}</span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              disabled={!canSaveAkvizyonYoklama}
+                              onClick={() => setAkvizyonYoklamaMap(prev => ({ ...prev, [item.id]: 'Geldi' }))}
+                              className={`px-3 py-1.5 rounded-xl font-bold text-[9px] transition cursor-pointer ${
+                                status === 'Geldi' ? 'bg-emerald-600 text-white shadow-sm font-black' : 'bg-white hover:bg-slate-100 text-slate-500 border border-slate-200'
+                              }`}
+                            >
+                              GELDİ
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!canSaveAkvizyonYoklama}
+                              onClick={() => setAkvizyonYoklamaMap(prev => ({ ...prev, [item.id]: 'Gelmedi' }))}
+                              className={`px-3 py-1.5 rounded-xl font-bold text-[9px] transition cursor-pointer ${
+                                status === 'Gelmedi' ? 'bg-rose-600 text-white shadow-sm font-black' : 'bg-white hover:bg-slate-100 text-slate-500 border border-slate-200'
+                              }`}
+                            >
+                              GELMEDİ
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {akvizyonPersoneller.length === 0 && (
+                      <div className="text-center p-6 text-slate-500 italic text-xs">
+                        Akvizyon firmasına kayıtlı taşeron personel bulunamadı.
+                      </div>
+                    )}
+                  </div>
+
+                  {canSaveAkvizyonYoklama && akvizyonPersoneller.length > 0 && (
+                    <button
+                      onClick={handleSaveAkvizyonYoklama}
+                      disabled={loadingAkvizyonYoklama}
+                      className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 text-slate-950 font-black text-xs py-3 rounded-2xl flex items-center justify-center space-x-1.5 border-b-2 border-amber-700 transition cursor-pointer shadow-md shadow-amber-500/10"
+                    >
+                      <Check size={13} />
+                      <span>{loadingAkvizyonYoklama ? 'Kaydediliyor...' : 'YOKLAMAYI ARŞİVE KAYDET'}</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Sağ Panel: Geçmiş Arşivler & Personel Bazlı Arama */}
+                <div className="lg:col-span-2 space-y-6">
+                  
+                  {/* Akvizyon Arşivi Listesi */}
+                  <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4 shadow-sm">
+                    <span className="font-display font-black text-xs text-slate-805 uppercase tracking-widest block border-b border-slate-200 pb-2">
+                      📂 GEÇMİŞ AKVİZYON YOKLAMA ARŞİVLERİ
+                    </span>
+
+                    <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                      {akvizyonArchives.map((archive) => {
+                        const presentCount = Object.values(archive.yoklama || {}).filter(v => v === 'Geldi').length;
+                        const absentCount = Object.values(archive.yoklama || {}).filter(v => v === 'Gelmedi').length;
+                        
+                        return (
+                          <div key={archive.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-3 flex justify-between items-center gap-4 hover:border-slate-350 transition">
+                            <div className="space-y-1">
+                              <div className="flex items-center space-x-2">
+                                <Calendar size={12} className="text-amber-500" />
+                                <span className="font-bold text-xs text-slate-805 font-mono">{archive.tarih}</span>
+                                <span className="text-[9px] text-slate-400 font-mono">Kaydeden: {archive.kaydeden}</span>
+                              </div>
+                              <div className="flex space-x-2 text-[9px] text-slate-500 font-mono font-bold">
+                                <span>Geldi: <strong className="text-emerald-600">{presentCount}</strong></span>
+                                <span>|</span>
+                                <span>Gelmedi: <strong className="text-rose-600">{absentCount}</strong></span>
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => setSelectedAkvizyonArchive(archive)}
+                              className="bg-amber-600/10 hover:bg-amber-600 border border-amber-500/20 text-amber-400 hover:text-slate-950 text-[10px] font-black px-3.5 py-1.5 rounded-xl transition cursor-pointer"
+                            >
+                              Detayları İncele
+                            </button>
+                          </div>
+                        );
+                      })}
+
+                      {akvizyonArchives.length === 0 && (
+                        <div className="text-center p-6 text-slate-500 italic text-xs">
+                          Arşivlenmiş Akvizyon yoklama kaydı bulunmuyor.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Personel Bazlı Yoklama Takip Havuzu */}
+                  <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4 shadow-sm">
+                    <span className="font-display font-black text-xs text-slate-805 uppercase tracking-widest block border-b border-slate-200 pb-2">
+                      👤 PERSONEL BAZLI YOKLAMA SİCİL GEÇMİŞİ
+                    </span>
+
+                    <div className="space-y-3.5">
+                      <select 
+                        value={selectedAkvizyonPersonel?.id || ''} 
+                        onChange={(e) => {
+                          const found = akvizyonPersoneller.find(p => p.id === e.target.value);
+                          setSelectedAkvizyonPersonel(found || null);
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-bold text-slate-850"
+                      >
+                        <option value="">-- Geçmişini İncelemek İstediğiniz Personeli Seçin --</option>
+                        {akvizyonPersoneller.map(p => (
+                          <option key={p.id} value={p.id}>{p.ad} {p.soyad} ({p.gorev})</option>
+                        ))}
+                      </select>
+
+                      {selectedAkvizyonPersonel && (() => {
+                        const history = akvizyonArchives.map(a => {
+                          const status = a.yoklama?.[selectedAkvizyonPersonel.id] || 'Girilmedi';
+                          return { tarih: a.tarih, status, kaydeden: a.kaydeden };
+                        }).filter(h => h.status !== 'Girilmedi');
+
+                        const cameDays = history.filter(h => h.status === 'Geldi').length;
+                        const totalDays = history.length;
+                        const attendanceRate = totalDays > 0 ? Math.round((cameDays / totalDays) * 100) : 0;
+
+                        return (
+                          <div className="space-y-3 text-xs">
+                            {/* İstatistik Özet Kartı */}
+                            <div className="grid grid-cols-3 gap-2.5 text-slate-750 font-semibold font-mono text-center">
+                              <div className="bg-slate-50 border border-slate-200/50 p-2 rounded-xl">
+                                <span className="text-[9px] text-slate-500 block uppercase font-sans">GELDİĞİ GÜN</span>
+                                <strong className="text-emerald-600 text-sm">{cameDays} Gün</strong>
+                              </div>
+                              <div className="bg-slate-50 border border-slate-200/50 p-2 rounded-xl">
+                                <span className="text-[9px] text-slate-500 block uppercase font-sans">GELMEDİĞİ GÜN</span>
+                                <strong className="text-rose-600 text-sm">{totalDays - cameDays} Gün</strong>
+                              </div>
+                              <div className="bg-slate-50 border border-slate-200/50 p-2 rounded-xl">
+                                <span className="text-[9px] text-slate-500 block uppercase font-sans">DEVAMLILIK ORANI</span>
+                                <strong className="text-indigo-500 text-sm">%{attendanceRate}</strong>
+                              </div>
+                            </div>
+
+                            {/* Tarih Bazlı Ayrıntılı Liste */}
+                            <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                              {history.map((h, idx) => (
+                                <div key={idx} className="bg-slate-50 border border-slate-100 p-2 px-3.5 rounded-xl flex justify-between items-center">
+                                  <span className="font-mono text-[11px] font-bold text-slate-805">{h.tarih}</span>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-[9px] text-slate-400 font-mono">Kaydeden: {h.kaydeden}</span>
+                                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-md ${
+                                      h.status === 'Geldi' ? 'bg-emerald-100 text-emerald-850 font-extrabold' : 'bg-rose-100 text-rose-850 font-extrabold'
+                                    }`}>
+                                      {h.status.toUpperCase()}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+
+                              {history.length === 0 && (
+                                <div className="text-center py-4 text-slate-500 italic text-[11px]">
+                                  Bu personel için henüz yoklama geçmişi bulunmuyor.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+          )}
         </div>
       </div>
 
@@ -1776,10 +2225,76 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             </div>
 
             {/* Modal Footer actions */}
-            <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-end shrink-0">
+            <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-between items-center shrink-0">
+              <button
+                type="button"
+                onClick={() => handleArchivedNobetRaporuAl(selectedArchive)}
+                className="bg-indigo-650 hover:bg-indigo-750 text-white font-extrabold px-5 py-2 rounded-xl text-xs flex items-center space-x-1.5 cursor-pointer transition shadow-md shadow-indigo-600/10"
+              >
+                <Download size={13} />
+                <span>PDF Rapor İndir</span>
+              </button>
               <button
                 onClick={() => setSelectedArchive(null)}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-700 font-bold px-6 py-2 rounded-xl text-xs cursor-pointer"
+                className="bg-slate-850 hover:bg-slate-750 text-white font-bold px-6 py-2 rounded-xl text-xs cursor-pointer border border-slate-700"
+              >
+                Kapat
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* 📂 AKVİZYON YOKLAMA DETAY MODAL */}
+      {selectedAkvizyonArchive && (
+        <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-50 p-4">
+          <div className="bg-white border border-slate-200 text-slate-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[80vh] animate-in zoom-in duration-150">
+            
+            <div className="bg-slate-50 p-5 px-6 border-b border-slate-200 flex justify-between items-center shrink-0">
+              <div className="flex items-center space-x-3">
+                <ClipboardList className="text-amber-500" size={18} />
+                <div>
+                  <h3 className="font-black text-sm uppercase tracking-widest text-slate-850">Akvizyon Yoklama Detayı</h3>
+                  <p className="text-[10px] text-slate-500 font-mono">Tarih: {selectedAkvizyonArchive.tarih} | Kaydeden: {selectedAkvizyonArchive.kaydeden}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSelectedAkvizyonArchive(null)}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-500 hover:text-slate-700 rounded-xl p-1.5 cursor-pointer transition"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-3 text-xs">
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4.5 space-y-2">
+                <span className="font-bold text-[9px] block uppercase text-amber-500 tracking-wider">Yoklama Sonuçları</span>
+                <div className="divide-y divide-slate-200 text-slate-700">
+                  {akvizyonPersoneller.map(p => {
+                    const status = selectedAkvizyonArchive.yoklama?.[p.id] || 'Girilmedi';
+                    return (
+                      <div key={p.id} className="py-2.5 flex justify-between items-center">
+                        <div>
+                          <strong className="text-slate-805 block text-xs">{p.ad} {p.soyad}</strong>
+                          <span className="text-[9px] text-slate-500 font-mono uppercase">{p.gorev}</span>
+                        </div>
+                        <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg ${
+                          status === 'Geldi' ? 'bg-emerald-100 text-emerald-850' : 'bg-rose-100 text-rose-850'
+                        }`}>
+                          {status.toUpperCase()}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-end shrink-0">
+              <button
+                onClick={() => setSelectedAkvizyonArchive(null)}
+                className="bg-slate-805 hover:bg-slate-750 text-white font-bold px-6 py-2 rounded-xl text-xs cursor-pointer"
               >
                 Kapat
               </button>

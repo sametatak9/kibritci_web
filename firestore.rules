@@ -129,6 +129,11 @@ service cloud.firestore {
       allow read, write: if canUseFinance();
     }
 
+    match /akvizyonYoklamalari/{docId} {
+      allow read: if canUseErp();
+      allow write: if canUseErp() && request.auth.token.email == 'guven3@gmail.com';
+    }
+
     // ── Diğer ERP verisi (aktif portal kullanıcıları) ──
     match /{collection}/{docId} {
       allow read, write: if canUseErp();

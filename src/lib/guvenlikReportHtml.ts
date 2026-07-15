@@ -3,18 +3,23 @@ export const generateGuvenlikReportHtml = (
   personelLoglar: any[],
   araclar: any[],
   ziyaretciler: any[],
-  evraklar: any[]
+  evraklar: any[],
+  vardiya: 'GUNDUZ' | 'GECE' | 'TAM_GUN' = 'TAM_GUN'
 ): string => {
   const KIBRITCI_LOGO_BASE64 = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MDAgMTAwIiBmaWxsPSJub25lIj4KICA8cGF0aCBkPSJNMzAgODBMNzAgMjBMMTEwIDgwSDMwWiIgZmlsbD0iI0Y1OTUwNiIvPgogIDxwYXRoIGQ9Ik03MCAyMEwxMTAgODBIMzBMMzAgODBMMzAgODBMMzAgODBaIiBmaWxsPSIjRjU5NTA2IiBmaWxsLW9wYWNpdHk9IjAuMSIvPgogIDx0ZXh0IHg9IjE0MCIgeT0iNzAiIGZvbnQtZmFtaWx5PSJBcmlhbCwgSGVsdmV0aWNhLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjU1IiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iIzFFMjkyQiI+S0k8dHNwYW4gZmlsbD0iI0Y1OTUwNiI+QjwvdHNwYW4+UklUQ8SwPC90ZXh0Pgo8L3N2Zz4=`;
 
   const dateFormatted = new Date(islemTarihi).toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const vardiyaLabel = 
+    vardiya === 'GUNDUZ' ? 'GÜNDÜZ VARDİYASI (08:00 - 20:00)' :
+    vardiya === 'GECE' ? 'GECE VARDİYASI (20:00 - 08:00)' :
+    'TÜM GÜN RAPORU';
 
   let html = `
   <!DOCTYPE html>
   <html>
   <head>
     <meta charset="utf-8" />
-    <title>Günlük Güvenlik Raporu - \${dateFormatted}</title>
+    <title>Güvenlik Raporu - ${dateFormatted} (${vardiyaLabel})</title>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
       body {
@@ -96,11 +101,12 @@ export const generateGuvenlikReportHtml = (
   <body>
     <div class="header">
       <div class="logo">
-        <img src="\${KIBRITCI_LOGO_BASE64}" alt="Kibritçi Logo" />
+        <img src="${KIBRITCI_LOGO_BASE64}" alt="Kibritçi Logo" />
       </div>
       <div class="report-title">
-        <h1>GÜNLÜK GÜVENLİK RAPORU</h1>
-        <p>Tarih: \${dateFormatted}</p>
+        <h1>GÜVENLİK RAPORU</h1>
+        <p>${vardiyaLabel}</p>
+        <p>Tarih: ${dateFormatted}</p>
       </div>
     </div>
   `;
