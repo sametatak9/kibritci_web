@@ -2,7 +2,8 @@ import { AylikYoklamaMap, SahaFaaliyeti, SahaFaaliyetTipi } from '../types/erp';
 import { normalizeDateKey } from './dateKeyUtils';
 import { getYoklamaDay, setYoklamaDay } from './yoklamaUtils';
 
-export const MAX_SAHA_MESAI_SAATI = 14;
+/** Mesai saha faaliyetinde tek seferde girilebilecek üst sınır (saat) */
+export const MAX_SAHA_MESAI_SAATI = 24;
 export const MAX_SAHA_FOTO_COUNT = 5;
 
 type FaaliyetFotoKaynak = Partial<SahaFaaliyeti> & {

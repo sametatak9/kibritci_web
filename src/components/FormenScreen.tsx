@@ -160,6 +160,8 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const [sahaIsciSayisi, setSahaIsciSayisi] = useState<number>(0);
   const [faaliyetTipi, setFaaliyetTipi] = useState<SahaFaaliyetTipi>('NORMAL');
   const [personelMesaiSaatleri, setPersonelMesaiSaatleri] = useState<Record<string, number>>({});
+  /** Mesai input yazımı sırasında serbest metin (14'e zorlanma hatasını önler) */
+  const [personelMesaiDraft, setPersonelMesaiDraft] = useState<Record<string, string>>({});
 
   // 3. PERSONEL GİRİŞE YOLLA STATE
   const [yeniAd, setYeniAd] = useState('');
@@ -782,6 +784,7 @@ ${satirlar
     setFaaliyetPersonelSearch('');
     setFaaliyetTipi('NORMAL');
     setPersonelMesaiSaatleri({});
+    setPersonelMesaiDraft({});
     setEditingFaaliyetId(null);
   };
 
@@ -797,7 +800,13 @@ ${satirlar
     setSahaUstaSayisi(sf.ustaSayisi || 0);
     setSahaIsciSayisi(sf.isciSayisi || 0);
     setFaaliyetTipi(sf.faaliyetTipi || 'NORMAL');
-    setPersonelMesaiSaatleri({ ...(sf.personelMesaiSaatleri || {}) });
+    const mesaiMap = { ...(sf.personelMesaiSaatleri || {}) };
+    setPersonelMesaiSaatleri(mesaiMap);
+    setPersonelMesaiDraft(
+      Object.fromEntries(
+        Object.entries(mesaiMap).map(([id, h]) => [id, String(h)])
+      )
+    );
     setFaaliyetPersonelSearch('');
   };
 
@@ -825,6 +834,20 @@ ${satirlar
     }
   };
 
+  const resolveMesaiMapForSave = (): Record<string, number> => {
+    const map = { ...personelMesaiSaatleri };
+    faaliyetPersonelIds.forEach((id) => {
+      const draft = personelMesaiDraft[id];
+      if (draft !== undefined && draft.trim() !== '') {
+        const parsed = parseFloat(String(draft).replace(',', '.'));
+        map[id] = normalizeSahaMesaiHours(Number.isFinite(parsed) ? parsed : 0);
+      } else if (map[id] === undefined) {
+        map[id] = 0;
+      }
+    });
+    return map;
+  };
+
   const handleSaveFaaliyet = async (e: React.SyntheticEvent) => {
     e.preventDefault();
     if (!isNiteligi) {
@@ -832,8 +855,11 @@ ${satirlar
       return;
     }
 
+    const mesaiMapForSave = faaliyetTipi === 'MESAI_SAHA' ? resolveMesaiMapForSave() : {};
+
     if (faaliyetTipi === 'MESAI_SAHA') {
-      const hasMesai = faaliyetPersonelIds.some((id) => Number(personelMesaiSaatleri[id] || 0) > 0);
+      setPersonelMesaiSaatleri(mesaiMapForSave);
+      const hasMesai = faaliyetPersonelIds.some((id) => Number(mesaiMapForSave[id] || 0) > 0);
       if (!hasMesai) {
         showStatus('error', 'Mesai Saha Faaliyeti için en az bir personele mesai saati girin.');
         return;
@@ -862,7 +888,7 @@ ${satirlar
         faaliyetTipi === 'MESAI_SAHA'
           ? Object.fromEntries(
               faaliyetPersonelIds
-                .map((id) => [id, normalizeSahaMesaiHours(Number(personelMesaiSaatleri[id] || 0))])
+                .map((id) => [id, normalizeSahaMesaiHours(Number(mesaiMapForSave[id] || 0))])
                 .filter(([, h]) => Number(h) > 0)
             )
           : undefined,
@@ -1810,9 +1836,15 @@ ${satirlar
                               type="button"
                               key={p.id}
                               onClick={() =>
-                                setFaaliyetPersonelIds((prev) =>
-                                  prev.includes(p.id) ? prev.filter((id) => id !== p.id) : [...prev, p.id]
-                                )
+                                setFaaliyetPersonelIds((prev) => {
+                                  const next = prev.includes(p.id)
+                                    ? prev.filter((id) => id !== p.id)
+                                    : [...prev, p.id];
+                                  if (!prev.includes(p.id) && faaliyetTipi === 'MESAI_SAHA') {
+                                    setPersonelMesaiDraft((d) => ({ ...d, [p.id]: d[p.id] ?? '0' }));
+                                  }
+                                  return next;
+                                })
                               }
                               className={`w-full text-left border rounded-xl px-2.5 py-1.5 text-[10px] font-bold transition ${
                                 selected
@@ -1839,18 +1871,33 @@ ${satirlar
                                 <span className="text-[9px] font-bold text-slate-800 truncate">{p.ad} {p.soyad}</span>
                                 <div className="flex items-center gap-1 shrink-0">
                                   <input
-                                    type="number"
-                                    min={0}
-                                    max={14}
-                                    step={0.5}
-                                    value={personelMesaiSaatleri[pid] ?? 0}
-                                    onChange={(e) =>
-                                      setPersonelMesaiSaatleri((prev) => ({
-                                        ...prev,
-                                        [pid]: normalizeSahaMesaiHours(parseFloat(e.target.value) || 0),
-                                      }))
+                                    type="text"
+                                    inputMode="decimal"
+                                    placeholder="0"
+                                    value={
+                                      personelMesaiDraft[pid] ??
+                                      (personelMesaiSaatleri[pid] != null
+                                        ? String(personelMesaiSaatleri[pid])
+                                        : '')
                                     }
-                                    className="w-14 text-center bg-slate-50 border border-slate-200 rounded-lg py-0.5 text-[9px] font-mono font-bold"
+                                    onChange={(e) => {
+                                      const raw = e.target.value.replace(',', '.');
+                                      if (raw !== '' && !/^\d*\.?\d*$/.test(raw)) return;
+                                      setPersonelMesaiDraft((prev) => ({ ...prev, [pid]: raw }));
+                                    }}
+                                    onBlur={() => {
+                                      const raw = personelMesaiDraft[pid] ?? '';
+                                      const parsed = parseFloat(raw);
+                                      const safe = normalizeSahaMesaiHours(
+                                        Number.isFinite(parsed) ? parsed : 0
+                                      );
+                                      setPersonelMesaiSaatleri((prev) => ({ ...prev, [pid]: safe }));
+                                      setPersonelMesaiDraft((prev) => ({
+                                        ...prev,
+                                        [pid]: String(safe),
+                                      }));
+                                    }}
+                                    className="w-16 text-center bg-slate-50 border border-slate-200 rounded-lg py-0.5 text-[9px] font-mono font-bold"
                                   />
                                   <span className="text-[8px] text-slate-500">sa</span>
                                 </div>
@@ -1886,6 +1933,7 @@ ${satirlar
                             type="file"
                             accept="image/*"
                             capture="environment"
+                            multiple
                             onChange={handleImageChange}
                             className="hidden"
                             disabled={fotoUrls.length >= MAX_SAHA_FOTO_COUNT}
@@ -1916,7 +1964,7 @@ ${satirlar
                             <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl h-16 flex items-center justify-center text-slate-400">
                               <div className="text-center p-2">
                                 <ImageIcon size={14} className="mx-auto text-slate-300 mb-0.5" />
-                                <span className="text-[7px] block leading-none">En fazla 5 fotoğraf</span>
+                                <span className="text-[7px] block leading-none">En fazla {MAX_SAHA_FOTO_COUNT} fotoğraf — tekrar ekleyebilirsiniz</span>
                               </div>
                             </div>
                           ) : (

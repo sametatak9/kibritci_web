@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Users, UserPlus, Trash2, CreditCard as Edit3, Camera, Search, ShieldCheck, Mail, Phone, MapPin, DollarSign, UserX, FileText, CloudUpload as UploadCloud, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, Loader as Loader2, Building2, History, Download } from 'lucide-react';
 import { CariKart, CariKartIslem, Personel } from '../types/erp';
 import { fetchApiJson } from '../lib/apiClient';
@@ -7,6 +7,12 @@ import { exportPersonelRows } from '../lib/reportExport';
 import { saveDocument } from '../lib/firebase';
 import { kibritciLogoHtml } from '../lib/kibritciBrand';
 import { findNearDuplicateCariNames, normalizeCardName } from '../lib/duplicateNameUtils';
+import {
+  AKVIZYON_GOREV,
+  displayPersonelGorev,
+  isAkvizyonFirmaAdi,
+  resolveAkvizyonGorev,
+} from '../lib/guvenlikHelpers';
 
 interface PersonelScreenProps {
   personeller: Personel[];
@@ -79,6 +85,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   setCariIslemGecmisi,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [firmaFilter, setFirmaFilter] = useState("");
   const [selectedPersonel, setSelectedPersonel] = useState<Personel | null>(null);
   const [dismissingPersonel, setDismissingPersonel] = useState<Personel | null>(null);
   const [dismissDateStr, setDismissDateStr] = useState<string>("");
@@ -257,9 +264,13 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
         ...prev,
         firmaTipi: nextTip,
         firmaAdi: nextTip === 'TASERON' ? '' : 'Kibritçi İnşaat',
+        gorev: nextTip === 'TASERON' ? prev.gorev : resolveAkvizyonGorev('Kibritçi İnşaat', prev.gorev),
       }));
       setTaseronKaynak('');
       setManuelTaseronAdi('');
+      return;
+    }
+    if (name === 'gorev' && isAkvizyonFirmaAdi(formData.firmaAdi)) {
       return;
     }
     setFormData(prev => ({
@@ -267,6 +278,41 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
       [name]: name === 'maas' ? (parseFloat(value) || 0) : value
     }));
   };
+
+  const applyFirmaAdiToForm = (firmaAdi: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      firmaAdi,
+      gorev: resolveAkvizyonGorev(firmaAdi, prev.gorev),
+    }));
+  };
+
+  const akvizyonGorevFixDone = useRef(false);
+  useEffect(() => {
+    if (akvizyonGorevFixDone.current) return;
+    const toFix = personeller.filter(
+      (p) =>
+        isAkvizyonFirmaAdi(p.firmaAdi) &&
+        normalizePersonelGorev(p.gorev).toLocaleUpperCase('tr-TR') !== AKVIZYON_GOREV
+    );
+    if (toFix.length === 0) return;
+    akvizyonGorevFixDone.current = true;
+    setPersoneller((prev) =>
+      prev.map((p) =>
+        isAkvizyonFirmaAdi(p.firmaAdi) &&
+        normalizePersonelGorev(p.gorev).toLocaleUpperCase('tr-TR') !== AKVIZYON_GOREV
+          ? { ...p, gorev: AKVIZYON_GOREV, firmaTipi: 'TASERON' as const }
+          : p
+      )
+    );
+    toFix.forEach((p) => {
+      void saveDocument('personeller', {
+        ...p,
+        gorev: AKVIZYON_GOREV,
+        firmaTipi: 'TASERON',
+      });
+    });
+  }, [personeller, setPersoneller]);
 
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = e.target;
@@ -277,8 +323,12 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   };
 
   const handleSelectPersonel = (p: Personel) => {
-    setSelectedPersonel(p);
-    setFormData(p);
+    const corrected = {
+      ...p,
+      gorev: resolveAkvizyonGorev(p.firmaAdi, p.gorev),
+    };
+    setSelectedPersonel(corrected);
+    setFormData(corrected);
     if (p.firmaTipi === 'TASERON') {
       const match = taseronCariList.find((c) => c.unvan === p.firmaAdi);
       if (match) {
@@ -381,14 +431,21 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     taseronCariId?: string,
     historyNote?: string
   ) => {
+    const withRules = {
+      ...normalizedPayload,
+      gorev: resolveAkvizyonGorev(normalizedPayload.firmaAdi, normalizedPayload.gorev),
+      firmaTipi: isAkvizyonFirmaAdi(normalizedPayload.firmaAdi)
+        ? ('TASERON' as const)
+        : normalizedPayload.firmaTipi,
+    };
     let savedPersonel: Personel;
-        if (isEdit && 'id' in normalizedPayload) {
-      savedPersonel = normalizedPayload as Personel;
+        if (isEdit && 'id' in withRules) {
+      savedPersonel = withRules as Personel;
       setPersoneller((prev) => prev.map((p) => (p.id === savedPersonel.id ? savedPersonel : p)));
       alert('Personel bilgileri başarıyla güncellendi.');
     } else {
       savedPersonel = {
-        ...(normalizedPayload as Omit<Personel, 'id'>),
+        ...(withRules as Omit<Personel, 'id'>),
         id: `p_${Date.now()}`,
       };
       setPersoneller((prev) => [savedPersonel, ...prev]);
@@ -525,7 +582,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
       ...formData,
       tcNo: normalizedTc,
       ibanNo: inputIban && inputIban !== 'TR' ? inputIban : prevIban,
-      gorev: normalizePersonelGorev((formData as any).gorev),
+      gorev: resolveAkvizyonGorev(firmaFields.firmaAdi, (formData as any).gorev),
       firmaTipi: firmaFields.firmaTipi,
       firmaAdi: firmaFields.firmaAdi,
     };
@@ -556,11 +613,31 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
 
   const dataToSave = () => formData;
 
+  const firmaFilterOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    personeller.forEach((p) => {
+      if (p.firmaTipi === 'TASERON' || isAkvizyonFirmaAdi(p.firmaAdi)) {
+        const ad = (p.firmaAdi || 'Taşeron').trim();
+        if (ad) map.set(ad, ad);
+      } else {
+        map.set('ANA_FIRMA', 'Kibritçi İnşaat (Ana Firma)');
+      }
+    });
+    return Array.from(map.entries()).sort((a, b) =>
+      a[1].localeCompare(b[1], 'tr', { sensitivity: 'base' })
+    );
+  }, [personeller]);
+
   const filteredPersonel = personeller.filter(p => {
     if (showOnlyActive && !is_aktif_status(p.durum)) return false;
+    if (firmaFilter === 'ANA_FIRMA') {
+      if (p.firmaTipi === 'TASERON' || isAkvizyonFirmaAdi(p.firmaAdi)) return false;
+    } else if (firmaFilter) {
+      if ((p.firmaAdi || '').trim() !== firmaFilter) return false;
+    }
     const term = searchTerm.toLowerCase();
     const fullName = `${p.ad} ${p.soyad}`.toLowerCase();
-    return fullName.includes(term) || p.tcNo.includes(term) || normalizePersonelGorev(p.gorev).toLowerCase().includes(term);
+    return fullName.includes(term) || p.tcNo.includes(term) || displayPersonelGorev(p).toLowerCase().includes(term);
   });
 
   const handleShowHistory = (p: Personel) => {
@@ -960,12 +1037,12 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                         const next = e.target.value;
                         setTaseronKaynak(next);
                         if (next === TASERON_MANUEL_KEY) {
-                          setFormData((prev) => ({ ...prev, firmaAdi: manuelTaseronAdi.trim() }));
+                          applyFirmaAdiToForm(manuelTaseronAdi.trim());
                           return;
                         }
                         const cari = taseronCariList.find((c) => c.id === next);
                         setManuelTaseronAdi('');
-                        setFormData((prev) => ({ ...prev, firmaAdi: cari?.unvan || '' }));
+                        applyFirmaAdiToForm(cari?.unvan || '');
                       }}
                       className="w-full text-xs border border-[#e2e8f0] rounded-lg p-2 bg-slate-50"
                     >
@@ -984,7 +1061,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                         onChange={(e) => {
                           const next = e.target.value;
                           setManuelTaseronAdi(next);
-                          setFormData((prev) => ({ ...prev, firmaAdi: next }));
+                          applyFirmaAdiToForm(next);
                         }}
                         className="w-full text-xs border border-[#e2e8f0] rounded-lg p-2 bg-slate-50"
                         placeholder="Taşeron firma adını yazın…"
@@ -1007,7 +1084,12 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                 )}
               </div>
             </div>
-            {formData.firmaTipi === 'TASERON' && (
+            {formData.firmaTipi === 'TASERON' && isAkvizyonFirmaAdi(formData.firmaAdi) && (
+              <p className="text-[9px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-2 py-1.5">
+                Akvizyon güvenlik taşeron firmasıdır — personel görevi otomatik olarak <strong>GÜVENLİK</strong> olarak kaydedilir.
+              </p>
+            )}
+            {formData.firmaTipi === 'TASERON' && !isAkvizyonFirmaAdi(formData.firmaAdi) && (
               <p className="text-[9px] text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5">
                 Taşeron personel yoklama listesine dahil edilmez; yalnızca ana firma kadrosu yoklamaya girer.
               </p>
@@ -1041,7 +1123,12 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                   list="personel-gorev-presets"
                   value={formData.gorev}
                   onChange={handleInputChange}
-                  className="w-full text-xs border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50"
+                  readOnly={isAkvizyonFirmaAdi(formData.firmaAdi)}
+                  className={`w-full text-xs border border-[#e2e8f0] rounded-lg mt-1 p-2 ${
+                    isAkvizyonFirmaAdi(formData.firmaAdi)
+                      ? 'bg-indigo-50 text-indigo-900 font-bold'
+                      : 'bg-slate-50'
+                  }`}
                   placeholder="Listeden seçin veya elle yazın"
                 />
                 <datalist id="personel-gorev-presets">
@@ -1049,7 +1136,11 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                     <option key={gorev} value={gorev} />
                   ))}
                 </datalist>
-                <p className="text-[8px] text-slate-400 mt-1">Önerilen görevler listeden seçilebilir; özel ünvan da yazılabilir.</p>
+                <p className="text-[8px] text-slate-400 mt-1">
+                  {isAkvizyonFirmaAdi(formData.firmaAdi)
+                    ? 'Akvizyon personeli için görev sabittir: GÜVENLİK'
+                    : 'Önerilen görevler listeden seçilebilir; özel ünvan da yazılabilir.'}
+                </p>
               </div>
             </div>
 
@@ -1225,7 +1316,20 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
             </h4>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={firmaFilter}
+              onChange={(e) => setFirmaFilter(e.target.value)}
+              className="text-[10px] font-bold px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 cursor-pointer max-w-[200px]"
+              title="Firma bazlı filtre"
+            >
+              <option value="">Tüm Firmalar</option>
+              {firmaFilterOptions.map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
             <button
               type="button"
               onClick={() => setShowOnlyActive((prev) => !prev)}
@@ -1308,7 +1412,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                         )}
                       </h4>
                       <p className="text-[10px] text-slate-400 font-medium">
-                        TC: {p.tcNo} · Görev: <span className="text-slate-600 font-bold">{p.gorev}</span>
+                        TC: {p.tcNo} · Görev: <span className="text-slate-600 font-bold">{displayPersonelGorev(p)}</span>
                       </p>
                       <div className="flex flex-wrap gap-1.5 mt-2">
                         <span className="inline-flex items-center gap-1 bg-slate-50 border border-slate-100 text-[#1e4e78] px-2 py-0.5 rounded font-bold font-mono text-[9px]">

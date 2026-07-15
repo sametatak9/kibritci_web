@@ -37,6 +37,19 @@ export function isAkvizyonPersonel(p?: Personel): boolean {
   return isAkvizyonFirmaAdi(p.firmaAdi);
 }
 
+export const AKVIZYON_GOREV = 'GÜVENLİK';
+
+/** Akvizyon güvenlik firması — görev her zaman GÜVENLİK olmalı */
+export function resolveAkvizyonGorev(firmaAdi?: string | null, currentGorev?: string | null): string {
+  if (isAkvizyonFirmaAdi(firmaAdi)) return AKVIZYON_GOREV;
+  return String(currentGorev || '').trim() || 'DÜZ İŞÇİ';
+}
+
+export function displayPersonelGorev(p?: Personel): string {
+  if (!p) return '—';
+  return resolveAkvizyonGorev(p.firmaAdi, p.gorev);
+}
+
 /** YYYY-MM-DD için işe giriş / işten çıkış penceresi */
 export function isPersonelActiveOnDate(p: Personel, dateStr: string): boolean {
   const parts = String(dateStr || '').split('-').map(Number);

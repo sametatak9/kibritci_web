@@ -38,6 +38,7 @@ import { db } from '../lib/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import {
   buildPersonelLoglariWhatsAppText,
+  displayPersonelGorev,
   formatZamanTr,
   isPersonelActiveOnDate,
   openWhatsAppText,
@@ -761,7 +762,7 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
                             <td className="p-3 font-bold text-slate-900 whitespace-nowrap">
                               {p.ad} {p.soyad}
                             </td>
-                            <td className="p-3 text-slate-700">{p.gorev || '—'}</td>
+                            <td className="p-3 text-slate-700">{displayPersonelGorev(p)}</td>
                             <td className="p-3 font-mono text-slate-600">{p.tcNo || '—'}</td>
                             <td className="p-3 font-mono text-slate-600">{p.iseGirisTarihi || '—'}</td>
                             <td className="p-3 font-mono text-slate-600">{p.istenCikisTarihi || '—'}</td>
