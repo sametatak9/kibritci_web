@@ -51,6 +51,7 @@ export const FIRESTORE_COLLECTIONS = [
   'guvenlikZiyaretciLoglari',
   'guvenlikGelenEvraklar',
   'guvenlikNobetArsivleri',
+  'akvizyonYoklamalari',
   'depoSayimlari',
   'personelZimmetleri',
   'asanaTasks',

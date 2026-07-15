@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ShieldAlert, FileText, Users, Truck, UserCheck, Search, PlusCircle, Trash2, 
   Check, X, FileUp, Camera, Printer, Clock, AlertTriangle, Key, Download, ArrowRight, RefreshCw, Barcode,
-  Archive, Calendar, Lock, ClipboardList
+  Archive, Calendar, Lock, ClipboardList, MessageCircle
 } from 'lucide-react';
 import { Personel, Irsaliye, IrsaliyeItem, Fatura } from '../types/erp';
 import { db } from '../lib/firebase';
@@ -12,6 +12,18 @@ import { collection, doc, setDoc, onSnapshot, addDoc, getDocs, deleteDoc } from 
 import { CorporateReportLayout } from './CorporateReportLayout';
 import { KibritciLogo } from './KibritciLogo';
 import { openBase64InNewTab } from '../lib/fileViewerUtils';
+import { isTaseronPersonel } from '../lib/yoklamaUtils';
+import {
+  buildAracLoglariWhatsAppText,
+  buildPersonelLoglariWhatsAppText,
+  buildZiyaretciWhatsAppText,
+  canAccessGuvenlikScreen,
+  canTakeAkvizyonYoklama,
+  firmaEtiketi,
+  isPersonelActiveOnDate,
+  openWhatsAppText,
+  buildAkvizyonYoklamaReportHtml,
+} from '../lib/guvenlikHelpers';
 
 interface GuvenlikScreenProps {
   personeller: Personel[];
@@ -32,6 +44,8 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'irsaliye' | 'personel' | 'arac' | 'ziyaretci' | 'nobet_arsivi' | 'akvizyon_yoklama'>('irsaliye');
   const [viewMode, setViewMode] = useState<'web' | 'mobile'>('web');
+  const [selectedPersonelLogIds, setSelectedPersonelLogIds] = useState<string[]>([]);
+  const [selectedAracLogIds, setSelectedAracLogIds] = useState<string[]>([]);
   
   // ─────────────────────────────────────────────────────────────
   // 📄 1. RE-DESIGNED EVRAK GİRİŞ STATE
@@ -86,16 +100,6 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   // 👥 2. PERSONEL GİRİŞ-ÇIKIŞ STATE & LISTS
   // ─────────────────────────────────────────────────────────────
   const [personelSearch, setPersonelSearch] = useState('');
-  
-  const filteredPersonel = (personeller || []).filter(p => {
-    const q = personelSearch.toLowerCase();
-    return (
-      (p.ad || '').toLowerCase().includes(q) ||
-      (p.soyad || '').toLowerCase().includes(q) ||
-      (p.tcNo || '').includes(q) ||
-      (p.gorev || '').toLowerCase().includes(q)
-    );
-  });
 
   const [personelLoglar, setPersonelLoglar] = useState<any[]>([]);
   const [loadingLog, setLoadingLog] = useState(false);
@@ -151,16 +155,34 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     return `${islemTarihi}T${hours}:${minutes}:${seconds}.000Z`; 
   };
 
-  const akvizyonPersoneller = (personeller || []).filter(p => {
-    const firm = (p.firmaAdi || p.calistigiFirma || '').trim().toLocaleLowerCase('tr-TR');
-    return firm.includes('akvizyon');
-  });
+  const filteredPersonel = useMemo(() => {
+    const q = personelSearch.toLowerCase();
+    return (personeller || []).filter(p => {
+      if (!isPersonelActiveOnDate(p, islemTarihi)) return false;
+      return (
+        (p.ad || '').toLowerCase().includes(q) ||
+        (p.soyad || '').toLowerCase().includes(q) ||
+        (p.tcNo || '').includes(q) ||
+        (p.gorev || '').toLowerCase().includes(q) ||
+        (p.firmaAdi || '').toLowerCase().includes(q) ||
+        ((p as any).calistigiFirma || '').toLowerCase().includes(q)
+      );
+    });
+  }, [personeller, personelSearch, islemTarihi]);
 
-  const canSaveAkvizyonYoklama = currentUser?.email === 'guven3@gmail.com';
+  const akvizyonPersoneller = useMemo(() => {
+    return (personeller || []).filter(p => {
+      const firm = (p.firmaAdi || (p as any).calistigiFirma || '').trim().toLocaleLowerCase('tr-TR');
+      if (!firm.includes('akvizyon')) return false;
+      return isPersonelActiveOnDate(p, islemTarihi);
+    });
+  }, [personeller, islemTarihi]);
+
+  const canSaveAkvizyonYoklama = canTakeAkvizyonYoklama(userYetki, currentUser?.email);
 
   const handleSaveAkvizyonYoklama = async () => {
     if (!canSaveAkvizyonYoklama) {
-      alert("Hata: Akvizyon yoklama kaydı yalnızca 'guven3@gmail.com' hesabı tarafından yapılabilir.");
+      alert('Hata: Akvizyon yoklama kaydı yalnızca Güvenlik, Kurucu ve Yönetici yetkileriyle yapılabilir.');
       return;
     }
     setLoadingAkvizyonYoklama(true);
@@ -571,7 +593,9 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         gorev: personel.gorev,
         tip,
         zaman: getIslemZamani(),
-        kaydeden: currentUser?.email || 'kapici_kibritci'
+        kaydeden: currentUser?.email || 'kapici_kibritci',
+        firmaTipi: isTaseronPersonel(personel) ? 'TASERON' : 'ANA',
+        firmaAdi: firmaEtiketi(personel),
       };
 
       await setDoc(doc(db, 'guvenlikGirisCikisLoglari', logId), logData);
@@ -708,8 +732,85 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     }
   };
 
+  const bugunkuPersonelLoglar = useMemo(() => {
+    return personelLoglar.filter((l) => String(l.zaman || '').startsWith(islemTarihi));
+  }, [personelLoglar, islemTarihi]);
+
+  const bugunkuAracLoglar = useMemo(() => {
+    return [...iceridekiAraclar, ...aracGecmisLoglar].filter((a) =>
+      String(a.girisZamani || '').startsWith(islemTarihi)
+    );
+  }, [iceridekiAraclar, aracGecmisLoglar, islemTarihi]);
+
+  const togglePersonelLogSelect = (id: string) => {
+    setSelectedPersonelLogIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleAracLogSelect = (id: string) => {
+    setSelectedAracLogIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleSendSelectedPersonelLogsWp = () => {
+    const selected = bugunkuPersonelLoglar.filter((l) => selectedPersonelLogIds.includes(l.id));
+    if (selected.length === 0) {
+      alert('WhatsApp için en az bir personel logu seçin.');
+      return;
+    }
+    openWhatsAppText(buildPersonelLoglariWhatsAppText(selected, islemTarihi));
+  };
+
+  const handleSendSelectedAracLogsWp = () => {
+    const selected = bugunkuAracLoglar.filter((l) => selectedAracLogIds.includes(l.id));
+    if (selected.length === 0) {
+      alert('WhatsApp için en az bir araç logu seçin.');
+      return;
+    }
+    openWhatsAppText(buildAracLoglariWhatsAppText(selected, islemTarihi));
+  };
+
+  const handleZiyaretciWhatsApp = (z: any) => {
+    openWhatsAppText(buildZiyaretciWhatsAppText(z));
+  };
+
+  const handleAkvizyonRaporIndir = () => {
+    const rows = akvizyonPersoneller.map((p) => {
+      const raw = akvizyonYoklamaMap[p.id];
+      const durum = raw === 'Geldi' ? 'VAR' : raw === 'Gelmedi' ? 'YOK' : 'BELİRTİLMEDİ';
+      return { ad: p.ad, soyad: p.soyad, gorev: p.gorev || '', durum };
+    });
+    const html = buildAkvizyonYoklamaReportHtml(islemTarihi, rows);
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `akvizyon_yoklama_${islemTarihi}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showStatus('success', 'Akvizyon yoklama raporu indirildi.');
+  };
+
+  const handleAkvizyonWpRapor = () => {
+    const lines = [
+      '📋 *Akvizyon (Taşeron) Günlük Yoklama*',
+      `Tarih: ${islemTarihi}`,
+      `Personel: ${akvizyonPersoneller.length}`,
+      '',
+      ...akvizyonPersoneller.map((p, i) => {
+        const durum = akvizyonYoklamaMap[p.id] || 'Girilmedi';
+        return `${i + 1}. ${p.ad} ${p.soyad} — *${durum}*`;
+      }),
+      '',
+      '_Ana firma puantajından bağımsızdır._',
+    ];
+    openWhatsAppText(lines.join('\n'));
+  };
+
   // 🔒 Authorization lock check
-  const isAuthorized = userYetki === 'GÜVENLİK' || userYetki === 'YÖNETİCİ';
+  const isAuthorized = canAccessGuvenlikScreen(userYetki, currentUser?.email);
   if (userYetki && !isAuthorized) {
     return (
       <div className="flex-1 min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center select-none text-slate-800">
@@ -718,7 +819,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         </div>
         <h1 className="text-xl font-black text-slate-900 tracking-widest uppercase mb-2">🚧 YETKİSİZ ERİŞİM ENGELLENDİ</h1>
         <p className="text-sm text-slate-600 max-w-md leading-relaxed font-sans mb-6">
-          Şantiye güvenliği ve veri bütünlüğü nedeniyle Güvenlik Kapısı Ekranı sadece yetkili <span className="text-amber-600 font-bold">GÜVENLİK</span> ve <span className="text-amber-600 font-bold">YÖNETİCİ</span> personeline açıktır.
+          Şantiye güvenliği ve veri bütünlüğü nedeniyle Güvenlik Kapısı Ekranı sadece yetkili <span className="text-amber-600 font-bold">GÜVENLİK</span>, <span className="text-amber-600 font-bold">KURUCU</span> ve <span className="text-amber-600 font-bold">YÖNETİCİ</span> personeline açıktır.
         </p>
         <div className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col space-y-2 text-xs font-mono w-full max-w-xs text-left mb-6 shadow-sm">
           <div className="flex justify-between"><span className="text-slate-400">Kullanıcı:</span> <span className="text-slate-700 font-bold">{currentUser?.email}</span></div>
@@ -1256,7 +1357,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                     <Search className="absolute left-3.5 top-3 text-slate-500" size={14} />
                     <input 
                       type="text"
-                      placeholder="Personel Adı, Soyadı, TC veya Görev Ara..."
+                      placeholder="Personel Adı, Soyadı, TC, Görev veya Firma Ara..."
                       value={personelSearch}
                       onChange={(e) => setPersonelSearch(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 pl-10 rounded-xl text-xs placeholder-slate-650"
@@ -1265,19 +1366,35 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
                   {/* Grid of employees */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
-                    {filteredPersonel.map((item) => (
-                      <div key={item.id} className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 flex flex-col justify-between space-y-3 hover:border-slate-700 transition">
+                    {filteredPersonel.map((item) => {
+                      const taseron = isTaseronPersonel(item);
+                      return (
+                      <div
+                        key={item.id}
+                        className={`rounded-2xl p-3 flex flex-col justify-between space-y-3 transition ${
+                          taseron
+                            ? 'bg-amber-50 border border-amber-200 hover:border-amber-400'
+                            : 'bg-slate-50 border border-slate-200/80 hover:border-slate-700'
+                        }`}
+                      >
                         <div className="flex items-start space-x-2.5">
                           {item.fotografUrl ? (
                             <img src={item.fotografUrl} alt={item.ad} className="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0" />
                           ) : (
-                            <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-500 font-bold shrink-0 text-xs">
+                            <div className={`w-10 h-10 rounded-xl border flex items-center justify-center font-bold shrink-0 text-xs ${
+                              taseron ? 'bg-amber-100 border-amber-200 text-amber-700' : 'bg-white border-slate-200 text-slate-500'
+                            }`}>
                               {item.ad[0]}{item.soyad[0]}
                             </div>
                           )}
                           <div className="min-w-0">
                             <h4 className="font-bold text-slate-805 text-xs truncate">{item.ad} {item.soyad}</h4>
                             <span className="text-[9px] text-slate-500 block truncate font-mono mt-0.5">💼 {item.gorev}</span>
+                            <span className={`inline-block mt-1 text-[8px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                              taseron ? 'bg-amber-200/80 text-amber-900' : 'bg-slate-200 text-slate-700'
+                            }`}>
+                              {firmaEtiketi(item)}
+                            </span>
                             <span className="text-[8px] text-slate-600 block font-mono mt-0.2">TC: {item.tcNo.replace(/(\d{3})\d{5}(\d{3})/, '$1*****$2')}</span>
                           </div>
                         </div>
@@ -1300,32 +1417,63 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                           </button>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
 
                     {filteredPersonel.length === 0 && (
-                      <div className="col-span-2 text-center p-6 text-slate-500 italic text-xs">Arama kriterlerine uygun personel bulunamadı.</div>
+                      <div className="col-span-2 text-center p-6 text-slate-500 italic text-xs space-y-1">
+                        <p>Arama kriterlerine uygun aktif personel bulunamadı.</p>
+                        <p className="text-[10px] text-slate-400 not-italic">İşe giriş / işten çıkış tarihleri seçili güne uygun olmayan personel listelenmez.</p>
+                      </div>
                     )}
                   </div>
                 </div>
 
                 {/* Live gate logs history */}
                 <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
-                  <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                  <div className="flex justify-between items-center border-b border-slate-200 pb-2 gap-2">
                     <span className="font-display font-black text-xs text-amber-500 uppercase tracking-widest block">📋 BUGÜNKÜ GİRİŞ-ÇIKIŞ LOGLARI</span>
-                    <Clock size={14} className="text-amber-500 animate-pulse" />
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleSendSelectedPersonelLogsWp}
+                        disabled={selectedPersonelLogIds.length === 0}
+                        className="flex items-center gap-1 px-2 py-1 bg-emerald-600 disabled:bg-slate-200 disabled:text-slate-400 text-white text-[9px] font-black rounded-lg cursor-pointer"
+                      >
+                        <MessageCircle size={11} />
+                        WP Gönder
+                      </button>
+                      <Clock size={14} className="text-amber-500 animate-pulse" />
+                    </div>
                   </div>
 
                   <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-                    {personelLoglar.slice(0, 20).map((log) => {
+                    {bugunkuPersonelLoglar.slice(0, 40).map((log) => {
                       const isGiris = log.tip === 'GİRİŞ';
+                      const checked = selectedPersonelLogIds.includes(log.id);
                       return (
-                        <div key={log.id} className="bg-slate-50 border border-slate-855 rounded-xl p-2.5 flex justify-between items-center text-[11px]">
-                          <div className="space-y-0.5">
-                            <span className="font-bold text-slate-805 block">{log.ad} {log.soyad}</span>
-                            <span className="text-[9px] text-slate-500 font-mono uppercase">{log.gorev}</span>
-                          </div>
+                        <div key={log.id} className="bg-slate-50 border border-slate-855 rounded-xl p-2.5 flex justify-between items-center text-[11px] gap-2">
+                          <label className="flex items-start gap-2 min-w-0 cursor-pointer flex-1">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => togglePersonelLogSelect(log.id)}
+                              className="mt-0.5 accent-emerald-600"
+                            />
+                            <div className="space-y-0.5 min-w-0">
+                              <span className="font-bold text-slate-805 block truncate">{log.ad} {log.soyad}</span>
+                              <span className="text-[9px] text-slate-500 font-mono uppercase block truncate">{log.gorev}</span>
+                              {log.firmaAdi && (
+                                <span className={`inline-block text-[8px] font-bold px-1 py-0.5 rounded ${
+                                  log.firmaTipi === 'TASERON' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'
+                                }`}>
+                                  {log.firmaAdi}
+                                </span>
+                              )}
+                            </div>
+                          </label>
                           
-                          <div className="text-right">
+                          <div className="text-right shrink-0">
                             <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase font-mono tracking-wide ${
                               isGiris ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/10' : 'bg-rose-950 text-rose-400 border border-rose-500/10'
                             }`}>
@@ -1339,7 +1487,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                       );
                     })}
 
-                    {personelLoglar.length === 0 && (
+                    {bugunkuPersonelLoglar.length === 0 && (
                       <div className="text-center p-10 text-slate-500 italic text-[11px]">Kapıda bugün henüz hiçbir personel girişi veya çıkışı kaydedilmedi.</div>
                     )}
                   </div>
@@ -1490,6 +1638,59 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
               </div>
 
+              {/* Bugünkü Araç Logları + WP */}
+              <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
+                <div className="flex justify-between items-center border-b border-slate-200 pb-2 gap-2">
+                  <span className="font-display font-black text-xs text-amber-500 uppercase tracking-widest block">🚛 BUGÜNKÜ ARAÇ LOGLARI</span>
+                  <button
+                    type="button"
+                    onClick={handleSendSelectedAracLogsWp}
+                    disabled={selectedAracLogIds.length === 0}
+                    className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 disabled:bg-slate-200 disabled:text-slate-400 text-white text-[9px] font-black rounded-lg cursor-pointer"
+                  >
+                    <MessageCircle size={11} />
+                    WP Gönder
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                  {bugunkuAracLoglar.map((log) => {
+                    const checked = selectedAracLogIds.includes(log.id);
+                    return (
+                      <div key={log.id} className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex justify-between items-center text-[11px] gap-2">
+                        <label className="flex items-start gap-2 min-w-0 cursor-pointer flex-1">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleAracLogSelect(log.id)}
+                            className="mt-0.5 accent-emerald-600"
+                          />
+                          <div className="space-y-0.5 min-w-0">
+                            <span className="font-bold text-slate-800 font-mono block">{log.plaka}</span>
+                            <span className="text-[9px] text-slate-500 block truncate">{log.aracTipi} · {log.firma}</span>
+                            <span className="text-[9px] text-slate-400 block">Sürücü: {log.surucuAdi || '—'}</span>
+                          </div>
+                        </label>
+                        <div className="text-right shrink-0">
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                            log.durum === 'İÇERİDE' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'
+                          }`}>
+                            {log.durum}
+                          </span>
+                          <span className="text-[9px] text-slate-500 block font-mono mt-0.5">
+                            {log.girisZamani ? new Date(log.girisZamani).toLocaleTimeString('tr-TR') : '—'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {bugunkuAracLoglar.length === 0 && (
+                    <div className="text-center p-8 text-slate-500 italic text-[11px]">Bugün henüz araç giriş/çıkış kaydı yok.</div>
+                  )}
+                </div>
+              </div>
+
             </div>
           )}
 
@@ -1594,13 +1795,22 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                           <p className="text-[9px] text-slate-500 pt-1">Giriş Saati: {new Date(item.girisZamani).toLocaleString('tr-TR')}</p>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-slate-950/60">
+                        <div className="grid grid-cols-3 gap-1.5 pt-1 border-t border-slate-950/60">
                           <button
                             onClick={() => setActiveBadgeGuest(item)}
                             className="bg-slate-800 hover:bg-slate-750 text-slate-700 text-[9px] font-extrabold py-1.5 rounded-xl border border-slate-700 transition cursor-pointer flex items-center justify-center space-x-1"
                           >
                             <Printer size={11} />
-                            <span>KART YAZDIR</span>
+                            <span>KART</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleZiyaretciWhatsApp(item)}
+                            className="bg-emerald-600/10 hover:bg-emerald-600 text-emerald-600 hover:text-white text-[9px] font-extrabold py-1.5 rounded-xl border border-emerald-500/20 transition cursor-pointer flex items-center justify-center space-x-1"
+                          >
+                            <MessageCircle size={11} />
+                            <span>WP</span>
                           </button>
                           
                           <button
@@ -1608,7 +1818,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                             className="bg-rose-600/10 hover:bg-rose-600 text-rose-400 hover:text-white text-[9px] font-extrabold py-1.5 rounded-xl border border-rose-500/20 transition cursor-pointer flex items-center justify-center space-x-1"
                           >
                             <X size={11} />
-                            <span>ÇIKIŞ YAPTI</span>
+                            <span>ÇIKIŞ</span>
                           </button>
                         </div>
                       </div>
@@ -1875,10 +2085,27 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex items-start space-x-2 text-amber-800 text-[11px] leading-relaxed">
                         <Lock size={16} className="shrink-0 mt-0.5 animate-pulse" />
                         <p>
-                          <strong>Görüntüleme Modu:</strong> Yoklama alma/kaydetme yetkisi sadece <strong className="font-extrabold text-amber-950">guven3@gmail.com</strong> hesabına aittir. Diğer hesaplar sadece geçmiş kayıtları inceleyebilir.
+                          <strong>Görüntüleme Modu:</strong> Yoklama alma/kaydetme yetkisi <strong className="font-extrabold text-amber-950">Güvenlik, Kurucu ve Yönetici</strong> yetkilerine aittir. Diğer hesaplar sadece geçmiş kayıtları inceleyebilir.
                         </p>
                       </div>
                     )}
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={handleAkvizyonRaporIndir}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 text-white text-[10px] font-bold rounded-xl cursor-pointer"
+                      >
+                        <Download size={12} /> Rapor İndir
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAkvizyonWpRapor}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-[10px] font-bold rounded-xl cursor-pointer"
+                      >
+                        <MessageCircle size={12} /> WP Rapor
+                      </button>
+                    </div>
                   </div>
 
                   {/* Yoklama Listesi */}
@@ -2361,6 +2588,15 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               >
                 <Printer size={12} />
                 <span>Yazdır</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleZiyaretciWhatsApp(activeBadgeGuest)}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black py-2 rounded-xl cursor-pointer flex items-center justify-center space-x-1"
+              >
+                <MessageCircle size={12} />
+                <span>WP</span>
               </button>
               
               <button

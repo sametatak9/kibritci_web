@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Building2, HardHat, Zap, UtensilsCrossed, Archive, Mail, Printer,
-  Download, CheckCircle2, Plus, Users,
+  Download, CheckCircle2, Plus, Users, LogIn, MessageCircle,
 } from 'lucide-react';
 import {
   CariKart,
@@ -24,6 +24,7 @@ import {
   ayAdi,
   personelForTaseron,
   formatPersonelKampYerlesim,
+  firmaEslesir,
 } from '../lib/taseronUtils';
 import {
   buildEnerjiKesintiReportHtml,
@@ -33,8 +34,16 @@ import {
   yazdirIsMakinesiRaporu,
 } from '../lib/taseronReportUtils';
 import { downloadKibritciReportHtml } from '../lib/kibritciReportTemplate';
+import { db } from '../lib/firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
+import {
+  buildPersonelLoglariWhatsAppText,
+  formatZamanTr,
+  isPersonelActiveOnDate,
+  openWhatsAppText,
+} from '../lib/guvenlikHelpers';
 
-type SubPage = 'makine' | 'enerji' | 'yemek' | 'personel' | 'arsiv';
+type SubPage = 'makine' | 'enerji' | 'yemek' | 'personel' | 'personel_loglari' | 'arsiv';
 
 interface TaseronKesintiScreenProps {
   cariKartlar: CariKart[];
@@ -77,6 +86,40 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
   const [selectedAy, setSelectedAy] = useState(new Date().getMonth() + 1);
   const [selectedYil, setSelectedYil] = useState(new Date().getFullYear());
   const [saatlikUcret, setSaatlikUcret] = useState(1500);
+  const [kapiLoglari, setKapiLoglari] = useState<any[]>([]);
+  const [girisTalepleri, setGirisTalepleri] = useState<any[]>([]);
+  const [cikisTalepleri, setCikisTalepleri] = useState<any[]>([]);
+  const [logFiltreBaslangic, setLogFiltreBaslangic] = useState(
+    () => new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
+  );
+  const [logFiltreBitis, setLogFiltreBitis] = useState(
+    () => new Date().toISOString().split('T')[0]
+  );
+  const [selectedLogIds, setSelectedLogIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    const unsubKapi = onSnapshot(collection(db, 'guvenlikGirisCikisLoglari'), (snap) => {
+      const list: any[] = [];
+      snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+      list.sort((a, b) => new Date(b.zaman || 0).getTime() - new Date(a.zaman || 0).getTime());
+      setKapiLoglari(list);
+    });
+    const unsubGiris = onSnapshot(collection(db, 'personelGirisTalepleri'), (snap) => {
+      const list: any[] = [];
+      snap.forEach((d) => list.push({ id: d.id, ...d.data(), _kaynak: 'ISCI_GIRIS' }));
+      setGirisTalepleri(list);
+    });
+    const unsubCikis = onSnapshot(collection(db, 'personelCikisTalepleri'), (snap) => {
+      const list: any[] = [];
+      snap.forEach((d) => list.push({ id: d.id, ...d.data(), _kaynak: 'ISCI_CIKIS' }));
+      setCikisTalepleri(list);
+    });
+    return () => {
+      unsubKapi();
+      unsubGiris();
+      unsubCikis();
+    };
+  }, []);
 
   const selectedTaseron = taseronlar.find((t) => t.id === selectedTaseronId);
 
@@ -309,6 +352,164 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
     return personelForTaseron(personeller, selectedTaseron);
   }, [personeller, selectedTaseron]);
 
+  /** İşe giriş/çıkış tarihine göre aktif taşeron personeli */
+  const taseronPersonelAktifListe = useMemo(() => {
+    const bugun = new Date().toISOString().split('T')[0];
+    return taseronPersonelListesi.filter((p) => isPersonelActiveOnDate(p, bugun));
+  }, [taseronPersonelListesi]);
+
+  const taseronPersonelIds = useMemo(
+    () => new Set(taseronPersonelListesi.map((p) => p.id)),
+    [taseronPersonelListesi]
+  );
+
+  const taseronPersonelLoglari = useMemo(() => {
+    if (!selectedTaseron) return [] as Array<{
+      id: string;
+      kaynak: string;
+      ad: string;
+      soyad: string;
+      tip: string;
+      zaman: string;
+      detay?: string;
+    }>;
+
+    const bas = logFiltreBaslangic;
+    const bit = logFiltreBitis;
+    const inRange = (iso?: string) => {
+      if (!iso) return false;
+      const d = String(iso).slice(0, 10);
+      return d >= bas && d <= bit;
+    };
+
+    const kapi = kapiLoglari
+      .filter((l) => {
+        if (!inRange(l.zaman)) return false;
+        if (l.personelId && taseronPersonelIds.has(l.personelId)) return true;
+        if (l.firmaTipi === 'TASERON' && l.firmaAdi && firmaEslesir(l.firmaAdi, selectedTaseron.unvan)) {
+          return true;
+        }
+        return false;
+      })
+      .map((l) => ({
+        id: `kapi_${l.id}`,
+        kaynak: 'KAPI',
+        ad: l.ad || '',
+        soyad: l.soyad || '',
+        tip: l.tip || '—',
+        zaman: l.zaman || '',
+        detay: l.gorev || '',
+        raw: l,
+      }));
+
+    const matchPersonelName = (adSoyad: string) => {
+      const n = String(adSoyad || '').trim().toLocaleLowerCase('tr-TR');
+      return taseronPersonelListesi.some(
+        (p) => `${p.ad} ${p.soyad}`.trim().toLocaleLowerCase('tr-TR') === n
+      );
+    };
+
+    const isciGiris = girisTalepleri
+      .filter((t) => {
+        const zaman = t.olusturmaTarihi || t.tarih || t.kayitTarihi || '';
+        if (!inRange(zaman)) return false;
+        if (t.personelId && taseronPersonelIds.has(t.personelId)) return true;
+        if (t.firmaAdi && firmaEslesir(t.firmaAdi, selectedTaseron.unvan)) return true;
+        if (t.adSoyad && matchPersonelName(t.adSoyad)) return true;
+        if (t.ad && t.soyad && matchPersonelName(`${t.ad} ${t.soyad}`)) return true;
+        return false;
+      })
+      .map((t) => ({
+        id: `giris_${t.id}`,
+        kaynak: 'İŞÇİ GİRİŞ',
+        ad: t.ad || String(t.adSoyad || '').split(' ')[0] || '',
+        soyad: t.soyad || String(t.adSoyad || '').split(' ').slice(1).join(' ') || '',
+        tip: t.durum || 'GİRİŞ TALEBİ',
+        zaman: t.olusturmaTarihi || t.tarih || t.kayitTarihi || '',
+        detay: t.gorev || t.aciklama || '',
+        raw: t,
+      }));
+
+    const isciCikis = cikisTalepleri
+      .filter((t) => {
+        const zaman = t.olusturmaTarihi || t.tarih || t.kayitTarihi || t.cikisTarihi || '';
+        if (!inRange(zaman)) return false;
+        if (t.personelId && taseronPersonelIds.has(t.personelId)) return true;
+        if (t.firmaAdi && firmaEslesir(t.firmaAdi, selectedTaseron.unvan)) return true;
+        if (t.adSoyad && matchPersonelName(t.adSoyad)) return true;
+        if (t.ad && t.soyad && matchPersonelName(`${t.ad} ${t.soyad}`)) return true;
+        return false;
+      })
+      .map((t) => ({
+        id: `cikis_${t.id}`,
+        kaynak: 'İŞÇİ ÇIKIŞ',
+        ad: t.ad || String(t.adSoyad || '').split(' ')[0] || '',
+        soyad: t.soyad || String(t.adSoyad || '').split(' ').slice(1).join(' ') || '',
+        tip: t.durum || 'ÇIKIŞ TALEBİ',
+        zaman: t.olusturmaTarihi || t.tarih || t.kayitTarihi || t.cikisTarihi || '',
+        detay: t.aciklama || t.neden || '',
+        raw: t,
+      }));
+
+    return [...kapi, ...isciGiris, ...isciCikis].sort(
+      (a, b) => new Date(b.zaman || 0).getTime() - new Date(a.zaman || 0).getTime()
+    );
+  }, [
+    selectedTaseron,
+    kapiLoglari,
+    girisTalepleri,
+    cikisTalepleri,
+    taseronPersonelIds,
+    taseronPersonelListesi,
+    logFiltreBaslangic,
+    logFiltreBitis,
+  ]);
+
+  const handleTaseronLogRapor = () => {
+    if (!selectedTaseron) return;
+    const rows = taseronPersonelLoglari
+      .map(
+        (l, i) =>
+          `<tr><td>${i + 1}</td><td>${l.kaynak}</td><td><strong>${l.ad} ${l.soyad}</strong></td><td>${l.tip}</td><td>${formatZamanTr(l.zaman)}</td><td>${l.detay || '—'}</td></tr>`
+      )
+      .join('');
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Taşeron Personel Logları</title>
+      <style>body{font-family:system-ui;padding:28px;color:#1e293b}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border-bottom:1px solid #e2e8f0;padding:8px;text-align:left}th{background:#f1f5f9;font-size:10px;text-transform:uppercase}.badge{background:#f59e0b;color:#0f172a;font-weight:800;font-size:10px;padding:3px 8px;border-radius:999px}</style>
+      </head><body>
+      <span class="badge">TAŞERON</span>
+      <h1>${selectedTaseron.unvan} — Personel Giriş/Çıkış Logları</h1>
+      <p>${logFiltreBaslangic} → ${logFiltreBitis} · ${taseronPersonelLoglari.length} kayıt</p>
+      <p style="font-size:12px;color:#64748b">Kapı logları + işçi giriş/çıkış talepleri. Ana firma puantajından bağımsızdır.</p>
+      <table><thead><tr><th>#</th><th>Kaynak</th><th>Personel</th><th>Tip/Durum</th><th>Zaman</th><th>Detay</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6">Kayıt yok</td></tr>'}</tbody></table>
+      </body></html>`;
+    downloadKibritciReportHtml(html, `taseron_personel_log_${selectedTaseron.unvan}_${logFiltreBaslangic}.html`);
+    addNotification?.(`${selectedTaseron.unvan} personel log raporu indirildi.`);
+  };
+
+  const handleTaseronLogWp = () => {
+    const selected = taseronPersonelLoglari.filter((l) => selectedLogIds.includes(l.id));
+    const logs = (selected.length ? selected : taseronPersonelLoglari).map((l) => ({
+      ad: l.ad,
+      soyad: l.soyad,
+      gorev: `${l.kaynak} · ${l.detay || ''}`,
+      tip: l.tip,
+      zaman: l.zaman,
+      firmaAdi: selectedTaseron?.unvan,
+      firmaTipi: 'TASERON',
+    }));
+    if (logs.length === 0) {
+      alert('Gönderilecek log yok.');
+      return;
+    }
+    openWhatsAppText(
+      buildPersonelLoglariWhatsAppText(
+        logs,
+        `${selectedTaseron?.unvan || ''} · ${logFiltreBaslangic}→${logFiltreBitis}`
+      )
+    );
+  };
+
   const cezaToplam = useMemo(() => {
     if (!selectedTaseron) return 0;
     return hazirTutanaklar
@@ -393,6 +594,7 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
             ['enerji', 'Elektrik / Su / Gaz', Zap],
             ['yemek', 'Yemek Sayımı', UtensilsCrossed],
             ['personel', 'Seçili Taşeron Personel', Users],
+            ['personel_loglari', 'Personel Giriş/Çıkış Logları', LogIn],
             ['arsiv', 'Rapor Arşivi', Archive],
           ] as const
         ).map(([key, label, Icon]) => (
@@ -514,7 +716,7 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
                     {selectedTaseron.unvan} — Personel Listesi
                   </h3>
                   <p className="text-[10px] text-slate-500 mt-1">
-                    Personel kayıtlarında <strong>firmaTipi: TASERON</strong> ve eşleşen firma adı. Yoklama listesine dahil edilmezler.
+                    Personel kayıtlarında <strong>firmaTipi: TASERON</strong> ve eşleşen firma adı. Ana firma yoklama listesine dahil edilmezler. İşe giriş/çıkış tarihlerine göre aktif: {taseronPersonelAktifListe.length}/{taseronPersonelListesi.length}.
                   </p>
                 </div>
                 <span className="text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-100 px-3 py-1 rounded-full">
@@ -537,6 +739,8 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
                         <th className="p-3 border-b">Ad Soyad</th>
                         <th className="p-3 border-b">Görev</th>
                         <th className="p-3 border-b">TC No</th>
+                        <th className="p-3 border-b">İşe Giriş</th>
+                        <th className="p-3 border-b">İşten Çıkış</th>
                         <th className="p-3 border-b">Telefon</th>
                         <th className="p-3 border-b">Kamp Yerleşimi</th>
                         <th className="p-3 border-b text-center">Durum</th>
@@ -545,14 +749,22 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
                     <tbody>
                       {taseronPersonelListesi.map((p) => {
                         const aktif = p.durum === true || String(p.durum).toLowerCase() === 'true';
+                        const bugunAktif = isPersonelActiveOnDate(p, new Date().toISOString().split('T')[0]);
                         const kamp = formatPersonelKampYerlesim(p, kampKayitlari, kampOdalari);
                         return (
-                          <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50/80">
+                          <tr
+                            key={p.id}
+                            className={`border-b border-slate-100 hover:bg-slate-50/80 ${
+                              bugunAktif ? 'bg-amber-50/40' : 'opacity-60'
+                            }`}
+                          >
                             <td className="p-3 font-bold text-slate-900 whitespace-nowrap">
                               {p.ad} {p.soyad}
                             </td>
                             <td className="p-3 text-slate-700">{p.gorev || '—'}</td>
                             <td className="p-3 font-mono text-slate-600">{p.tcNo || '—'}</td>
+                            <td className="p-3 font-mono text-slate-600">{p.iseGirisTarihi || '—'}</td>
+                            <td className="p-3 font-mono text-slate-600">{p.istenCikisTarihi || '—'}</td>
                             <td className="p-3 text-slate-600 whitespace-nowrap">{p.telefonNo || '—'}</td>
                             <td className="p-3 text-slate-700 min-w-[180px]">
                               <span className={`inline-flex items-center gap-1 ${kamp.startsWith('—') ? 'text-slate-400 italic' : 'text-emerald-800 font-semibold'}`}>
@@ -561,13 +773,106 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
                               </span>
                             </td>
                             <td className="p-3 text-center">
-                              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${aktif ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
-                                {aktif ? 'Aktif' : 'Pasif'}
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${aktif && bugunAktif ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                                {aktif && bugunAktif ? 'Aktif' : 'Pasif / Tarih Dışı'}
                               </span>
                             </td>
                           </tr>
                         );
                       })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {subPage === 'personel_loglari' && (
+            <div className="bg-white border rounded-2xl overflow-hidden space-y-0">
+              <div className="p-4 border-b bg-amber-50/60 flex flex-wrap justify-between gap-3 items-center">
+                <div>
+                  <h3 className="text-xs font-black uppercase text-slate-800 flex items-center gap-2">
+                    <LogIn size={14} className="text-amber-700" />
+                    {selectedTaseron.unvan} — Personel Giriş/Çıkış Logları
+                  </h3>
+                  <p className="text-[10px] text-slate-500 mt-1 max-w-xl">
+                    Kapı giriş-çıkış logları ile işçi giriş/çıkış talepleri bu taşeron altında birikir. Ana firma (Kibritçi İnşaat) kayıtları buraya karışmaz.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 items-end">
+                  <div>
+                    <label className="text-[8px] font-bold text-slate-400 uppercase block">Başlangıç</label>
+                    <input type="date" value={logFiltreBaslangic} onChange={(e) => setLogFiltreBaslangic(e.target.value)} className="text-xs p-2 border rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="text-[8px] font-bold text-slate-400 uppercase block">Bitiş</label>
+                    <input type="date" value={logFiltreBitis} onChange={(e) => setLogFiltreBitis(e.target.value)} className="text-xs p-2 border rounded-lg" />
+                  </div>
+                  <button type="button" onClick={handleTaseronLogRapor} className="px-3 py-2 bg-slate-900 text-white text-[10px] font-bold rounded-xl cursor-pointer flex items-center gap-1">
+                    <Download size={12} /> Rapor
+                  </button>
+                  <button type="button" onClick={handleTaseronLogWp} className="px-3 py-2 bg-emerald-600 text-white text-[10px] font-bold rounded-xl cursor-pointer flex items-center gap-1">
+                    <MessageCircle size={12} /> WP Gönder
+                  </button>
+                </div>
+              </div>
+
+              {taseronPersonelLoglari.length === 0 ? (
+                <div className="p-10 text-center text-slate-400 text-xs">
+                  Seçili tarih aralığında bu taşeron için kapı / işçi logu bulunamadı.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-[11px]">
+                    <thead className="bg-slate-100 text-slate-600 uppercase text-[9px] font-bold">
+                      <tr>
+                        <th className="p-3 border-b w-8">
+                          <input
+                            type="checkbox"
+                            checked={selectedLogIds.length === taseronPersonelLoglari.length && taseronPersonelLoglari.length > 0}
+                            onChange={() => {
+                              setSelectedLogIds((prev) =>
+                                prev.length === taseronPersonelLoglari.length
+                                  ? []
+                                  : taseronPersonelLoglari.map((l) => l.id)
+                              );
+                            }}
+                          />
+                        </th>
+                        <th className="p-3 border-b">Kaynak</th>
+                        <th className="p-3 border-b">Personel</th>
+                        <th className="p-3 border-b">Tip / Durum</th>
+                        <th className="p-3 border-b">Zaman</th>
+                        <th className="p-3 border-b">Detay</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {taseronPersonelLoglari.map((l) => (
+                        <tr key={l.id} className="border-b border-slate-100 hover:bg-amber-50/30">
+                          <td className="p-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedLogIds.includes(l.id)}
+                              onChange={() =>
+                                setSelectedLogIds((prev) =>
+                                  prev.includes(l.id) ? prev.filter((x) => x !== l.id) : [...prev, l.id]
+                                )
+                              }
+                            />
+                          </td>
+                          <td className="p-3">
+                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${
+                              l.kaynak === 'KAPI' ? 'bg-slate-800 text-white' : 'bg-amber-100 text-amber-900'
+                            }`}>
+                              {l.kaynak}
+                            </span>
+                          </td>
+                          <td className="p-3 font-bold text-slate-900 whitespace-nowrap">{l.ad} {l.soyad}</td>
+                          <td className="p-3 font-mono text-slate-700">{l.tip}</td>
+                          <td className="p-3 font-mono text-slate-600 whitespace-nowrap">{formatZamanTr(l.zaman)}</td>
+                          <td className="p-3 text-slate-500">{l.detay || '—'}</td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
