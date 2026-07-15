@@ -74,6 +74,10 @@ import {
   fetchCollection,
   ensureFirestoreAuth,
 } from './lib/firebase';
+import {
+  isPlaceholderPersonelName,
+  personelNameKey,
+} from './lib/guvenlikHelpers';
 import { loadKampStateSnapshot, ensureYapıFromOdalari } from './lib/kampYapisi';
 import { probeGeminiApi } from './lib/apiClient';
 import {
@@ -279,6 +283,7 @@ export default function App() {
   const claimsSyncedRef = useRef(false);
   const bootstrapDoneRef = useRef(false);
   const kampRepairInFlightRef = useRef(false);
+  const personelAutoCreateBlocklistRef = useRef(new Set<string>());
   const persistenceFailureRef = useRef<(collection: string, message: string) => void>((c, m) => {
     console.error(`[persist:${c}]`, m);
   });
@@ -1257,6 +1262,32 @@ export default function App() {
     );
   };
 
+  const handlePersonelDeleted = (deleted: Personel[]) => {
+    if (!deleted.length) return;
+    const deletedIds = new Set(deleted.map((p) => p.id));
+    deleted.forEach((p) => {
+      personelAutoCreateBlocklistRef.current.add(personelNameKey(p));
+    });
+
+    setKampKayitlari((prev) => {
+      let changed = false;
+      const next = prev.map((k) => {
+        const nameMatch = deleted.some(
+          (p) => personelNameKey(p) === k.personelIsim.trim().toLocaleLowerCase('tr-TR')
+        );
+        const idMatch = Boolean(k.personelId && deletedIds.has(k.personelId));
+        if (nameMatch || idMatch) {
+          changed = true;
+          const updated = { ...k, personelId: '', durum: 'PASIF' as const };
+          void saveDocument('kampKayitlari', updated);
+          return updated;
+        }
+        return k;
+      });
+      return changed ? next : prev;
+    });
+  };
+
   const setPersonellerWithSync = (updater: Personel[] | ((p: Personel[]) => Personel[])) => {
     setPersoneller(prev => {
       const nextRaw = typeof updater === 'function' ? updater(prev) : updater;
@@ -1266,15 +1297,6 @@ export default function App() {
           : p
       );
 
-      const prevIds = new Set(prev.map((p) => p.id as string));
-      const nextIds = new Set(next.map((p) => p.id as string));
-      let added = 0;
-      let removed = 0;
-      nextIds.forEach((id) => { if (!prevIds.has(id as string)) added++; });
-      prevIds.forEach((id) => { if (!nextIds.has(id as string)) removed++; });
-      // #region agent log
-      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-1',hypothesisId:'H1',location:'App.tsx:setPersonellerWithSync',message:'personel local state change queued for sync',data:{prevCount:prev.length,nextCount:next.length,added,removed},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       syncListState('personeller', prev, next, setPersoneller);
       return next;
     });
@@ -1362,9 +1384,13 @@ export default function App() {
         const nameClean = k.personelIsim.trim();
         if (!nameClean) return;
 
+        const nameKey = nameClean.toLocaleLowerCase('tr-TR');
+        if (personelAutoCreateBlocklistRef.current.has(nameKey)) return;
+        if (isPlaceholderPersonelName(nameClean)) return;
+
         const exists = personeller.some((p) => {
           const fullName = `${p.ad} ${p.soyad}`.trim().toLocaleLowerCase('tr-TR');
-          return fullName === nameClean.toLocaleLowerCase('tr-TR');
+          return fullName === nameKey;
         });
 
         const alreadyQueued = toCreate.some((p) => {
@@ -2390,6 +2416,7 @@ export default function App() {
                 <PersonelScreen 
                   personeller={personeller} 
                   setPersoneller={setPersonellerWithSync}
+                  onPersonelDeleted={handlePersonelDeleted}
                   cariKartlar={cariKartlar}
                   setCariKartlar={setCariKartlarWithSync}
                   setCariIslemGecmisi={setCariIslemGecmisiWithSync}

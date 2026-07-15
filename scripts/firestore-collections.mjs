@@ -48,6 +48,7 @@ export const FIRESTORE_COLLECTIONS = [
   'kampGunlukFaaliyetleri',
   'guvenlikGirisCikisLoglari',
   'guvenlikAracLoglari',
+  'guvenlikSuTankeriLoglari',
   'guvenlikZiyaretciLoglari',
   'guvenlikGelenEvraklar',
   'guvenlikNobetArsivleri',

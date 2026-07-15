@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ShieldAlert, FileText, Users, Truck, UserCheck, Search, PlusCircle, Trash2, 
   Check, X, FileUp, Camera, Printer, Clock, AlertTriangle, Key, Download, ArrowRight, RefreshCw, Barcode,
-  Archive, Calendar, Lock, ClipboardList, MessageCircle
+  Archive, Calendar, Lock, ClipboardList, MessageCircle, Droplets
 } from 'lucide-react';
 import { Personel, Irsaliye, IrsaliyeItem, Fatura } from '../types/erp';
 import { db } from '../lib/firebase';
@@ -16,10 +16,12 @@ import { isTaseronPersonel } from '../lib/yoklamaUtils';
 import {
   buildAracLoglariWhatsAppText,
   buildPersonelLoglariWhatsAppText,
+  buildSuTankeriLoglariWhatsAppText,
   buildZiyaretciWhatsAppText,
   canAccessGuvenlikScreen,
   canTakeAkvizyonYoklama,
   firmaEtiketi,
+  isAkvizyonPersonel,
   isPersonelActiveOnDate,
   openWhatsAppText,
   buildAkvizyonYoklamaReportHtml,
@@ -42,10 +44,11 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   isStandalone = false,
   addNotification
 }) => {
-  const [activeTab, setActiveTab] = useState<'irsaliye' | 'personel' | 'arac' | 'ziyaretci' | 'nobet_arsivi' | 'akvizyon_yoklama'>('irsaliye');
+  const [activeTab, setActiveTab] = useState<'irsaliye' | 'personel' | 'arac' | 'su_tankeri' | 'ziyaretci' | 'nobet_arsivi' | 'akvizyon_yoklama'>('irsaliye');
   const [viewMode, setViewMode] = useState<'web' | 'mobile'>('web');
   const [selectedPersonelLogIds, setSelectedPersonelLogIds] = useState<string[]>([]);
   const [selectedAracLogIds, setSelectedAracLogIds] = useState<string[]>([]);
+  const [selectedSuTankeriLogIds, setSelectedSuTankeriLogIds] = useState<string[]>([]);
   
   // ─────────────────────────────────────────────────────────────
   // 📄 1. RE-DESIGNED EVRAK GİRİŞ STATE
@@ -117,6 +120,17 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   const [aracGecmisLoglar, setAracGecmisLoglar] = useState<any[]>([]);
 
   // ─────────────────────────────────────────────────────────────
+  // 💧 SU TANKERİ GİRİŞ-ÇIKIŞ
+  // ─────────────────────────────────────────────────────────────
+  const [stPlaka, setStPlaka] = useState('');
+  const [stFirma, setStFirma] = useState('');
+  const [stSurucu, setStSurucu] = useState('');
+  const [stMiktar, setStMiktar] = useState('');
+  const [stAciklama, setStAciklama] = useState('');
+  const [iceridekiSuTankerleri, setIceridekiSuTankerleri] = useState<any[]>([]);
+  const [suTankeriGecmisLoglar, setSuTankeriGecmisLoglar] = useState<any[]>([]);
+
+  // ─────────────────────────────────────────────────────────────
   // 🎫 4. ZİYARETÇİ STATE & BADGE
   // ─────────────────────────────────────────────────────────────
   const [ziyaretciAd, setZiyaretciAd] = useState('');
@@ -171,11 +185,9 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   }, [personeller, personelSearch, islemTarihi]);
 
   const akvizyonPersoneller = useMemo(() => {
-    return (personeller || []).filter(p => {
-      const firm = (p.firmaAdi || (p as any).calistigiFirma || '').trim().toLocaleLowerCase('tr-TR');
-      if (!firm.includes('akvizyon')) return false;
-      return isPersonelActiveOnDate(p, islemTarihi);
-    });
+    return (personeller || []).filter(
+      (p) => isAkvizyonPersonel(p) && isPersonelActiveOnDate(p, islemTarihi)
+    );
   }, [personeller, islemTarihi]);
 
   const canSaveAkvizyonYoklama = canTakeAkvizyonYoklama(userYetki, currentUser?.email);
@@ -251,6 +263,16 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       setAracGecmisLoglar(list.filter(x => x.durum === 'ÇIKTI'));
     });
 
+    // 2b. Su tankeri logları
+    const stColl = collection(db, 'guvenlikSuTankeriLoglari');
+    const unsubSt = onSnapshot(stColl, (snap) => {
+      const list: any[] = [];
+      snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+      list.sort((a, b) => new Date(b.girisZamani).getTime() - new Date(a.girisZamani).getTime());
+      setIceridekiSuTankerleri(list.filter((x) => x.durum === 'İÇERİDE'));
+      setSuTankeriGecmisLoglar(list.filter((x) => x.durum === 'ÇIKTI'));
+    });
+
     // 3. Aktif ve geçmiş ziyaretçiler
     const vizColl = collection(db, 'guvenlikZiyaretciLoglari');
     const unsubViz = onSnapshot(vizColl, (snap) => {
@@ -292,6 +314,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     return () => {
       unsubPLog();
       unsubArac();
+      unsubSt();
       unsubViz();
       unsubEvrak();
       unsubNobet();
@@ -670,6 +693,63 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     }
   };
 
+  const handleSuTankeriGiris = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stPlaka.trim() || !stFirma.trim()) {
+      alert('Lütfen plaka ve su tedarikçi firmasını girin!');
+      return;
+    }
+
+    try {
+      const logId = `st_${Date.now()}`;
+      const logData = {
+        id: logId,
+        plaka: stPlaka.toUpperCase().trim(),
+        firma: stFirma.trim(),
+        surucuAdi: stSurucu.trim(),
+        miktar: stMiktar.trim() || 'Belirtilmedi',
+        aciklama: stAciklama.trim(),
+        durum: 'İÇERİDE',
+        girisZamani: getIslemZamani(),
+        cikisZamani: null,
+        kaydeden: currentUser?.email || 'guvenlik_gate',
+      };
+
+      await setDoc(doc(db, 'guvenlikSuTankeriLoglari', logId), logData);
+      if (addNotification) {
+        addNotification(`Su tankeri ${logData.plaka} (${logData.firma}) şantiyeye giriş yaptı.`);
+      }
+      setStPlaka('');
+      setStFirma('');
+      setStSurucu('');
+      setStMiktar('');
+      setStAciklama('');
+      showStatus('success', 'Su tankeri giriş kaydı yapıldı!');
+    } catch (err) {
+      console.error(err);
+      showStatus('error', 'Kayıt başarısız!');
+    }
+  };
+
+  const handleSuTankeriCikis = async (id: string) => {
+    try {
+      const matched = iceridekiSuTankerleri.find((a) => a.id === id);
+      const plakaLabel = matched ? matched.plaka : id;
+      await setDoc(
+        doc(db, 'guvenlikSuTankeriLoglari', id),
+        { durum: 'ÇIKTI', cikisZamani: getIslemZamani() },
+        { merge: true }
+      );
+      if (addNotification) {
+        addNotification(`${plakaLabel} plakalı su tankeri şantiyeden çıkış yaptı.`);
+      }
+      showStatus('success', 'Su tankeri çıkışı kaydedildi!');
+    } catch (err) {
+      console.error(err);
+      showStatus('error', 'Hata oluştu!');
+    }
+  };
+
   // ─────────────────────────────────────────────────────────────
   // 🎫 ZİYARETÇİ KAYIT & KART EVENTLERİ
   // ─────────────────────────────────────────────────────────────
@@ -742,6 +822,12 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     );
   }, [iceridekiAraclar, aracGecmisLoglar, islemTarihi]);
 
+  const bugunkuSuTankeriLoglar = useMemo(() => {
+    return [...iceridekiSuTankerleri, ...suTankeriGecmisLoglar].filter((a) =>
+      String(a.girisZamani || '').startsWith(islemTarihi)
+    );
+  }, [iceridekiSuTankerleri, suTankeriGecmisLoglar, islemTarihi]);
+
   const togglePersonelLogSelect = (id: string) => {
     setSelectedPersonelLogIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
@@ -750,6 +836,12 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
   const toggleAracLogSelect = (id: string) => {
     setSelectedAracLogIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSuTankeriLogSelect = (id: string) => {
+    setSelectedSuTankeriLogIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
@@ -770,6 +862,23 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       return;
     }
     openWhatsAppText(buildAracLoglariWhatsAppText(selected, islemTarihi));
+  };
+
+  const handleSendSelectedSuTankeriLogsWp = () => {
+    const selected = bugunkuSuTankeriLoglar.filter((l) => selectedSuTankeriLogIds.includes(l.id));
+    if (selected.length === 0) {
+      alert('WhatsApp için en az bir su tankeri logu seçin.');
+      return;
+    }
+    openWhatsAppText(buildSuTankeriLoglariWhatsAppText(selected, islemTarihi));
+  };
+
+  const handleSuTankeriGunlukRaporWp = () => {
+    if (bugunkuSuTankeriLoglar.length === 0) {
+      alert('Bugün için su tankeri kaydı yok.');
+      return;
+    }
+    openWhatsAppText(buildSuTankeriLoglariWhatsAppText(bugunkuSuTankeriLoglar, islemTarihi));
   };
 
   const handleZiyaretciWhatsApp = (z: any) => {
@@ -929,10 +1038,20 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             </button>
 
             <button 
+              onClick={() => setActiveTab('su_tankeri')}
+              className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'su_tankeri' ? 'bg-sky-600 text-white shadow-md shadow-sky-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+              <span className="flex items-center space-x-2"><Droplets size={13} /> <span>4. Su Tankeri</span></span>
+              {iceridekiSuTankerleri.length > 0 && (
+                <span className="text-[9px] font-mono bg-sky-500/20 text-sky-600 rounded-full px-1.5 py-0.2 ml-1 hidden lg:inline">{iceridekiSuTankerleri.length}</span>
+              )}
+            </button>
+
+            <button 
               onClick={() => setActiveTab('ziyaretci')}
               className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'ziyaretci' ? 'bg-amber-600 text-slate-950 shadow-md shadow-amber-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
             >
-              <span className="flex items-center space-x-2"><UserCheck size={13} /> <span>4. Ziyaretçi Defteri</span></span>
+              <span className="flex items-center space-x-2"><UserCheck size={13} /> <span>5. Ziyaretçi Defteri</span></span>
               {aktifZiyaretciler.length > 0 && (
                 <span className="text-[9px] font-mono bg-amber-500/20 text-amber-400 rounded-full px-1.5 py-0.2 ml-1 hidden lg:inline">{aktifZiyaretciler.length}</span>
               )}
@@ -942,14 +1061,14 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               onClick={() => setActiveTab('nobet_arsivi')}
               className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'nobet_arsivi' ? 'bg-amber-600 text-slate-950 shadow-md shadow-amber-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
             >
-              <span className="flex items-center space-x-2"><Archive size={13} /> <span>5. Nöbet Kapat &amp; Arşiv</span></span>
+              <span className="flex items-center space-x-2"><Archive size={13} /> <span>6. Nöbet Kapat &amp; Arşiv</span></span>
             </button>
 
             <button 
               onClick={() => setActiveTab('akvizyon_yoklama')}
               className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'akvizyon_yoklama' ? 'bg-amber-600 text-slate-950 shadow-md shadow-amber-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
             >
-              <span className="flex items-center space-x-2"><ClipboardList size={13} /> <span>6. Akvizyon Yoklama</span></span>
+              <span className="flex items-center space-x-2"><ClipboardList size={13} /> <span>7. Akvizyon Yoklama</span></span>
             </button>
           </div>
 
@@ -1695,7 +1814,194 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
           )}
 
           {/* ─────────────────────────────────────────────────────────────
-              TAB 4: ZİYARETÇİ DEFTERİ
+              TAB: SU TANKERİ GİRİŞ-ÇIKIŞ
+              ───────────────────────────────────────────────────────────── */}
+          {activeTab === 'su_tankeri' && (
+            <div className="space-y-6">
+              <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 text-xs text-sky-900">
+                Su tankeri günde 3–4 sefer gelebilir. Her seferi ayrı kaydedin; günlük loglar bu sekmede birikir ve WhatsApp ile paylaşılabilir.
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
+                  <span className="font-display font-black text-xs text-sky-800 uppercase tracking-widest block border-b border-slate-200 pb-2">💧 SU TANKERİ GİRİŞ KAYDI</span>
+
+                  <form onSubmit={handleSuTankeriGiris} className="space-y-3.5 text-xs text-slate-700">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-500 uppercase">Plaka *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Örn: 34 XYZ 456"
+                        value={stPlaka}
+                        onChange={(e) => setStPlaka(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold font-mono text-xs uppercase"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-500 uppercase">Su Tedarikçi Firma *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Örn: ABC Su Taşımacılık"
+                        value={stFirma}
+                        onChange={(e) => setStFirma(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-500 uppercase">Sürücü Adı</label>
+                      <input
+                        type="text"
+                        placeholder="Şoför adı"
+                        value={stSurucu}
+                        onChange={(e) => setStSurucu(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-500 uppercase">Miktar (m³ / ton)</label>
+                      <input
+                        type="text"
+                        placeholder="Örn: 18 m³"
+                        value={stMiktar}
+                        onChange={(e) => setStMiktar(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-500 uppercase">Not / Açıklama</label>
+                      <input
+                        type="text"
+                        placeholder="Depo dolumu, test vb."
+                        value={stAciklama}
+                        onChange={(e) => setStAciklama(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl text-xs"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full bg-sky-600 hover:bg-sky-700 text-white font-black text-xs py-3 rounded-xl cursor-pointer border-b-2 border-sky-800 transition"
+                    >
+                      KAYDET &amp; GİRİŞ YAP
+                    </button>
+                  </form>
+                </div>
+
+                <div className="lg:col-span-2 bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
+                  <span className="font-display font-black text-xs text-sky-600 uppercase tracking-widest block border-b border-slate-200 pb-2">🚧 ŞANTİYEDEKİ SU TANKERLERİ</span>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
+                    {iceridekiSuTankerleri.map((item) => (
+                      <div key={item.id} className="bg-sky-50/50 border border-sky-200 rounded-2xl p-4.5 space-y-3.5 relative overflow-hidden">
+                        <div className="flex justify-between items-center border-b border-sky-200 pb-1.5">
+                          <span className="font-mono text-xs font-black text-sky-900 bg-white px-2 py-0.5 border border-sky-200 rounded">{item.plaka}</span>
+                          <span className="text-[9px] text-sky-600 font-bold uppercase">İçeride</span>
+                        </div>
+
+                        <div className="space-y-1 text-[11px] text-slate-600 font-semibold">
+                          <p>🏢 Firma: <span className="text-slate-800 font-bold">{item.firma}</span></p>
+                          <p>👤 Sürücü: <span className="text-slate-800">{item.surucuAdi || '—'}</span></p>
+                          <p>💧 Miktar: <span className="text-sky-700 font-bold">{item.miktar || '—'}</span></p>
+                          {item.aciklama && <p>📝 Not: {item.aciklama}</p>}
+                          <p className="text-[9px] text-slate-500 pt-1">Giriş: {new Date(item.girisZamani).toLocaleString('tr-TR')}</p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSuTankeriCikis(item.id)}
+                          className="w-full bg-rose-600/10 hover:bg-rose-600 text-rose-500 hover:text-white font-extrabold text-[10px] py-1.5 px-3 rounded-xl border border-rose-500/20 transition cursor-pointer flex items-center justify-center space-x-1"
+                        >
+                          <X size={11} />
+                          <span>ÇIKIŞ YAPTI OLARAK İŞARETLE</span>
+                        </button>
+                      </div>
+                    ))}
+
+                    {iceridekiSuTankerleri.length === 0 && (
+                      <div className="col-span-2 bg-slate-50 p-10 rounded-2xl border border-slate-200 text-center text-slate-500 italic text-xs">
+                        Şantiyede aktif su tankeri kaydı yok.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
+                <div className="flex flex-wrap justify-between items-center border-b border-slate-200 pb-2 gap-2">
+                  <span className="font-display font-black text-xs text-sky-600 uppercase tracking-widest">
+                    💧 BUGÜNKÜ SU TANKERİ LOGLARI ({bugunkuSuTankeriLoglar.length} sefer)
+                  </span>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleSuTankeriGunlukRaporWp}
+                      disabled={bugunkuSuTankeriLoglar.length === 0}
+                      className="flex items-center gap-1 px-2.5 py-1.5 bg-sky-600 disabled:bg-slate-200 disabled:text-slate-400 text-white text-[9px] font-black rounded-lg cursor-pointer"
+                    >
+                      <MessageCircle size={11} />
+                      Tüm Günü WP
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSendSelectedSuTankeriLogsWp}
+                      disabled={selectedSuTankeriLogIds.length === 0}
+                      className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 disabled:bg-slate-200 disabled:text-slate-400 text-white text-[9px] font-black rounded-lg cursor-pointer"
+                    >
+                      <MessageCircle size={11} />
+                      Seçilenleri WP
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                  {bugunkuSuTankeriLoglar.map((log) => {
+                    const checked = selectedSuTankeriLogIds.includes(log.id);
+                    return (
+                      <div key={log.id} className="bg-sky-50/40 border border-sky-100 rounded-xl p-2.5 flex justify-between items-center text-[11px] gap-2">
+                        <label className="flex items-start gap-2 min-w-0 cursor-pointer flex-1">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleSuTankeriLogSelect(log.id)}
+                            className="mt-0.5 accent-sky-600"
+                          />
+                          <div className="space-y-0.5 min-w-0">
+                            <span className="font-bold text-slate-800 font-mono block">{log.plaka}</span>
+                            <span className="text-[9px] text-slate-500 block truncate">{log.firma} · {log.miktar || '—'}</span>
+                            <span className="text-[9px] text-slate-400 block">Sürücü: {log.surucuAdi || '—'}</span>
+                          </div>
+                        </label>
+                        <div className="text-right shrink-0">
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                            log.durum === 'İÇERİDE' ? 'bg-sky-100 text-sky-800' : 'bg-slate-200 text-slate-600'
+                          }`}>
+                            {log.durum}
+                          </span>
+                          <span className="text-[9px] text-slate-500 block font-mono mt-0.5">
+                            {log.girisZamani ? new Date(log.girisZamani).toLocaleTimeString('tr-TR') : '—'}
+                            {log.cikisZamani ? ` → ${new Date(log.cikisZamani).toLocaleTimeString('tr-TR')}` : ''}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {bugunkuSuTankeriLoglar.length === 0 && (
+                    <div className="text-center p-8 text-slate-500 italic text-[11px]">Bugün henüz su tankeri kaydı yok.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ─────────────────────────────────────────────────────────────
+              TAB 5: ZİYARETÇİ DEFTERİ
               ───────────────────────────────────────────────────────────── */}
           {activeTab === 'ziyaretci' && (
             <div className="space-y-6">

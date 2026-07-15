@@ -46,6 +46,7 @@ import {
   getFaaliyetFoto,
   getFaaliyetFotolar,
   isMesaiSahaFaaliyet,
+  MAX_SAHA_FOTO_COUNT,
   normalizeMesaiHours as normalizeSahaMesaiHours,
 } from '../lib/sahaFaaliyetUtils';
 import {
@@ -794,8 +795,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [sahaAciklama, setSahaAciklama] = useState("");
   const [sahaUstaSayisi, setSahaUstaSayisi] = useState<number>(0);
   const [sahaIsciSayisi, setSahaIsciSayisi] = useState<number>(0);
-  const [sahaFotoBase64, setSahaFotoBase64] = useState<string | undefined>(undefined);
-  const [photoSelectedSim, setPhotoSelectedSim] = useState(false);
+  const [sahaFotoUrls, setSahaFotoUrls] = useState<string[]>([]);
   const [faaliyetTipi, setFaaliyetTipi] = useState<SahaFaaliyetTipi>('NORMAL');
   const [personelMesaiSaatleri, setPersonelMesaiSaatleri] = useState<Record<string, number>>({});
   
@@ -1026,18 +1026,47 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     }
   };
 
-  const handleSahaPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const rawBase64 = reader.result as string;
-        const compressed = await compressImage(rawBase64);
-        setSahaFotoBase64(compressed);
-        setPhotoSelectedSim(true);
-      };
-      reader.readAsDataURL(file);
+  const handleSahaPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+
+    const remaining = MAX_SAHA_FOTO_COUNT - sahaFotoUrls.length;
+    if (remaining <= 0) {
+      alert(`En fazla ${MAX_SAHA_FOTO_COUNT} fotoğraf eklenebilir.`);
+      e.target.value = '';
+      return;
     }
+
+    const toProcess = Array.from(files).slice(0, remaining);
+    if (files.length > remaining) {
+      alert(`En fazla ${MAX_SAHA_FOTO_COUNT} fotoğraf — ${remaining} adet eklendi.`);
+    }
+
+    try {
+      const added: string[] = [];
+      for (const file of toProcess) {
+        const rawBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (event) => resolve(String(event.target?.result || ''));
+          reader.onerror = reject;
+          reader.readAsDataURL(file as File);
+        });
+        try {
+          added.push(await compressImage(rawBase64));
+        } catch {
+          added.push(rawBase64);
+        }
+      }
+      setSahaFotoUrls((prev) => [...prev, ...added].slice(0, MAX_SAHA_FOTO_COUNT));
+    } catch {
+      alert('Fotoğraf yüklenemedi, tekrar deneyin.');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveSahaFoto = (index: number) => {
+    setSahaFotoUrls((prev) => prev.filter((_, i) => i !== index));
   };
 
   const syncIdariMesaiFromFaaliyet = async (
@@ -1071,8 +1100,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     setEditingSahaId(null);
     setSahaAciklama('');
     setSahaNitelik('');
-    setSahaFotoBase64(undefined);
-    setPhotoSelectedSim(false);
+    setSahaFotoUrls([]);
     setSahaUstaSayisi(0);
     setSahaIsciSayisi(0);
     setSelectedFieldStaff([]);
@@ -1117,13 +1145,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
             parsel: sahaParsel,
             blok: sahaBlok,
             aciklama: sahaAciklama,
-            fotoUrl: sahaFotoBase64 !== undefined ? (sahaFotoBase64 || undefined) : sf.fotoUrl,
-            fotoUrls:
-              sahaFotoBase64 !== undefined
-                ? sahaFotoBase64
-                  ? [sahaFotoBase64]
-                  : sf.fotoUrls
-                : sf.fotoUrls,
+            fotoUrl: sahaFotoUrls[0] || undefined,
+            fotoUrls: sahaFotoUrls.length ? sahaFotoUrls : undefined,
             ustaSayisi: selectedCounts.usta,
             isciSayisi: selectedCounts.isci,
             aktifPersonelListesi: selectedFieldStaff,
@@ -1170,7 +1193,8 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
         parsel: sahaParsel,
         blok: sahaBlok,
         aciklama: sahaAciklama,
-        fotoUrl: sahaFotoBase64 || (photoSelectedSim ? "saha_foto_example.jpg" : undefined),
+        fotoUrl: sahaFotoUrls[0] || undefined,
+        fotoUrls: sahaFotoUrls.length ? sahaFotoUrls : undefined,
         ustaSayisi: selectedCounts.usta,
         isciSayisi: selectedCounts.isci,
         aktifPersonelListesi: selectedFieldStaff,
@@ -1219,6 +1243,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     setSelectedFieldStaff(Array.isArray(sf.aktifPersonelListesi) ? sf.aktifPersonelListesi : []);
     setFaaliyetTipi(sf.faaliyetTipi || 'NORMAL');
     setPersonelMesaiSaatleri({ ...(sf.personelMesaiSaatleri || {}) });
+    setSahaFotoUrls(getFaaliyetFotolar(sf));
   };
 
   const handleCancelEditSaha = () => {
@@ -3657,29 +3682,54 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 )}
               </div>
 
-              {/* Photo uploader with true file selection */}
+              {/* Photo uploader — max 5 (Formen mobil ile aynı) */}
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <span className="font-bold text-[10px] text-slate-500 block">Saha Fotoğrafı</span>
+                    <span className="font-bold text-[10px] text-slate-500 block">Saha Fotoğrafları</span>
                     <span className="text-[9px] text-slate-400 block">
-                      {sahaFotoBase64 ? "✓ Gerçek fotoğraf yüklendi" : photoSelectedSim ? "✓ foto_saha.jpg seçildi" : "Görsel yüklenmedi"}
+                      {sahaFotoUrls.length === 0
+                        ? 'Görsel yüklenmedi — birden fazla seçebilirsiniz'
+                        : `${sahaFotoUrls.length} fotoğraf yüklendi`}
                     </span>
                   </div>
-                  <label className="bg-slate-900 hover:bg-slate-900 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center space-x-1 cursor-pointer shadow-sm transition">
-                    <FileUp size={12} />
-                    <span>Dosya Seç</span>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      className="hidden" 
-                      onChange={handleSahaPhotoChange}
-                    />
-                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] font-black text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                      {sahaFotoUrls.length}/{MAX_SAHA_FOTO_COUNT}
+                    </span>
+                    <label
+                      className={`bg-slate-900 hover:bg-black text-white text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center space-x-1 cursor-pointer shadow-sm transition ${
+                        sahaFotoUrls.length >= MAX_SAHA_FOTO_COUNT ? 'opacity-40 pointer-events-none' : ''
+                      }`}
+                    >
+                      <FileUp size={12} />
+                      <span>Dosya Seç</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        disabled={sahaFotoUrls.length >= MAX_SAHA_FOTO_COUNT}
+                        onChange={handleSahaPhotoChange}
+                      />
+                    </label>
+                  </div>
                 </div>
-                {sahaFotoBase64 && (
-                  <div className="relative border rounded-lg overflow-hidden max-h-24 bg-black/5">
-                    <img src={sahaFotoBase64} alt="Pre-upload" className="w-full h-24 object-contain" />
+                {sahaFotoUrls.length > 0 && (
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                    {sahaFotoUrls.map((url, idx) => (
+                      <div key={`${idx}-${url.slice(0, 24)}`} className="relative border rounded-lg overflow-hidden bg-black/5 aspect-square">
+                        <img src={url} alt={`Saha ${idx + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSahaFoto(idx)}
+                          className="absolute top-0.5 right-0.5 bg-rose-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold cursor-pointer shadow"
+                          title="Fotoğrafı kaldır"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

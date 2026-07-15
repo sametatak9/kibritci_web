@@ -11,12 +11,14 @@ import {
   AKVIZYON_GOREV,
   displayPersonelGorev,
   isAkvizyonFirmaAdi,
+  personelNameKey,
   resolveAkvizyonGorev,
 } from '../lib/guvenlikHelpers';
 
 interface PersonelScreenProps {
   personeller: Personel[];
   setPersoneller: React.Dispatch<React.SetStateAction<Personel[]>>;
+  onPersonelDeleted?: (deleted: Personel[]) => void;
   cariKartlar?: CariKart[];
   setCariKartlar?: React.Dispatch<React.SetStateAction<CariKart[]>>;
   setCariIslemGecmisi?: React.Dispatch<React.SetStateAction<CariKartIslem[]>>;
@@ -80,6 +82,7 @@ type TaseronResolveModalState =
 export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   personeller,
   setPersoneller,
+  onPersonelDeleted,
   cariKartlar = [],
   setCariKartlar,
   setCariIslemGecmisi,
@@ -91,8 +94,6 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   const [dismissDateStr, setDismissDateStr] = useState<string>("");
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historyPersonel, setHistoryPersonel] = useState<Personel | null>(null);
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [exportSelectedIds, setExportSelectedIds] = useState<Set<string>>(new Set());
   const [exportFormat, setExportFormat] = useState<'html' | 'csv'>('csv');
   const [showOnlyActive, setShowOnlyActive] = useState(false);
 
@@ -600,14 +601,26 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   };
 
   const handleDelete = (id: string) => {
-    if (confirm("Seçili personeli kalıcı olarak silmek istediğinize emin misiniz?")) {
-      // #region agent log
-      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-1',hypothesisId:'H3',location:'PersonelScreen.tsx:handleDelete',message:'personel delete requested',data:{targetId:id,currentListCount:personeller.length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      setPersoneller(prev => prev.filter(p => p.id !== id));
-      if (selectedPersonel?.id === id) {
-        handleClearForm();
-      }
+    const target = personeller.find((p) => p.id === id);
+    if (!target) return;
+
+    const nameKey = personelNameKey(target);
+    const dupes = personeller.filter((p) => personelNameKey(p) === nameKey);
+    const toDelete = dupes.length > 1 ? dupes : [target];
+
+    const msg =
+      dupes.length > 1
+        ? `"${target.ad} ${target.soyad}" için ${dupes.length} mükerrer kayıt bulundu. Hepsini kalıcı olarak silmek istiyor musunuz?`
+        : `"${target.ad} ${target.soyad}" kalıcı olarak silinsin mi?`;
+
+    if (!confirm(msg)) return;
+
+    const deleteIds = new Set(toDelete.map((p) => p.id));
+    setPersoneller((prev) => prev.filter((p) => !deleteIds.has(p.id)));
+    onPersonelDeleted?.(toDelete);
+
+    if (selectedPersonel && deleteIds.has(selectedPersonel.id)) {
+      handleClearForm();
     }
   };
 
@@ -645,16 +658,17 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     setShowHistoryModal(true);
   };
 
-  const toggleExportPersonel = (id: string) => {
-    setExportSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+  const exportFilterLabel = useMemo(() => {
+    if (firmaFilter === 'ANA_FIRMA') return 'Kibritci_Insaat';
+    if (firmaFilter) return firmaFilter.replace(/\s+/g, '_');
+    return 'Tumu';
+  }, [firmaFilter]);
 
-  const runPersonelExport = () => {
+  const exportFilteredPersonel = () => {
+    if (filteredPersonel.length === 0) {
+      alert('Dışa aktarılacak personel bulunamadı. Filtreleri kontrol edin.');
+      return;
+    }
     const cols = [
       { key: 'ad', label: 'Ad' },
       { key: 'soyad', label: 'Soyad' },
@@ -665,20 +679,23 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
       { key: 'sgkDurumu', label: 'SGK' },
       { key: 'firmaAdi', label: 'Firma' },
     ];
-    const rows = personeller
-      .filter((p) => exportSelectedIds.has(p.id))
-      .map((p) => ({
-        ad: p.ad,
-        soyad: p.soyad,
-        tcNo: p.tcNo,
-        gorev: p.gorev,
-        telefonNo: p.telefonNo,
-        iseGirisTarihi: p.iseGirisTarihi,
-        sgkDurumu: p.sgkDurumu,
-        firmaAdi: p.firmaAdi || '',
-      }));
-    exportPersonelRows(rows, cols, `Kibritci_Personel_${Date.now()}`, exportFormat);
-    setShowExportModal(false);
+    const rows = filteredPersonel.map((p) => ({
+      ad: p.ad,
+      soyad: p.soyad,
+      tcNo: p.tcNo,
+      gorev: displayPersonelGorev(p),
+      telefonNo: p.telefonNo,
+      iseGirisTarihi: p.iseGirisTarihi,
+      sgkDurumu: p.sgkDurumu,
+      firmaAdi: p.firmaAdi || '',
+    }));
+    const activeSuffix = showOnlyActive ? '_Aktif' : '';
+    exportPersonelRows(
+      rows,
+      cols,
+      `Kibritci_Personel_${exportFilterLabel}${activeSuffix}_${Date.now()}`,
+      exportFormat
+    );
   };
 
   const generateHistoryReport = () => {
@@ -1337,15 +1354,22 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
             >
               {showOnlyActive ? 'Sadece Aktifler: AÇIK' : 'Sadece Aktifleri Göster'}
             </button>
+            <select
+              value={exportFormat}
+              onChange={(e) => setExportFormat(e.target.value as 'html' | 'csv')}
+              className="text-[10px] font-bold px-2 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 cursor-pointer"
+              title="Dışa aktarma formatı"
+            >
+              <option value="csv">Excel (CSV)</option>
+              <option value="html">HTML</option>
+            </select>
             <button
               type="button"
-              onClick={() => {
-                setExportSelectedIds(new Set(filteredPersonel.map((p) => p.id)));
-                setShowExportModal(true);
-              }}
+              onClick={exportFilteredPersonel}
               className="flex items-center gap-1.5 text-[10px] font-bold px-3 py-2 bg-slate-900 text-white rounded-xl hover:bg-black cursor-pointer"
+              title={`Listedeki ${filteredPersonel.length} personeli dışa aktar`}
             >
-              <Download size={12} /> Dışa Aktar
+              <Download size={12} /> Dışa Aktar ({filteredPersonel.length})
             </button>
             <div className="relative w-64">
             <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
@@ -1702,60 +1726,6 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
         </div>
       )}
 
-      {showExportModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl border border-slate-150 p-5 w-full max-w-lg shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between shrink-0">
-              <h3 className="font-display font-bold text-sm uppercase tracking-wider">Personel Dışa Aktar</h3>
-              <button type="button" onClick={() => setShowExportModal(false)} className="text-slate-400 hover:text-slate-600 text-lg cursor-pointer">×</button>
-            </div>
-            <div className="flex gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => setExportSelectedIds(new Set(personeller.map((p) => p.id)))}
-                className="text-[10px] font-bold px-3 py-1.5 bg-slate-100 rounded-lg cursor-pointer"
-              >
-                Tümünü Seç
-              </button>
-              <button
-                type="button"
-                onClick={() => setExportSelectedIds(new Set())}
-                className="text-[10px] font-bold px-3 py-1.5 bg-slate-100 rounded-lg cursor-pointer"
-              >
-                Seçimi Temizle
-              </button>
-              <select
-                value={exportFormat}
-                onChange={(e) => setExportFormat(e.target.value as 'html' | 'csv')}
-                className="text-[10px] font-bold px-2 py-1.5 border rounded-lg ml-auto"
-              >
-                <option value="csv">Excel (CSV)</option>
-                <option value="html">HTML</option>
-              </select>
-            </div>
-            <div className="overflow-y-auto flex-1 space-y-1 border rounded-xl p-2 max-h-64">
-              {personeller.map((p) => (
-                <label key={p.id} className="flex items-center gap-2 text-xs p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={exportSelectedIds.has(p.id)}
-                    onChange={() => toggleExportPersonel(p.id)}
-                  />
-                  <span className="font-semibold">{p.ad} {p.soyad}</span>
-                  <span className="text-slate-400 font-mono text-[10px]">{p.gorev}</span>
-                </label>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={runPersonelExport}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 rounded-xl cursor-pointer shrink-0"
-            >
-              {exportSelectedIds.size} Personeli İndir ({exportFormat === 'csv' ? 'Excel' : 'HTML'})
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 

@@ -144,6 +144,56 @@ export function buildPersonelLoglariWhatsAppText(
   return [...header, ...body, '', '_Şantiye Güvenlik Kapısı_'].join('\n');
 }
 
+/** Kamp/kayıt hatası — otomatik personel oluşturmayı engelle */
+export function isPlaceholderPersonelName(name?: string | null): boolean {
+  const n = String(name || '').toLocaleUpperCase('tr-TR');
+  return (
+    n.includes('SOYADI?') ||
+    n.includes('(SOYADI') ||
+    n.includes('SOYAD?') ||
+    /\(\?+\)/.test(n)
+  );
+}
+
+export function personelNameKey(p?: { ad?: string; soyad?: string } | null): string {
+  return `${p?.ad || ''} ${p?.soyad || ''}`.trim().toLocaleLowerCase('tr-TR');
+}
+
+export function buildSuTankeriLoglariWhatsAppText(
+  logs: Array<{
+    plaka?: string;
+    firma?: string;
+    surucuAdi?: string;
+    miktar?: string;
+    aciklama?: string;
+    durum?: string;
+    girisZamani?: string;
+    cikisZamani?: string;
+  }>,
+  tarih?: string
+): string {
+  const header = [
+    '💧 *KİBRİTÇİ İNŞAAT — Su Tankeri Giriş/Çıkış Logları*',
+    tarih ? `Tarih: ${tarih}` : '',
+    `Sefer sayısı: ${logs.length}`,
+    '',
+  ].filter(Boolean);
+
+  const body = logs.map((l, i) => {
+    const lines = [
+      `${i + 1}. ${l.plaka || '—'} · ${l.firma || '—'}`,
+      `   Sürücü: ${l.surucuAdi || '—'} · Miktar: ${l.miktar || '—'}`,
+      `   Durum: ${l.durum || '—'}`,
+      `   Giriş: ${formatZamanTr(l.girisZamani)}`,
+    ];
+    if (l.cikisZamani) lines.push(`   Çıkış: ${formatZamanTr(l.cikisZamani)}`);
+    if (l.aciklama) lines.push(`   Not: ${l.aciklama}`);
+    return lines.join('\n');
+  });
+
+  return [...header, ...body, '', '_Şantiye Güvenlik Kapısı_'].join('\n');
+}
+
 export function buildAracLoglariWhatsAppText(
   logs: Array<{
     plaka?: string;
