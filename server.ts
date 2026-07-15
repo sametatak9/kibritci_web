@@ -35,8 +35,36 @@ async function startServer() {
     });
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
+
+    // Intercept html, service worker, and manifest requests to disable browser caching
+    app.use((req, res, next) => {
+      const normPath = req.path.toLowerCase();
+      const isHtmlOrSwOrManifest =
+        normPath === "/" ||
+        normPath.endsWith(".html") ||
+        normPath === "/index.html" ||
+        normPath === "/sw.js" ||
+        normPath === "/manifest.json";
+      if (isHtmlOrSwOrManifest) {
+        res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
+      }
+      next();
+    });
+
+    app.use(
+      express.static(distPath, {
+        maxAge: "1y",
+        immutable: true,
+        index: false,
+      })
+    );
+
     app.get("*", (req, res) => {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
