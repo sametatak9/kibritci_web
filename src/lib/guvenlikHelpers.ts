@@ -1,7 +1,178 @@
 import { Personel } from '../types/erp';
+import { formatDateLabelTr, normalizeDateKey } from './dateKeyUtils';
 import { isDayActiveForPersonel, isTaseronPersonel } from './yoklamaUtils';
 import { isFounderEmail } from './roleClaims';
 import { buildWhatsAppUrl } from './mobilOnayUtils';
+
+export type NobetVardiyaTipi = 'TUM_GUN' | 'GUNDUZ' | 'GECE';
+
+type GuvenlikTarihliKayit = {
+  islemTarihi?: string;
+  zaman?: string;
+  girisZamani?: string;
+  tarih?: string;
+};
+
+/** Log/evrak kaydının işlem günü (YYYY-MM-DD) */
+export function guvenlikKayitTarihi(log: GuvenlikTarihliKayit | null | undefined): string {
+  if (!log) return '';
+  if (log.islemTarihi) return normalizeDateKey(log.islemTarihi);
+  const raw = log.zaman || log.girisZamani || log.tarih || '';
+  return normalizeDateKey(String(raw).slice(0, 10));
+}
+
+export function filterGuvenlikLogsByTarih<T extends GuvenlikTarihliKayit>(
+  logs: T[],
+  tarih: string
+): T[] {
+  const key = normalizeDateKey(tarih);
+  if (!key) return logs;
+  return logs.filter((l) => guvenlikKayitTarihi(l) === key);
+}
+
+function nobetVardiyaAraligi(tarih: string, vardiya: NobetVardiyaTipi): { start: string; end: string } | null {
+  if (vardiya === 'TUM_GUN') return null;
+  const base = new Date(tarih + 'T12:00:00');
+  base.setDate(base.getDate() + 1);
+  const nextDay = base.toISOString().split('T')[0];
+  if (vardiya === 'GUNDUZ') {
+    return { start: `${tarih}T08:00:00.000Z`, end: `${tarih}T20:00:00.000Z` };
+  }
+  return { start: `${tarih}T20:00:00.000Z`, end: `${nextDay}T08:00:00.000Z` };
+}
+
+function zamanAralikta(zaman: string, start: string, end: string): boolean {
+  if (!zaman) return false;
+  return zaman >= start && zaman < end;
+}
+
+export function filterNobetPersonelLoglari(
+  logs: Array<{ zaman?: string; islemTarihi?: string }>,
+  tarih: string,
+  vardiya: NobetVardiyaTipi
+) {
+  const day = filterGuvenlikLogsByTarih(logs, tarih);
+  const aralik = nobetVardiyaAraligi(tarih, vardiya);
+  if (!aralik) return day;
+  return day.filter((l) => zamanAralikta(String(l.zaman || ''), aralik.start, aralik.end));
+}
+
+export function filterNobetAracZiyaretLoglari(
+  logs: Array<{ girisZamani?: string; cikisZamani?: string; islemTarihi?: string }>,
+  tarih: string,
+  vardiya: NobetVardiyaTipi,
+  simdiIso?: string
+) {
+  const day = filterGuvenlikLogsByTarih(logs, tarih);
+  const aralik = nobetVardiyaAraligi(tarih, vardiya);
+  if (!aralik) return day;
+  const now = simdiIso || new Date().toISOString();
+  return day.filter((a) => {
+    const inTime = String(a.girisZamani || '');
+    const outTime = a.cikisZamani || now;
+    return inTime < aralik!.end && outTime >= aralik!.start;
+  });
+}
+
+export function filterNobetEvrakLoglari(
+  logs: Array<{ tarih?: string; saat?: string }>,
+  tarih: string,
+  vardiya: NobetVardiyaTipi
+) {
+  const day = logs.filter((e) => normalizeDateKey(e.tarih) === normalizeDateKey(tarih));
+  const aralik = nobetVardiyaAraligi(tarih, vardiya);
+  if (!aralik) return day;
+  return day.filter((e) => {
+    if (!e.tarih || !e.saat) return false;
+    const evrakTime = `${normalizeDateKey(e.tarih)}T${e.saat}:00.000Z`;
+    return zamanAralikta(evrakTime, aralik.start, aralik.end);
+  });
+}
+
+export function buildNobetGunlukRaporHtml(archive: {
+  tarih: string;
+  vardiya?: string;
+  kaydeden?: string;
+  kayitZamani?: string;
+  notlar?: string;
+  personelLoglari?: any[];
+  aracLoglari?: any[];
+  suTankeriLoglari?: any[];
+  ziyaretciLoglari?: any[];
+  evrakLoglari?: any[];
+  akvizyonYoklama?: Record<string, string> | null;
+}): string {
+  const tarihLabel = formatDateLabelTr(archive.tarih);
+  const vardiyaLabel =
+    archive.vardiya === 'GECE' ? 'Gece Vardiyası' :
+    archive.vardiya === 'GUNDUZ' ? 'Gündüz Vardiyası' : 'Tam Gün (24 Saat)';
+  const p = archive.personelLoglari || [];
+  const a = archive.aracLoglari || [];
+  const st = archive.suTankeriLoglari || [];
+  const z = archive.ziyaretciLoglari || [];
+  const e = archive.evrakLoglari || [];
+
+  const section = (title: string, rows: string) =>
+    `<section style="margin-bottom:24px"><h2 style="font-size:14px;border-bottom:2px solid #cbd5e1;padding-bottom:6px;margin:0 0 10px">${title}</h2>${rows}</section>`;
+
+  const personelRows = p.length
+    ? `<table><tr><th>Saat</th><th>Ad Soyad</th><th>Tip</th><th>Firma</th></tr>${p.map((l) =>
+        `<tr><td>${formatZamanTr(l.zaman).split(' ')[1] || '—'}</td><td>${l.ad || ''} ${l.soyad || ''}</td><td>${l.tip || '—'}</td><td>${l.firmaAdi || '—'}</td></tr>`
+      ).join('')}</table>`
+    : '<p style="color:#64748b;font-size:12px">Kayıt yok</p>';
+
+  const aracRows = a.length
+    ? `<table><tr><th>Plaka</th><th>Firma</th><th>Giriş</th><th>Çıkış</th></tr>${a.map((l) =>
+        `<tr><td>${l.plaka || '—'}</td><td>${l.firma || '—'}</td><td>${formatZamanTr(l.girisZamani)}</td><td>${l.cikisZamani ? formatZamanTr(l.cikisZamani) : 'İçeride'}</td></tr>`
+      ).join('')}</table>`
+    : '<p style="color:#64748b;font-size:12px">Kayıt yok</p>';
+
+  const stRows = st.length
+    ? `<table><tr><th>Plaka</th><th>Firma</th><th>Miktar</th><th>Giriş</th></tr>${st.map((l) =>
+        `<tr><td>${l.plaka || '—'}</td><td>${l.firma || '—'}</td><td>${l.miktar || '—'}</td><td>${formatZamanTr(l.girisZamani)}</td></tr>`
+      ).join('')}</table>`
+    : '<p style="color:#64748b;font-size:12px">Kayıt yok</p>';
+
+  const zRows = z.length
+    ? `<table><tr><th>Ad Soyad</th><th>Firma</th><th>Görüşülen</th><th>Giriş</th><th>Çıkış</th></tr>${z.map((l) =>
+        `<tr><td>${l.adSoyad || '—'}</td><td>${l.firma || '—'}</td><td>${l.ziyaretEdilen || '—'}</td><td>${formatZamanTr(l.girisZamani)}</td><td>${l.cikisZamani ? formatZamanTr(l.cikisZamani) : 'İçeride'}</td></tr>`
+      ).join('')}</table>`
+    : '<p style="color:#64748b;font-size:12px">Kayıt yok</p>';
+
+  const eRows = e.length
+    ? `<table><tr><th>Tür</th><th>Dosya</th><th>Açıklama</th><th>Durum</th><th>Saat</th></tr>${e.map((l) =>
+        `<tr><td>${l.evrakTuru || '—'}</td><td>${l.fileName || '—'}</td><td>${l.aciklama || '—'}</td><td>${l.durum || '—'}</td><td>${l.saat || '—'}</td></tr>`
+      ).join('')}</table>`
+    : '<p style="color:#64748b;font-size:12px">Kayıt yok</p>';
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Güvenlik Nöbet Raporu ${tarihLabel}</title>
+  <style>body{font-family:system-ui,sans-serif;color:#1e293b;padding:32px;max-width:960px;margin:0 auto}
+  h1{font-size:22px;margin:0}.meta{color:#64748b;font-size:13px;margin:8px 0 20px}
+  table{width:100%;border-collapse:collapse;font-size:11px;margin-top:8px}
+  th{background:#f1f5f9;text-align:left;padding:6px;border-bottom:2px solid #cbd5e1}
+  td{padding:6px;border-bottom:1px solid #e2e8f0}
+  .ozet{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:20px}
+  .ozet div{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px;text-align:center;font-size:11px}
+  .ozet strong{display:block;font-size:18px}
+  .note{background:#ecfdf5;border:1px solid #a7f3d0;padding:10px;border-radius:10px;font-size:12px;margin-bottom:16px;color:#065f46}</style></head><body>
+  <h1>🚧 Güvenlik Nöbet Raporu</h1>
+  <p class="meta">Kibritçi İnşaat · ${tarihLabel} · ${vardiyaLabel}<br/>Arşivleyen: ${archive.kaydeden || '—'} · ${formatZamanTr(archive.kayitZamani)}</p>
+  <p class="note">Bu rapor günlük logların arşiv kopyasıdır. Canlı giriş-çıkış kayıtları silinmez; sekmelerden tarihe göre yeniden görüntülenebilir.</p>
+  ${archive.notlar ? `<p style="background:#fffbeb;border:1px solid #fde68a;padding:12px;border-radius:10px;font-size:12px"><strong>Devir Notu:</strong> ${archive.notlar}</p>` : ''}
+  <div class="ozet">
+    <div><strong>${p.length}</strong>Personel</div>
+    <div><strong>${a.length}</strong>Araç</div>
+    <div><strong>${st.length}</strong>Su Tankeri</div>
+    <div><strong>${z.length}</strong>Ziyaretçi</div>
+    <div><strong>${e.length}</strong>Evrak</div>
+  </div>
+  ${section('Personel Kapı Logları', personelRows)}
+  ${section('Araç Giriş-Çıkış', aracRows)}
+  ${section('Su Tankeri', stRows)}
+  ${section('Ziyaretçi Defteri', zRows)}
+  ${section('Evrak Girişleri', eRows)}
+  </body></html>`;
+}
 
 /** Ana firma (Kibritçi) vs taşeron görsel ayrımı */
 export function isAnaFirmaPersonel(p?: Personel): boolean {

@@ -18,14 +18,22 @@ import {
   buildPersonelLoglariWhatsAppText,
   buildSuTankeriLoglariWhatsAppText,
   buildZiyaretciWhatsAppText,
+  buildNobetGunlukRaporHtml,
   canAccessGuvenlikScreen,
   canTakeAkvizyonYoklama,
+  filterGuvenlikLogsByTarih,
+  filterNobetAracZiyaretLoglari,
+  filterNobetEvrakLoglari,
+  filterNobetPersonelLoglari,
   firmaEtiketi,
   isAkvizyonPersonel,
   isPersonelActiveOnDate,
   openWhatsAppText,
   buildAkvizyonYoklamaReportHtml,
+  NobetVardiyaTipi,
 } from '../lib/guvenlikHelpers';
+import { GuvenlikTabDateBar } from './GuvenlikTabDateBar';
+import { normalizeDateKey, todayDateKey, formatDateLabelTr } from '../lib/dateKeyUtils';
 
 interface GuvenlikScreenProps {
   personeller: Personel[];
@@ -149,7 +157,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   const [selectedArchive, setSelectedArchive] = useState<any | null>(null);
   const [nobetSearch, setNobetSearch] = useState('');
   const [isArchiving, setIsArchiving] = useState(false);
-  const [selectedVardiya, setSelectedVardiya] = useState<'GUNDUZ' | 'GECE'>('GUNDUZ');
+  const [selectedVardiya, setSelectedVardiya] = useState<NobetVardiyaTipi>('TUM_GUN');
 
   // Akvizyon States
   const [akvizyonYoklamaMap, setAkvizyonYoklamaMap] = useState<Record<string, 'Geldi' | 'Gelmedi'>>({});
@@ -529,40 +537,29 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     setIsArchiving(true);
     try {
       const todayStr = islemTarihi;
-      const baseDate = new Date(todayStr);
-      baseDate.setDate(baseDate.getDate() + 1);
-      const nextDayStr = baseDate.toISOString().split('T')[0];
+      const filteredLogs = filterNobetPersonelLoglari(personelLoglar, todayStr, selectedVardiya);
+      const filteredAraclar = filterNobetAracZiyaretLoglari(
+        tumAracLoglar,
+        todayStr,
+        selectedVardiya,
+        getIslemZamani()
+      );
+      const filteredSuTanker = filterNobetAracZiyaretLoglari(
+        tumSuTankeriLoglar,
+        todayStr,
+        selectedVardiya,
+        getIslemZamani()
+      );
+      const filteredZiyaretciler = filterNobetAracZiyaretLoglari(
+        tumZiyaretciLoglar,
+        todayStr,
+        selectedVardiya,
+        getIslemZamani()
+      );
+      const filteredEvraklar = filterNobetEvrakLoglari(gelenEvraklar, todayStr, selectedVardiya);
+      const akvizyonSnap = akvizyonArchives.find((a) => a.tarih === todayStr);
 
-      const startLimit = selectedVardiya === 'GUNDUZ' ? `${todayStr}T08:00:00.000Z` : `${todayStr}T20:00:00.000Z`;
-      const endLimit = selectedVardiya === 'GUNDUZ' ? `${todayStr}T20:00:00.000Z` : `${nextDayStr}T08:00:00.000Z`;
-
-      const filterByTime = (timeStr: string) => {
-        if (!timeStr) return false;
-        return timeStr >= startLimit && timeStr < endLimit;
-      };
-
-      const filteredLogs = personelLoglar.filter(l => filterByTime(l.zaman));
-      const filteredAraclar = [...iceridekiAraclar, ...aracGecmisLoglar].filter(a => {
-        const inTime = a.girisZamani;
-        const outTime = a.cikisZamani || getIslemZamani();
-        return inTime < endLimit && outTime >= startLimit;
-      });
-      const filteredZiyaretciler = [...aktifZiyaretciler, ...ziyaretciGecmisLoglar].filter(z => {
-        const inTime = z.girisZamani;
-        const outTime = z.cikisZamani || getIslemZamani();
-        return inTime < endLimit && outTime >= startLimit;
-      });
-      const filteredEvraklar = gelenEvraklar.filter(e => {
-        if (!e.tarih || !e.saat) return false;
-        const evrakTime = `${e.tarih}T${e.saat}:00.000Z`;
-        return evrakTime >= startLimit && evrakTime < endLimit;
-      });
-
-      const archiveRef = doc(collection(db, 'guvenlikNobetArsivleri'));
-      const archiveId = archiveRef.id;
-
-      await setDoc(archiveRef, {
-        id: archiveId,
+      const archivePayload = {
         tarih: todayStr,
         vardiya: selectedVardiya,
         kayitZamani: getIslemZamani(),
@@ -570,21 +567,238 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         notlar: notes,
         personelLoglari: filteredLogs,
         aracLoglari: filteredAraclar,
+        suTankeriLoglari: filteredSuTanker,
         ziyaretciLoglari: filteredZiyaretciler,
-        evrakLoglari: filteredEvraklar
+        evrakLoglari: filteredEvraklar,
+        akvizyonYoklama: akvizyonSnap?.yoklama || null,
+        ozet: {
+          personel: filteredLogs.length,
+          arac: filteredAraclar.length,
+          suTankeri: filteredSuTanker.length,
+          ziyaretci: filteredZiyaretciler.length,
+          evrak: filteredEvraklar.length,
+        },
+      };
+
+      const raporHtml = buildNobetGunlukRaporHtml(archivePayload);
+      const archiveRef = doc(collection(db, 'guvenlikNobetArsivleri'));
+      const archiveId = archiveRef.id;
+
+      await setDoc(archiveRef, {
+        id: archiveId,
+        ...archivePayload,
+        raporHtml,
       });
 
       if (addNotification) {
-        const shiftText = selectedVardiya === 'GUNDUZ' ? 'Gündüz Vardiyası' : 'Gece Vardiyası';
-        addNotification(`Bugünkü güvenlik nöbeti (${shiftText} - ${currentUser?.email || 'Güvenlik'}) tarafından arşivlendi.`);
+        const shiftText =
+          selectedVardiya === 'TUM_GUN'
+            ? 'Günlük Tam Rapor'
+            : selectedVardiya === 'GUNDUZ'
+              ? 'Gündüz Vardiyası'
+              : 'Gece Vardiyası';
+        addNotification(`${todayStr} güvenlik nöbeti (${shiftText}) arşivlendi.`);
       }
-      showStatus('success', '🎉 Nöbet günü başarıyla kalıcı olarak arşivlendi!');
+      showStatus('success', '🎉 Nöbet raporu arşive kaydedildi! Alttaki listeden görüntüleyebilirsiniz. Günlük loglar silinmedi.');
+      setActiveTab('nobet_arsivi');
     } catch (err: any) {
       console.error(err);
       showStatus('error', 'Nöbet günü arşivlenirken hata oluştu: ' + err.message);
     } finally {
       setIsArchiving(false);
     }
+  };
+
+  const handleDeletePersonelLog = async (id: string) => {
+    if (!window.confirm('Bu personel kapı kaydı silinsin mi?')) return;
+    try {
+      await deleteDoc(doc(db, 'guvenlikGirisCikisLoglari', id));
+      setSelectedPersonelLogIds((prev) => prev.filter((x) => x !== id));
+      showStatus('success', 'Personel log kaydı silindi.');
+    } catch (e) {
+      console.error(e);
+      showStatus('error', 'Silinemedi.');
+    }
+  };
+
+  const handleDeleteAracLog = async (id: string) => {
+    if (!window.confirm('Bu araç kaydı silinsin mi?')) return;
+    try {
+      await deleteDoc(doc(db, 'guvenlikAracLoglari', id));
+      setSelectedAracLogIds((prev) => prev.filter((x) => x !== id));
+      showStatus('success', 'Araç log kaydı silindi.');
+    } catch (e) {
+      console.error(e);
+      showStatus('error', 'Silinemedi.');
+    }
+  };
+
+  const handleDeleteSuTankeriLog = async (id: string) => {
+    if (!window.confirm('Bu su tankeri kaydı silinsin mi?')) return;
+    try {
+      await deleteDoc(doc(db, 'guvenlikSuTankeriLoglari', id));
+      setSelectedSuTankeriLogIds((prev) => prev.filter((x) => x !== id));
+      showStatus('success', 'Su tankeri kaydı silindi.');
+    } catch (e) {
+      console.error(e);
+      showStatus('error', 'Silinemedi.');
+    }
+  };
+
+  const handleDeleteZiyaretciLog = async (id: string) => {
+    if (!window.confirm('Bu ziyaretçi kaydı silinsin mi?')) return;
+    try {
+      await deleteDoc(doc(db, 'guvenlikZiyaretciLoglari', id));
+      showStatus('success', 'Ziyaretçi kaydı silindi.');
+    } catch (e) {
+      console.error(e);
+      showStatus('error', 'Silinemedi.');
+    }
+  };
+
+  const handleGosterSeciliGun = (tabLabel: string, count: number) => {
+    showStatus(
+      'success',
+      `${formatDateLabelTr(islemTarihi)} — ${tabLabel}: ${count} kayıt listeleniyor. Loglar silinmedi.`
+    );
+  };
+
+  const handleBulkDeletePersonelLogs = async () => {
+    if (selectedPersonelLogIds.length === 0) return;
+    if (!window.confirm(`${selectedPersonelLogIds.length} personel log kaydı silinsin mi?`)) return;
+    try {
+      await Promise.all(
+        selectedPersonelLogIds.map((id) => deleteDoc(doc(db, 'guvenlikGirisCikisLoglari', id)))
+      );
+      setSelectedPersonelLogIds([]);
+      showStatus('success', 'Seçili personel logları silindi.');
+    } catch (e) {
+      console.error(e);
+      showStatus('error', 'Toplu silme başarısız.');
+    }
+  };
+
+  const handleBulkDeleteAracLogs = async () => {
+    if (selectedAracLogIds.length === 0) return;
+    if (!window.confirm(`${selectedAracLogIds.length} araç log kaydı silinsin mi?`)) return;
+    try {
+      await Promise.all(selectedAracLogIds.map((id) => deleteDoc(doc(db, 'guvenlikAracLoglari', id))));
+      setSelectedAracLogIds([]);
+      showStatus('success', 'Seçili araç logları silindi.');
+    } catch (e) {
+      console.error(e);
+      showStatus('error', 'Toplu silme başarısız.');
+    }
+  };
+
+  const handleBulkDeleteSuTankeriLogs = async () => {
+    if (selectedSuTankeriLogIds.length === 0) return;
+    if (!window.confirm(`${selectedSuTankeriLogIds.length} su tankeri log kaydı silinsin mi?`)) return;
+    try {
+      await Promise.all(
+        selectedSuTankeriLogIds.map((id) => deleteDoc(doc(db, 'guvenlikSuTankeriLoglari', id)))
+      );
+      setSelectedSuTankeriLogIds([]);
+      showStatus('success', 'Seçili su tankeri logları silindi.');
+    } catch (e) {
+      console.error(e);
+      showStatus('error', 'Toplu silme başarısız.');
+    }
+  };
+
+  const handleGuncelleSeciliPersonelTarih = async () => {
+    if (selectedPersonelLogIds.length === 0) return;
+    if (
+      !window.confirm(
+        `Seçili ${selectedPersonelLogIds.length} personel kaydının işlem tarihi ${formatDateLabelTr(islemTarihi)} olarak güncellensin mi?`
+      )
+    )
+      return;
+    try {
+      await Promise.all(
+        selectedPersonelLogIds.map((id) => {
+          const log = personelLoglar.find((l) => l.id === id);
+          if (!log) return Promise.resolve();
+          const timePart = String(log.zaman || getIslemZamani()).slice(11);
+          return setDoc(
+            doc(db, 'guvenlikGirisCikisLoglari', id),
+            { islemTarihi, zaman: `${islemTarihi}T${timePart || '12:00:00.000Z'}` },
+            { merge: true }
+          );
+        })
+      );
+      showStatus('success', 'Seçili personel kayıtları seçili tarihe güncellendi.');
+    } catch (e) {
+      console.error(e);
+      showStatus('error', 'Güncelleme başarısız.');
+    }
+  };
+
+  const handleGuncelleSeciliAracTarih = async () => {
+    if (selectedAracLogIds.length === 0) return;
+    if (
+      !window.confirm(
+        `Seçili ${selectedAracLogIds.length} araç kaydının işlem tarihi ${formatDateLabelTr(islemTarihi)} olarak güncellensin mi?`
+      )
+    )
+      return;
+    try {
+      await Promise.all(
+        selectedAracLogIds.map((id) => {
+          const log = tumAracLoglar.find((l) => l.id === id);
+          if (!log) return Promise.resolve();
+          const timePart = String(log.girisZamani || getIslemZamani()).slice(11);
+          return setDoc(
+            doc(db, 'guvenlikAracLoglari', id),
+            { islemTarihi, girisZamani: `${islemTarihi}T${timePart || '12:00:00.000Z'}` },
+            { merge: true }
+          );
+        })
+      );
+      showStatus('success', 'Seçili araç kayıtları seçili tarihe güncellendi.');
+    } catch (e) {
+      console.error(e);
+      showStatus('error', 'Güncelleme başarısız.');
+    }
+  };
+
+  const handleGuncelleSeciliSuTankeriTarih = async () => {
+    if (selectedSuTankeriLogIds.length === 0) return;
+    if (
+      !window.confirm(
+        `Seçili ${selectedSuTankeriLogIds.length} su tankeri kaydının işlem tarihi ${formatDateLabelTr(islemTarihi)} olarak güncellensin mi?`
+      )
+    )
+      return;
+    try {
+      await Promise.all(
+        selectedSuTankeriLogIds.map((id) => {
+          const log = tumSuTankeriLoglar.find((l) => l.id === id);
+          if (!log) return Promise.resolve();
+          const timePart = String(log.girisZamani || getIslemZamani()).slice(11);
+          return setDoc(
+            doc(db, 'guvenlikSuTankeriLoglari', id),
+            { islemTarihi, girisZamani: `${islemTarihi}T${timePart || '12:00:00.000Z'}` },
+            { merge: true }
+          );
+        })
+      );
+      showStatus('success', 'Seçili su tankeri kayıtları seçili tarihe güncellendi.');
+    } catch (e) {
+      console.error(e);
+      showStatus('error', 'Güncelleme başarısız.');
+    }
+  };
+
+  const handleIndirNobetRaporHtml = (archive: any) => {
+    const html = archive.raporHtml || buildNobetGunlukRaporHtml(archive);
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `guvenlik_nobet_${archive.tarih}_${archive.vardiya || 'TUM'}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleDeleteEvrak = async (evrakId: string) => {
@@ -616,6 +830,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         gorev: personel.gorev,
         tip,
         zaman: getIslemZamani(),
+        islemTarihi,
         kaydeden: currentUser?.email || 'kapici_kibritci',
         firmaTipi: isTaseronPersonel(personel) ? 'TASERON' : 'ANA',
         firmaAdi: firmaEtiketi(personel),
@@ -656,6 +871,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         aciklama: aracAciklama,
         durum: 'İÇERİDE',
         girisZamani: getIslemZamani(),
+        islemTarihi,
         cikisZamani: null,
         kaydeden: currentUser?.email || 'guvenlik_gate'
       };
@@ -711,6 +927,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         aciklama: stAciklama.trim(),
         durum: 'İÇERİDE',
         girisZamani: getIslemZamani(),
+        islemTarihi,
         cikisZamani: null,
         kaydeden: currentUser?.email || 'guvenlik_gate',
       };
@@ -771,6 +988,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         ziyaretEdilen,
         durum: 'İÇERİDE',
         girisZamani: getIslemZamani(),
+        islemTarihi,
         cikisZamani: null,
         kartNo: `ZK-${Math.floor(1000 + Math.random() * 9000)}`
       };
@@ -812,21 +1030,50 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     }
   };
 
-  const bugunkuPersonelLoglar = useMemo(() => {
-    return personelLoglar.filter((l) => String(l.zaman || '').startsWith(islemTarihi));
-  }, [personelLoglar, islemTarihi]);
+  const isSeciliGunBugun = islemTarihi === todayDateKey();
+  const seciliTarihLabel = formatDateLabelTr(islemTarihi);
 
-  const bugunkuAracLoglar = useMemo(() => {
-    return [...iceridekiAraclar, ...aracGecmisLoglar].filter((a) =>
-      String(a.girisZamani || '').startsWith(islemTarihi)
-    );
-  }, [iceridekiAraclar, aracGecmisLoglar, islemTarihi]);
+  const tumAracLoglar = useMemo(
+    () => [...iceridekiAraclar, ...aracGecmisLoglar],
+    [iceridekiAraclar, aracGecmisLoglar]
+  );
+  const tumSuTankeriLoglar = useMemo(
+    () => [...iceridekiSuTankerleri, ...suTankeriGecmisLoglar],
+    [iceridekiSuTankerleri, suTankeriGecmisLoglar]
+  );
+  const tumZiyaretciLoglar = useMemo(
+    () => [...aktifZiyaretciler, ...ziyaretciGecmisLoglar],
+    [aktifZiyaretciler, ziyaretciGecmisLoglar]
+  );
 
-  const bugunkuSuTankeriLoglar = useMemo(() => {
-    return [...iceridekiSuTankerleri, ...suTankeriGecmisLoglar].filter((a) =>
-      String(a.girisZamani || '').startsWith(islemTarihi)
-    );
-  }, [iceridekiSuTankerleri, suTankeriGecmisLoglar, islemTarihi]);
+  const seciliGunPersonelLoglar = useMemo(
+    () => filterGuvenlikLogsByTarih(personelLoglar, islemTarihi),
+    [personelLoglar, islemTarihi]
+  );
+  const seciliGunAracLoglar = useMemo(
+    () => filterGuvenlikLogsByTarih(tumAracLoglar, islemTarihi),
+    [tumAracLoglar, islemTarihi]
+  );
+  const seciliGunSuTankeriLoglar = useMemo(
+    () => filterGuvenlikLogsByTarih(tumSuTankeriLoglar, islemTarihi),
+    [tumSuTankeriLoglar, islemTarihi]
+  );
+  const seciliGunZiyaretciLoglar = useMemo(
+    () => filterGuvenlikLogsByTarih(tumZiyaretciLoglar, islemTarihi),
+    [tumZiyaretciLoglar, islemTarihi]
+  );
+  const seciliGunEvraklar = useMemo(
+    () => gelenEvraklar.filter((e) => normalizeDateKey(e.tarih) === normalizeDateKey(islemTarihi)),
+    [gelenEvraklar, islemTarihi]
+  );
+  const seciliGunNobetArsivleri = useMemo(
+    () => nobetArsivleri.filter((a) => normalizeDateKey(a.tarih) === normalizeDateKey(islemTarihi)),
+    [nobetArsivleri, islemTarihi]
+  );
+
+  const bugunkuPersonelLoglar = seciliGunPersonelLoglar;
+  const bugunkuAracLoglar = seciliGunAracLoglar;
+  const bugunkuSuTankeriLoglar = seciliGunSuTankeriLoglar;
 
   const togglePersonelLogSelect = (id: string) => {
     setSelectedPersonelLogIds((prev) =>
@@ -1087,6 +1334,37 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
           
           {activeTab === 'irsaliye' && (
             <div className="space-y-6">
+              <GuvenlikTabDateBar
+                islemTarihi={islemTarihi}
+                onTarihChange={setIslemTarihi}
+                tabLabel="Evrak Girişi"
+                logCount={seciliGunEvraklar.length}
+                archivedCount={seciliGunNobetArsivleri.length}
+                onGoster={() => handleGosterSeciliGun('Evrak Girişi', seciliGunEvraklar.length)}
+                onKaydet={handleSendQueueToManager}
+                kaydetLabel="Kuyruğu Kaydet"
+                kaydetDisabled={uploadQueue.length === 0}
+                kaydetLoading={loadingIrsaliye}
+                onGuncelle={() => {
+                  if (!editingEvrak && seciliGunEvraklar[0]) {
+                    const e = seciliGunEvraklar[0];
+                    setEditingEvrak(e);
+                    setEditEvrakTuru(e.evrakTuru || 'İRSALİYE');
+                    setEditAciklama(e.aciklama || '');
+                    showStatus('success', 'İlk kayıt düzenleme için açıldı. Listeden Düzenle ile de seçebilirsiniz.');
+                  } else if (editingEvrak) {
+                    showStatus('success', 'Düzenleme formu açık — Değişiklikleri Kaydet ile güncelleyin.');
+                  } else {
+                    showStatus('error', 'Güncellenecek evrak yok. Önce listeden Düzenle seçin.');
+                  }
+                }}
+                guncelleDisabled={seciliGunEvraklar.length === 0}
+                onSil={() => {
+                  if (seciliGunEvraklar.length === 0) return;
+                  handleDeleteEvrak(seciliGunEvraklar[0].id);
+                }}
+                silDisabled={seciliGunEvraklar.length === 0}
+              />
               
               {/* 1. YENİ EVRAK YÜKLEME ALANI */}
               <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4 shadow-sm">
@@ -1263,8 +1541,8 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                   </div>
                 </div>
 
-                {/* Evrak Log Tablosu */}
-                {gelenEvraklar.filter(e => {
+                {/* Evrak Log Tablosu — seçili güne göre */}
+                {seciliGunEvraklar.filter(e => {
                   // Apply search
                   const q = docSearch.toLowerCase();
                   const matchesSearch = 
@@ -1283,7 +1561,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                   return matchesSearch && matchesType && matchesStatus;
                 }).length === 0 ? (
                   <div className="text-center py-10 text-[11px] text-slate-400 font-bold">
-                    Aranan kriterlere uygun evrak kaydı bulunamadı.
+                    {seciliTarihLabel} için aranan kriterlere uygun evrak kaydı bulunamadı.
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -1299,7 +1577,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-150">
-                        {gelenEvraklar
+                        {seciliGunEvraklar
                           .filter(e => {
                             const q = docSearch.toLowerCase();
                             const matchesSearch = 
@@ -1462,14 +1740,33 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               ───────────────────────────────────────────────────────────── */}
           {activeTab === 'personel' && (
             <div className="space-y-6">
+              <GuvenlikTabDateBar
+                islemTarihi={islemTarihi}
+                onTarihChange={setIslemTarihi}
+                tabLabel="Personel Kapı"
+                logCount={seciliGunPersonelLoglar.length}
+                archivedCount={seciliGunNobetArsivleri.length}
+                onGoster={() => handleGosterSeciliGun('Personel Kapı', seciliGunPersonelLoglar.length)}
+                onKaydet={() =>
+                  showStatus(
+                    'success',
+                    `${seciliTarihLabel} için personel giriş/çıkışları anında kaydedilir. Bu güne ${seciliGunPersonelLoglar.length} kayıt bağlı.`
+                  )
+                }
+                kaydetLabel="Tarihe Bağla"
+                onGuncelle={handleGuncelleSeciliPersonelTarih}
+                guncelleDisabled={selectedPersonelLogIds.length === 0}
+                onSil={handleBulkDeletePersonelLogs}
+                silDisabled={selectedPersonelLogIds.length === 0}
+              />
               
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
                 {/* Personnel Search & Grid */}
                 <div className="lg:col-span-2 bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
                   <div className="flex justify-between items-center border-b border-slate-200 pb-2">
-                    <span className="font-display font-black text-xs text-white uppercase tracking-widest block">👥 ŞANTİYE PERSONEL GİRİŞ PANELİ</span>
-                    <span className="bg-slate-900 text-slate-600 text-[9px] font-mono font-bold py-0.5 px-2 rounded">REALTIME</span>
+                    <span className="font-display font-black text-xs text-slate-800 uppercase tracking-widest block">👥 ŞANTİYE PERSONEL GİRİŞ PANELİ</span>
+                    <span className="bg-slate-900 text-white text-[9px] font-mono font-bold py-0.5 px-2 rounded">{seciliTarihLabel}</span>
                   </div>
 
                   <div className="relative">
@@ -1551,7 +1848,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                 {/* Live gate logs history */}
                 <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
                   <div className="flex justify-between items-center border-b border-slate-200 pb-2 gap-2">
-                    <span className="font-display font-black text-xs text-amber-500 uppercase tracking-widest block">📋 BUGÜNKÜ GİRİŞ-ÇIKIŞ LOGLARI</span>
+                    <span className="font-display font-black text-xs text-amber-500 uppercase tracking-widest block">📋 {seciliTarihLabel} GİRİŞ-ÇIKIŞ LOGLARI</span>
                     <div className="flex items-center gap-2 shrink-0">
                       <button
                         type="button"
@@ -1592,7 +1889,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                             </div>
                           </label>
                           
-                          <div className="text-right shrink-0">
+                          <div className="text-right shrink-0 space-y-1">
                             <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase font-mono tracking-wide ${
                               isGiris ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/10' : 'bg-rose-950 text-rose-400 border border-rose-500/10'
                             }`}>
@@ -1601,13 +1898,22 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                             <span className="text-[9px] text-slate-500 block font-mono mt-0.5">
                               {new Date(log.zaman).toLocaleTimeString('tr-TR')}
                             </span>
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePersonelLog(log.id)}
+                              className="text-[8px] font-black px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200"
+                            >
+                              Sil
+                            </button>
                           </div>
                         </div>
                       );
                     })}
 
                     {bugunkuPersonelLoglar.length === 0 && (
-                      <div className="text-center p-10 text-slate-500 italic text-[11px]">Kapıda bugün henüz hiçbir personel girişi veya çıkışı kaydedilmedi.</div>
+                      <div className="text-center p-10 text-slate-500 italic text-[11px]">
+                        {seciliTarihLabel} için henüz personel giriş/çıkış kaydı yok. Tarih seçip Göster ile kontrol edin.
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1622,6 +1928,25 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               ───────────────────────────────────────────────────────────── */}
           {activeTab === 'arac' && (
             <div className="space-y-6">
+              <GuvenlikTabDateBar
+                islemTarihi={islemTarihi}
+                onTarihChange={setIslemTarihi}
+                tabLabel="Araç Giriş-Çıkış"
+                logCount={seciliGunAracLoglar.length}
+                archivedCount={seciliGunNobetArsivleri.length}
+                onGoster={() => handleGosterSeciliGun('Araç Giriş-Çıkış', seciliGunAracLoglar.length)}
+                onKaydet={() =>
+                  showStatus(
+                    'success',
+                    `${seciliTarihLabel} için araç girişleri anında kaydedilir. Bu güne ${seciliGunAracLoglar.length} kayıt bağlı.`
+                  )
+                }
+                kaydetLabel="Tarihe Bağla"
+                onGuncelle={handleGuncelleSeciliAracTarih}
+                guncelleDisabled={selectedAracLogIds.length === 0}
+                onSil={handleBulkDeleteAracLogs}
+                silDisabled={selectedAracLogIds.length === 0}
+              />
               
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
@@ -1760,7 +2085,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               {/* Bugünkü Araç Logları + WP */}
               <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
                 <div className="flex justify-between items-center border-b border-slate-200 pb-2 gap-2">
-                  <span className="font-display font-black text-xs text-amber-500 uppercase tracking-widest block">🚛 BUGÜNKÜ ARAÇ LOGLARI</span>
+                  <span className="font-display font-black text-xs text-amber-500 uppercase tracking-widest block">🚛 {seciliTarihLabel} ARAÇ LOGLARI</span>
                   <button
                     type="button"
                     onClick={handleSendSelectedAracLogsWp}
@@ -1790,7 +2115,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                             <span className="text-[9px] text-slate-400 block">Sürücü: {log.surucuAdi || '—'}</span>
                           </div>
                         </label>
-                        <div className="text-right shrink-0">
+                        <div className="text-right shrink-0 space-y-1">
                           <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
                             log.durum === 'İÇERİDE' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'
                           }`}>
@@ -1799,13 +2124,22 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                           <span className="text-[9px] text-slate-500 block font-mono mt-0.5">
                             {log.girisZamani ? new Date(log.girisZamani).toLocaleTimeString('tr-TR') : '—'}
                           </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAracLog(log.id)}
+                            className="text-[8px] font-black px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200"
+                          >
+                            Sil
+                          </button>
                         </div>
                       </div>
                     );
                   })}
 
                   {bugunkuAracLoglar.length === 0 && (
-                    <div className="text-center p-8 text-slate-500 italic text-[11px]">Bugün henüz araç giriş/çıkış kaydı yok.</div>
+                    <div className="text-center p-8 text-slate-500 italic text-[11px]">
+                      {seciliTarihLabel} için henüz araç giriş/çıkış kaydı yok.
+                    </div>
                   )}
                 </div>
               </div>
@@ -1818,6 +2152,25 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               ───────────────────────────────────────────────────────────── */}
           {activeTab === 'su_tankeri' && (
             <div className="space-y-6">
+              <GuvenlikTabDateBar
+                islemTarihi={islemTarihi}
+                onTarihChange={setIslemTarihi}
+                tabLabel="Su Tankeri"
+                logCount={seciliGunSuTankeriLoglar.length}
+                archivedCount={seciliGunNobetArsivleri.length}
+                onGoster={() => handleGosterSeciliGun('Su Tankeri', seciliGunSuTankeriLoglar.length)}
+                onKaydet={() =>
+                  showStatus(
+                    'success',
+                    `${seciliTarihLabel} için su tankeri kayıtları anında kaydedilir. Bu güne ${seciliGunSuTankeriLoglar.length} sefer bağlı.`
+                  )
+                }
+                kaydetLabel="Tarihe Bağla"
+                onGuncelle={handleGuncelleSeciliSuTankeriTarih}
+                guncelleDisabled={selectedSuTankeriLogIds.length === 0}
+                onSil={handleBulkDeleteSuTankeriLogs}
+                silDisabled={selectedSuTankeriLogIds.length === 0}
+              />
               <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 text-xs text-sky-900">
                 Su tankeri günde 3–4 sefer gelebilir. Her seferi ayrı kaydedin; günlük loglar bu sekmede birikir ve WhatsApp ile paylaşılabilir.
               </div>
@@ -1935,7 +2288,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
                 <div className="flex flex-wrap justify-between items-center border-b border-slate-200 pb-2 gap-2">
                   <span className="font-display font-black text-xs text-sky-600 uppercase tracking-widest">
-                    💧 BUGÜNKÜ SU TANKERİ LOGLARI ({bugunkuSuTankeriLoglar.length} sefer)
+                    💧 {seciliTarihLabel} SU TANKERİ LOGLARI ({bugunkuSuTankeriLoglar.length} sefer)
                   </span>
                   <div className="flex gap-1.5">
                     <button
@@ -1977,7 +2330,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                             <span className="text-[9px] text-slate-400 block">Sürücü: {log.surucuAdi || '—'}</span>
                           </div>
                         </label>
-                        <div className="text-right shrink-0">
+                        <div className="text-right shrink-0 space-y-1">
                           <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
                             log.durum === 'İÇERİDE' ? 'bg-sky-100 text-sky-800' : 'bg-slate-200 text-slate-600'
                           }`}>
@@ -1987,6 +2340,13 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                             {log.girisZamani ? new Date(log.girisZamani).toLocaleTimeString('tr-TR') : '—'}
                             {log.cikisZamani ? ` → ${new Date(log.cikisZamani).toLocaleTimeString('tr-TR')}` : ''}
                           </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSuTankeriLog(log.id)}
+                            className="text-[8px] font-black px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200"
+                          >
+                            Sil
+                          </button>
                         </div>
                       </div>
                     );
@@ -2005,6 +2365,26 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               ───────────────────────────────────────────────────────────── */}
           {activeTab === 'ziyaretci' && (
             <div className="space-y-6">
+              <GuvenlikTabDateBar
+                islemTarihi={islemTarihi}
+                onTarihChange={setIslemTarihi}
+                tabLabel="Ziyaretçi Defteri"
+                logCount={seciliGunZiyaretciLoglar.length}
+                archivedCount={seciliGunNobetArsivleri.length}
+                onGoster={() => handleGosterSeciliGun('Ziyaretçi Defteri', seciliGunZiyaretciLoglar.length)}
+                onKaydet={() =>
+                  showStatus(
+                    'success',
+                    `${seciliTarihLabel} için ziyaretçi girişleri anında kaydedilir. Bu güne ${seciliGunZiyaretciLoglar.length} kayıt bağlı.`
+                  )
+                }
+                kaydetLabel="Tarihe Bağla"
+                onSil={() => {
+                  if (seciliGunZiyaretciLoglar.length === 0) return;
+                  handleDeleteZiyaretciLog(seciliGunZiyaretciLoglar[0].id);
+                }}
+                silDisabled={seciliGunZiyaretciLoglar.length === 0}
+              />
               
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
@@ -2140,6 +2520,61 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
               </div>
 
+              <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
+                <span className="font-display font-black text-xs text-amber-500 uppercase tracking-widest block border-b border-slate-200 pb-2">
+                  🎫 {seciliTarihLabel} ZİYARETÇİ LOGLARI ({seciliGunZiyaretciLoglar.length})
+                </span>
+                <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                  {seciliGunZiyaretciLoglar.map((log) => (
+                    <div
+                      key={log.id}
+                      className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex justify-between items-center text-[11px] gap-2"
+                    >
+                      <div className="min-w-0 space-y-0.5">
+                        <span className="font-bold text-slate-800 block truncate">{log.adSoyad}</span>
+                        <span className="text-[9px] text-slate-500 block truncate">
+                          {log.firma} · {log.ziyaretEdilen}
+                        </span>
+                        <span className="text-[9px] text-slate-400 font-mono">{log.kartNo}</span>
+                      </div>
+                      <div className="text-right shrink-0 space-y-1">
+                        <span
+                          className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                            log.durum === 'İÇERİDE' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'
+                          }`}
+                        >
+                          {log.durum}
+                        </span>
+                        <span className="text-[9px] text-slate-500 block font-mono">
+                          {log.girisZamani ? new Date(log.girisZamani).toLocaleTimeString('tr-TR') : '—'}
+                        </span>
+                        <div className="flex gap-1 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleZiyaretciWhatsApp(log)}
+                            className="text-[8px] font-black px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          >
+                            WP
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteZiyaretciLog(log.id)}
+                            className="text-[8px] font-black px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200"
+                          >
+                            Sil
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {seciliGunZiyaretciLoglar.length === 0 && (
+                    <div className="text-center p-8 text-slate-500 italic text-[11px]">
+                      {seciliTarihLabel} için ziyaretçi kaydı yok. Tarih seçip Göster ile kontrol edin.
+                    </div>
+                  )}
+                </div>
+              </div>
+
             </div>
           )}
 
@@ -2148,17 +2583,49 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               ───────────────────────────────────────────────────────────── */}
           {activeTab === 'nobet_arsivi' && (
             <div className="space-y-6">
+              <GuvenlikTabDateBar
+                islemTarihi={islemTarihi}
+                onTarihChange={setIslemTarihi}
+                tabLabel="Nöbet Kapat & Arşiv"
+                logCount={
+                  seciliGunPersonelLoglar.length +
+                  seciliGunAracLoglar.length +
+                  seciliGunSuTankeriLoglar.length +
+                  seciliGunZiyaretciLoglar.length +
+                  seciliGunEvraklar.length
+                }
+                archivedCount={seciliGunNobetArsivleri.length}
+                onGoster={() =>
+                  handleGosterSeciliGun(
+                    'Nöbet günü',
+                    seciliGunPersonelLoglar.length +
+                      seciliGunAracLoglar.length +
+                      seciliGunSuTankeriLoglar.length +
+                      seciliGunZiyaretciLoglar.length +
+                      seciliGunEvraklar.length
+                  )
+                }
+                onKaydet={() => {
+                  const txt =
+                    (document.getElementById('nobetNotlar') as HTMLTextAreaElement)?.value || '';
+                  handleArchiveNobetGunu(txt);
+                }}
+                kaydetLabel="Nöbeti Arşivle"
+                kaydetLoading={isArchiving}
+              />
               
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
                 {/* Sol Panel: Aktif Günü Arşivle */}
                 <div className="bg-white p-6 border border-slate-200 rounded-3xl space-y-5">
                   <span className="font-display font-black text-xs text-slate-805 uppercase tracking-widest block border-b border-slate-200 pb-2">
-                    🔒 BUGÜNKÜ NÖBET VARDİYASINI ARŞİVLE
+                    🔒 {seciliTarihLabel} NÖBET VARDİYASINI ARŞİVLE
                   </span>
 
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    Nöbet değişimi veya vardiya sonu geldiğinde, bu vardiya süresindeki tüm aktif giriş-çıkış ve evrak hareketlerini süzerek arşive kaydedebilirsiniz.
+                    Nöbet kapatınca seçili günün tüm giriş-çıkış ve evrak logları <strong>toplu rapora</strong> dönüşüp
+                    arşive kaydedilir. Canlı loglar <strong className="text-emerald-700">silinmez</strong>; sekmelerden
+                    tarihe göre yeniden görüntülenir.
                   </p>
 
                   {/* Vardiya Seçimi */}
@@ -2166,9 +2633,10 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                     <label className="text-[9px] font-bold text-slate-500 uppercase block font-sans">Arşivlenecek Vardiya *</label>
                     <select
                       value={selectedVardiya}
-                      onChange={(e) => setSelectedVardiya(e.target.value as any)}
+                      onChange={(e) => setSelectedVardiya(e.target.value as NobetVardiyaTipi)}
                       className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl font-bold text-xs text-slate-850"
                     >
+                      <option value="TUM_GUN">📅 Tam Gün (24 Saat — tüm günlük loglar)</option>
                       <option value="GUNDUZ">☀️ Gündüz Vardiyası (08:00 - 20:00)</option>
                       <option value="GECE">🌙 Gece Vardiyası (20:00 - 08:00)</option>
                     </select>
@@ -2176,40 +2644,31 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
                   {/* Vardiyaya Göre Dinamik İstatistikler */}
                   {(() => {
-                    const todayStr = islemTarihi;
-                    const baseDate = new Date(todayStr);
-                    baseDate.setDate(baseDate.getDate() + 1);
-                    const nextDayStr = baseDate.toISOString().split('T')[0];
-
-                    const startLimit = selectedVardiya === 'GUNDUZ' ? `${todayStr}T08:00:00.000Z` : `${todayStr}T20:00:00.000Z`;
-                    const endLimit = selectedVardiya === 'GUNDUZ' ? `${todayStr}T20:00:00.000Z` : `${nextDayStr}T08:00:00.000Z`;
-
-                    const filterByTime = (timeStr: string) => {
-                      if (!timeStr) return false;
-                      return timeStr >= startLimit && timeStr < endLimit;
-                    };
-
-                    const sLogs = personelLoglar.filter(l => filterByTime(l.zaman)).length;
-                    const sAraclar = [...iceridekiAraclar, ...aracGecmisLoglar].filter(a => {
-                      const inTime = a.girisZamani;
-                      const outTime = a.cikisZamani || getIslemZamani();
-                      return inTime < endLimit && outTime >= startLimit;
-                    }).length;
-                    const sGuests = [...aktifZiyaretciler, ...ziyaretciGecmisLoglar].filter(z => {
-                      const inTime = z.girisZamani;
-                      const outTime = z.cikisZamani || getIslemZamani();
-                      return inTime < endLimit && outTime >= startLimit;
-                    }).length;
-                    const sEvrak = gelenEvraklar.filter(e => {
-                      if (!e.tarih || !e.saat) return false;
-                      const evrakTime = `${e.tarih}T${e.saat}:00.000Z`;
-                      return evrakTime >= startLimit && evrakTime < endLimit;
-                    }).length;
+                    const sLogs = filterNobetPersonelLoglari(personelLoglar, islemTarihi, selectedVardiya).length;
+                    const sAraclar = filterNobetAracZiyaretLoglari(
+                      tumAracLoglar,
+                      islemTarihi,
+                      selectedVardiya,
+                      getIslemZamani()
+                    ).length;
+                    const sSu = filterNobetAracZiyaretLoglari(
+                      tumSuTankeriLoglar,
+                      islemTarihi,
+                      selectedVardiya,
+                      getIslemZamani()
+                    ).length;
+                    const sGuests = filterNobetAracZiyaretLoglari(
+                      tumZiyaretciLoglar,
+                      islemTarihi,
+                      selectedVardiya,
+                      getIslemZamani()
+                    ).length;
+                    const sEvrak = filterNobetEvrakLoglari(gelenEvraklar, islemTarihi, selectedVardiya).length;
 
                     return (
                       <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-3">
                         <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider block font-sans">
-                          Vardiya İstatistikleri Özeti
+                          Vardiya İstatistikleri Özeti — {seciliTarihLabel}
                         </span>
                         
                         <div className="grid grid-cols-2 gap-2 text-xs">
@@ -2224,11 +2683,16 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                           </div>
 
                           <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40">
+                            <span className="text-[9px] font-bold text-slate-500 block uppercase font-sans">Su Tankeri</span>
+                            <span className="text-sm font-black text-slate-805 font-mono">{sSu} Sefer</span>
+                          </div>
+
+                          <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40">
                             <span className="text-[9px] font-bold text-slate-500 block uppercase font-sans">Misafir</span>
                             <span className="text-sm font-black text-slate-805 font-mono">{sGuests} Kayıt</span>
                           </div>
 
-                          <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40">
+                          <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40 col-span-2">
                             <span className="text-[9px] font-bold text-slate-500 block uppercase font-sans">Evrak</span>
                             <span className="text-sm font-black text-slate-805 font-mono">{sEvrak} Belge</span>
                           </div>
@@ -2260,8 +2724,12 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                     className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-slate-800 text-slate-950 font-black text-xs py-3.5 rounded-2xl flex items-center justify-center space-x-2 border-b-2 border-amber-700 cursor-pointer transition uppercase tracking-wider"
                   >
                     <Archive size={14} />
-                    <span>{isArchiving ? 'Arşivleniyor...' : 'Vardiya Raporunu Kalıcı Arşivle'}</span>
+                    <span>{isArchiving ? 'Arşivleniyor...' : 'Nöbeti Kapat & Raporu Arşivle'}</span>
                   </button>
+
+                  <p className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                    ✓ Arşivleme sonrası günlük loglar sekmelerde kalır. Alttaki listeden raporları açabilirsiniz.
+                  </p>
 
                 </div>
 
@@ -2270,10 +2738,10 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                   
                   <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-200 pb-3 gap-3">
                     <div>
-                      <span className="font-display font-black text-xs text-white uppercase tracking-widest block">
+                      <span className="font-display font-black text-xs text-slate-800 uppercase tracking-widest block">
                         📂 GEÇMİŞ GÜNLERİN GÜVENLİK ARŞİVLERİ
                       </span>
-                      <p className="text-[10px] text-slate-500 font-mono">Geriye dönük güvenlik nöbet kayıtları havuzu</p>
+                      <p className="text-[10px] text-slate-500 font-mono">Nöbet kapatınca oluşan raporlar burada listelenir — günlük loglar silinmez</p>
                     </div>
 
                     {/* Arama Barı */}
@@ -2304,7 +2772,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                           <div className="space-y-1.5">
                             <div className="flex items-center space-x-2">
                               <Calendar size={13} className="text-amber-500" />
-                              <span className="text-sm font-black text-white font-mono">{archive.tarih}</span>
+                              <span className="text-sm font-black text-slate-800 font-mono">{archive.tarih}</span>
                               <span className={`text-[8px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wider ${
                                 archive.vardiya === 'GUNDUZ' ? 'bg-amber-100 text-amber-805 border border-amber-200' :
                                 archive.vardiya === 'GECE' ? 'bg-indigo-105 text-indigo-850 border border-indigo-200' :
@@ -2342,9 +2810,16 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
                             <button
                               onClick={() => setSelectedArchive(archive)}
-                              className="bg-amber-600/10 hover:bg-amber-600 border border-amber-500/20 text-amber-400 hover:text-slate-950 text-[10px] font-black px-3.5 py-2 rounded-xl transition cursor-pointer"
+                              className="bg-amber-600/10 hover:bg-amber-600 border border-amber-500/20 text-amber-700 hover:text-slate-950 text-[10px] font-black px-3.5 py-2 rounded-xl transition cursor-pointer"
                             >
                               Arşivi İncele
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleIndirNobetRaporHtml(archive)}
+                              className="bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-black px-3 py-2 rounded-xl transition cursor-pointer"
+                            >
+                              HTML Rapor
                             </button>
                           </div>
                         </div>
@@ -2369,6 +2844,20 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               ───────────────────────────────────────────────────────────── */}
           {activeTab === 'akvizyon_yoklama' && (
             <div className="space-y-6 animate-in fade-in duration-150">
+              <GuvenlikTabDateBar
+                islemTarihi={islemTarihi}
+                onTarihChange={setIslemTarihi}
+                tabLabel="Akvizyon Yoklama"
+                logCount={Object.keys(akvizyonYoklamaMap).length}
+                archivedCount={akvizyonArchives.filter((a) => a.tarih === islemTarihi).length}
+                onGoster={() =>
+                  handleGosterSeciliGun('Akvizyon Yoklama', Object.keys(akvizyonYoklamaMap).length)
+                }
+                onKaydet={handleSaveAkvizyonYoklama}
+                kaydetLabel="Yoklamayı Kaydet"
+                kaydetDisabled={!canSaveAkvizyonYoklama || akvizyonPersoneller.length === 0}
+                kaydetLoading={loadingAkvizyonYoklama}
+              />
               
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
@@ -2383,7 +2872,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                     <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                       <span className="text-[10px] font-bold text-slate-500 uppercase">Yoklama Tarihi:</span>
                       <span className="font-mono font-black text-amber-600 bg-amber-500/10 px-2.5 py-0.5 rounded-lg border border-amber-500/20 text-xs">
-                        {islemTarihi}
+                        {seciliTarihLabel}
                       </span>
                     </div>
 
