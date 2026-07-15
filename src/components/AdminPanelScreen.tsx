@@ -380,8 +380,10 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
 
     setIsSavingEdit(true);
     try {
+      let authCreated = false;
       if (editPassword) {
-        await adminUpdateUserPassword(editingUser.email, editPassword);
+        const authResult = await adminUpdateUserPassword(editingUser.email, editPassword);
+        authCreated = authResult.created;
       }
 
       const updatedUser: Kullanici = {
@@ -403,7 +405,11 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
 
       await syncAuthClaimsFromServer(editingUser.email).catch(() => undefined);
 
-      alert(`✅ ${editingUser.email} kullanıcısının bilgileri başarıyla güncellendi!`);
+      alert(
+        authCreated
+          ? `✅ ${editingUser.email} için Firebase giriş hesabı oluşturuldu ve şifre atandı. Artık bu şifreyle giriş yapabilir.`
+          : `✅ ${editingUser.email} kullanıcısının bilgileri başarıyla güncellendi!`
+      );
       if (addNotification) {
         addNotification(`${editingUser.email} kullanıcısının kişisel bilgileri kurucu tarafından güncellendi.`);
       }

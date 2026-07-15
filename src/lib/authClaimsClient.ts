@@ -63,13 +63,13 @@ export async function provisionAuthUser(
   return data.claims;
 }
 
-/** Yönetici (sametatak9@gmail.com): bir kullanıcının şifresini Auth üzerinde günceller */
+/** Yönetici (sametatak9@gmail.com): bir kullanıcının şifresini Auth üzerinde günceller; Auth yoksa oluşturur */
 export async function adminUpdateUserPassword(
   email: string,
   password: string
-): Promise<boolean> {
+): Promise<{ created: boolean }> {
   const user = auth.currentUser;
-  if (!user || user.isAnonymous) return false;
+  if (!user || user.isAnonymous) return { created: false };
 
   const idToken = await user.getIdToken();
   const res = await fetch('/api/auth/admin/update-user', {
@@ -86,8 +86,15 @@ export async function adminUpdateUserPassword(
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Şifre güncellenemedi.');
+    const raw = String(data.error || '');
+    if (raw.includes('user-not-found') || raw.includes('no user record')) {
+      throw new Error(
+        'Firebase giriş hesabı bulunamadı ve oluşturulamadı. Render\'da FIREBASE_SERVICE_ACCOUNT_JSON tanımlı mı kontrol edin.'
+      );
+    }
+    throw new Error(raw || 'Şifre güncellenemedi.');
   }
 
-  return true;
+  const data = (await res.json()) as { created?: boolean };
+  return { created: Boolean(data.created) };
 }

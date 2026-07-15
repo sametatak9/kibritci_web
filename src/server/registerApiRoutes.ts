@@ -116,22 +116,60 @@ app.post('/api/auth/admin/update-user', async (req, res) => {
       return res.status(400).json({ error: 'hedef e-posta (email) zorunludur' });
     }
 
+    if (!newPassword) {
+      return res.status(400).json({ error: 'Yeni şifre zorunludur' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Yeni şifre en az 6 karakter olmalıdır' });
+    }
+
     const admin = getFirebaseAdmin();
-    const userRecord = await admin.auth().getUserByEmail(targetEmail);
-    const updatePayload: any = {};
+    const emailKey = targetEmail;
+    let created = false;
 
-    if (newPassword) {
-      if (newPassword.length < 6) {
-        return res.status(400).json({ error: 'Yeni şifre en az 6 karakter olmalıdır' });
+    try {
+      const existing = await admin.auth().getUserByEmail(emailKey);
+      await admin.auth().updateUser(existing.uid, {
+        password: newPassword,
+        emailVerified: true,
+      });
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code !== 'auth/user-not-found') throw err;
+
+      const kullaniciSnap = await admin.firestore().collection('kullanicilar').doc(emailKey).get();
+      if (!kullaniciSnap.exists) {
+        return res.status(404).json({
+          error: `${emailKey} için ERP kullanıcı kaydı bulunamadı. Önce Admin panelden kullanıcı oluşturun.`,
+        });
       }
-      updatePayload.password = newPassword;
+
+      await admin.auth().createUser({
+        email: emailKey,
+        password: newPassword,
+        emailVerified: true,
+      });
+      created = true;
     }
 
-    if (Object.keys(updatePayload).length > 0) {
-      await admin.auth().updateUser(userRecord.uid, updatePayload);
-    }
+    await syncClaimsForEmail(emailKey);
 
-    return res.json({ success: true, message: 'Kullanıcı şifresi başarıyla güncellendi' });
+    await admin.firestore().collection('portalKullanicilar').doc(emailKey).set(
+      {
+        email: emailKey,
+        password: newPassword,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+
+    return res.json({
+      success: true,
+      created,
+      message: created
+        ? 'Firebase giriş hesabı oluşturuldu ve şifre atandı'
+        : 'Kullanıcı şifresi başarıyla güncellendi',
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Kullanıcı güncelleme başarısız';
     return res.status(500).json({ error: message });
