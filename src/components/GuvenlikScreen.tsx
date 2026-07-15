@@ -11,6 +11,7 @@ import { fetchApiJson } from '../lib/apiClient';
 import { collection, doc, setDoc, onSnapshot, addDoc, getDocs, deleteDoc } from 'firebase/firestore';
 import { CorporateReportLayout } from './CorporateReportLayout';
 import { KibritciLogo } from './KibritciLogo';
+import { openBase64InNewTab } from '../lib/fileViewerUtils';
 
 interface GuvenlikScreenProps {
   personeller: Personel[];
@@ -916,9 +917,11 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                                 <div className="text-[10px] text-indigo-500 font-mono mt-0.5">{e.id}</div>
                                 {e.fotoUrl && (
                                   <a
-                                    href={e.fotoUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
+                                    href="#"
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      openBase64InNewTab(e.fotoUrl, e.fileName || 'Belge');
+                                    }}
                                     className="text-[9px] text-indigo-600 hover:underline flex items-center gap-0.5 mt-1"
                                   >
                                     <span>👁️ Evrakı Görüntüle</span>

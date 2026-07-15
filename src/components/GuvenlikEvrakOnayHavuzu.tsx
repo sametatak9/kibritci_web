@@ -1,5 +1,6 @@
 import React from 'react';
 import { Truck, CreditCard, Eye, Check, X, Sparkles, ExternalLink, FileText } from 'lucide-react';
+import { openBase64InNewTab } from '../lib/fileViewerUtils';
 
 interface GuvenlikEvrakOnayHavuzuProps {
   pendingGateDocs: any[];
@@ -345,9 +346,11 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                 <span className="font-bold text-[10px] text-slate-400 uppercase tracking-widest">Evrak Görseli / Önizleme</span>
                 {activeGateDoc.fotoUrl && (
                   <a
-                    href={activeGateDoc.fotoUrl}
-                    target="_blank"
-                    rel="noreferrer"
+                    href="#"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      openBase64InNewTab(activeGateDoc.fotoUrl, activeGateDoc.fileName || 'Belge');
+                    }}
                     className="text-[10px] text-indigo-400 hover:underline flex items-center gap-1"
                   >
                     <ExternalLink size={12} />
@@ -369,9 +372,11 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                       <div className="text-5xl">📄</div>
                       <div className="text-xs text-slate-400">PDF veya Word Dosyası Yüklenmiş</div>
                       <a
-                        href={activeGateDoc.fotoUrl}
-                        target="_blank"
-                        rel="noreferrer"
+                        href="#"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          openBase64InNewTab(activeGateDoc.fotoUrl, activeGateDoc.fileName || 'Belge');
+                        }}
                         className="inline-block bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-xl text-xs font-bold transition"
                       >
                         Dosyayı İndir / Aç
