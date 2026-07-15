@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { 
   Users, Wallet, ShoppingCart, Truck, RefreshCw, 
   FileText, BarChart, ArrowUpRight, ArrowDownRight, Compass, Settings,
-  Search, ClipboardList, Briefcase, CalendarCheck2, ChevronRight, UserCheck, AlertTriangle, Tent
+  Search, ClipboardList, Briefcase, CalendarCheck2, ChevronRight, UserCheck, AlertTriangle, Tent,
+  MapPin, Sun, HelpCircle, Activity, ArrowRight, BookOpen, Plus, TrendingUp
 } from 'lucide-react';
 import { Personel, KasaHareketi, SatinAlmaTalebi, AracBakim, AylikYoklamaMap, KampOdasi, KampKaydi } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
@@ -138,77 +139,107 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     {
       title: "Aktif Kadro (Personel)",
       value: `${activePersonelCount} Kişi`,
-      color: "text-slate-800",
-      bg: "bg-blue-50 border-blue-100",
+      color: "text-blue-600",
+      iconBg: "bg-blue-50 text-blue-600 border-blue-100",
       icon: Users,
       trend: `Ana Firma: ${anaFirmaActiveCount} | Taşeron: ${taseronActiveCount}`,
-      trendColor: "text-blue-600 font-semibold"
+      trendColor: "text-slate-600 font-semibold"
     },
     {
       title: "Lojman Doluluk Oranı",
       value: `%${fillRatio}`,
       color: "text-emerald-600",
-      bg: "bg-emerald-50/70 border-emerald-100",
+      iconBg: "bg-emerald-50 text-emerald-600 border-emerald-100",
       icon: Compass,
       trend: `${occupiedBeds} / ${totalBeds} Yatak Dolu`,
-      trendColor: "text-emerald-400"
+      trendColor: "text-emerald-600 font-semibold"
     },
     {
       title: "Puantaj Katılım Oranı",
       value: `%${attendanceRate}`,
-      color: "text-[#8B1E1E]",
-      bg: "bg-rose-50/70 border-rose-100",
+      color: "text-rose-600",
+      iconBg: "bg-rose-50 text-rose-600 border-rose-100",
       icon: CalendarCheck2,
       trend: "Aylık Ortalama Katılım",
-      trendColor: "text-rose-400"
+      trendColor: "text-rose-600 font-semibold"
     },
     {
       title: "Bekleyen Onay Talepleri",
       value: `${totalPendingApprovals} Adet`,
       color: "text-amber-600",
-      bg: "bg-amber-50/70 border-amber-100",
+      iconBg: "bg-amber-50 text-amber-600 border-amber-100",
       icon: ClipboardList,
       trend: "Yönetici Kararı Bekleyen",
-      trendColor: "text-amber-600"
+      trendColor: "text-amber-600 font-semibold"
     }
   ];
 
   return (
-    <div className="flex-grow p-6 space-y-6 overflow-y-auto h-full font-sans bg-white/5">
+    <div className="flex-grow p-6 space-y-6 overflow-y-auto h-full font-sans bg-slate-55">
       
-      {/* Welcome Banner */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-slate-900 text-white rounded-3xl p-6 shadow-md relative overflow-hidden border border-slate-800 gap-4">
-        <div className="absolute right-0 top-0 w-64 h-64 bg-slate-800 rounded-full mix-blend-multiply filter blur-xl opacity-30 -translate-y-20 translate-x-10" />
-        <div className="absolute right-10 bottom-0 w-48 h-48 bg-[#1E4E78] rounded-full mix-blend-multiply filter blur-2xl opacity-15 translate-y-10" />
+      {/* Welcome Banner with Corporate Design */}
+      <div className="flex flex-col bg-gradient-to-r from-slate-950 via-[#1e293b] to-slate-950 text-white rounded-3xl p-6 shadow-lg relative overflow-hidden border border-slate-800 gap-6">
+        <div className="absolute right-0 top-0 w-64 h-64 bg-blue-600 rounded-full mix-blend-screen filter blur-[90px] opacity-10 -translate-y-20 translate-x-10 pointer-events-none" />
+        <div className="absolute left-1/3 bottom-0 w-48 h-48 bg-rose-600 rounded-full mix-blend-screen filter blur-[70px] opacity-5 translate-y-10 pointer-events-none" />
         
-        <div className="relative z-10 space-y-2 flex items-center space-x-4">
-          <KibritciLogo size="lg" className="mr-2" />
-          <div className="space-y-1">
-            <span className="bg-[#1E4E78]/25 text-slate-400 text-[10px] font-bold tracking-widest px-2.5 py-0.5 rounded-full border border-[#1E4E78]/30 uppercase block w-fit">
-              BULUT YÖNETSEL ÖZET PANELİ
-            </span>
-            <h2 className="font-display font-black text-xl tracking-tight text-white">
-              Şantiye Kontrol &amp; Raporlama Merkezi
-            </h2>
-            <p className="text-[11px] text-slate-350 font-sans tracking-tight max-w-lg leading-relaxed">
-              Google Cloud Firestore NoSQL canlı veritabanı aktif durumdadır. Personel, puantaj, satın alma talepleri ve hakediş harcamaları anlık senkronizedir.
-            </p>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center relative z-10 gap-4">
+          <div className="flex items-center space-x-4">
+            <div className="bg-slate-900/60 p-2.5 rounded-2xl border border-slate-800">
+              <KibritciLogo size="lg" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center space-x-2">
+                <span className="bg-blue-500/20 text-blue-300 text-[9px] font-black tracking-widest px-2.5 py-0.5 rounded-full border border-blue-500/30 uppercase block w-fit">
+                  BULUT YÖNETSEL ÖZET PANELİ
+                </span>
+                <span className="bg-emerald-500/20 text-emerald-300 text-[9px] font-black tracking-widest px-2.5 py-0.5 rounded-full border border-emerald-500/30 uppercase block w-fit">
+                  Realtime Aktif
+                </span>
+              </div>
+              <h2 className="font-display font-black text-2xl tracking-tight text-white">
+                Şantiye Kontrol &amp; Raporlama Merkezi
+              </h2>
+              <p className="text-[11px] text-slate-350 max-w-xl leading-relaxed">
+                Google Cloud Firestore NoSQL canlı veritabanı aktif durumdadır. Personel, puantaj, satın alma talepleri ve hakediş harcamaları anlık senkronizedir.
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex space-x-2 shrink-0 w-full md:w-auto">
+            <button 
+              onClick={() => onNavigate("satin_alma")} 
+              className="flex-1 md:flex-none bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:scale-95 text-white font-bold text-xs px-5 py-3 rounded-xl transition shadow-lg cursor-pointer flex items-center justify-center space-x-1"
+            >
+              <Plus size={14} className="stroke-[3]" />
+              <span>Yeni Satın Alma Talebi</span>
+            </button>
+            <button 
+              onClick={() => onNavigate("personel")} 
+              className="flex-1 md:flex-none bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 border border-slate-700 font-bold text-xs px-5 py-3 rounded-xl transition shadow cursor-pointer flex items-center justify-center"
+            >
+              Personel Düzenle
+            </button>
           </div>
         </div>
-        
-        <div className="relative z-10 flex space-x-2 shrink-0">
-          <button 
-            onClick={() => onNavigate("satin_alma")} 
-            className="bg-gradient-to-r from-[#1E4E78] to-[#B91C1C] hover:from-[#153a5c] hover:to-[#991b1b] active:scale-95 text-white font-bold text-[11px] px-4 py-2.5 rounded-xl transition shadow-md cursor-pointer"
-          >
-            + Yeni Satın Alma Talebi
-          </button>
-          <button 
-            onClick={() => onNavigate("personel")} 
-            className="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 border border-slate-700 font-semibold text-[11px] px-4 py-2.5 rounded-xl transition shadow-md cursor-pointer"
-          >
-            Personel Düzenle
-          </button>
+
+        {/* Live Operational Ticker Band */}
+        <div className="relative z-10 flex flex-wrap items-center gap-y-2 gap-x-6 pt-4 border-t border-slate-800/80 text-[10px] text-slate-400 font-mono">
+          <div className="flex items-center space-x-1.5">
+            <MapPin size={12} className="text-rose-500" />
+            <span>Gebze Şantiyesi Merkez Ofisi</span>
+          </div>
+          <span className="hidden sm:inline text-slate-700">|</span>
+          <div className="flex items-center space-x-1.5">
+            <Sun size={12} className="text-amber-500 animate-spin-slow" />
+            <span>29°C Açık Hava (Açık saha çalışmaları aktif)</span>
+          </div>
+          <span className="hidden md:inline text-slate-700">|</span>
+          <div className="flex items-center space-x-3 ml-auto">
+            <span className="text-slate-500">Satın Alma Döviz Takip:</span>
+            <span className="text-slate-300">USD: <strong className="text-emerald-455">32.84 TL</strong></span>
+            <span className="text-slate-350">EUR: <strong className="text-emerald-455">35.15 TL</strong></span>
+            <span className="text-slate-350">ALTIN: <strong className="text-amber-400">2,540 TL</strong></span>
+          </div>
         </div>
       </div>
 
@@ -217,7 +248,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         {stats.map((st, i) => {
           const Icon = st.icon;
           return (
-            <div key={i} className="p-4 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 text-slate-200 shadow-sm flex flex-col justify-between hover:shadow-md transition duration-200">
+            <div key={i} className="p-5 rounded-3xl bg-white border border-slate-250 text-slate-800 shadow-xs flex flex-col justify-between hover:shadow-md hover:border-slate-350 transition-all duration-200">
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
@@ -227,102 +258,165 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     {st.value}
                   </span>
                 </div>
-                <div className={`p-2 rounded-xl border ${st.bg} flex items-center justify-center shrink-0`}>
-                  <Icon size={18} className={`${st.color}`} />
+                <div className={`p-3 rounded-2xl border ${st.iconBg} flex items-center justify-center shrink-0`}>
+                  <Icon size={20} className="stroke-[2.5]" />
                 </div>
               </div>
-              <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-[10px]">
-                <span className="text-slate-400">Canlı Durum:</span>
-                <span className={`font-semibold ${st.trendColor}`}>{st.trend}</span>
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[10px]">
+                <span className="text-slate-400 font-semibold">Canlı Durum:</span>
+                <span className={st.trendColor}>{st.trend}</span>
               </div>
             </div>
           );
         })}
       </div>
 
+      {/* Quick Actions Hub (Hızlı Erişim Paneli) */}
+      <div className="space-y-2">
+        <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block pl-1">HIZLI ERİŞİM VE İŞLEMLER</h4>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div 
+            onClick={() => onNavigate("yoklama")} 
+            className="bg-white border border-slate-250 p-4 rounded-2xl hover:border-blue-400 hover:shadow-md transition-all duration-200 cursor-pointer flex items-center gap-3.5 group"
+          >
+            <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 group-hover:scale-110 transition duration-200 shrink-0">
+              <ClipboardList size={18} />
+            </div>
+            <div>
+              <h5 className="text-xs font-bold text-slate-800 group-hover:text-blue-600 transition">Yoklama &amp; Puantaj Girişi</h5>
+              <p className="text-[9.5px] text-slate-400 mt-0.5">Saha personelinin puantaj durumunu işle</p>
+            </div>
+            <ChevronRight size={14} className="ml-auto text-slate-350 group-hover:translate-x-0.5 transition" />
+          </div>
+
+          <div 
+            onClick={() => onNavigate("satin_alma")} 
+            className="bg-white border border-slate-250 p-4 rounded-2xl hover:border-indigo-400 hover:shadow-md transition-all duration-200 cursor-pointer flex items-center gap-3.5 group"
+          >
+            <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 group-hover:scale-110 transition duration-200 shrink-0">
+              <ShoppingCart size={18} />
+            </div>
+            <div>
+              <h5 className="text-xs font-bold text-slate-800 group-hover:text-indigo-600 transition">Satın Alma İstemi Aç</h5>
+              <p className="text-[9.5px] text-slate-400 mt-0.5">Şantiyeye yeni malzeme veya hizmet talep et</p>
+            </div>
+            <ChevronRight size={14} className="ml-auto text-slate-350 group-hover:translate-x-0.5 transition" />
+          </div>
+
+          <div 
+            onClick={() => onNavigate("kamp")} 
+            className="bg-white border border-slate-250 p-4 rounded-2xl hover:border-emerald-400 hover:shadow-md transition-all duration-200 cursor-pointer flex items-center gap-3.5 group"
+          >
+            <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 group-hover:scale-110 transition duration-200 shrink-0">
+              <Tent size={18} />
+            </div>
+            <div>
+              <h5 className="text-xs font-bold text-slate-800 group-hover:text-emerald-600 transition">Lojman &amp; Kamp Atama</h5>
+              <p className="text-[9.5px] text-slate-400 mt-0.5">Personeli uygun odalara ve yataklara yerleştir</p>
+            </div>
+            <ChevronRight size={14} className="ml-auto text-slate-350 group-hover:translate-x-0.5 transition" />
+          </div>
+
+          <div 
+            onClick={() => onNavigate("kasa")} 
+            className="bg-white border border-slate-250 p-4 rounded-2xl hover:border-amber-500 hover:shadow-md transition-all duration-200 cursor-pointer flex items-center gap-3.5 group"
+          >
+            <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600 border border-amber-100 group-hover:scale-110 transition duration-200 shrink-0">
+              <Wallet size={18} />
+            </div>
+            <div>
+              <h5 className="text-xs font-bold text-slate-800 group-hover:text-amber-600 transition">Haftalık Kasa Yönetimi</h5>
+              <p className="text-[9.5px] text-slate-400 mt-0.5">Şantiye nakit giriş-çıkış evraklarını işle</p>
+            </div>
+            <ChevronRight size={14} className="ml-auto text-slate-350 group-hover:translate-x-0.5 transition" />
+          </div>
+        </div>
+      </div>
+
       {/* Visual Analytics Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Attendance Progress */}
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 text-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+        
+        {/* Attendance Progress Card */}
+        <div className="bg-white border border-slate-200/85 text-slate-800 rounded-3xl p-5 shadow-xs space-y-4 hover:shadow-md transition duration-200">
           <div className="flex items-center justify-between">
-            <h3 className="font-bold text-white text-xs">Puantaj Katılım Durumu</h3>
-            <CalendarCheck2 size={16} className="text-slate-400" />
+            <h3 className="font-bold text-slate-850 text-xs uppercase tracking-wider">Puantaj Katılım Durumu</h3>
+            <CalendarCheck2 size={16} className="text-rose-500" />
           </div>
           <div>
             <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-1.5">
               <span>Genel Katılım</span>
-              <span className="text-slate-200">% {attendanceRate}</span>
+              <span className="text-slate-800 font-mono">% {attendanceRate}</span>
             </div>
-            <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200">
+            <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200/40">
               <div 
                 className="bg-gradient-to-r from-rose-400 to-[#8B1E1E] h-full rounded-full transition-all duration-1000 ease-out" 
                 style={{ width: `${Math.max(0, Math.min(100, attendanceRate))}%` }} 
               />
             </div>
           </div>
-          <p className="text-[10px] text-slate-400 leading-relaxed">
+          <p className="text-[10px] text-slate-400 leading-relaxed font-semibold">
             Bu ayki yoklama verilerine göre personelin sahada bulunma oranını gösterir.
           </p>
         </div>
 
-        {/* Camp Occupancy */}
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 text-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+        {/* Camp Occupancy Card */}
+        <div className="bg-white border border-slate-200/85 text-slate-800 rounded-3xl p-5 shadow-xs space-y-4 hover:shadow-md transition duration-200">
           <div className="flex items-center justify-between">
-            <h3 className="font-bold text-white text-xs">Kamp & Lojman Doluluğu</h3>
-            <Tent size={16} className="text-slate-400" />
+            <h3 className="font-bold text-slate-850 text-xs uppercase tracking-wider">Kamp & Lojman Doluluğu</h3>
+            <Tent size={16} className="text-emerald-500" />
           </div>
           <div>
             <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-1.5">
               <span>Dolu Yatak</span>
-              <span className="text-slate-200">{occupiedBeds} / {totalBeds} Yatak</span>
+              <span className="text-slate-800 font-mono">{occupiedBeds} / {totalBeds} Yatak</span>
             </div>
-            <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200">
+            <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200/40">
               <div 
                 className="bg-gradient-to-r from-emerald-400 to-emerald-600 h-full rounded-full transition-all duration-1000 ease-out" 
                 style={{ width: `${Math.max(0, Math.min(100, fillRatio))}%` }} 
               />
             </div>
           </div>
-          <p className="text-[10px] text-slate-400 leading-relaxed">
+          <p className="text-[10px] text-slate-400 leading-relaxed font-semibold">
             Kamp alanındaki aktif konaklama oranını ve kullanılabilir kapasiteyi gösterir.
           </p>
         </div>
 
-        {/* Personnel Status */}
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 text-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+        {/* Personnel Status Card */}
+        <div className="bg-white border border-slate-200/85 text-slate-800 rounded-3xl p-5 shadow-xs space-y-4 hover:shadow-md transition duration-200">
           <div className="flex items-center justify-between">
-            <h3 className="font-bold text-white text-xs">Kadro Aktivasyon Durumu</h3>
-            <Users size={16} className="text-slate-400" />
+            <h3 className="font-bold text-slate-850 text-xs uppercase tracking-wider">Kadro Aktivasyon Durumu</h3>
+            <Users size={16} className="text-blue-500" />
           </div>
           <div>
             <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-1.5">
               <span>Aktif Çalışanlar</span>
-              <span className="text-slate-200">{activePersonelCount} / {totalPersonel} Kişi</span>
+              <span className="text-slate-800 font-mono">{activePersonelCount} / {totalPersonel} Kişi</span>
             </div>
-            <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200">
+            <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200/40">
               <div 
-                className="bg-gradient-to-r from-[#1E4E78] to-blue-600 h-full rounded-full transition-all duration-1000 ease-out" 
+                className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full rounded-full transition-all duration-1000 ease-out" 
                 style={{ width: `${totalPersonel > 0 ? Math.round((activePersonelCount / totalPersonel) * 100) : 0}%` }} 
               />
             </div>
           </div>
-          <p className="text-[10px] text-slate-400 leading-relaxed">
+          <p className="text-[10px] text-slate-400 leading-relaxed font-semibold">
             Sisteme kayıtlı toplam personel ile şu anda aktif çalışan personelin oranını gösterir.
           </p>
         </div>
       </div>
 
       {/* 📘 Şantiye Hızlı Kılavuz & Sistem Rehberi */}
-      <div className="bg-white/5 backdrop-blur-xl border border-white/10 text-slate-200 rounded-3xl p-6 shadow-sm space-y-4 relative overflow-hidden bg-gradient-to-r from-slate-50/20 to-transparent">
-        <div className="absolute right-0 top-0 w-32 h-32 bg-white/50 rounded-full mix-blend-multiply filter blur-3xl opacity-5 -translate-y-10 translate-x-10" />
+      <div className="bg-white border border-slate-250 text-slate-800 rounded-3xl p-6 shadow-xs space-y-4 relative overflow-hidden bg-gradient-to-r from-slate-50/20 to-transparent hover:shadow-md transition duration-200">
+        <div className="absolute right-0 top-0 w-32 h-32 bg-slate-105 rounded-full mix-blend-multiply filter blur-3xl opacity-50 -translate-y-10 translate-x-10" />
         <div className="space-y-1">
-          <span className="bg-white/50/10 text-white text-[9px] font-black tracking-wider px-2.5 py-0.5 rounded-full border border-slate-800/10 uppercase">
+          <span className="bg-slate-100 text-slate-500 text-[9px] font-black tracking-wider px-2.5 py-0.5 rounded-full border border-slate-200 uppercase">
             EĞİTİM &amp; PRATİK KULLANIM REHBERLERİ
           </span>
-          <h3 className="font-display font-black text-white text-sm tracking-tight">
+          <h3 className="font-display font-black text-slate-900 text-sm tracking-tight pt-1">
             📘 Kibritçi ERP Şantiye Kullanım Kılavuzu
           </h3>
-          <p className="text-[11px] text-slate-400 max-w-2xl">
+          <p className="text-[11px] text-slate-500 max-w-2xl leading-relaxed font-semibold">
             Aşağıdaki kartlar şantiyede sıkça yapılan operasyonların nasıl yürütüleceğini açıklar. İlgili modüle hızlıca gitmek için kılavuz başlıklarına tıklayabilirsiniz.
           </p>
         </div>
@@ -330,52 +424,52 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
           <div 
             onClick={() => onNavigate("yoklama")} 
-            className="p-3.5 rounded-2xl bg-white/5 hover:bg-slate-100 border border-white/10 hover:border-slate-200 transition duration-200 cursor-pointer space-y-1.5 group"
+            className="p-3.5 rounded-2xl bg-white hover:bg-blue-50/40 border border-slate-200 hover:border-blue-200 transition duration-200 cursor-pointer space-y-1.5 group"
           >
-            <div className="flex items-center justify-between text-white font-bold text-xs">
+            <div className="flex items-center justify-between text-blue-600 font-bold text-xs">
               <span className="group-hover:underline">1. Yoklama &amp; Puantaj</span>
-              <span>→</span>
+              <ArrowRight size={12} className="group-hover:translate-x-0.5 transition" />
             </div>
-            <p className="text-[10px] text-slate-400 leading-relaxed">
+            <p className="text-[10px] text-slate-450 leading-relaxed font-semibold">
               Her sabah çalışanların şantiye durumlarını girin. AI ile yoklama kağıdının fotoğrafını çekip otomatik sisteme yükleyebilirsiniz.
             </p>
           </div>
 
           <div 
             onClick={() => onNavigate("satin_alma")} 
-            className="p-3.5 rounded-2xl bg-white/5 hover:bg-amber-55/45 border border-white/10 hover:border-amber-200 transition duration-200 cursor-pointer space-y-1.5 group"
+            className="p-3.5 rounded-2xl bg-white hover:bg-amber-50/40 border border-slate-200 hover:border-amber-200 transition duration-200 cursor-pointer space-y-1.5 group"
           >
-            <div className="flex items-center justify-between text-amber-400 font-bold text-xs">
+            <div className="flex items-center justify-between text-amber-600 font-bold text-xs">
               <span className="group-hover:underline">2. Satın Alma Talebi</span>
-              <span>→</span>
+              <ArrowRight size={12} className="group-hover:translate-x-0.5 transition" />
             </div>
-            <p className="text-[10px] text-slate-400 leading-relaxed">
+            <p className="text-[10px] text-slate-450 leading-relaxed font-semibold">
               Şantiyeye gerekli olan malzeme veya hizmet taleplerini oluşturun. Talebiniz yöneticinin Onay Havuzuna düşer.
             </p>
           </div>
 
           <div 
             onClick={() => onNavigate("kamp")} 
-            className="p-3.5 rounded-2xl bg-white/5 hover:bg-emerald-55/40 border border-white/10 hover:border-emerald-200 transition duration-200 cursor-pointer space-y-1.5 group"
+            className="p-3.5 rounded-2xl bg-white hover:bg-emerald-50/40 border border-slate-200 hover:border-emerald-200 transition duration-200 cursor-pointer space-y-1.5 group"
           >
-            <div className="flex items-center justify-between text-emerald-400 font-bold text-xs">
+            <div className="flex items-center justify-between text-emerald-600 font-bold text-xs">
               <span className="group-hover:underline">3. Lojman &amp; Kamp</span>
-              <span>→</span>
+              <ArrowRight size={12} className="group-hover:translate-x-0.5 transition" />
             </div>
-            <p className="text-[10px] text-slate-400 leading-relaxed">
+            <p className="text-[10px] text-slate-455 leading-relaxed font-semibold">
               Kamp Yönetimi altından yatak atamalarını yapın. Personelin lojmana giriş-çıkış tarihlerini canlı takip edebilirsiniz.
             </p>
           </div>
 
           <div 
             onClick={() => onNavigate("arac")} 
-            className="p-3.5 rounded-2xl bg-white/5 hover:bg-purple-55/40 border border-white/10 hover:border-purple-200 transition duration-200 cursor-pointer space-y-1.5 group"
+            className="p-3.5 rounded-2xl bg-white hover:bg-indigo-50/40 border border-slate-200 hover:border-indigo-200 transition duration-200 cursor-pointer space-y-1.5 group"
           >
-            <div className="flex items-center justify-between text-purple-700 font-bold text-xs">
+            <div className="flex items-center justify-between text-indigo-600 font-bold text-xs">
               <span className="group-hover:underline">4. Şoför &amp; Araç KM</span>
-              <span>→</span>
+              <ArrowRight size={12} className="group-hover:translate-x-0.5 transition" />
             </div>
-            <p className="text-[10px] text-slate-400 leading-relaxed">
+            <p className="text-[10px] text-slate-455 leading-relaxed font-semibold">
               Şoförlerin sabah/akşam KM seyrini girin. Muayene ve yağ bakımı sayaçlarını araç panelinden sürekli izleyin.
             </p>
           </div>
@@ -386,11 +480,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         
         {/* Left 2 Cols: Grafik ve Puantaj */}
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl text-slate-200 p-5 shadow-sm space-y-4 xl:col-span-2">
-          <div className="flex justify-between items-center border-b border-rose-100 pb-3">
+        <div className="bg-white border border-slate-250 rounded-3xl text-slate-800 p-5 shadow-xs space-y-4 xl:col-span-2 hover:shadow-md transition duration-200">
+          <div className="flex justify-between items-center border-b border-slate-100 pb-3">
             <div className="flex items-center space-x-2">
-              <BarChart size={16} className="text-[#8B1E1E]" />
-              <h3 className="font-display font-black text-white uppercase text-xs tracking-wider">
+              <BarChart size={16} className="text-blue-600" />
+              <h3 className="font-display font-black text-slate-800 uppercase text-xs tracking-wider">
                 Aylık Puantaj ve Mesai Oran Analizi
               </h3>
             </div>
@@ -399,20 +493,20 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
           <div className="h-44 w-full flex items-end justify-between px-2 pt-4 relative">
             <div className="absolute inset-y-0 left-0 right-0 flex flex-col justify-between pointer-events-none pb-4">
-              <div className="border-b border-white/5 w-full" />
-              <div className="border-b border-white/5 w-full" />
-              <div className="border-b border-white/5 w-full" />
-              <div className="border-b border-white/10 w-full" />
+              <div className="border-b border-slate-100 w-full" />
+              <div className="border-b border-slate-100 w-full" />
+              <div className="border-b border-slate-100 w-full" />
+              <div className="border-b border-slate-200 w-full" />
             </div>
 
             {[
-              { label: "01 Haz", height: "h-20", value: "3", fill: "bg-gradient-to-t from-slate-100 to-slate-50" },
-              { label: "05 Haz", height: "h-28", value: "5", fill: "bg-gradient-to-t from-[#1E4E78] to-slate-50" },
-              { label: "10 Haz", height: "h-14", value: "2", fill: "bg-gradient-to-t from-[#8B1E1E] to-red-500" },
+              { label: "01 Haz", height: "h-20", value: "3", fill: "bg-gradient-to-t from-slate-200 to-slate-400" },
+              { label: "05 Haz", height: "h-28", value: "5", fill: "bg-gradient-to-t from-blue-600 to-indigo-500" },
+              { label: "10 Haz", height: "h-14", value: "2", fill: "bg-gradient-to-t from-rose-500 to-[#8B1E1E]" },
               { label: "15 Haz", height: "h-36", value: "8", fill: "bg-gradient-to-t from-emerald-500 to-emerald-400" },
-              { label: "20 Haz", height: "h-28", value: "6", fill: "bg-gradient-to-t from-[#1E4E78] to-slate-50" },
-              { label: "25 Haz", height: "h-32", value: "7", fill: "bg-gradient-to-t from-slate-100 to-slate-900" },
-              { label: "30 Haz", height: "h-40", value: "9", fill: "bg-gradient-to-t from-[#1E4E78] to-[#8B1E1E]" },
+              { label: "20 Haz", height: "h-28", value: "6", fill: "bg-gradient-to-t from-blue-600 to-indigo-500" },
+              { label: "25 Haz", height: "h-32", value: "7", fill: "bg-gradient-to-t from-slate-300 to-slate-500" },
+              { label: "30 Haz", height: "h-40", value: "9", fill: "bg-gradient-to-t from-blue-800 to-slate-900" },
             ].map((bar, idx) => (
               <div key={idx} className="flex flex-col items-center space-y-2 group relative z-10 w-12">
                 <div className="opacity-0 group-hover:opacity-100 absolute -top-6 bg-slate-900 text-white text-[9px] font-mono font-bold px-1.5 py-0.5 rounded shadow transition-opacity select-none z-20">
@@ -426,30 +520,30 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             ))}
           </div>
 
-          <div className="flex justify-between items-center text-[10px] text-slate-400 pt-3 border-t border-white/5 font-sans">
+          <div className="flex justify-between items-center text-[10px] text-slate-400 pt-3 border-t border-slate-100 font-sans">
             <div className="flex items-center space-x-3">
               <span className="flex items-center space-x-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#1E4E78] inline-block" />
-                <span>Normal Mesailer</span>
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block" />
+                <span className="font-semibold text-slate-500">Normal Mesailer</span>
               </span>
               <span className="flex items-center space-x-1">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#8B1E1E] inline-block" />
-                <span>Haftalık Tatili</span>
+                <span className="font-semibold text-slate-500">Haftalık Tatili</span>
               </span>
               <span className="flex items-center space-x-1">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
-                <span>Hakediş Günü</span>
+                <span className="font-semibold text-slate-500">Hakediş Günü</span>
               </span>
             </div>
-            <span className="font-mono">Günlük Verim İncelemesi</span>
+            <span className="font-mono text-slate-400 font-semibold">Günlük Verim İncelemesi</span>
           </div>
         </div>
 
         {/* Right 1 Col: Dynamic Personnel History Finder */}
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl text-slate-200 p-5 shadow-sm flex flex-col space-y-4">
-          <div className="border-b border-rose-100 pb-3 flex items-center space-x-2">
-            <ClipboardList size={16} className="text-[#8B1E1E]" />
-            <h3 className="font-display font-black text-white text-xs uppercase tracking-wider">
+        <div className="bg-white border border-slate-250 rounded-3xl text-slate-800 p-5 shadow-xs flex flex-col space-y-4 hover:shadow-md transition duration-200">
+          <div className="border-b border-slate-100 pb-3 flex items-center space-x-2">
+            <ClipboardList size={16} className="text-blue-600" />
+            <h3 className="font-display font-black text-slate-800 text-xs uppercase tracking-wider">
               Personel İşlem Geçmişi Sorgula
             </h3>
           </div>
@@ -461,7 +555,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
               <select
                 value={selectedPersonelId}
                 onChange={(e) => setSelectedPersonelId(e.target.value)}
-                className="w-full bg-white/5 border border-slate-200 text-xs rounded-xl p-2.5 font-semibold text-slate-200 outline-none focus:border-[#8B1E1E] transition cursor-pointer"
+                className="w-full bg-slate-55 border border-slate-200 text-xs rounded-xl p-2.5 font-semibold text-slate-700 outline-none focus:border-blue-500 transition cursor-pointer animate-fade-in"
               >
                 <option value="">-- Personel Seçin --</option>
                 {personeller.map(p => (
@@ -473,9 +567,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
           {/* Selected Personnel Tracing Summary */}
           {!selectedPersonelId ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-400 space-y-2 border border-dashed border-white/10 rounded-2xl bg-white/5/50">
-              <Users size={30} className="stroke-[1.5] text-slate-300" />
-              <p className="text-[11px] leading-relaxed">
+            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-400 space-y-2 border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+              <Users size={30} className="stroke-[1.5] text-slate-400" />
+              <p className="text-[11px] leading-relaxed font-semibold text-slate-450">
                 Şantiyedeki bir personeli seçerek araç sevklerini, puantaj kaydını, satın alma taleplerini ve zimmet dosya geçmişini anında listeleyin.
               </p>
             </div>
@@ -483,16 +577,16 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             <div className="flex-grow space-y-4 max-h-[300px] overflow-y-auto pr-1">
               
               {/* Individual Base Info */}
-              <div className="bg-white/5 border p-3 rounded-xl flex items-center space-x-3">
-                <div className="w-9 h-9 rounded-full bg-[#1E4E78] text-white flex items-center justify-center font-bold font-display text-xs">
+              <div className="bg-slate-50 border border-slate-200/60 p-3 rounded-xl flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold font-display text-xs">
                   {traceData?.person.ad[0]}{traceData?.person.soyad[0]}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-white truncate">{traceData?.person.ad} {traceData?.person.soyad}</p>
+                  <p className="text-xs font-bold text-slate-800 truncate">{traceData?.person.ad} {traceData?.person.soyad}</p>
                   <p className="text-[10px] text-slate-400 font-semibold truncate">{traceData?.person.gorev} · {traceData?.person.departman}</p>
                 </div>
                 <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                  traceData?.person.durum ? 'bg-emerald-50 text-emerald-400 border border-emerald-100' : 'bg-rose-50 text-rose-400 border border-rose-100'
+                  traceData?.person.durum ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100'
                 }`}>
                   {traceData?.person.durum ? 'AKTİF KADRO' : 'AYRILMIŞ'}
                 </span>
@@ -502,19 +596,19 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
               <div className="space-y-1.5">
                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Yoklama / Puantaj Karnesi</span>
                 <div className="grid grid-cols-4 gap-2 text-center text-[10px] font-bold">
-                  <div className="bg-emerald-50 text-emerald-400 p-1.5 rounded-lg border border-emerald-100">
+                  <div className="bg-emerald-50 text-emerald-600 p-1.5 rounded-lg border border-emerald-100">
                     <p className="text-xs font-mono font-bold leading-none">{traceData?.attendance.geldi}</p>
                     <span className="text-[8px] font-semibold text-slate-400 block mt-1">Geldi</span>
                   </div>
-                  <div className="bg-rose-50 text-rose-400 p-1.5 rounded-lg border border-rose-100">
+                  <div className="bg-rose-50 text-rose-600 p-1.5 rounded-lg border border-rose-100">
                     <p className="text-xs font-mono font-bold leading-none">{traceData?.attendance.yok}</p>
                     <span className="text-[8px] font-semibold text-slate-400 block mt-1">Yok</span>
                   </div>
-                  <div className="bg-amber-50 text-amber-400 p-1.5 rounded-lg border border-amber-100">
+                  <div className="bg-amber-50 text-amber-600 p-1.5 rounded-lg border border-amber-100">
                     <p className="text-xs font-mono font-bold leading-none">{traceData?.attendance.izinli}</p>
                     <span className="text-[8px] font-semibold text-slate-400 block mt-1">İzin</span>
                   </div>
-                  <div className="bg-white/5 text-white p-1.5 rounded-lg border border-slate-200">
+                  <div className="bg-slate-100 text-slate-700 p-1.5 rounded-lg border border-slate-200">
                     <p className="text-xs font-mono font-bold leading-none">{traceData?.attendance.raporlu}</p>
                     <span className="text-[8px] font-semibold text-slate-400 block mt-1">Rapor</span>
                   </div>
@@ -529,9 +623,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 ) : (
                   <div className="space-y-1">
                     {traceData?.vehicles.map(v => (
-                      <div key={v.id} className="p-2 border bg-white rounded-lg flex justify-between items-center text-[10px]">
-                        <span className="font-bold text-white bg-slate-100 px-1.5 py-0.5 rounded font-mono">{v.plaka}</span>
-                        <span className="text-slate-400 font-semibold">{v.markaModel}</span>
+                      <div key={v.id} className="p-2 border border-slate-200 bg-slate-50 rounded-lg flex justify-between items-center text-[10px]">
+                        <span className="font-bold text-slate-700 bg-white border px-1.5 py-0.5 rounded font-mono">{v.plaka}</span>
+                        <span className="text-slate-500 font-semibold">{v.markaModel}</span>
                         <span className="text-amber-600 font-bold font-mono">{v.mevcutKm} KM</span>
                       </div>
                     ))}
@@ -547,10 +641,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 ) : (
                   <div className="space-y-1">
                     {traceData?.kmLogs.slice(0, 3).map((log, i) => (
-                      <div key={i} className="p-2 border bg-[#FAF9F5] rounded-lg text-[9px] flex justify-between items-center">
+                      <div key={i} className="p-2 border border-slate-200 bg-slate-50 rounded-lg text-[9px] flex justify-between items-center">
                         <span className="font-mono text-slate-400">{log.tarih}</span>
-                        <span className="font-bold text-white">{log.plaka}</span>
-                        <span className="text-slate-600">Fark: <strong>{log.fark} KM</strong></span>
+                        <span className="font-bold text-slate-700">{log.plaka}</span>
+                        <span className="text-slate-500">Fark: <strong>{log.fark} KM</strong></span>
                       </div>
                     ))}
                   </div>
@@ -565,12 +659,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 ) : (
                   <div className="space-y-1">
                     {traceData?.purchases.slice(0, 3).map(sa => (
-                      <div key={sa.id} className="p-2 border bg-white rounded-lg text-[10px] flex justify-between items-center">
+                      <div key={sa.id} className="p-2 border border-slate-200 bg-slate-50 rounded-lg text-[10px] flex justify-between items-center">
                         <div>
-                          <p className="font-bold text-white truncate max-w-[130px]">{sa.aciklama}</p>
+                          <p className="font-bold text-slate-700 truncate max-w-[130px]">{sa.aciklama}</p>
                           <span className="font-mono text-[8px] text-slate-400">{sa.saId}</span>
                         </div>
-                        <span className="text-[9px] font-bold bg-amber-50 text-amber-400 px-1.5 py-0.5 rounded border border-amber-100">{sa.onayDurumu}</span>
+                        <span className="text-[9px] font-bold bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded border border-amber-100">{sa.onayDurumu}</span>
                       </div>
                     ))}
                   </div>
@@ -588,7 +682,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   const activeVehiclesHtml = traceData.vehicles.length === 0 
                     ? `<tr><td colspan="3" class="p-2.5 text-slate-400 italic text-center">Zimmetli araç bulunmuyor.</td></tr>`
                     : traceData.vehicles.map(v => `
-                      <tr class="border-b">
+                      <tr class="border-b text-slate-700">
                         <td class="p-2.5 font-bold">${v.plaka}</td>
                         <td class="p-2.5">${v.markaModel}</td>
                         <td class="p-2.5 font-mono text-amber-600 font-bold">${v.mevcutKm.toLocaleString('tr-TR')} KM</td>
@@ -598,17 +692,17 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   const kmLogsHtml = traceData.kmLogs.length === 0
                     ? `<tr><td colspan="3" class="p-2.5 text-slate-400 italic text-center">Kilometre sefer kaydı bulunamadı.</td></tr>`
                     : traceData.kmLogs.map(log => `
-                      <tr class="border-b">
+                      <tr class="border-b text-slate-700">
                         <td class="p-2.5 font-mono text-slate-400">${log.tarih}</td>
-                        <td class="p-2.5 font-bold text-slate-200">${log.plaka}</td>
-                        <td class="p-2.5 font-mono font-bold text-white">${log.fark} KM</td>
+                        <td class="p-2.5 font-bold">${log.plaka}</td>
+                        <td class="p-2.5 font-mono font-bold">${log.fark} KM</td>
                       </tr>
                     `).join('');
 
                   const purchasesHtml = traceData.purchases.length === 0
                     ? `<tr><td colspan="4" class="p-2.5 text-slate-400 italic text-center">Talep edilen malzeme bulunmuyor.</td></tr>`
                     : traceData.purchases.map(sa => `
-                      <tr class="border-b">
+                      <tr class="border-b text-slate-700">
                         <td class="p-2.5 font-mono text-xs font-bold">${sa.saId}</td>
                         <td class="p-2.5 font-bold">${sa.aciklama || 'Genel Şantiye Malzemesi'}</td>
                         <td class="p-2.5 font-mono text-slate-400">${sa.tarih}</td>
@@ -623,7 +717,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         <title>Personel İşlem Geçmişi Raporu - ${p.ad} ${p.soyad}</title>
                         <script src="https://cdn.tailwindcss.com"></script>
                       </head>
-                      <body class="p-12 bg-white text-white font-sans">
+                      <body class="p-12 bg-white text-slate-800 font-sans">
                         <div class="max-w-4xl mx-auto space-y-8">
                           
                           <!-- Header -->
@@ -635,23 +729,23 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                               </div>
                             </div>
                             <div class="text-right text-xs">
-                              <span class="border border-slate-900 text-[10px] font-bold px-3 py-1 bg-white/5 uppercase tracking-widest block mb-1">KBR-PERS-DOC-${Date.now()}</span>
+                              <span class="border border-slate-900 text-[10px] font-bold px-3 py-1 bg-slate-50 uppercase tracking-widest block mb-1">KBR-PERS-DOC-${Date.now()}</span>
                               <span class="text-slate-400 font-mono text-[9px]">Oluşturulma: ${new Date().toLocaleDateString('tr-TR')}</span>
                             </div>
                           </div>
 
                           <!-- Title -->
                           <div class="text-center">
-                            <h2 class="text-base font-bold text-white tracking-wider uppercase border-y border-slate-200 py-2.5 bg-white/5">
+                            <h2 class="text-base font-bold text-slate-800 tracking-wider uppercase border-y border-slate-200 py-2.5 bg-slate-50">
                               PERSONEL SAHA GEÇMİŞİ VE PORTAL FAALİYET RAPORU
                             </h2>
                           </div>
 
                           <!-- Person Details Grid -->
-                          <div class="grid grid-cols-2 gap-4 border p-4 rounded-xl bg-white/5/50">
+                          <div class="grid grid-cols-2 gap-4 border p-4 rounded-xl bg-slate-50">
                             <div>
                               <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">PERSONEL ADI SOYADI</p>
-                              <p class="text-sm font-black text-white mt-0.5">${p.ad} ${p.soyad}</p>
+                              <p class="text-sm font-black text-slate-900 mt-0.5">${p.ad} ${p.soyad}</p>
                             </div>
                             <div>
                               <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">DEPARTMAN & GÖREV</p>
@@ -659,11 +753,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                             </div>
                             <div class="mt-2">
                               <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">TC KİMLİK NUMARASI</p>
-                              <p class="text-xs font-mono font-bold text-slate-600 mt-0.5">${p.tcNo || 'Belirtilmedi'}</p>
+                              <p class="text-xs font-mono font-bold text-slate-650 mt-0.5">${p.tcNo || 'Belirtilmedi'}</p>
                             </div>
                             <div class="mt-2">
                               <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">FİİLİ ÇALIŞMA DURUMU</p>
-                              <p class="text-xs font-bold text-emerald-400 mt-0.5">AKTİF ŞANTİYE WH-KADROSU</p>
+                              <p class="text-xs font-bold text-emerald-600 mt-0.5">AKTİF ŞANTİYE WH-KADROSU</p>
                             </div>
                           </div>
 
@@ -685,7 +779,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                 <p class="text-base font-mono font-black">${traceData.attendance.izinli}</p>
                                 <span class="text-[10px] text-slate-400 font-normal">İzinli Gün</span>
                               </div>
-                              <div class="bg-white/5 border border-slate-200 text-white p-3 rounded-xl">
+                              <div class="bg-slate-50 border border-slate-200 text-slate-700 p-3 rounded-xl">
                                 <p class="text-base font-mono font-black">${traceData.attendance.raporlu}</p>
                                 <span class="text-[10px] text-slate-400 font-normal">Raporlu Gün</span>
                               </div>
@@ -697,9 +791,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                             <h3 class="text-xs font-extrabold text-[#1E4E78] uppercase tracking-wider flex items-center gap-1.5">
                               🚗 2. Üzerine Zimmetli Şantiye Araç Demirbaşları
                             </h3>
-                            <table class="w-full text-left text-xs text-slate-200 border">
+                            <table class="w-full text-left text-xs text-slate-800 border">
                               <thead>
-                                <tr class="bg-white/5 border-b">
+                                <tr class="bg-slate-50 border-b">
                                   <th class="p-2.5 text-left font-bold">Plaka</th>
                                   <th class="p-2.5 text-left font-bold">Marka & Model</th>
                                   <th class="p-2.5 text-left font-bold">Mevcut Kilometre</th>
@@ -716,9 +810,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                             <h3 class="text-xs font-extrabold text-[#1E4E78] uppercase tracking-wider flex items-center gap-1.5">
                               📈 3. Sürüş ve Seyahat Kilometre Kayıtları (Son Seferler)
                             </h3>
-                            <table class="w-full text-left text-xs text-slate-200 border">
+                            <table class="w-full text-left text-xs text-slate-800 border">
                               <thead>
-                                <tr class="bg-white/5 border-b">
+                                <tr class="bg-slate-50 border-b">
                                   <th class="p-2.5 text-left font-bold">Sefer Tarihi</th>
                                   <th class="p-2.5 text-left font-bold">Kullanılan Araç Plakası</th>
                                   <th class="p-2.5 text-left font-bold">Gidilen Yol Farkı</th>
@@ -735,9 +829,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                             <h3 class="text-xs font-extrabold text-[#1E4E78] uppercase tracking-wider flex items-center gap-1.5">
                               🛒 4. Görevliye Bağlı Satın Alma / Malzeme İstihkak Talepleri
                             </h3>
-                            <table class="w-full text-left text-xs text-slate-200 border">
+                            <table class="w-full text-left text-xs text-slate-800 border">
                               <thead>
-                                <tr class="bg-slate-55 border-b">
+                                <tr class="bg-slate-50 border-b">
                                   <th class="p-2.5 text-left font-bold">İşlem Kodu</th>
                                   <th class="p-2.5 text-left font-bold">Malzeme Açıklaması</th>
                                   <th class="p-2.5 text-left font-bold">Tarih</th>
@@ -755,34 +849,34 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                             <div class="bg-[#1E4E78] text-white p-2 text-[10px] font-bold uppercase tracking-wider mb-6 rounded-md">
                               📌 RESMİ ŞANTİYE REFAKAT VE PERSONEL SİCİL MUTABAKAT MERCİLERİ
                             </div>
-                            <div class="grid grid-cols-4 gap-4 text-center">
+                            <div class="grid grid-cols-4 gap-4 text-center text-slate-800">
                               
-                              <div class="border border-slate-200 p-3 rounded-xl bg-white/5/50">
+                              <div class="border border-slate-200 p-3 rounded-xl bg-slate-50">
                                 <span class="font-extrabold text-[#8B1E1E] tracking-wider uppercase block mb-1">1. MUHASEBE</span>
                                 <span class="text-[10px] text-slate-400 block mb-6">Bordro Masası</span>
-                                <div class="h-10 border-b border-dashed border-slate-350 w-24 mx-auto mb-2"></div>
-                                <span class="text-[10px] font-bold text-white block">Bordro Yetkilisi</span>
+                                <div class="h-10 border-b border-dashed border-slate-300 w-24 mx-auto mb-2"></div>
+                                <span class="text-[10px] font-bold block">Bordro Yetkilisi</span>
                               </div>
 
-                              <div class="border border-slate-200 p-3 rounded-xl bg-white/5/50">
+                              <div class="border border-slate-200 p-3 rounded-xl bg-slate-50">
                                 <span class="font-extrabold text-[#1E4E78] tracking-wider uppercase block mb-1">2. İDARİ İŞLER</span>
                                 <span class="text-[10px] text-slate-400 block mb-6">Şantiye Şefliği</span>
-                                <div class="h-10 border-b border-dashed border-slate-350 w-24 mx-auto mb-2"></div>
-                                <span class="text-[10px] font-bold text-white block">İdari İşler Şefi</span>
+                                <div class="h-10 border-b border-dashed border-slate-300 w-24 mx-auto mb-2"></div>
+                                <span class="text-[10px] font-bold block">İdari İşler Şefi</span>
                               </div>
 
-                              <div class="border border-slate-200 p-3 rounded-xl bg-white/5/50">
+                              <div class="border border-slate-200 p-3 rounded-xl bg-slate-50">
                                 <span class="font-extrabold text-[#1E4E78] tracking-wider uppercase block mb-1">3. ŞANTİYE ŞEFİ</span>
                                 <span class="text-[10px] text-slate-400 block mb-6">Fiili Saha Mühendisi</span>
-                                <div class="h-10 border-b border-dashed border-slate-350 w-24 mx-auto mb-2"></div>
-                                <span class="text-[10px] font-bold text-white block">Şantiye Şefi</span>
+                                <div class="h-10 border-b border-dashed border-slate-300 w-24 mx-auto mb-2"></div>
+                                <span class="text-[10px] font-bold block">Şantiye Şefi</span>
                               </div>
 
-                              <div class="border border-slate-150 p-3 rounded-xl bg-white/5">
+                              <div class="border border-slate-200 p-3 rounded-xl bg-slate-50">
                                 <span class="font-extrabold text-[#8B1E1E] tracking-wider uppercase block mb-1">4. PROJE MÜDÜRÜ</span>
                                 <span class="text-[10px] text-slate-400 block mb-6">Nihai Onaycı Müdür</span>
-                                <div class="h-10 border-b border-dashed border-slate-350 w-24 mx-auto mb-2"></div>
-                                <span class="text-[10px] font-bold text-white block">Proje Müdürü</span>
+                                <div class="h-10 border-b border-dashed border-slate-300 w-24 mx-auto mb-2"></div>
+                                <span class="text-[10px] font-bold block">Proje Müdürü</span>
                               </div>
 
                             </div>
@@ -801,9 +895,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   URL.revokeObjectURL(url);
                   alert(`${p.ad} ${p.soyad} personeline ait işlem ve refakat geçmişi detaylı hakediş raporu başarıyla masaüstünüze HTML olarak kaydedildi.`);
                 }}
-                className="w-full mt-3 bg-[#1e293b] hover:bg-[#334155] border border-slate-700 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center space-x-1 transition shadow-sm cursor-pointer"
+                className="w-full mt-3 bg-slate-800 hover:bg-slate-700 border border-slate-200 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center space-x-1 transition shadow-xs cursor-pointer"
               >
-                <span>💾 Personel Geçmiş Raporunu Masaüstüne Kaydet</span>
+                <span>💾 Personel Raporunu İndir</span>
               </button>
 
             </div>
@@ -813,31 +907,32 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
       {/* 🏕️ DYNAMIC CAMP OCCUPANCY & 📝 NOTEPAD EXTRA WIDGETS SECTION */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
         {/* Camp occupancy progress */}
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl text-slate-200 p-5 shadow-sm space-y-4">
-          <div className="border-b border-rose-100 pb-3 flex justify-between items-center">
-            <h4 className="font-display font-bold text-white text-xs uppercase tracking-wider flex items-center gap-1.5">
+        <div className="bg-white border border-slate-250 rounded-3xl text-slate-800 p-5 shadow-xs space-y-4 hover:shadow-md transition duration-200">
+          <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
+            <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
               🏕️ Lojman &amp; Kamp Doluluk Raporu ( Canlı )
             </h4>
             <button 
               onClick={() => onNavigate("idari")} 
-              className="text-[10px] text-white hover:underline font-bold bg-white/5 px-2 py-1 rounded border border-slate-200"
+              className="text-[10px] text-blue-600 hover:underline font-bold bg-blue-50/50 px-2 py-1 rounded border border-blue-100"
             >
               Kamp Yönetimine Git →
             </button>
           </div>
 
           <div className="grid grid-cols-3 gap-3 text-center">
-            <div className="p-3 bg-white/5 border rounded-xl">
-              <span className="text-[18px] font-bold font-mono text-white block leading-none">{totalRooms}</span>
+            <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
+              <span className="text-[18px] font-bold font-mono text-slate-800 block leading-none">{totalRooms}</span>
               <span className="text-[8px] font-bold text-slate-400 uppercase block mt-1">Toplam Oda</span>
             </div>
-            <div className="p-3 bg-white/5 border border-slate-200 rounded-xl">
-              <span className="text-[18px] font-bold font-mono text-white block leading-none">{totalBeds}</span>
+            <div className="p-3 bg-slate-50 border border-slate-150 rounded-xl">
+              <span className="text-[18px] font-bold font-mono text-slate-800 block leading-none">{totalBeds}</span>
               <span className="text-[8px] font-bold text-slate-400 uppercase block mt-1">Yatak Kapasitesi</span>
             </div>
-            <div className="p-3 bg-emerald-50 border border-emerald-105 rounded-xl">
-              <span className="text-[18px] font-bold font-mono text-emerald-400 block leading-none">{occupiedBeds}</span>
+            <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
+              <span className="text-[18px] font-bold font-mono text-emerald-600 block leading-none">{occupiedBeds}</span>
               <span className="text-[8px] font-bold text-slate-400 uppercase block mt-1">Konaklayan Kişi</span>
             </div>
           </div>
@@ -845,11 +940,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           <div className="space-y-1.5 pt-1">
             <div className="flex justify-between items-center text-[10px] font-bold text-slate-400">
               <span className="uppercase">Genel Yatak Doluluk Oranı</span>
-              <span className="text-white font-mono font-bold">%{fillRatio} Görüntüleniyor</span>
+              <span className="text-slate-800 font-mono font-bold">%{fillRatio} Dolu</span>
             </div>
-            <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden border border-slate-200">
+            <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden border border-slate-200/40">
               <div 
-                className="bg-gradient-to-r from-slate-100 to-slate-50 h-full rounded-full transition-all duration-500" 
+                className="bg-gradient-to-r from-emerald-500 to-emerald-600 h-full rounded-full transition-all duration-500" 
                 style={{ width: `${Math.min(100, fillRatio)}%` }} 
               />
             </div>
@@ -860,18 +955,18 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         </div>
 
         {/* Browser Persistent manager notepad */}
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl text-slate-200 p-5 shadow-sm space-y-3 flex flex-col">
-          <div className="border-b border-rose-100 pb-2.5 flex justify-between items-center shrink-0">
-            <h4 className="font-display font-medium text-white text-xs uppercase tracking-wider flex items-center gap-1.5">
+        <div className="bg-white border border-slate-250 rounded-3xl text-slate-800 p-5 shadow-xs space-y-3 flex flex-col hover:shadow-md transition duration-200">
+          <div className="border-b border-slate-100 pb-2.5 flex justify-between items-center shrink-0">
+            <h4 className="font-display font-medium text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
               📝 Yönetici Pratik Not Defteri
             </h4>
-            <span className="text-[9px] text-emerald-400 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-110 font-mono">
+            <span className="text-[9px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-110 font-mono">
               Otomatik Kaydedilir
             </span>
           </div>
           
           <textarea
-            className="w-full flex-grow min-h-[140px] p-3 text-xs font-semibold text-slate-200 bg-[#FAF9F5] border border-[#e2e8f0] rounded-xl outline-none focus:border-amber-400 transition resize-none font-sans"
+            className="w-full flex-grow min-h-[140px] p-3 text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-400 transition resize-none font-sans"
             placeholder="Şantiye koordinasyonu için pratik notlarınızı buraya yazabilirsiniz. Bilgiler tarayıcınızda kalıcı kalır..."
             value={stickyNotes}
             onChange={(e) => handleNotesChange(e.target.value)}
@@ -883,32 +978,43 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         
         {/* Real-time Live Log Activity Stream */}
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl text-slate-200 p-5 shadow-sm space-y-4">
-          <div className="border-b border-rose-100 pb-3 flex justify-between items-center">
-            <h4 className="font-display font-black text-white text-xs uppercase tracking-wider flex items-center gap-1.5">
+        <div className="bg-white border border-slate-250 rounded-3xl text-slate-800 p-5 shadow-xs space-y-4 hover:shadow-md transition duration-200">
+          <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
+            <h4 className="font-display font-black text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
               🔔 Şantiye Canlı Aktivite Akışı (Live Logs)
             </h4>
-            <span className="text-[9px] text-white font-bold bg-white/5 px-2 py-0.5 rounded border border-slate-200 font-mono animate-pulse">
+            <span className="text-[9px] text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded border border-rose-100 font-mono animate-pulse">
               Canlı Akış
             </span>
           </div>
 
-          <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+          <div className="space-y-3.5 max-h-[300px] overflow-y-auto pr-1 relative pl-4 border-l border-slate-200/80 ml-2">
             {bildirimler && bildirimler.length > 0 ? (
-              bildirimler.slice(0, 6).map((b, idx) => (
-                <div 
-                  key={b.id || idx} 
-                  className="flex items-start space-x-3 p-2.5 rounded-xl hover:bg-white/5 transition border border-transparent hover:border-white/10"
-                >
-                  <div className="w-1.5 h-1.5 rounded-full bg-white/50 mt-1.5 shrink-0" />
-                  <div className="flex-1 min-w-0 text-xs">
-                    <p className="font-medium text-slate-200 leading-normal">{b.mesaj}</p>
-                    <span className="text-[9px] text-slate-400 font-mono block mt-0.5">
+              bildirimler.slice(0, 6).map((b, idx) => {
+                // Style marker dot based on content
+                let markerBg = "bg-blue-500 ring-blue-155";
+                if (b.mesaj.includes("hata") || b.mesaj.includes("engellendi")) {
+                  markerBg = "bg-rose-500 ring-rose-155";
+                } else if (b.mesaj.includes("yeni") || b.mesaj.includes("yüklendi")) {
+                  markerBg = "bg-emerald-500 ring-emerald-155";
+                } else if (b.mesaj.includes("onay")) {
+                  markerBg = "bg-amber-500 ring-amber-155";
+                }
+                return (
+                  <div 
+                    key={b.id || idx} 
+                    className="relative flex flex-col space-y-1 hover:bg-slate-50 p-2 rounded-xl transition duration-150 animate-fade-in"
+                  >
+                    {/* Glowing vertical marker dot */}
+                    <div className={`absolute -left-[21.5px] top-4 w-2.5 h-2.5 rounded-full ${markerBg} ring-4 shrink-0 z-10`} />
+                    
+                    <p className="text-xs font-semibold text-slate-700 leading-relaxed pr-1">{b.mesaj}</p>
+                    <span className="text-[9px] text-slate-450 font-mono block mt-0.5">
                       {b.tarih ? new Date(b.tarih).toLocaleString('tr-TR') : 'Şimdi'}
                     </span>
                   </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="py-8 text-center text-slate-400 text-xs italic">
                 Henüz canlı aktivite kaydı bulunmuyor.
@@ -918,14 +1024,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         </div>
 
         {/* Active Kadro */}
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl text-slate-200 p-5 shadow-sm space-y-4">
-          <div className="border-b border-rose-100 pb-3 flex justify-between items-center">
-            <h4 className="font-display font-black text-white text-xs uppercase tracking-wider">
-              Aktif Şantiye Çalışan Kadrosu
+        <div className="bg-white border border-slate-250 rounded-3xl text-slate-800 p-5 shadow-xs space-y-4 hover:shadow-md transition duration-200">
+          <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
+            <h4 className="font-display font-black text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
+              👥 Aktif Şantiye Çalışan Kadrosu
             </h4>
             <button 
               onClick={() => onNavigate("personel")}
-              className="text-[10px] text-[#1E4E78] hover:underline font-bold cursor-pointer"
+              className="text-[10px] text-blue-600 hover:underline font-bold cursor-pointer"
             >
               Kadroya Git →
             </button>
@@ -935,20 +1041,20 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             {personeller.slice(0, 5).map(p => (
               <div 
                 key={p.id} 
-                className="flex items-center justify-between p-2.5 rounded-xl hover:bg-white/5 transition border border-transparent hover:border-white/10"
+                className="flex items-center justify-between p-2.5 rounded-2xl hover:bg-slate-50 transition border border-transparent hover:border-slate-150"
               >
                 <div className="flex items-center space-x-3 text-xs">
-                  <div className="w-8 h-8 rounded-full bg-white/5 border border-slate-200 flex items-center justify-center font-bold text-white text-[10px]">
+                  <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-650 text-[10px]">
                     {p.ad[0]}{p.soyad[0]}
                   </div>
                   <div>
-                    <p className="font-bold text-white">{p.ad} {p.soyad}</p>
-                    <span className="text-[10px] text-slate-450 font-semibold">{p.gorev} · {p.departman}</span>
+                    <p className="font-bold text-slate-800">{p.ad} {p.soyad}</p>
+                    <span className="text-[10px] text-slate-400 font-semibold">{p.gorev} · {p.departman}</span>
                   </div>
                 </div>
 
                 <div className="text-right">
-                  <span className="text-white font-bold text-xs">{p.departman}</span>
+                  <span className="text-slate-800 font-bold text-xs">{p.departman}</span>
                   <p className="text-[9px] text-slate-400 font-mono">Giriş: {p.iseGirisTarihi || 'Belirtilmedi'}</p>
                 </div>
               </div>
