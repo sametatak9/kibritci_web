@@ -576,19 +576,51 @@ function registerApiRoutes(app2) {
       if (!targetEmail) {
         return res.status(400).json({ error: "hedef e-posta (email) zorunludur" });
       }
+      if (!newPassword) {
+        return res.status(400).json({ error: "Yeni \u015Fifre zorunludur" });
+      }
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: "Yeni \u015Fifre en az 6 karakter olmal\u0131d\u0131r" });
+      }
       const admin2 = getFirebaseAdmin();
-      const userRecord = await admin2.auth().getUserByEmail(targetEmail);
-      const updatePayload = {};
-      if (newPassword) {
-        if (newPassword.length < 6) {
-          return res.status(400).json({ error: "Yeni \u015Fifre en az 6 karakter olmal\u0131d\u0131r" });
+      const emailKey = targetEmail;
+      let created = false;
+      try {
+        const existing = await admin2.auth().getUserByEmail(emailKey);
+        await admin2.auth().updateUser(existing.uid, {
+          password: newPassword,
+          emailVerified: true
+        });
+      } catch (err) {
+        const code = err?.code;
+        if (code !== "auth/user-not-found") throw err;
+        const kullaniciSnap = await admin2.firestore().collection("kullanicilar").doc(emailKey).get();
+        if (!kullaniciSnap.exists) {
+          return res.status(404).json({
+            error: `${emailKey} i\xE7in ERP kullan\u0131c\u0131 kayd\u0131 bulunamad\u0131. \xD6nce Admin panelden kullan\u0131c\u0131 olu\u015Fturun.`
+          });
         }
-        updatePayload.password = newPassword;
+        await admin2.auth().createUser({
+          email: emailKey,
+          password: newPassword,
+          emailVerified: true
+        });
+        created = true;
       }
-      if (Object.keys(updatePayload).length > 0) {
-        await admin2.auth().updateUser(userRecord.uid, updatePayload);
-      }
-      return res.json({ success: true, message: "Kullan\u0131c\u0131 \u015Fifresi ba\u015Far\u0131yla g\xFCncellendi" });
+      await syncClaimsForEmail(emailKey);
+      await admin2.firestore().collection("portalKullanicilar").doc(emailKey).set(
+        {
+          email: emailKey,
+          password: newPassword,
+          updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+        },
+        { merge: true }
+      );
+      return res.json({
+        success: true,
+        created,
+        message: created ? "Firebase giri\u015F hesab\u0131 olu\u015Fturuldu ve \u015Fifre atand\u0131" : "Kullan\u0131c\u0131 \u015Fifresi ba\u015Far\u0131yla g\xFCncellendi"
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Kullan\u0131c\u0131 g\xFCncelleme ba\u015Far\u0131s\u0131z";
       return res.status(500).json({ error: message });
