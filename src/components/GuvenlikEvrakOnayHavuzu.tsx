@@ -1,5 +1,5 @@
-import React from 'react';
-import { Truck, CreditCard, Eye, Check, X, Sparkles, ExternalLink, FileText } from 'lucide-react';
+import React, { useState } from 'react';
+import { Truck, CreditCard, Eye, Check, X, Sparkles, ExternalLink, FileText, Download, ZoomIn } from 'lucide-react';
 import { openBase64InNewTab } from '../lib/fileViewerUtils';
 
 interface GuvenlikEvrakOnayHavuzuProps {
@@ -143,6 +143,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
   itemKdvOran,
   setItemKdvOran,
 }) => {
+  const [isZoomed, setIsZoomed] = useState(false);
   return (
     <div className="space-y-6">
       <div className="border bg-slate-950 p-4.5 rounded-2xl border-slate-800/80 flex justify-between items-center text-xs">
@@ -345,17 +346,42 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
               <div className="flex justify-between items-center mb-3">
                 <span className="font-bold text-[10px] text-slate-400 uppercase tracking-widest">Evrak Görseli / Önizleme</span>
                 {activeGateDoc.fotoUrl && (
-                  <a
-                    href="#"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      openBase64InNewTab(activeGateDoc.fotoUrl, activeGateDoc.fileName || 'Belge');
-                    }}
-                    className="text-[10px] text-indigo-400 hover:underline flex items-center gap-1"
-                  >
-                    <ExternalLink size={12} />
-                    <span>Tam Boyutta Aç</span>
-                  </a>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsZoomed(true)}
+                      className="text-[10px] text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-0 font-semibold"
+                    >
+                      <ZoomIn size={12} />
+                      <span>Yakınlaştır</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = activeGateDoc.fotoUrl;
+                        link.download = activeGateDoc.fileName || 'evrak.png';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                      }}
+                      className="text-[10px] text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-0 font-semibold"
+                    >
+                      <Download size={12} />
+                      <span>İndir</span>
+                    </button>
+                    <a
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        openBase64InNewTab(activeGateDoc.fotoUrl, activeGateDoc.fileName || 'Belge');
+                      }}
+                      className="text-[10px] text-slate-400 hover:underline flex items-center gap-1 font-semibold"
+                    >
+                      <ExternalLink size={12} />
+                      <span>Yeni Sekmede Aç</span>
+                    </a>
+                  </div>
                 )}
               </div>
               
@@ -365,7 +391,9 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                     <img
                       src={activeGateDoc.fotoUrl}
                       alt="Evrak"
-                      className="max-w-full max-h-[60vh] object-contain rounded-lg"
+                      onClick={() => setIsZoomed(true)}
+                      className="max-w-full max-h-[60vh] object-contain rounded-lg cursor-zoom-in hover:opacity-90 transition"
+                      title="Büyütmek için tıklayın"
                     />
                   ) : (
                     <div className="text-center p-6 space-y-3">
@@ -841,6 +869,46 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
             </div>
 
           </div>
+        </div>
+      )}
+
+      {/* 4. GÖRSEL YAKINLAŞTIRMA OVERLAY MODALI */}
+      {isZoomed && activeGateDoc && activeGateDoc.fotoUrl && (
+        <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4">
+          <div className="absolute top-4 right-4 flex items-center gap-3">
+            <button
+              onClick={() => {
+                const link = document.createElement('a');
+                link.href = activeGateDoc.fotoUrl;
+                link.download = activeGateDoc.fileName || 'evrak.png';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-4 rounded-xl flex items-center gap-1.5 transition shadow-lg cursor-pointer border-0"
+            >
+              <Download size={14} />
+              <span>İndir</span>
+            </button>
+            <button
+              onClick={() => setIsZoomed(false)}
+              className="bg-slate-800 hover:bg-slate-750 text-white p-2 rounded-xl transition shadow-lg cursor-pointer border-0"
+              title="Kapat"
+            >
+              <X size={20} />
+            </button>
+          </div>
+          <div className="max-w-5xl max-h-[85vh] overflow-auto flex items-center justify-center p-2 rounded-2xl bg-slate-900/50 border border-slate-800">
+            <img
+              src={activeGateDoc.fotoUrl}
+              alt="Evrak Zoomed"
+              className="max-w-full max-h-[80vh] object-contain rounded-lg"
+            />
+          </div>
+          <span className="text-slate-400 text-xs mt-3 font-semibold font-mono">
+            {activeGateDoc.fileName || 'Belge Görseli'} (Tıklayarak veya sağ üstteki X butonu ile kapatabilirsiniz)
+          </span>
+          <div className="absolute inset-0 -z-10 cursor-zoom-out" onClick={() => setIsZoomed(false)} />
         </div>
       )}
     </div>

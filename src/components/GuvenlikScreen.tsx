@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ShieldAlert, FileText, Users, Truck, UserCheck, Search, PlusCircle, Trash2, 
   Check, X, FileUp, Camera, Printer, Clock, AlertTriangle, Key, Download, ArrowRight, RefreshCw, Barcode,
-  Archive, Calendar, Lock, ClipboardList, MessageCircle, Droplets
+  Archive, Calendar, Lock, ClipboardList, MessageCircle, Droplets, Fuel
 } from 'lucide-react';
 import { Personel, Irsaliye, IrsaliyeItem, Fatura } from '../types/erp';
 import { db } from '../lib/firebase';
@@ -52,7 +52,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   isStandalone = false,
   addNotification
 }) => {
-  const [activeTab, setActiveTab] = useState<'irsaliye' | 'personel' | 'arac' | 'su_tankeri' | 'ziyaretci' | 'nobet_arsivi' | 'akvizyon_yoklama'>('irsaliye');
+  const [activeTab, setActiveTab] = useState<'irsaliye' | 'personel' | 'arac' | 'su_tankeri' | 'vidanjor' | 'petrol_tankeri' | 'ziyaretci' | 'nobet_arsivi' | 'akvizyon_yoklama'>('irsaliye');
   const [viewMode, setViewMode] = useState<'web' | 'mobile'>('web');
   const [selectedPersonelLogIds, setSelectedPersonelLogIds] = useState<string[]>([]);
   const [selectedAracLogIds, setSelectedAracLogIds] = useState<string[]>([]);
@@ -128,15 +128,22 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   const [aracGecmisLoglar, setAracGecmisLoglar] = useState<any[]>([]);
 
   // ─────────────────────────────────────────────────────────────
-  // 💧 SU TANKERİ GİRİŞ-ÇIKIŞ
+  // 💧 TANKER/KONTROL GİRİŞ-ÇIKIŞ (Su Tankeri, Vidanjör, Petrol Tankeri)
   // ─────────────────────────────────────────────────────────────
   const [stPlaka, setStPlaka] = useState('');
   const [stFirma, setStFirma] = useState('');
   const [stSurucu, setStSurucu] = useState('');
   const [stMiktar, setStMiktar] = useState('');
   const [stAciklama, setStAciklama] = useState('');
+  const [tankerFotoUrl, setTankerFotoUrl] = useState('');
+  const [tankerFileName, setTankerFileName] = useState('');
+  
   const [iceridekiSuTankerleri, setIceridekiSuTankerleri] = useState<any[]>([]);
   const [suTankeriGecmisLoglar, setSuTankeriGecmisLoglar] = useState<any[]>([]);
+  const [iceridekiVidanjorler, setIceridekiVidanjorler] = useState<any[]>([]);
+  const [vidanjorGecmisLoglar, setVidanjorGecmisLoglar] = useState<any[]>([]);
+  const [iceridekiPetrolTankerleri, setIceridekiPetrolTankerleri] = useState<any[]>([]);
+  const [petrolTankeriGecmisLoglar, setPetrolTankeriGecmisLoglar] = useState<any[]>([]);
 
   // ─────────────────────────────────────────────────────────────
   // 🎫 4. ZİYARETÇİ STATE & BADGE
@@ -271,14 +278,27 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       setAracGecmisLoglar(list.filter(x => x.durum === 'ÇIKTI'));
     });
 
-    // 2b. Su tankeri logları
-    const stColl = collection(db, 'guvenlikSuTankeriLoglari');
+    // 2b. Unified tanker logları (Su, Vidanjör, Petrol Tankeri)
+    const stColl = collection(db, 'guvenlikTankerLoglari');
     const unsubSt = onSnapshot(stColl, (snap) => {
       const list: any[] = [];
       snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
       list.sort((a, b) => new Date(b.girisZamani).getTime() - new Date(a.girisZamani).getTime());
-      setIceridekiSuTankerleri(list.filter((x) => x.durum === 'İÇERİDE'));
-      setSuTankeriGecmisLoglar(list.filter((x) => x.durum === 'ÇIKTI'));
+      
+      // Su Tankeri
+      const suList = list.filter(x => x.tip === 'SU_TANKERI');
+      setIceridekiSuTankerleri(suList.filter(x => x.durum === 'İÇERİDE'));
+      setSuTankeriGecmisLoglar(suList.filter(x => x.durum === 'ÇIKTI'));
+
+      // Vidanjör
+      const vidList = list.filter(x => x.tip === 'VIDANJOR');
+      setIceridekiVidanjorler(vidList.filter(x => x.durum === 'İÇERİDE'));
+      setVidanjorGecmisLoglar(vidList.filter(x => x.durum === 'ÇIKTI'));
+
+      // Petrol Tankeri
+      const petList = list.filter(x => x.tip === 'PETROL_TANKERI');
+      setIceridekiPetrolTankerleri(petList.filter(x => x.durum === 'İÇERİDE'));
+      setPetrolTankeriGecmisLoglar(petList.filter(x => x.durum === 'ÇIKTI'));
     });
 
     // 3. Aktif ve geçmiş ziyaretçiler
@@ -909,22 +929,35 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     }
   };
 
-  const handleSuTankeriGiris = async (e: React.FormEvent) => {
+  const handleTankerGiris = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!stPlaka.trim() || !stFirma.trim()) {
-      alert('Lütfen plaka ve su tedarikçi firmasını girin!');
+      alert('Lütfen plaka ve firmasını girin!');
       return;
     }
 
+    const currentTip = 
+      activeTab === 'vidanjor' ? 'VIDANJOR' : 
+      activeTab === 'petrol_tankeri' ? 'PETROL_TANKERI' : 
+      'SU_TANKERI';
+
+    const currentLabel = 
+      activeTab === 'vidanjor' ? 'Vidanjör' : 
+      activeTab === 'petrol_tankeri' ? 'Petrol Tankeri' : 
+      'Su Tankeri';
+
     try {
-      const logId = `st_${Date.now()}`;
+      const logId = `tk_${Date.now()}`;
       const logData = {
         id: logId,
+        tip: currentTip,
         plaka: stPlaka.toUpperCase().trim(),
         firma: stFirma.trim(),
         surucuAdi: stSurucu.trim(),
         miktar: stMiktar.trim() || 'Belirtilmedi',
         aciklama: stAciklama.trim(),
+        fotoUrl: tankerFotoUrl || null,
+        fileName: tankerFileName || null,
         durum: 'İÇERİDE',
         girisZamani: getIslemZamani(),
         islemTarihi,
@@ -932,35 +965,45 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         kaydeden: currentUser?.email || 'guvenlik_gate',
       };
 
-      await setDoc(doc(db, 'guvenlikSuTankeriLoglari', logId), logData);
+      await setDoc(doc(db, 'guvenlikTankerLoglari', logId), logData);
       if (addNotification) {
-        addNotification(`Su tankeri ${logData.plaka} (${logData.firma}) şantiyeye giriş yaptı.`);
+        addNotification(`${currentLabel} ${logData.plaka} (${logData.firma}) şantiyeye giriş yaptı.`);
       }
       setStPlaka('');
       setStFirma('');
       setStSurucu('');
       setStMiktar('');
       setStAciklama('');
-      showStatus('success', 'Su tankeri giriş kaydı yapıldı!');
+      setTankerFotoUrl('');
+      setTankerFileName('');
+      showStatus('success', `${currentLabel} giriş kaydı yapıldı!`);
     } catch (err) {
       console.error(err);
       showStatus('error', 'Kayıt başarısız!');
     }
   };
 
-  const handleSuTankeriCikis = async (id: string) => {
+  const handleTankerCikis = async (id: string) => {
     try {
-      const matched = iceridekiSuTankerleri.find((a) => a.id === id);
+      const matched = 
+        iceridekiSuTankerleri.find((a) => a.id === id) ||
+        iceridekiVidanjorler.find((a) => a.id === id) ||
+        iceridekiPetrolTankerleri.find((a) => a.id === id);
+      
       const plakaLabel = matched ? matched.plaka : id;
+      const typeLabel = matched && matched.tip === 'VIDANJOR' ? 'vidanjör' : 
+                        matched && matched.tip === 'PETROL_TANKERI' ? 'petrol tankeri' : 
+                        'su tankeri';
+
       await setDoc(
-        doc(db, 'guvenlikSuTankeriLoglari', id),
+        doc(db, 'guvenlikTankerLoglari', id),
         { durum: 'ÇIKTI', cikisZamani: getIslemZamani() },
         { merge: true }
       );
       if (addNotification) {
-        addNotification(`${plakaLabel} plakalı su tankeri şantiyeden çıkış yaptı.`);
+        addNotification(`${plakaLabel} plakalı ${typeLabel} şantiyeden çıkış yaptı.`);
       }
-      showStatus('success', 'Su tankeri çıkışı kaydedildi!');
+      showStatus('success', 'Çıkış başarıyla kaydedildi!');
     } catch (err) {
       console.error(err);
       showStatus('error', 'Hata oluştu!');
@@ -1295,10 +1338,30 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             </button>
 
             <button 
+              onClick={() => setActiveTab('vidanjor')}
+              className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'vidanjor' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+              <span className="flex items-center space-x-2"><Droplets size={13} className="rotate-180" /> <span>5. Vidanjör</span></span>
+              {iceridekiVidanjorler.length > 0 && (
+                <span className="text-[9px] font-mono bg-indigo-500/20 text-indigo-400 rounded-full px-1.5 py-0.2 ml-1 hidden lg:inline">{iceridekiVidanjorler.length}</span>
+              )}
+            </button>
+
+            <button 
+              onClick={() => setActiveTab('petrol_tankeri')}
+              className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'petrol_tankeri' ? 'bg-rose-600 text-white shadow-md shadow-rose-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+              <span className="flex items-center space-x-2"><Fuel size={13} /> <span>6. Petrol Tankeri</span></span>
+              {iceridekiPetrolTankerleri.length > 0 && (
+                <span className="text-[9px] font-mono bg-rose-500/20 text-rose-400 rounded-full px-1.5 py-0.2 ml-1 hidden lg:inline">{iceridekiPetrolTankerleri.length}</span>
+              )}
+            </button>
+
+            <button 
               onClick={() => setActiveTab('ziyaretci')}
               className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'ziyaretci' ? 'bg-amber-600 text-slate-950 shadow-md shadow-amber-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
             >
-              <span className="flex items-center space-x-2"><UserCheck size={13} /> <span>5. Ziyaretçi Defteri</span></span>
+              <span className="flex items-center space-x-2"><UserCheck size={13} /> <span>7. Ziyaretçi Defteri</span></span>
               {aktifZiyaretciler.length > 0 && (
                 <span className="text-[9px] font-mono bg-amber-500/20 text-amber-400 rounded-full px-1.5 py-0.2 ml-1 hidden lg:inline">{aktifZiyaretciler.length}</span>
               )}
@@ -1308,14 +1371,14 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               onClick={() => setActiveTab('nobet_arsivi')}
               className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'nobet_arsivi' ? 'bg-amber-600 text-slate-950 shadow-md shadow-amber-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
             >
-              <span className="flex items-center space-x-2"><Archive size={13} /> <span>6. Nöbet Kapat &amp; Arşiv</span></span>
+              <span className="flex items-center space-x-2"><Archive size={13} /> <span>8. Nöbet Kapat &amp; Arşiv</span></span>
             </button>
 
             <button 
               onClick={() => setActiveTab('akvizyon_yoklama')}
               className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'akvizyon_yoklama' ? 'bg-amber-600 text-slate-950 shadow-md shadow-amber-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
             >
-              <span className="flex items-center space-x-2"><ClipboardList size={13} /> <span>7. Akvizyon Yoklama</span></span>
+              <span className="flex items-center space-x-2"><ClipboardList size={13} /> <span>9. Akvizyon Yoklama</span></span>
             </button>
           </div>
 
@@ -1969,19 +2032,14 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
                     <div className="space-y-1">
                       <label className="text-[9px] font-bold text-slate-500 uppercase">Araç Tipi / Cinsi *</label>
-                      <select 
+                      <input 
+                        type="text"
+                        required
+                        placeholder="Örn: Hazır Beton Mikseri"
                         value={aracTipi}
                         onChange={(e) => setAracTipi(e.target.value)}
                         className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold text-xs"
-                      >
-                        <option value="Hazır Beton Mikseri">Hazır Beton Mikseri</option>
-                        <option value="Hafriyat Kamyonu">Hafriyat Kamyonu</option>
-                        <option value="Tedarikçi Teslimat Kamyoneti">Tedarikçi Teslimat Kamyoneti</option>
-                        <option value="Ziyaretçi Hususi Araç">Ziyaretçi Hususi Araç</option>
-                        <option value="Beton Pompası">Beton Pompası</option>
-                        <option value="Vinç / Mobil Vinç">Vinç / Mobil Vinç</option>
-                        <option value="Diğer Şantiye İş Makinesi">Diğer Şantiye İş Makinesi</option>
-                      </select>
+                      />
                     </div>
 
                     <div className="space-y-1">
@@ -2148,217 +2206,272 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
           )}
 
           {/* ─────────────────────────────────────────────────────────────
-              TAB: SU TANKERİ GİRİŞ-ÇIKIŞ
+              TAB: TANKER / KONTROL (SU TANKERİ, VİDANJÖR, PETROL TANKERİ)
               ───────────────────────────────────────────────────────────── */}
-          {activeTab === 'su_tankeri' && (
-            <div className="space-y-6">
-              <GuvenlikTabDateBar
-                islemTarihi={islemTarihi}
-                onTarihChange={setIslemTarihi}
-                tabLabel="Su Tankeri"
-                logCount={seciliGunSuTankeriLoglar.length}
-                archivedCount={seciliGunNobetArsivleri.length}
-                onGoster={() => handleGosterSeciliGun('Su Tankeri', seciliGunSuTankeriLoglar.length)}
-                onKaydet={() =>
-                  showStatus(
-                    'success',
-                    `${seciliTarihLabel} için su tankeri kayıtları anında kaydedilir. Bu güne ${seciliGunSuTankeriLoglar.length} sefer bağlı.`
-                  )
-                }
-                kaydetLabel="Tarihe Bağla"
-                onGuncelle={handleGuncelleSeciliSuTankeriTarih}
-                guncelleDisabled={selectedSuTankeriLogIds.length === 0}
-                onSil={handleBulkDeleteSuTankeriLogs}
-                silDisabled={selectedSuTankeriLogIds.length === 0}
-              />
-              <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 text-xs text-sky-900">
-                Su tankeri günde 3–4 sefer gelebilir. Her seferi ayrı kaydedin; günlük loglar bu sekmede birikir ve WhatsApp ile paylaşılabilir.
-              </div>
+          {(activeTab === 'su_tankeri' || activeTab === 'vidanjor' || activeTab === 'petrol_tankeri') && (() => {
+            const currentBg = 
+              activeTab === 'vidanjor' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/15' : 
+              activeTab === 'petrol_tankeri' ? 'bg-rose-600 text-white shadow-md shadow-rose-500/15' : 
+              'bg-sky-600 text-white shadow-md shadow-sky-500/15';
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
-                  <span className="font-display font-black text-xs text-sky-800 uppercase tracking-widest block border-b border-slate-200 pb-2">💧 SU TANKERİ GİRİŞ KAYDI</span>
+            const currentLabel = 
+              activeTab === 'vidanjor' ? 'Vidanjör' : 
+              activeTab === 'petrol_tankeri' ? 'Petrol Tankeri' : 
+              'Su Tankeri';
 
-                  <form onSubmit={handleSuTankeriGiris} className="space-y-3.5 text-xs text-slate-700">
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-500 uppercase">Plaka *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Örn: 34 XYZ 456"
-                        value={stPlaka}
-                        onChange={(e) => setStPlaka(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold font-mono text-xs uppercase"
-                      />
-                    </div>
+            const currentIcon = 
+              activeTab === 'vidanjor' ? <Droplets size={13} className="rotate-180" /> : 
+              activeTab === 'petrol_tankeri' ? <Fuel size={13} /> : 
+              <Droplets size={13} />;
 
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-500 uppercase">Su Tedarikçi Firma *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Örn: ABC Su Taşımacılık"
-                        value={stFirma}
-                        onChange={(e) => setStFirma(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold text-xs"
-                      />
-                    </div>
+            const currentTextClass = 
+              activeTab === 'vidanjor' ? 'text-indigo-800 border-indigo-200 bg-indigo-50' : 
+              activeTab === 'petrol_tankeri' ? 'text-rose-800 border-rose-200 bg-rose-50' : 
+              'text-sky-800 border-sky-200 bg-sky-50';
 
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-500 uppercase">Sürücü Adı</label>
-                      <input
-                        type="text"
-                        placeholder="Şoför adı"
-                        value={stSurucu}
-                        onChange={(e) => setStSurucu(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl text-xs"
-                      />
-                    </div>
+            const currentButtonClass = 
+              activeTab === 'vidanjor' ? 'bg-indigo-600 hover:bg-indigo-700 border-indigo-800' : 
+              activeTab === 'petrol_tankeri' ? 'bg-rose-600 hover:bg-rose-700 border-rose-800' : 
+              'bg-sky-600 hover:bg-sky-700 border-sky-800';
 
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-500 uppercase">Miktar (m³ / ton)</label>
-                      <input
-                        type="text"
-                        placeholder="Örn: 18 m³"
-                        value={stMiktar}
-                        onChange={(e) => setStMiktar(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl text-xs"
-                      />
-                    </div>
+            const insideList = 
+              activeTab === 'vidanjor' ? iceridekiVidanjorler : 
+              activeTab === 'petrol_tankeri' ? iceridekiPetrolTankerleri : 
+              iceridekiSuTankerleri;
 
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-500 uppercase">Not / Açıklama</label>
-                      <input
-                        type="text"
-                        placeholder="Depo dolumu, test vb."
-                        value={stAciklama}
-                        onChange={(e) => setStAciklama(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl text-xs"
-                      />
-                    </div>
+            const pastList = 
+              activeTab === 'vidanjor' ? vidanjorGecmisLoglar : 
+              activeTab === 'petrol_tankeri' ? petrolTankeriGecmisLoglar : 
+              suTankeriGecmisLoglar;
 
-                    <button
-                      type="submit"
-                      className="w-full bg-sky-600 hover:bg-sky-700 text-white font-black text-xs py-3 rounded-xl cursor-pointer border-b-2 border-sky-800 transition"
-                    >
-                      KAYDET &amp; GİRİŞ YAP
-                    </button>
-                  </form>
-                </div>
+            const historyList = [...insideList, ...pastList]
+              .filter(item => item.girisZamani && item.girisZamani.startsWith(islemTarihi));
 
-                <div className="lg:col-span-2 bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
-                  <span className="font-display font-black text-xs text-sky-600 uppercase tracking-widest block border-b border-slate-200 pb-2">🚧 ŞANTİYEDEKİ SU TANKERLERİ</span>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
-                    {iceridekiSuTankerleri.map((item) => (
-                      <div key={item.id} className="bg-sky-50/50 border border-sky-200 rounded-2xl p-4.5 space-y-3.5 relative overflow-hidden">
-                        <div className="flex justify-between items-center border-b border-sky-200 pb-1.5">
-                          <span className="font-mono text-xs font-black text-sky-900 bg-white px-2 py-0.5 border border-sky-200 rounded">{item.plaka}</span>
-                          <span className="text-[9px] text-sky-600 font-bold uppercase">İçeride</span>
-                        </div>
-
-                        <div className="space-y-1 text-[11px] text-slate-600 font-semibold">
-                          <p>🏢 Firma: <span className="text-slate-800 font-bold">{item.firma}</span></p>
-                          <p>👤 Sürücü: <span className="text-slate-800">{item.surucuAdi || '—'}</span></p>
-                          <p>💧 Miktar: <span className="text-sky-700 font-bold">{item.miktar || '—'}</span></p>
-                          {item.aciklama && <p>📝 Not: {item.aciklama}</p>}
-                          <p className="text-[9px] text-slate-500 pt-1">Giriş: {new Date(item.girisZamani).toLocaleString('tr-TR')}</p>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => handleSuTankeriCikis(item.id)}
-                          className="w-full bg-rose-600/10 hover:bg-rose-600 text-rose-500 hover:text-white font-extrabold text-[10px] py-1.5 px-3 rounded-xl border border-rose-500/20 transition cursor-pointer flex items-center justify-center space-x-1"
-                        >
-                          <X size={11} />
-                          <span>ÇIKIŞ YAPTI OLARAK İŞARETLE</span>
-                        </button>
-                      </div>
-                    ))}
-
-                    {iceridekiSuTankerleri.length === 0 && (
-                      <div className="col-span-2 bg-slate-50 p-10 rounded-2xl border border-slate-200 text-center text-slate-500 italic text-xs">
-                        Şantiyede aktif su tankeri kaydı yok.
-                      </div>
-                    )}
+            return (
+              <div className="space-y-6">
+                
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white p-4 border border-slate-200 rounded-3xl gap-3 shadow-sm">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-display font-black text-sm text-slate-800 uppercase tracking-widest flex items-center space-x-2">
+                      {currentIcon}
+                      <span>{currentLabel} Kontrol Paneli</span>
+                    </span>
                   </div>
-                </div>
-              </div>
-
-              <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
-                <div className="flex flex-wrap justify-between items-center border-b border-slate-200 pb-2 gap-2">
-                  <span className="font-display font-black text-xs text-sky-600 uppercase tracking-widest">
-                    💧 {seciliTarihLabel} SU TANKERİ LOGLARI ({bugunkuSuTankeriLoglar.length} sefer)
-                  </span>
-                  <div className="flex gap-1.5">
-                    <button
-                      type="button"
-                      onClick={handleSuTankeriGunlukRaporWp}
-                      disabled={bugunkuSuTankeriLoglar.length === 0}
-                      className="flex items-center gap-1 px-2.5 py-1.5 bg-sky-600 disabled:bg-slate-200 disabled:text-slate-400 text-white text-[9px] font-black rounded-lg cursor-pointer"
-                    >
-                      <MessageCircle size={11} />
-                      Tüm Günü WP
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSendSelectedSuTankeriLogsWp}
-                      disabled={selectedSuTankeriLogIds.length === 0}
-                      className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 disabled:bg-slate-200 disabled:text-slate-400 text-white text-[9px] font-black rounded-lg cursor-pointer"
-                    >
-                      <MessageCircle size={11} />
-                      Seçilenleri WP
-                    </button>
+                  <div className="flex items-center space-x-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                    <label className="text-[9px] font-bold text-slate-500 uppercase">İşlem Tarihi:</label>
+                    <input 
+                      type="date" 
+                      value={islemTarihi} 
+                      onChange={(e) => setIslemTarihi(e.target.value)} 
+                      className="bg-transparent text-xs font-bold text-slate-800 outline-none" 
+                    />
                   </div>
                 </div>
 
-                <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
-                  {bugunkuSuTankeriLoglar.map((log) => {
-                    const checked = selectedSuTankeriLogIds.includes(log.id);
-                    return (
-                      <div key={log.id} className="bg-sky-50/40 border border-sky-100 rounded-xl p-2.5 flex justify-between items-center text-[11px] gap-2">
-                        <label className="flex items-start gap-2 min-w-0 cursor-pointer flex-1">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleSuTankeriLogSelect(log.id)}
-                            className="mt-0.5 accent-sky-600"
-                          />
-                          <div className="space-y-0.5 min-w-0">
-                            <span className="font-bold text-slate-800 font-mono block">{log.plaka}</span>
-                            <span className="text-[9px] text-slate-500 block truncate">{log.firma} · {log.miktar || '—'}</span>
-                            <span className="text-[9px] text-slate-400 block">Sürücü: {log.surucuAdi || '—'}</span>
+                <div className={`${currentTextClass} border rounded-2xl p-4 text-xs font-semibold`}>
+                  {currentLabel} girişlerini bu sekmeden takip edebilirsiniz. Günlük loglar seçilen işleme tarihine göre listelenir.
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  
+                  {/* Yeni Giriş Formu */}
+                  <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
+                    <span className="font-display font-black text-xs text-slate-805 uppercase tracking-widest block border-b border-slate-200 pb-2">
+                      {currentIcon} YENİ {currentLabel.toUpperCase()} GİRİŞ KAYDI
+                    </span>
+
+                    <form onSubmit={handleTankerGiris} className="space-y-3.5 text-xs text-slate-700">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Plaka *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Örn: 34 XYZ 456"
+                          value={stPlaka}
+                          onChange={(e) => setStPlaka(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold font-mono text-xs uppercase"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Tedarikçi / Firma *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Örn: ABC Lojistik"
+                          value={stFirma}
+                          onChange={(e) => setStFirma(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold text-xs"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Sürücü Adı Soyadı</label>
+                        <input
+                          type="text"
+                          placeholder="Örn: Ahmet Yılmaz"
+                          value={stSurucu}
+                          onChange={(e) => setStSurucu(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl text-xs"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Miktar (m³ / Litre)</label>
+                        <input
+                          type="text"
+                          placeholder="Örn: 15 m³ veya 10000 Lt"
+                          value={stMiktar}
+                          onChange={(e) => setStMiktar(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl text-xs"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Açıklama</label>
+                        <input
+                          type="text"
+                          placeholder="Genel şantiye ihtiyacı vb..."
+                          value={stAciklama}
+                          onChange={(e) => setStAciklama(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl text-xs"
+                        />
+                      </div>
+
+                      {/* Document Upload Area */}
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Fotoğraf / Belge Yükle</label>
+                        {tankerFotoUrl ? (
+                          <div className="relative border border-slate-200 rounded-2xl p-2 bg-slate-50 flex items-center justify-between">
+                            <span className="text-[10px] text-slate-600 font-bold font-mono truncate max-w-[180px]">
+                              {tankerFileName || 'Belge Yüklendi'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTankerFotoUrl('');
+                                setTankerFileName('');
+                              }}
+                              className="text-rose-500 hover:text-rose-700 p-1 font-bold text-xs cursor-pointer border-0 bg-transparent"
+                            >
+                              Kaldır
+                            </button>
                           </div>
-                        </label>
-                        <div className="text-right shrink-0 space-y-1">
-                          <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
-                            log.durum === 'İÇERİDE' ? 'bg-sky-100 text-sky-800' : 'bg-slate-200 text-slate-600'
-                          }`}>
-                            {log.durum}
-                          </span>
-                          <span className="text-[9px] text-slate-500 block font-mono mt-0.5">
-                            {log.girisZamani ? new Date(log.girisZamani).toLocaleTimeString('tr-TR') : '—'}
-                            {log.cikisZamani ? ` → ${new Date(log.cikisZamani).toLocaleTimeString('tr-TR')}` : ''}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteSuTankeriLog(log.id)}
-                            className="text-[8px] font-black px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200"
-                          >
-                            Sil
-                          </button>
-                        </div>
+                        ) : (
+                          <div className="relative border border-dashed border-slate-350 rounded-2xl p-4 text-center bg-slate-50 hover:bg-slate-100/60 transition cursor-pointer group">
+                            <input
+                              type="file"
+                              accept="image/*,application/pdf"
+                              capture="environment"
+                              onChange={(e) => {
+                                if (!e.target.files || !e.target.files[0]) return;
+                                const file = e.target.files[0];
+                                setTankerFileName(file.name);
+                                const reader = new FileReader();
+                                reader.onload = async () => {
+                                  const rawBase64 = reader.result as string;
+                                  let compressed = rawBase64;
+                                  if (file.type.startsWith('image/')) {
+                                    try {
+                                      compressed = await compressImage(rawBase64);
+                                    } catch (err) {
+                                      console.error('Image compression failed', err);
+                                    }
+                                  }
+                                  setTankerFotoUrl(compressed);
+                                };
+                                reader.readAsDataURL(file);
+                              }}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <div className="space-y-1 py-1">
+                              <Camera size={18} className="text-slate-400 mx-auto" />
+                              <span className="text-[10px] font-bold text-slate-500 block">Belge / Fotoğraf Çek veya Yükle</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    );
-                  })}
 
-                  {bugunkuSuTankeriLoglar.length === 0 && (
-                    <div className="text-center p-8 text-slate-500 italic text-[11px]">Bugün henüz su tankeri kaydı yok.</div>
-                  )}
+                      <button
+                        type="submit"
+                        className={`w-full ${currentButtonClass} text-white font-black text-xs py-3 rounded-xl cursor-pointer border-b-2 transition`}
+                      >
+                        KAYDET &amp; ŞANTİYEYE GÖNDER
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Tarihli Tanker Hareketleri Listesi */}
+                  <div className="lg:col-span-2 bg-white p-5 border border-slate-200 rounded-3xl space-y-4 shadow-sm">
+                    <span className="font-display font-black text-xs text-amber-500 uppercase tracking-widest block border-b border-slate-200 pb-2">
+                      🚧 TARİHLİ {currentLabel.toUpperCase()} HAREKET LİSTESİ
+                    </span>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
+                      {historyList.map((item) => (
+                        <div key={item.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-4.5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
+                          
+                          <div>
+                            <div className="flex justify-between items-center border-b border-slate-950 pb-1.5">
+                              <span className="font-mono text-xs font-black text-white bg-white px-2 py-0.5 border border-slate-200 rounded">{item.plaka}</span>
+                              <div className="flex items-center space-x-1">
+                                {item.fotoUrl && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openBase64InNewTab(item.fotoUrl, item.fileName || 'Belge')}
+                                    className="text-indigo-600 hover:text-indigo-500 p-1 hover:bg-indigo-50/20 rounded transition cursor-pointer bg-transparent border-0"
+                                    title="Belgeyi Görüntüle"
+                                  >
+                                    <FileText size={12} />
+                                  </button>
+                                )}
+                                <span className={`text-[8px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wider ${currentBg}`}>
+                                  {currentLabel}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1 text-[11px] text-slate-500 font-semibold mt-2.5">
+                              <p>🏢 Tedarikçi / Firma: <span className="text-slate-800 font-bold">{item.firma}</span></p>
+                              <p>👤 Sürücü: <span className="text-slate-800 font-bold">{item.surucuAdi || 'Belirtilmedi'}</span></p>
+                              <p>⚖️ Miktar / Açıklama: <span className="text-amber-500 font-bold">{item.miktar ? `${item.miktar} m³ / Lt` : '—'} ({item.aciklama || 'Belirtilmedi'})</span></p>
+                              <p className="text-[9px] text-slate-500 pt-1">Giriş Saati: {new Date(item.girisZamani).toLocaleString('tr-TR')}</p>
+                              {item.cikisZamani && (
+                                <p className="text-[9px] text-rose-500">Çıkış Saati: {new Date(item.cikisZamani).toLocaleString('tr-TR')}</p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="pt-2">
+                            {item.durum === 'ÇIKTI' ? (
+                              <div className="w-full bg-slate-100 text-slate-500 text-center font-extrabold text-[10px] py-2 rounded-xl border border-slate-200">
+                                Çıkış Yapıldı
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => handleTankerCikis(item.id)}
+                                className="w-full bg-rose-600/10 hover:bg-rose-600 text-rose-400 hover:text-white font-extrabold text-[10px] py-1.5 px-3 rounded-xl border border-rose-500/20 transition cursor-pointer flex items-center justify-center space-x-1"
+                              >
+                                <X size={11} />
+                                <span>ŞANTİYEDEN ÇIKIŞ YAPTI OLARAK İŞARETLE</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+
+                      {historyList.length === 0 && (
+                        <div className="col-span-2 bg-slate-900/40 p-10 rounded-2xl border border-slate-200 text-center text-slate-500 italic text-xs">
+                          Seçilen tarihte şantiyeye giriş yapmış {currentLabel.toLowerCase()} kaydı bulunmuyor.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ─────────────────────────────────────────────────────────────
               TAB 5: ZİYARETÇİ DEFTERİ
