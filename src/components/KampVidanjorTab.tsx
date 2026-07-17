@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Calendar, Camera, Check, Pencil, Trash2, RefreshCw, AlertTriangle, Truck, X
+  Calendar, Camera, Check, Pencil, Trash2, RefreshCw, AlertTriangle, Truck
 } from 'lucide-react';
 import { collection, deleteDoc, doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { CariKart, Fatura, VidanjorFis } from '../types/erp';
@@ -12,7 +12,6 @@ import {
   compareCekimFatura,
   findSekerVidanjorCari,
   isSekerVidanjorFirma,
-  vibrateVidanjorAlert,
 } from '../lib/vidanjorUtils';
 
 interface KampVidanjorTabProps {
@@ -41,7 +40,6 @@ export const KampVidanjorTab: React.FC<KampVidanjorTabProps> = ({
   const [saving, setSaving] = useState(false);
   const [fisler, setFisler] = useState<VidanjorFis[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [alertBanner, setAlertBanner] = useState<string | null>(null);
 
   const [eslesmeAy, setEslesmeAy] = useState(() => new Date().getMonth() + 1);
   const [eslesmeYil, setEslesmeYil] = useState(() => new Date().getFullYear());
@@ -52,38 +50,6 @@ export const KampVidanjorTab: React.FC<KampVidanjorTabProps> = ({
       snap.forEach((d) => list.push({ id: d.id, ...(d.data() as Omit<VidanjorFis, 'id'>) }));
       list.sort((a, b) => String(b.tarih).localeCompare(String(a.tarih)) || String(b.olusturulma).localeCompare(String(a.olusturulma)));
       setFisler(list);
-    });
-    return () => unsub();
-  }, []);
-
-  // Kapıdan gelen vidanjör bildirimlerini dinle → titreşim + banner
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'bildirimler'), (snap) => {
-      const now = Date.now();
-      snap.docChanges().forEach((change) => {
-        if (change.type !== 'added') return;
-        const data = change.doc.data() as any;
-        const tip = data.tip || data.metaTip;
-        const hedef = String(data.hedefRol || '').toLocaleUpperCase('tr-TR');
-        const mesaj = String(data.mesaj || '');
-        const ts = new Date(data.tarih || 0).getTime();
-        if (now - ts > 120_000) return; // sadece son 2 dk
-        const isVidanjor =
-          tip === 'VIDANJOR_GIRIS' ||
-          (hedef.includes('KAMP') && mesaj.toLocaleLowerCase('tr-TR').includes('vidanj'));
-        if (!isVidanjor) return;
-        vibrateVidanjorAlert();
-        setAlertBanner(mesaj || 'Vidanjör sahaya giriş yaptı — fiş yükleyin.');
-        try {
-          window.dispatchEvent(
-            new CustomEvent('app-toast', {
-              detail: { type: 'info', message: mesaj || 'Vidanjör girişi' },
-            })
-          );
-        } catch {
-          /* ignore */
-        }
-      });
     });
     return () => unsub();
   }, []);
@@ -142,6 +108,7 @@ export const KampVidanjorTab: React.FC<KampVidanjorTabProps> = ({
     try {
       const id = editingId || `vfis_${Date.now()}`;
       const existing = editingId ? fisler.find((f) => f.id === editingId) : null;
+      const guvenlikEvrakId = existing?.guvenlikEvrakId || `EVR-VID-${id}`;
       const fis: VidanjorFis = {
         id,
         tarih: islemTarihi,
@@ -152,6 +119,7 @@ export const KampVidanjorTab: React.FC<KampVidanjorTabProps> = ({
         firmaUnvan,
         cariKartId: sekerCari?.id,
         irsaliyeId: existing?.irsaliyeId || `IR-VID-${id}`,
+        guvenlikEvrakId,
         kaydeden: currentUser?.email || 'kampci',
         olusturulma: existing?.olusturulma || new Date().toISOString(),
         guncellenme: new Date().toISOString(),
@@ -188,6 +156,31 @@ export const KampVidanjorTab: React.FC<KampVidanjorTabProps> = ({
         { merge: true }
       );
 
+      // Güvenlik sekmesi — o günün yüklenen evrak listesine düşür
+      await setDoc(
+        doc(db, 'guvenlikGelenEvraklar', guvenlikEvrakId),
+        {
+          id: guvenlikEvrakId,
+          evrakNo: fis.fisNo,
+          evrakTuru: 'İRSALİYE',
+          firma: firmaUnvan,
+          tarih: fis.tarih,
+          saat: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+          fotoUrl: fis.fisGorselUrl || '',
+          fileName: `vidanjor_${fis.fisNo}.jpg`,
+          fileType: 'image/jpeg',
+          durum: 'BEKLEMEDE',
+          aciklama: `Kampçı vidanjör fişi · Plaka ${fis.plaka} · ${fis.cekimAdedi} çekim`,
+          kaydeden: currentUser?.email || 'kampci',
+          kaynak: 'VIDANJOR_FIS',
+          vidanjorFisId: id,
+          plaka: fis.plaka,
+          cekimAdedi: fis.cekimAdedi,
+          aiStatus: 'SKIPPED',
+        },
+        { merge: true }
+      );
+
       if (addNotification) {
         await addNotification(
           `Vidanjör fişi ${editingId ? 'güncellendi' : 'kaydedildi'}: ${fis.fisNo} · ${fis.plaka} · ${fis.cekimAdedi} çekim (${firmaUnvan})`
@@ -195,7 +188,9 @@ export const KampVidanjorTab: React.FC<KampVidanjorTabProps> = ({
       }
       showStatus?.(
         'success',
-        editingId ? 'Fiş güncellendi ve listeye yansıdı.' : 'Fiş kaydedildi; cari / irsaliye listesine eklendi.'
+        editingId
+          ? 'Fiş güncellendi; güvenlik evrak listesine yansıdı.'
+          : 'Fiş kaydedildi; güvenlik / cari / irsaliye listesine eklendi.'
       );
       resetForm();
     } catch (err: any) {
@@ -226,6 +221,12 @@ export const KampVidanjorTab: React.FC<KampVidanjorTabProps> = ({
           /* irsaliye yoksa geç */
         }
       }
+      const evrakId = f.guvenlikEvrakId || `EVR-VID-${f.id}`;
+      try {
+        await deleteDoc(doc(db, 'guvenlikGelenEvraklar', evrakId));
+      } catch {
+        /* evrak yoksa geç */
+      }
       if (editingId === f.id) resetForm();
       showStatus?.('success', 'Fiş silindi.');
     } catch (err: any) {
@@ -235,19 +236,6 @@ export const KampVidanjorTab: React.FC<KampVidanjorTabProps> = ({
 
   return (
     <div className="space-y-4">
-      {alertBanner && (
-        <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3 flex items-start gap-2">
-          <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={16} />
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-black uppercase text-amber-800 tracking-wider">Vidanjör Giriş Uyarısı</p>
-            <p className="text-xs text-amber-900 mt-0.5">{alertBanner}</p>
-          </div>
-          <button type="button" onClick={() => setAlertBanner(null)} className="text-amber-700">
-            <X size={14} />
-          </button>
-        </div>
-      )}
-
       <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 shadow-sm">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div>

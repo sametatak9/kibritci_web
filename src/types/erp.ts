@@ -110,6 +110,8 @@ export interface VidanjorFis {
   firmaUnvan: string;
   cariKartId?: string;
   irsaliyeId?: string;
+  /** Güvenlik sekmesi o günün gelen evrak listesindeki kayıt id */
+  guvenlikEvrakId?: string;
   kapıLogId?: string;
   kaydeden?: string;
   olusturulma: string;

@@ -1456,7 +1456,10 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             </button>
 
             <button 
-              onClick={() => setActiveTab('vidanjor')}
+              onClick={() => {
+                setActiveTab('vidanjor');
+                setStFirma((prev) => prev.trim() || 'ŞEKER VİDANJÖR');
+              }}
               className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'vidanjor' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <span className="flex items-center space-x-2"><Droplets size={13} className="rotate-180" /> <span>5. Vidanjör</span></span>
