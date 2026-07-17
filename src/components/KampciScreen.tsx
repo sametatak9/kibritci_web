@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Tent, Plus, Trash2, Camera, Check, RefreshCw, Eye, 
-  Search, UserPlus, ClipboardList, Package, Layers, MapPin, Sparkles, CheckCircle, Clock, X, ArrowRight, ShieldCheck, DoorOpen, LogOut, Image as ImageIcon, MessageSquare, Calendar
+  Search, UserPlus, ClipboardList, Package, Layers, MapPin, Sparkles, CheckCircle, Clock, X, ArrowRight, ShieldCheck, DoorOpen, LogOut, Image as ImageIcon, MessageSquare, Calendar, Truck
 } from 'lucide-react';
-import { KampOdasi, KampKaydi, Personel, StokKart, KampYerleske, KampKat, CariKart, AylikYoklamaMap } from '../types/erp';
+import { KampOdasi, KampKaydi, Personel, StokKart, KampYerleske, KampKat, CariKart, AylikYoklamaMap, Fatura } from '../types/erp';
 import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { createKampYerleske, createKampKat, katsForYerleske, createKampOdasi, deleteKampOdasi, updateKampOdasi } from '../lib/kampYapisi';
@@ -12,6 +12,7 @@ import { buildKampciGunlukOzet } from '../lib/gunlukAkisUtils';
 import { buildWhatsAppUrl } from '../lib/mobilOnayUtils';
 import { KampHaftalikYoklamaTab } from './KampHaftalikYoklamaTab';
 import { KampGunlukYoklamaTab } from './KampGunlukYoklamaTab';
+import { KampVidanjorTab } from './KampVidanjorTab';
 import { collection, onSnapshot, doc, updateDoc, setDoc, query, orderBy } from 'firebase/firestore';
 import { applySahaMesaiToYoklama, normalizeMesaiHours } from '../lib/sahaFaaliyetUtils';
 import { isTaseronPersonel } from '../lib/yoklamaUtils';
@@ -31,10 +32,11 @@ interface KampciScreenProps {
   setYoklamalar?: (updater: AylikYoklamaMap | ((y: AylikYoklamaMap) => AylikYoklamaMap)) => void;
   saveYoklamalarNow?: (next: AylikYoklamaMap) => Promise<void>;
   stokKartlar?: StokKart[];
+  faturalar?: Fatura[];
   currentUser: any;
   onSignOut?: () => void;
   isStandalone?: boolean;
-  addNotification?: (mesaj: string) => void;
+  addNotification?: (mesaj: string, meta?: Record<string, unknown>) => void | Promise<void>;
 }
 
 export const KampciScreen: React.FC<KampciScreenProps> = ({
@@ -53,13 +55,14 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   setYoklamalar,
   saveYoklamalarNow,
   stokKartlar = [],
+  faturalar = [],
   currentUser,
   onSignOut,
   isStandalone = false,
   addNotification
 }) => {
-  // Tabs: 'rooms' | 'placement' | 'warehouse' | 'activities' | 'haftalik_yoklama' | 'yoklama' | ...
-  const [activeSubTab, setActiveSubTab] = useState<'rooms' | 'placement' | 'warehouse' | 'activities' | 'gunluk_akis' | 'personel_giris' | 'haftalik_yoklama' | 'yoklama'>('placement');
+  // Tabs: 'rooms' | 'placement' | 'warehouse' | 'activities' | 'haftalik_yoklama' | 'yoklama' | 'vidanjor' | ...
+  const [activeSubTab, setActiveSubTab] = useState<'rooms' | 'placement' | 'warehouse' | 'activities' | 'gunluk_akis' | 'personel_giris' | 'haftalik_yoklama' | 'yoklama' | 'vidanjor'>('placement');
   const [sendingKampAkis, setSendingKampAkis] = useState(false);
   const [viewMode, setViewMode] = useState<'web' | 'mobile'>('web');
 
@@ -1324,6 +1327,18 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveSubTab('vidanjor')}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center space-x-2 border cursor-pointer ${
+            activeSubTab === 'vidanjor'
+              ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-500/20'
+              : 'bg-white border-slate-200/80 text-slate-500 hover:bg-slate-50'
+          }`}
+        >
+          <Truck size={14} />
+          <span>🚛 Vidanjör</span>
+        </button>
+
+        <button
           onClick={() => setActiveSubTab('gunluk_akis')}
           className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center space-x-2 border cursor-pointer ${
             activeSubTab === 'gunluk_akis'
@@ -2255,6 +2270,16 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           saveYoklamalarNow={saveYoklamalarNow}
           currentUser={currentUser}
           addNotification={addNotification}
+        />
+      )}
+
+      {activeSubTab === 'vidanjor' && (
+        <KampVidanjorTab
+          cariKartlar={cariKartlar}
+          faturalar={faturalar}
+          currentUser={currentUser}
+          addNotification={addNotification}
+          showStatus={showStatus}
         />
       )}
 

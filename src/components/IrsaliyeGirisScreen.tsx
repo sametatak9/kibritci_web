@@ -711,9 +711,25 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                       .map((ir) => (
                         <tr key={ir.id} className="border-t border-slate-100">
                           <td className="px-2 py-1.5">{ir.tarih || '-'}</td>
-                          <td className="px-2 py-1.5 font-semibold">{ir.irsaliyeNo}</td>
-                          <td className="px-2 py-1.5">{ir.firma}</td>
-                          <td className="px-2 py-1.5">{(ir.kalemler || []).length}</td>
+                          <td className="px-2 py-1.5 font-semibold">
+                            {ir.irsaliyeNo}
+                            {(ir as any).kaynak === 'VIDANJOR_FIS' && (
+                              <span className="ml-1 text-[8px] font-black uppercase bg-indigo-100 text-indigo-700 px-1 py-0.5 rounded">
+                                Vidanjör
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-2 py-1.5">
+                            {ir.firma}
+                            {(ir as any).plaka ? (
+                              <span className="block text-[9px] text-slate-400 font-mono">{(ir as any).plaka}</span>
+                            ) : null}
+                          </td>
+                          <td className="px-2 py-1.5">
+                            {(ir as any).kaynak === 'VIDANJOR_FIS'
+                              ? `${(ir as any).cekimAdedi ?? (ir.kalemler || [])[0]?.miktar ?? 0} çekim`
+                              : (ir.kalemler || []).length}
+                          </td>
                           <td className="px-2 py-1.5">
                             <button
                               type="button"
