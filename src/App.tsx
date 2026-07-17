@@ -2143,6 +2143,7 @@ export default function App() {
           sahaFaaliyetleri={sahaFaaliyetleri}
           setSahaFaaliyetleri={setSahaFaaliyetleriWithSync}
           saveSahaFaaliyetNow={saveSahaFaaliyetNow}
+          removeSahaFaaliyetNow={removeSahaFaaliyetNow}
           hazirTutanaklar={hazirTutanaklar}
           setHazirTutanaklar={setHazirTutanaklarWithSync}
           currentUser={currentUser}
@@ -2246,6 +2247,7 @@ export default function App() {
           sahaFaaliyetleri={sahaFaaliyetleri}
           setSahaFaaliyetleri={setSahaFaaliyetleriWithSync}
           saveSahaFaaliyetNow={saveSahaFaaliyetNow}
+          removeSahaFaaliyetNow={removeSahaFaaliyetNow}
           hazirTutanaklar={hazirTutanaklar}
           setHazirTutanaklar={setHazirTutanaklarWithSync}
           currentUser={currentUser}
@@ -2778,6 +2780,7 @@ export default function App() {
                   sahaFaaliyetleri={sahaFaaliyetleri}
                   setSahaFaaliyetleri={setSahaFaaliyetleriWithSync}
                   saveSahaFaaliyetNow={saveSahaFaaliyetNow}
+                  removeSahaFaaliyetNow={removeSahaFaaliyetNow}
                   hazirTutanaklar={hazirTutanaklar}
                   setHazirTutanaklar={setHazirTutanaklarWithSync}
                   currentUser={currentUser}
