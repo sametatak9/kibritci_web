@@ -8,7 +8,7 @@ import { Personel, Irsaliye, IrsaliyeItem, Fatura } from '../types/erp';
 import { db } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { fetchApiJson } from '../lib/apiClient';
-import { collection, doc, setDoc, onSnapshot, addDoc, getDocs, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, onSnapshot, addDoc, getDocs, deleteDoc, updateDoc } from 'firebase/firestore';
 import { CorporateReportLayout } from './CorporateReportLayout';
 import { KibritciLogo } from './KibritciLogo';
 import { openBase64InNewTab } from '../lib/fileViewerUtils';
@@ -353,6 +353,80 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   // ─────────────────────────────────────────────────────────────
   // 💾 EVRAK GÖNDERİM EVENTLERİ
   // ─────────────────────────────────────────────────────────────
+  const triggerBackgroundAiParsing = async (docId: string, fotoUrl: string, evrakTuru: string) => {
+    let docTypeParam = 'general';
+    if (evrakTuru === 'FATURA') docTypeParam = 'fatura';
+    if (evrakTuru === 'İRSALİYE') docTypeParam = 'irsaliye';
+    if (evrakTuru === 'MAKBUZ') docTypeParam = 'makbuz';
+
+    if (docTypeParam === 'general') return;
+
+    const parts = fotoUrl.split(',');
+    if (parts.length < 2) return;
+    const mimeMatch = parts[0].match(/data:(.*?);base64/);
+    const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    const fileBase64 = parts[1];
+
+    try {
+      await updateDoc(doc(db, 'guvenlikGelenEvraklar', docId), {
+        aiStatus: 'PARSING'
+      });
+
+      const response: any = await fetchApiJson('/api/parse-legacy-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileBase64,
+          mimeType,
+          docType: docTypeParam
+        })
+      });
+
+      if (response && !response.error) {
+        const parsed = response;
+        const updates: any = {
+          aiParsed: true,
+          aiStatus: 'SUCCESS'
+        };
+
+        if (evrakTuru === 'FATURA') {
+          updates.evrakNo = parsed.faturaNo || '';
+          updates.firma = parsed.cariUnvan || '';
+          updates.tarih = parsed.tarih || '';
+          updates.toplamTutar = parsed.toplamTutar || 0;
+          updates.kdvTutar = parsed.kdvTutar || 0;
+          updates.genelToplam = parsed.genelToplam || 0;
+          updates.kalemler = parsed.kalemler || [];
+        } else if (evrakTuru === 'İRSALİYE') {
+          updates.evrakNo = parsed.irsaliyeNo || '';
+          updates.firma = parsed.firma || '';
+          updates.tarih = parsed.tarih || '';
+          updates.kalemler = parsed.kalemler || [];
+        } else if (evrakTuru === 'MAKBUZ') {
+          updates.evrakNo = parsed.referansId || '';
+          updates.firma = parsed.firma || '';
+          updates.tarih = parsed.tarih || '';
+          updates.tutar = parsed.tutar || 0;
+          updates.aciklama = parsed.aciklama || '';
+          updates.hareketTipi = parsed.hareketTipi || 'ÇIKIŞ';
+        }
+
+        await updateDoc(doc(db, 'guvenlikGelenEvraklar', docId), updates);
+      } else {
+        await updateDoc(doc(db, 'guvenlikGelenEvraklar', docId), {
+          aiStatus: 'FAILED',
+          aiError: response?.error || 'Bilinmeyen YZ hatası'
+        });
+      }
+    } catch (err: any) {
+      console.error("Background AI parsing error:", err);
+      await updateDoc(doc(db, 'guvenlikGelenEvraklar', docId), {
+        aiStatus: 'FAILED',
+        aiError: err?.message || 'Bağlantı hatası'
+      });
+    }
+  };
+
   const handleSendQueueToManager = async () => {
     if (uploadQueue.length === 0) {
       alert("Gönderilecek evrak bulunmuyor. Lütfen önce dosya yükleyin!");
@@ -378,6 +452,10 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
           kaydeden: currentUser?.email || 'nobetci_guvenlik'
         };
         await setDoc(doc(db, 'guvenlikGelenEvraklar', uniqueId), newEvrak);
+        
+        if (newEvrak.fotoUrl) {
+          triggerBackgroundAiParsing(uniqueId, newEvrak.fotoUrl, newEvrak.evrakTuru);
+        }
       }
 
       if (addNotification) {

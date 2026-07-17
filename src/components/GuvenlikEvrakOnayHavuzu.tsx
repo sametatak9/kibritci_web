@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Truck, CreditCard, Eye, Check, X, Sparkles, ExternalLink, FileText, Download, ZoomIn } from 'lucide-react';
+import { Truck, CreditCard, Eye, Check, X, Sparkles, ExternalLink, FileText, Download, ZoomIn, Loader2 } from 'lucide-react';
 import { openBase64InNewTab } from '../lib/fileViewerUtils';
 
 interface GuvenlikEvrakOnayHavuzuProps {
@@ -200,6 +200,24 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                   <div className="text-[10px] text-slate-500 mt-1 font-semibold">
                     Yükleyen: {docItem.kaydeden || 'Güvenlik'}
                   </div>
+
+                  {/* AI Status & Parsed Preview */}
+                  {docItem.aiParsed && (
+                    <div className="mt-2 text-[10px] bg-indigo-950/40 border border-indigo-900/30 p-2.5 rounded-xl text-indigo-300 font-sans">
+                      <span className="font-bold block text-[8px] uppercase tracking-wider text-indigo-400 mb-1 flex items-center gap-1">
+                        <Sparkles size={9} className="text-amber-400 animate-pulse" /> YAYINLANAN YZ VERİLERİ
+                      </span>
+                      <div className="truncate"><strong>Firma:</strong> {docItem.firma || '-'}</div>
+                      <div className="truncate"><strong>No/Kod:</strong> {docItem.evrakNo || '-'}</div>
+                      <div className="truncate"><strong>Miktar:</strong> {docItem.kalemler?.length || 0} Kalem</div>
+                    </div>
+                  )}
+                  {docItem.aiStatus === 'PARSING' && (
+                    <div className="mt-2 text-[10px] bg-slate-900 border border-slate-800 p-2 rounded-xl text-slate-400 font-sans flex items-center gap-1.5 animate-pulse">
+                      <Loader2 size={10} className="animate-spin text-indigo-500" />
+                      <span>Yapay Zeka evrakı okuyor...</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-2 pt-2 border-t border-slate-900">

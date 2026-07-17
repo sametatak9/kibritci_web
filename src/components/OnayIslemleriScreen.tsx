@@ -1149,31 +1149,58 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   const handleOpenGateDocApproval = (docItem: any) => {
     setActiveGateDoc(docItem);
     setSelectedDocType(docItem.evrakTuru || 'İRSALİYE');
-    setApprovalStep('SELECT_METHOD');
     setIsAiResolving(false);
     
-    // Clear all forms
-    setFaturaNo('');
-    setFaturaFirma('');
-    setFaturaTarih('');
-    setFaturaToplam(0);
-    setFaturaKdv(0);
-    setFaturaGenelToplam(0);
-    setFaturaKalemler([]);
+    if (docItem.aiParsed) {
+      setFaturaNo(docItem.evrakNo || '');
+      setFaturaFirma(docItem.firma || '');
+      setFaturaTarih(docItem.tarih || new Date().toISOString().split('T')[0]);
+      setFaturaToplam(docItem.toplamTutar || 0);
+      setFaturaKdv(docItem.kdvTutar || 0);
+      setFaturaGenelToplam(docItem.genelToplam || 0);
+      setFaturaKalemler(docItem.kalemler || []);
 
-    setIrsaliyeNo('');
-    setIrsaliyeFirma('');
-    setIrsaliyeTarih('');
-    setIrsaliyeKalemler([]);
+      setIrsaliyeNo(docItem.evrakNo || '');
+      setIrsaliyeFirma(docItem.firma || '');
+      setIrsaliyeTarih(docItem.tarih || new Date().toISOString().split('T')[0]);
+      setIrsaliyeKalemler(docItem.kalemler || []);
 
-    setMakbuzRefNo('');
-    setMakbuzFirma('');
-    setMakbuzTarih('');
-    setMakbuzTutar(0);
-    setMakbuzAciklama('');
-    setMakbuzTip('ÇIKIŞ');
+      setMakbuzRefNo(docItem.evrakNo || '');
+      setMakbuzFirma(docItem.firma || '');
+      setMakbuzTarih(docItem.tarih || new Date().toISOString().split('T')[0]);
+      setMakbuzTutar(docItem.tutar || 0);
+      setMakbuzAciklama(docItem.aciklama || '');
+      setMakbuzTip(docItem.hareketTipi || 'ÇIKIŞ');
 
-    setGenelAciklama('');
+      setGenelAciklama(docItem.aciklama || '');
+
+      setApprovalStep('FORM');
+    } else {
+      // Clear all forms
+      setFaturaNo('');
+      setFaturaFirma('');
+      setFaturaTarih('');
+      setFaturaToplam(0);
+      setFaturaKdv(0);
+      setFaturaGenelToplam(0);
+      setFaturaKalemler([]);
+
+      setIrsaliyeNo('');
+      setIrsaliyeFirma('');
+      setIrsaliyeTarih('');
+      setIrsaliyeKalemler([]);
+
+      setMakbuzRefNo('');
+      setMakbuzFirma('');
+      setMakbuzTarih('');
+      setMakbuzTutar(0);
+      setMakbuzAciklama('');
+      setMakbuzTip('ÇIKIŞ');
+
+      setGenelAciklama('');
+
+      setApprovalStep('SELECT_METHOD');
+    }
   };
 
   const handleStartManualGateDocApproval = () => {
