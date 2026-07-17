@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Tent, Plus, Trash2, Camera, Check, RefreshCw, Eye, 
-  Search, UserPlus, ClipboardList, Package, Layers, MapPin, Sparkles, CheckCircle, Clock, X, ArrowRight, ShieldCheck, DoorOpen, LogOut, Image as ImageIcon, MessageSquare, Calendar, Truck
+  Search, UserPlus, ClipboardList, Package, Layers, MapPin, Sparkles, CheckCircle, Clock, X, ArrowRight, ShieldCheck, DoorOpen, LogOut, Image as ImageIcon, MessageSquare, Calendar, Truck, AlertTriangle
 } from 'lucide-react';
 import { KampOdasi, KampKaydi, Personel, StokKart, KampYerleske, KampKat, CariKart, AylikYoklamaMap, Fatura } from '../types/erp';
 import { db, saveDocument } from '../lib/firebase';
@@ -16,6 +16,7 @@ import { KampVidanjorTab } from './KampVidanjorTab';
 import { collection, onSnapshot, doc, updateDoc, setDoc, query, orderBy } from 'firebase/firestore';
 import { applySahaMesaiToYoklama, normalizeMesaiHours } from '../lib/sahaFaaliyetUtils';
 import { isTaseronPersonel } from '../lib/yoklamaUtils';
+import { vibrateVidanjorAlert } from '../lib/vidanjorUtils';
 interface KampciScreenProps {
   kampOdalari: KampOdasi[];
   setKampOdalari: React.Dispatch<React.SetStateAction<KampOdasi[]>>;
@@ -79,6 +80,45 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
       statusHideTimer.current = setTimeout(() => setStatusMessage(null), autoHideMs);
     }
   };
+
+  // Kapı vidanjör girişi → kampçı her sekmedeyken bildirim + titreşim
+  const [vidanjorAlert, setVidanjorAlert] = useState<string | null>(null);
+  const seenVidanjorNotifIds = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'bildirimler'), (snap) => {
+      const now = Date.now();
+      snap.docChanges().forEach((change) => {
+        if (change.type !== 'added') return;
+        const id = change.doc.id;
+        if (seenVidanjorNotifIds.current.has(id)) return;
+        const data = change.doc.data() as Record<string, unknown>;
+        const tip = String(data.tip || data.metaTip || '');
+        const hedef = String(data.hedefRol || '').toLocaleUpperCase('tr-TR');
+        const mesaj = String(data.mesaj || '');
+        const ts = new Date(String(data.tarih || 0)).getTime();
+        if (Number.isFinite(ts) && now - ts > 120_000) return;
+        const isVidanjor =
+          tip === 'VIDANJOR_GIRIS' ||
+          (hedef.includes('KAMP') && mesaj.toLocaleLowerCase('tr-TR').includes('vidanj'));
+        if (!isVidanjor) return;
+        seenVidanjorNotifIds.current.add(id);
+        vibrateVidanjorAlert();
+        setVidanjorAlert(mesaj || 'Vidanjör sahaya giriş yaptı — fiş yükleyin.');
+        setActiveSubTab('vidanjor');
+        try {
+          window.dispatchEvent(
+            new CustomEvent('app-toast', {
+              detail: { type: 'info', message: mesaj || 'Vidanjör girişi' },
+            })
+          );
+        } catch {
+          /* ignore */
+        }
+      });
+    });
+    return () => unsub();
+  }, []);
 
   // ─────────────────────────────────────────────────────────────
   // 🏕️ 1. YERLEŞKE / KAT / ODA — App seviyesinde Firestore dinleyicisi ile senkron
@@ -1237,6 +1277,34 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
             <CheckCircle size={16} className="shrink-0" />
           )}
           <span className="text-xs font-bold">{statusMessage.text}</span>
+        </div>
+      )}
+
+      {vidanjorAlert && (
+        <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3 flex items-start gap-2 max-w-2xl shadow-sm">
+          <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={16} />
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-black uppercase text-amber-800 tracking-wider">Vidanjör Giriş Uyarısı</p>
+            <p className="text-xs text-amber-900 mt-0.5">{vidanjorAlert}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveSubTab('vidanjor');
+                setVidanjorAlert(null);
+              }}
+              className="mt-2 text-[10px] font-black uppercase tracking-wide text-indigo-700 hover:underline cursor-pointer"
+            >
+              Vidanjör fiş sekmesine git →
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setVidanjorAlert(null)}
+            className="text-amber-700 cursor-pointer"
+            aria-label="Uyarıyı kapat"
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
 
