@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   Users, Wallet, ShoppingCart, Truck, RefreshCw, 
   FileText, BarChart, ArrowUpRight, ArrowDownRight, Compass, Settings,
   Search, ClipboardList, Briefcase, CalendarCheck2, ChevronRight, UserCheck, AlertTriangle, Tent,
-  MapPin, Sun, HelpCircle, Activity, ArrowRight, BookOpen, Plus, TrendingUp
+  MapPin, Sun, HelpCircle, Activity, ArrowRight, BookOpen, Plus, TrendingUp, CreditCard
 } from 'lucide-react';
 import { Personel, KasaHareketi, SatinAlmaTalebi, AracBakim, AylikYoklamaMap, KampOdasi, KampKaydi } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
 import { getKibritciLogoUrl } from '../lib/kibritciBrand';
+import { listOdemeEngelleri } from '../lib/personelOdemeUtils';
 
 interface DashboardScreenProps {
   personeller: Personel[];
@@ -133,6 +134,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   };
 
   const traceData = getIndividualTraceHistory(selectedPersonelId);
+  const odemeEngelleri = useMemo(() => listOdemeEngelleri(personeller), [personeller]);
 
   // Stats Card Arrays
   const stats = [
@@ -277,6 +279,89 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </div>
           );
         })}
+      </div>
+
+      {/* Ödeme Engeli Paneli — maaş günü öncesi */}
+      <div className="bg-white border border-rose-200 rounded-3xl p-5 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 shrink-0">
+              <CreditCard size={18} className="stroke-[2.5]" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                Ödeme Engeli — Eksik TC / IBAN / SGK
+              </h4>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Aktif ana firma personeli. Maaş gününden önce tamamlanması gereken kayıtlar.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span
+              className={`text-[10px] font-black px-2.5 py-1 rounded-lg border ${
+                odemeEngelleri.length === 0
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-rose-50 text-rose-700 border-rose-200'
+              }`}
+            >
+              {odemeEngelleri.length === 0 ? 'Engelsiz' : `${odemeEngelleri.length} personel`}
+            </span>
+            <button
+              type="button"
+              onClick={() => onNavigate('personel')}
+              className="text-[10px] font-black uppercase tracking-wide px-3 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 cursor-pointer"
+            >
+              Personele Git
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate('maas_odeme')}
+              className="text-[10px] font-black uppercase tracking-wide px-3 py-2 rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-600 cursor-pointer"
+            >
+              Maaş Ödeme
+            </button>
+          </div>
+        </div>
+
+        {odemeEngelleri.length === 0 ? (
+          <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
+            Tüm aktif ana firma personelinin TC, IBAN ve SGK bilgileri ödeme için uygun görünüyor.
+          </p>
+        ) : (
+          <div className="max-h-[220px] overflow-y-auto space-y-1.5 pr-1">
+            {odemeEngelleri.slice(0, 40).map(({ personel, engeller }) => (
+              <div
+                key={personel.id}
+                className="flex items-center justify-between gap-2 bg-rose-50/60 border border-rose-100 rounded-xl px-3 py-2 text-[11px]"
+              >
+                <div className="min-w-0">
+                  <span className="font-bold text-slate-800 block truncate">
+                    {personel.ad} {personel.soyad}
+                  </span>
+                  <span className="text-[9px] text-slate-500 font-mono truncate block">
+                    {personel.gorev || '—'}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1 shrink-0 justify-end">
+                  {engeller.map((e) => (
+                    <span
+                      key={e}
+                      className="text-[8px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-white border border-rose-200 text-rose-700"
+                    >
+                      {e === 'SGK' ? 'SGK eksik' : `${e} eksik`}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {odemeEngelleri.length > 40 && (
+              <p className="text-[10px] text-slate-500 text-center pt-1">
+                +{odemeEngelleri.length - 40} kişi daha — Personel ekranından tamamlayın.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Quick Actions Hub (Hızlı Erişim Paneli) */}

@@ -3,7 +3,7 @@ import {
   Calendar, CheckCircle, XCircle, Users, ClipboardCheck, 
   MapPin, Camera, Sparkles, Undo2, ChevronRight, User, 
   Info, Smartphone, Monitor, Search, PlusCircle, Trash2, 
-  FileSignature, Briefcase, RefreshCw, Send, Image as ImageIcon,
+  FileSignature, Briefcase, RefreshCw, Send, Image as ImageIcon, MessageCircle,
   Check, X, FileText, UserPlus, Upload, ShieldCheck, Edit2, ArrowLeft, Eye
 } from 'lucide-react';
 import { Personel, AylikYoklamaMap, YoklamaDurum, SahaFaaliyeti as SahaFaaliyetiType, SahaFaaliyetTipi } from '../types/erp';
@@ -949,24 +949,43 @@ ${satirlar
     }
   };
 
+  const buildFormenGunlukAkisMetin = () => {
+    const gelenIsimler = activeStaff
+      .filter((p) => presentIds.includes(p.id))
+      .map((p) => `${p.ad} ${p.soyad}`);
+    const mesaiToplamSaat = presentIds.reduce((sum, id) => sum + Number(mesaiSaatleri[id] || 0), 0);
+    const sahaOzetleri = daySahaFaaliyetleri.map(
+      (sf) => `${sf.isNiteligi || 'Faaliyet'} — ${sf.parsel || '?'}/${sf.blok || '?'}`
+    );
+    return buildFormenGunlukOzet({
+      tarih: selectedDate,
+      email: formenEmail,
+      gelen: presentIds.length,
+      gelmeyen: Math.max(0, activeStaff.length - presentIds.length),
+      toplam: activeStaff.length,
+      gelenIsimler,
+      sahaCount: daySahaFaaliyetleri.length,
+      girisCount: personelGirisListesi.filter((g) => g.tarih?.startsWith(selectedDate)).length,
+      cikisCount: isCikisTalepleriList.filter((c) => c.tarih?.startsWith(selectedDate)).length,
+      mesaiToplamSaat,
+      sahaOzetleri,
+    });
+  };
+
+  const handleShareGunlukAkisWhatsApp = () => {
+    const metin = buildFormenGunlukAkisMetin();
+    window.open(buildWhatsAppUrl(metin), '_blank');
+    showStatus('success', 'Gün sonu özeti WhatsApp’ta açıldı — şefe iletebilirsiniz.');
+  };
+
   const handleSendGunlukAkis = async () => {
     if (!window.confirm(`${selectedDate} tarihli günlük akış raporunu yönetime göndermek istiyor musunuz?`)) return;
     setSendingGunlukAkis(true);
     try {
+      const ozetMetin = buildFormenGunlukAkisMetin();
       const gelenIsimler = activeStaff
         .filter((p) => presentIds.includes(p.id))
         .map((p) => `${p.ad} ${p.soyad}`);
-      const ozetMetin = buildFormenGunlukOzet({
-        tarih: selectedDate,
-        email: formenEmail,
-        gelen: presentIds.length,
-        gelmeyen: Math.max(0, activeStaff.length - presentIds.length),
-        toplam: activeStaff.length,
-        gelenIsimler,
-        sahaCount: daySahaFaaliyetleri.length,
-        girisCount: personelGirisListesi.filter((g) => g.tarih?.startsWith(selectedDate)).length,
-        cikisCount: isCikisTalepleriList.filter((c) => c.tarih?.startsWith(selectedDate)).length,
-      });
       const raporId = `formen_akis_${selectedDate}_${formenEmail.replace(/[@.]/g, '-')}`;
       await saveDocument('mobilGunlukAkisRaporlari', {
         id: raporId,
@@ -2761,8 +2780,17 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                     <p className="text-[10px] text-slate-500">Formen: <strong>{formenEmail}</strong></p>
                     <ul className="text-[10px] text-slate-700 space-y-1">
                       <li>✓ Yoklama: {presentIds.length} geldi / {activeStaff.length} toplam</li>
+                      <li>
+                        ✓ Mesai:{' '}
+                        {presentIds.reduce((s, id) => s + Number(mesaiSaatleri[id] || 0), 0)} saat
+                      </li>
                       <li>✓ Saha faaliyeti: {daySahaFaaliyetleri.length} kayıt</li>
-                      <li>✓ Personel giriş talebi: {personelGirisListesi.filter((g) => g.tarih?.startsWith(selectedDate)).length}</li>
+                      <li>
+                        ✓ Personel giriş:{' '}
+                        {personelGirisListesi.filter((g) => g.tarih?.startsWith(selectedDate)).length} ·
+                        çıkış:{' '}
+                        {isCikisTalepleriList.filter((c) => c.tarih?.startsWith(selectedDate)).length}
+                      </li>
                     </ul>
                     {daySahaFaaliyetleri.length > 0 && (
                       <div className="border-t pt-2 space-y-1">
@@ -2771,15 +2799,25 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                         ))}
                       </div>
                     )}
-                    <button
-                      type="button"
-                      disabled={sendingGunlukAkis}
-                      onClick={handleSendGunlukAkis}
-                      className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-60"
-                    >
-                      {sendingGunlukAkis ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
-                      GÜN SONU RAPORUNU YÖNETİME GÖNDER
-                    </button>
+                    <div className="grid grid-cols-1 gap-2">
+                      <button
+                        type="button"
+                        onClick={handleShareGunlukAkisWhatsApp}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] py-3 rounded-xl flex items-center justify-center gap-2"
+                      >
+                        <MessageCircle size={14} />
+                        WHATSAPP: GÜN SONU ÖZETİ (ŞEFE)
+                      </button>
+                      <button
+                        type="button"
+                        disabled={sendingGunlukAkis}
+                        onClick={handleSendGunlukAkis}
+                        className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-60"
+                      >
+                        {sendingGunlukAkis ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
+                        GÜN SONU RAPORUNU YÖNETİME GÖNDER
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

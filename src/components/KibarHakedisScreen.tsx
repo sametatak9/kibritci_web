@@ -4,8 +4,8 @@ import {
   RefreshCw, UserX
 } from 'lucide-react';
 import { db, parseYoklamaSnapshotData, saveDocument } from '../lib/firebase';
-import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
-import { Personel, AylikYoklamaMap } from '../types/erp';
+import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore';
+import { Personel, AylikYoklamaMap, SahaKolajFoto } from '../types/erp';
 import { CorporateReportLayout } from './CorporateReportLayout';
 import { buildPersonelListForMonth, isDayActiveForPersonel, normalizeTurkishName } from '../lib/yoklamaUtils';
 import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
@@ -16,6 +16,7 @@ import {
   faaliyetIsTanimi,
   formatPersonelSayisi,
 } from '../lib/kibarReportUtils';
+import { groupKolajFotolari } from '../lib/sahaKolajUtils';
 
 interface KibarHakedisScreenProps {
   personeller: Personel[];
@@ -165,6 +166,24 @@ const REPORT_CSS = `
     border: 1px solid #d1d5db; border-radius: 4px; padding: 12px;
     background: #f9fafb; font-size: 8pt; color: #374151;
   }
+  .rpt-foto-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+    margin-top: 6px;
+  }
+  .rpt-foto-card {
+    border: 1px solid #d1d5db; border-radius: 4px; overflow: hidden;
+    background: #fff; page-break-inside: avoid;
+  }
+  .rpt-foto-card img {
+    display: block !important; width: 100%; height: 38mm; object-fit: cover;
+  }
+  .rpt-foto-cap {
+    font-size: 6.5pt; color: #4b5563; padding: 3px 4px; line-height: 1.2;
+  }
+  .rpt-foto-grup {
+    font-size: 7.5pt; font-weight: 700; color: #374151;
+    text-transform: uppercase; margin: 8px 0 3px;
+  }
 `;
 
 function daysInMonth(year: number, month: number): number {
@@ -244,6 +263,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
   const [selectedYear, setSelectedYear] = useState(2026);
   const [selectedMonth, setSelectedMonth] = useState(5);
   const [kampFaaliyetleri, setKampFaaliyetleri] = useState<any[]>([]);
+  const [kolajFotolari, setKolajFotolari] = useState<SahaKolajFoto[]>([]);
   const [excludedStaffIds, setExcludedStaffIds] = useState<string[]>([]);
   const [reportType, setReportType] = useState<'NORMAL' | 'E-IMZALI'>('NORMAL');
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -267,11 +287,35 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
   useEffect(() => {
     const unsubKamp = onSnapshot(collection(db, 'kampGunlukFaaliyetleri'), (snap) => {
       const list: any[] = [];
-      snap.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
+      snap.forEach((docSnap) => list.push({ id: docSnap.id, ...docSnap.data() }));
       setKampFaaliyetleri(list);
     });
     return () => unsubKamp();
   }, []);
+
+  useEffect(() => {
+    const q = query(collection(db, 'sahaKolajFotolari'), where('albumKey', '==', donemKey));
+    const unsub = onSnapshot(q, (snap) => {
+      const list: SahaKolajFoto[] = [];
+      snap.forEach((d) => list.push({ id: d.id, ...(d.data() as Omit<SahaKolajFoto, 'id'>) }));
+      list.sort((a, b) => a.sira - b.sira || a.yuklemeTarihi.localeCompare(b.yuklemeTarihi));
+      setKolajFotolari(list);
+    });
+    return () => unsub();
+  }, [donemKey]);
+
+  const kolajFotoLimit = useMemo(() => {
+    const gruplar = groupKolajFotolari(kolajFotolari).slice(0, 8);
+    const flat: SahaKolajFoto[] = [];
+    for (const g of gruplar) {
+      for (const f of g.fotolar) {
+        if (flat.length >= 24) break;
+        flat.push(f);
+      }
+      if (flat.length >= 24) break;
+    }
+    return flat;
+  }, [kolajFotolari]);
 
   const monthPersoneller = useMemo(
     () => buildPersonelListForMonth(personeller, yoklamaSource, selectedYear, selectedMonth, resolveStubPersonelFromLegacyId),
@@ -422,6 +466,7 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
       tr { page-break-inside: avoid; break-inside: avoid; }
       svg:not(.rpt-logo-mark) { display: none !important; }
       .rpt-logo-mark { display: block !important; max-height: 14mm; width: auto; }
+      .rpt-foto-card img { display: block !important; }
       ${REPORT_CSS}
       @media print {
         html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -814,6 +859,40 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                )}
+              </section>
+
+              {/* —— 4. SAHA KOLAJ FOTO ALBÜMÜ —— */}
+              <section>
+                <p className="rpt-sec-title m-0">4 · Saha Foto Albümü (Kolaj)</p>
+                <p className="rpt-sec-sub">
+                  {kolajFotolari.length} albüm fotoğrafı
+                  {kolajFotoLimit.length < kolajFotolari.length
+                    ? ` · raporda ${kolajFotoLimit.length} adet gösteriliyor`
+                    : ''}
+                </p>
+                {kolajFotoLimit.length === 0 ? (
+                  <p className="text-[9px] text-slate-400 italic">
+                    Bu dönem için saha kolaj albümünde fotoğraf yok. İdari → Kolaj sekmesinden yükleyebilirsiniz.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {groupKolajFotolari(kolajFotoLimit).map((grup) => (
+                      <div key={grup.ad}>
+                        <p className="rpt-foto-grup">{grup.ad}</p>
+                        <div className="rpt-foto-grid">
+                          {grup.fotolar.map((f) => (
+                            <div key={f.id} className="rpt-foto-card">
+                              <img src={f.imageUrl} alt={f.baslik || f.dosyaAdi || 'Saha foto'} />
+                              <div className="rpt-foto-cap">
+                                {(f.baslik || f.aciklama || f.dosyaAdi || 'Saha').slice(0, 48)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </section>

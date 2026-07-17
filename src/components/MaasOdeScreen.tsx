@@ -4,6 +4,7 @@ import { Personel, AylikYoklamaMap, MaaşOdeme, MaasKesinti } from '../types/erp
 import { iterateMonthYoklama, buildPersonelListForMonth, isDayActiveForPersonel } from '../lib/yoklamaUtils';
 import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 import { kibritciLogoHtml } from '../lib/kibritciBrand';
+import { validateTC, validateIBAN } from '../lib/personelOdemeUtils';
 
 interface MaasOdeScreenProps {
   personeller: Personel[];
@@ -309,18 +310,6 @@ export const MaasOdeScreen: React.FC<MaasOdeScreenProps> = ({
     a.download = `Maas_Odeme_Raporu_${String(selectedAy).padStart(2, '0')}_${selectedYil}.html`;
     a.click();
     URL.revokeObjectURL(url);
-  };
-
-  const validateTC = (tc: string): boolean => {
-    if (!tc || tc.length !== 11) return false;
-    if (!/^\d{11}$/.test(tc)) return false;
-    return true;
-  };
-
-  const validateIBAN = (iban: string): boolean => {
-    if (!iban) return false;
-    const cleaned = iban.replace(/\s/g, '');
-    return cleaned.startsWith('TR') && cleaned.length === 26;
   };
 
   return (
