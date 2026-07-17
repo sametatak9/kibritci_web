@@ -44,6 +44,103 @@ export function groupKolajFotolari(fotolar: SahaKolajFoto[]): KolajGrup[] {
   return groups.sort((a, b) => a.ad.localeCompare(b.ad));
 }
 
+type SahaFaaliyetFotoKaynak = {
+  id?: string;
+  tarih?: string;
+  fotoUrl?: string;
+  fotoUrls?: string[];
+  isinAdi?: string;
+  isNiteligi?: string;
+  aciklama?: string;
+  parsel?: string;
+  blok?: string;
+  kaydeden?: string;
+};
+
+type ProgramliFaaliyetFotoKaynak = {
+  id?: string;
+  tarih?: string;
+  isinAdi?: string;
+  parsel?: string;
+  bloklar?: string;
+  olusturan?: string;
+  asamalar?: Array<{
+    adim?: string;
+    tamamlandi?: boolean;
+    fotoUrl?: string;
+    aciklama?: string;
+    tamamlanmaTarihi?: string;
+  }>;
+};
+
+/**
+ * Kolaj ekranı ile aynı birleşik liste:
+ * sahaKolajFotolari + dönemdeki saha faaliyet fotoğrafları + programlı faaliyet aşama fotoğrafları.
+ */
+export function mergeAlbumFotolari(input: {
+  albumKey: string;
+  yil: number;
+  ay: number;
+  kolajFotolari: SahaKolajFoto[];
+  sahaFaaliyetleri?: SahaFaaliyetFotoKaynak[];
+  programliFaaliyetler?: ProgramliFaaliyetFotoKaynak[];
+}): SahaKolajFoto[] {
+  const { albumKey, yil, ay } = input;
+  const list: SahaKolajFoto[] = [...(input.kolajFotolari || [])];
+  let siraOffset = list.length > 0 ? Math.max(...list.map((f) => f.sira || 0)) + 1 : 1;
+
+  (input.sahaFaaliyetleri || []).forEach((sf) => {
+    if (!sf.tarih || !String(sf.tarih).startsWith(albumKey)) return;
+    const urls = sf.fotoUrls || (sf.fotoUrl ? [sf.fotoUrl] : []);
+    urls.forEach((url, i) => {
+      if (!url) return;
+      const id = `sf_${sf.id}_${i}`;
+      if (list.some((x) => x.id === id)) return;
+      list.push({
+        id,
+        albumKey,
+        yil,
+        ay,
+        imageUrl: url,
+        baslik: sf.isinAdi || sf.isNiteligi || 'Günlük Faaliyet',
+        aciklama: sf.aciklama,
+        grupAdi: `Parsel: ${sf.parsel || '—'} - Blok: ${sf.blok || '—'}`,
+        sira: siraOffset++,
+        yuklemeTarihi: sf.tarih,
+        yukleyen: sf.kaydeden || 'Formen',
+        parsel: sf.parsel,
+        blok: sf.blok,
+      });
+    });
+  });
+
+  (input.programliFaaliyetler || []).forEach((pf) => {
+    if (!pf.tarih || !String(pf.tarih).startsWith(albumKey)) return;
+    (pf.asamalar || []).forEach((asama) => {
+      if (!asama.tamamlandi || !asama.fotoUrl) return;
+      const id = `pf_${pf.id}_${asama.adim}`;
+      if (list.some((x) => x.id === id)) return;
+      list.push({
+        id,
+        albumKey,
+        yil,
+        ay,
+        imageUrl: asama.fotoUrl,
+        baslik: `${pf.isinAdi || 'Programlı'} (${asama.adim || ''})`,
+        aciklama: asama.aciklama,
+        grupAdi: `Parsel: ${pf.parsel || '—'} - Blok: ${pf.bloklar || '—'}`,
+        sira: siraOffset++,
+        yuklemeTarihi: asama.tamamlanmaTarihi || pf.tarih,
+        yukleyen: pf.olusturan || 'Formen',
+        parsel: pf.parsel,
+        blok: pf.bloklar,
+      });
+    });
+  });
+
+  return list.sort((a, b) => a.sira - b.sira || a.yuklemeTarihi.localeCompare(b.yuklemeTarihi));
+}
+
 export type MagazinePageType = 'cover' | 'toc' | 'section' | 'spread' | 'collage' | 'summary';
 
 export interface MagazinePage {

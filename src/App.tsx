@@ -2831,6 +2831,7 @@ export default function App() {
                     personeller={personeller}
                     yoklamalar={yoklamalar}
                     sahaFaaliyetleri={sahaFaaliyetleri}
+                    programliFaaliyetler={programliFaaliyetler}
                     currentUser={currentUser}
                   />
                 ) : renderAccessDenied()
