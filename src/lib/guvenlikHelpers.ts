@@ -98,6 +98,7 @@ export function buildNobetGunlukRaporHtml(archive: {
   personelLoglari?: any[];
   aracLoglari?: any[];
   suTankeriLoglari?: any[];
+  miciStabilizeLoglari?: any[];
   ziyaretciLoglari?: any[];
   evrakLoglari?: any[];
   akvizyonYoklama?: Record<string, string> | null;
@@ -109,6 +110,7 @@ export function buildNobetGunlukRaporHtml(archive: {
   const p = archive.personelLoglari || [];
   const a = archive.aracLoglari || [];
   const st = archive.suTankeriLoglari || [];
+  const ms = archive.miciStabilizeLoglari || [];
   const z = archive.ziyaretciLoglari || [];
   const e = archive.evrakLoglari || [];
 
@@ -128,8 +130,14 @@ export function buildNobetGunlukRaporHtml(archive: {
     : '<p style="color:#64748b;font-size:12px">Kayıt yok</p>';
 
   const stRows = st.length
-    ? `<table><tr><th>Plaka</th><th>Firma</th><th>Miktar</th><th>Giriş</th></tr>${st.map((l) =>
-        `<tr><td>${l.plaka || '—'}</td><td>${l.firma || '—'}</td><td>${l.miktar || '—'}</td><td>${formatZamanTr(l.girisZamani)}</td></tr>`
+    ? `<table><tr><th>Plaka</th><th>Firma</th><th>Miktar</th><th>Giriş</th><th>Çıkış</th></tr>${st.map((l) =>
+        `<tr><td>${l.plaka || '—'}</td><td>${l.firma || '—'}</td><td>${l.miktar || '—'}</td><td>${formatZamanTr(l.girisZamani)}</td><td>${l.cikisZamani ? formatZamanTr(l.cikisZamani) : 'İçeride'}</td></tr>`
+      ).join('')}</table>`
+    : '<p style="color:#64748b;font-size:12px">Kayıt yok</p>';
+
+  const msRows = ms.length
+    ? `<table><tr><th>Plaka</th><th>Firma</th><th>Malzeme/Miktar</th><th>Giriş</th><th>Çıkış</th></tr>${ms.map((l) =>
+        `<tr><td>${l.plaka || '—'}</td><td>${l.firma || '—'}</td><td>${l.miktar || '—'}</td><td>${formatZamanTr(l.girisZamani)}</td><td>${l.cikisZamani ? formatZamanTr(l.cikisZamani) : 'İçeride'}</td></tr>`
       ).join('')}</table>`
     : '<p style="color:#64748b;font-size:12px">Kayıt yok</p>';
 
@@ -151,7 +159,7 @@ export function buildNobetGunlukRaporHtml(archive: {
   table{width:100%;border-collapse:collapse;font-size:11px;margin-top:8px}
   th{background:#f1f5f9;text-align:left;padding:6px;border-bottom:2px solid #cbd5e1}
   td{padding:6px;border-bottom:1px solid #e2e8f0}
-  .ozet{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:20px}
+  .ozet{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:20px}
   .ozet div{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px;text-align:center;font-size:11px}
   .ozet strong{display:block;font-size:18px}
   .note{background:#ecfdf5;border:1px solid #a7f3d0;padding:10px;border-radius:10px;font-size:12px;margin-bottom:16px;color:#065f46}</style></head><body>
@@ -163,12 +171,14 @@ export function buildNobetGunlukRaporHtml(archive: {
     <div><strong>${p.length}</strong>Personel</div>
     <div><strong>${a.length}</strong>Araç</div>
     <div><strong>${st.length}</strong>Su Tankeri</div>
+    <div><strong>${ms.length}</strong>Mıcır &amp; Stabilize</div>
     <div><strong>${z.length}</strong>Ziyaretçi</div>
     <div><strong>${e.length}</strong>Evrak</div>
   </div>
   ${section('Personel Kapı Logları', personelRows)}
   ${section('Araç Giriş-Çıkış', aracRows)}
-  ${section('Su Tankeri', stRows)}
+  ${section('Su/Tanker/Vidanjör Logları', stRows)}
+  ${section('Mıcır &amp; Stabilize Kamyon Takip', msRows)}
   ${section('Ziyaretçi Defteri', zRows)}
   ${section('Evrak Girişleri', eRows)}
   </body></html>`;

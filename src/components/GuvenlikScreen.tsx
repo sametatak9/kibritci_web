@@ -52,7 +52,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   isStandalone = false,
   addNotification
 }) => {
-  const [activeTab, setActiveTab] = useState<'irsaliye' | 'personel' | 'arac' | 'su_tankeri' | 'vidanjor' | 'petrol_tankeri' | 'ziyaretci' | 'nobet_arsivi' | 'akvizyon_yoklama'>('irsaliye');
+  const [activeTab, setActiveTab] = useState<'irsaliye' | 'personel' | 'arac' | 'su_tankeri' | 'vidanjor' | 'petrol_tankeri' | 'mici_stabilize' | 'ziyaretci' | 'nobet_arsivi' | 'akvizyon_yoklama'>('irsaliye');
   const [viewMode, setViewMode] = useState<'web' | 'mobile'>('web');
   const [selectedPersonelLogIds, setSelectedPersonelLogIds] = useState<string[]>([]);
   const [selectedAracLogIds, setSelectedAracLogIds] = useState<string[]>([]);
@@ -144,6 +144,8 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   const [vidanjorGecmisLoglar, setVidanjorGecmisLoglar] = useState<any[]>([]);
   const [iceridekiPetrolTankerleri, setIceridekiPetrolTankerleri] = useState<any[]>([]);
   const [petrolTankeriGecmisLoglar, setPetrolTankeriGecmisLoglar] = useState<any[]>([]);
+  const [iceridekiMiciStabilize, setIceridekiMiciStabilize] = useState<any[]>([]);
+  const [miciStabilizeGecmisLoglar, setMiciStabilizeGecmisLoglar] = useState<any[]>([]);
 
   // ─────────────────────────────────────────────────────────────
   // 🎫 4. ZİYARETÇİ STATE & BADGE
@@ -299,6 +301,11 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       const petList = list.filter(x => x.tip === 'PETROL_TANKERI');
       setIceridekiPetrolTankerleri(petList.filter(x => x.durum === 'İÇERİDE'));
       setPetrolTankeriGecmisLoglar(petList.filter(x => x.durum === 'ÇIKTI'));
+
+      // Mıcır & Stabilize
+      const micirList = list.filter(x => x.tip === 'MICIR_STABILIZE');
+      setIceridekiMiciStabilize(micirList.filter(x => x.durum === 'İÇERİDE'));
+      setMiciStabilizeGecmisLoglar(micirList.filter(x => x.durum === 'ÇIKTI'));
     });
 
     // 3. Aktif ve geçmiş ziyaretçiler
@@ -648,6 +655,12 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         selectedVardiya,
         getIslemZamani()
       );
+      const filteredMiciStabilize = filterNobetAracZiyaretLoglari(
+        tumMiciStabilizeLoglar,
+        todayStr,
+        selectedVardiya,
+        getIslemZamani()
+      );
       const filteredZiyaretciler = filterNobetAracZiyaretLoglari(
         tumZiyaretciLoglar,
         todayStr,
@@ -666,6 +679,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         personelLoglari: filteredLogs,
         aracLoglari: filteredAraclar,
         suTankeriLoglari: filteredSuTanker,
+        miciStabilizeLoglari: filteredMiciStabilize,
         ziyaretciLoglari: filteredZiyaretciler,
         evrakLoglari: filteredEvraklar,
         akvizyonYoklama: akvizyonSnap?.yoklama || null,
@@ -673,6 +687,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
           personel: filteredLogs.length,
           arac: filteredAraclar.length,
           suTankeri: filteredSuTanker.length,
+          miciStabilize: filteredMiciStabilize.length,
           ziyaretci: filteredZiyaretciler.length,
           evrak: filteredEvraklar.length,
         },
@@ -1017,11 +1032,13 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     const currentTip = 
       activeTab === 'vidanjor' ? 'VIDANJOR' : 
       activeTab === 'petrol_tankeri' ? 'PETROL_TANKERI' : 
+      activeTab === 'mici_stabilize' ? 'MICIR_STABILIZE' : 
       'SU_TANKERI';
 
     const currentLabel = 
       activeTab === 'vidanjor' ? 'Vidanjör' : 
       activeTab === 'petrol_tankeri' ? 'Petrol Tankeri' : 
+      activeTab === 'mici_stabilize' ? 'Mıcır & Stabilize' : 
       'Su Tankeri';
 
     try {
@@ -1066,11 +1083,13 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       const matched = 
         iceridekiSuTankerleri.find((a) => a.id === id) ||
         iceridekiVidanjorler.find((a) => a.id === id) ||
+        iceridekiMiciStabilize.find((a) => a.id === id) ||
         iceridekiPetrolTankerleri.find((a) => a.id === id);
       
       const plakaLabel = matched ? matched.plaka : id;
       const typeLabel = matched && matched.tip === 'VIDANJOR' ? 'vidanjör' : 
                         matched && matched.tip === 'PETROL_TANKERI' ? 'petrol tankeri' : 
+                        matched && matched.tip === 'MICIR_STABILIZE' ? 'mıcır & stabilize kamyonu' : 
                         'su tankeri';
 
       await setDoc(
@@ -1162,6 +1181,10 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     () => [...iceridekiSuTankerleri, ...suTankeriGecmisLoglar],
     [iceridekiSuTankerleri, suTankeriGecmisLoglar]
   );
+  const tumMiciStabilizeLoglar = useMemo(
+    () => [...iceridekiMiciStabilize, ...miciStabilizeGecmisLoglar],
+    [iceridekiMiciStabilize, miciStabilizeGecmisLoglar]
+  );
   const tumZiyaretciLoglar = useMemo(
     () => [...aktifZiyaretciler, ...ziyaretciGecmisLoglar],
     [aktifZiyaretciler, ziyaretciGecmisLoglar]
@@ -1178,6 +1201,10 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   const seciliGunSuTankeriLoglar = useMemo(
     () => filterGuvenlikLogsByTarih(tumSuTankeriLoglar, islemTarihi),
     [tumSuTankeriLoglar, islemTarihi]
+  );
+  const seciliGunMiciStabilizeLoglar = useMemo(
+    () => filterGuvenlikLogsByTarih(tumMiciStabilizeLoglar, islemTarihi),
+    [tumMiciStabilizeLoglar, islemTarihi]
   );
   const seciliGunZiyaretciLoglar = useMemo(
     () => filterGuvenlikLogsByTarih(tumZiyaretciLoglar, islemTarihi),
@@ -1436,10 +1463,20 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             </button>
 
             <button 
+              onClick={() => setActiveTab('mici_stabilize')}
+              className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'mici_stabilize' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+              <span className="flex items-center space-x-2"><Truck size={13} /> <span>7. Mıcır &amp; Stabilize</span></span>
+              {iceridekiMiciStabilize.length > 0 && (
+                <span className="text-[9px] font-mono bg-emerald-500/20 text-emerald-400 rounded-full px-1.5 py-0.2 ml-1 hidden lg:inline">{iceridekiMiciStabilize.length}</span>
+              )}
+            </button>
+
+            <button 
               onClick={() => setActiveTab('ziyaretci')}
               className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'ziyaretci' ? 'bg-amber-600 text-slate-950 shadow-md shadow-amber-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
             >
-              <span className="flex items-center space-x-2"><UserCheck size={13} /> <span>7. Ziyaretçi Defteri</span></span>
+              <span className="flex items-center space-x-2"><UserCheck size={13} /> <span>8. Ziyaretçi Defteri</span></span>
               {aktifZiyaretciler.length > 0 && (
                 <span className="text-[9px] font-mono bg-amber-500/20 text-amber-400 rounded-full px-1.5 py-0.2 ml-1 hidden lg:inline">{aktifZiyaretciler.length}</span>
               )}
@@ -1449,14 +1486,14 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               onClick={() => setActiveTab('nobet_arsivi')}
               className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'nobet_arsivi' ? 'bg-amber-600 text-slate-950 shadow-md shadow-amber-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
             >
-              <span className="flex items-center space-x-2"><Archive size={13} /> <span>8. Nöbet Kapat &amp; Arşiv</span></span>
+              <span className="flex items-center space-x-2"><Archive size={13} /> <span>9. Nöbet Kapat &amp; Arşiv</span></span>
             </button>
 
             <button 
               onClick={() => setActiveTab('akvizyon_yoklama')}
               className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'akvizyon_yoklama' ? 'bg-amber-600 text-slate-950 shadow-md shadow-amber-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
             >
-              <span className="flex items-center space-x-2"><ClipboardList size={13} /> <span>9. Akvizyon Yoklama</span></span>
+              <span className="flex items-center space-x-2"><ClipboardList size={13} /> <span>10. Akvizyon Yoklama</span></span>
             </button>
           </div>
 
@@ -2286,40 +2323,47 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
           {/* ─────────────────────────────────────────────────────────────
               TAB: TANKER / KONTROL (SU TANKERİ, VİDANJÖR, PETROL TANKERİ)
               ───────────────────────────────────────────────────────────── */}
-          {(activeTab === 'su_tankeri' || activeTab === 'vidanjor' || activeTab === 'petrol_tankeri') && (() => {
+          {(activeTab === 'su_tankeri' || activeTab === 'vidanjor' || activeTab === 'petrol_tankeri' || activeTab === 'mici_stabilize') && (() => {
             const currentBg = 
               activeTab === 'vidanjor' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/15' : 
               activeTab === 'petrol_tankeri' ? 'bg-rose-600 text-white shadow-md shadow-rose-500/15' : 
+              activeTab === 'mici_stabilize' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/15' : 
               'bg-sky-600 text-white shadow-md shadow-sky-500/15';
 
             const currentLabel = 
               activeTab === 'vidanjor' ? 'Vidanjör' : 
               activeTab === 'petrol_tankeri' ? 'Petrol Tankeri' : 
+              activeTab === 'mici_stabilize' ? 'Mıcır & Stabilize Kamyonu' : 
               'Su Tankeri';
 
             const currentIcon = 
               activeTab === 'vidanjor' ? <Droplets size={13} className="rotate-180" /> : 
               activeTab === 'petrol_tankeri' ? <Fuel size={13} /> : 
+              activeTab === 'mici_stabilize' ? <Truck size={13} /> : 
               <Droplets size={13} />;
 
             const currentTextClass = 
               activeTab === 'vidanjor' ? 'text-indigo-800 border-indigo-200 bg-indigo-50' : 
               activeTab === 'petrol_tankeri' ? 'text-rose-800 border-rose-200 bg-rose-50' : 
+              activeTab === 'mici_stabilize' ? 'text-emerald-800 border-emerald-200 bg-emerald-50' : 
               'text-sky-800 border-sky-200 bg-sky-50';
 
             const currentButtonClass = 
               activeTab === 'vidanjor' ? 'bg-indigo-600 hover:bg-indigo-700 border-indigo-800' : 
               activeTab === 'petrol_tankeri' ? 'bg-rose-600 hover:bg-rose-700 border-rose-800' : 
+              activeTab === 'mici_stabilize' ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-800' : 
               'bg-sky-600 hover:bg-sky-700 border-sky-800';
 
             const insideList = 
               activeTab === 'vidanjor' ? iceridekiVidanjorler : 
               activeTab === 'petrol_tankeri' ? iceridekiPetrolTankerleri : 
+              activeTab === 'mici_stabilize' ? iceridekiMiciStabilize : 
               iceridekiSuTankerleri;
 
             const pastList = 
               activeTab === 'vidanjor' ? vidanjorGecmisLoglar : 
               activeTab === 'petrol_tankeri' ? petrolTankeriGecmisLoglar : 
+              activeTab === 'mici_stabilize' ? miciStabilizeGecmisLoglar : 
               suTankeriGecmisLoglar;
 
             const historyList = [...insideList, ...pastList]
@@ -2782,6 +2826,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                   seciliGunPersonelLoglar.length +
                   seciliGunAracLoglar.length +
                   seciliGunSuTankeriLoglar.length +
+                  seciliGunMiciStabilizeLoglar.length +
                   seciliGunZiyaretciLoglar.length +
                   seciliGunEvraklar.length
                 }
@@ -2792,6 +2837,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                     seciliGunPersonelLoglar.length +
                       seciliGunAracLoglar.length +
                       seciliGunSuTankeriLoglar.length +
+                      seciliGunMiciStabilizeLoglar.length +
                       seciliGunZiyaretciLoglar.length +
                       seciliGunEvraklar.length
                   )
