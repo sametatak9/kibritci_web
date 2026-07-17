@@ -146,6 +146,20 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
   const [isZoomed, setIsZoomed] = useState(false);
   return (
     <div className="space-y-6">
+      <datalist id="birim-listesi">
+        <option value="Adet" />
+        <option value="Kg" />
+        <option value="Lt" />
+        <option value="Ton" />
+        <option value="M3" />
+        <option value="Torba" />
+        <option value="Kamyon" />
+        <option value="Kutu" />
+        <option value="Palet" />
+        <option value="Set" />
+        <option value="Metre" />
+        <option value="Rulo" />
+      </datalist>
       <div className="border bg-slate-950 p-4.5 rounded-2xl border-slate-800/80 flex justify-between items-center text-xs">
         <div className="space-y-1">
           <span className="text-emerald-500 font-bold block text-[11px] tracking-widest uppercase">🛡️ GÜVENLİK KAPISI EVRAK ONAY HAVUZU</span>
@@ -599,10 +613,19 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                           </div>
                         </div>
 
-                        {/* Items table for Fatura */}
+                {/* Items table for Fatura */}
                         <div className="space-y-2 border-t border-slate-800 pt-3">
                           <span className="text-[9px] font-black text-purple-400 block uppercase tracking-wider">Malzeme Kalemleri ({faturaKalemler.length})</span>
                           
+                          <datalist id="birim-listesi">
+                            <option value="Adet" />
+                            <option value="Kg" />
+                            <option value="Litre" />
+                            <option value="Metre" />
+                            <option value="Koli" />
+                            <option value="Paket" />
+                          </datalist>
+
                           {/* Add row */}
                           <div className="grid grid-cols-12 gap-1 bg-slate-950 p-2 border border-slate-800 rounded-xl">
                             <input
@@ -610,7 +633,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                               placeholder="Malzeme Adı"
                               value={itemUrunAdi}
                               onChange={(e) => setItemUrunAdi(e.target.value)}
-                              className="col-span-6 bg-slate-900 border border-slate-800 text-[10px] p-1.5 rounded"
+                              className="col-span-4 bg-slate-900 border border-slate-800 text-[10px] p-1.5 rounded"
                             />
                             <input
                               type="number"
@@ -618,6 +641,14 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                               value={itemMiktar}
                               onChange={(e) => setItemMiktar(e.target.value === '' ? '' : Number(e.target.value))}
                               className="col-span-2 bg-slate-900 border border-slate-800 text-[10px] p-1.5 rounded text-right font-mono"
+                            />
+                            <input
+                              type="text"
+                              list="birim-listesi"
+                              placeholder="Birim"
+                              value={itemBirim}
+                              onChange={(e) => setItemBirim(e.target.value)}
+                              className="col-span-2 bg-slate-900 border border-slate-800 text-[10px] p-1.5 rounded"
                             />
                             <input
                               type="number"
@@ -646,6 +677,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                                 }]);
                                 setItemUrunAdi('');
                                 setItemMiktar('');
+                                setItemBirim('Adet');
                                 setItemBirimFiyat('');
                               }}
                               className="col-span-2 bg-purple-700 hover:bg-purple-650 text-white font-extrabold text-[10px] rounded"
@@ -665,7 +697,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                                     <button
                                       type="button"
                                       onClick={() => setFaturaKalemler(prev => prev.filter((_, i) => i !== idx))}
-                                      className="text-rose-500 hover:text-rose-400 text-[10px] px-1 font-bold"
+                                      className="text-rose-505 hover:text-rose-400 text-[10px] px-1 font-bold"
                                     >
                                       Sil
                                     </button>
@@ -725,14 +757,22 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                               placeholder="Malzeme Adı"
                               value={itemUrunAdi}
                               onChange={(e) => setItemUrunAdi(e.target.value)}
-                              className="col-span-7 bg-slate-900 border border-slate-800 text-[10px] p-1.5 rounded"
+                              className="col-span-5 bg-slate-900 border border-slate-800 text-[10px] p-1.5 rounded"
                             />
                             <input
                               type="number"
                               placeholder="Miktar"
                               value={itemMiktar}
                               onChange={(e) => setItemMiktar(e.target.value === '' ? '' : Number(e.target.value))}
-                              className="col-span-3 bg-slate-900 border border-slate-800 text-[10px] p-1.5 rounded text-right font-mono"
+                              className="col-span-2 bg-slate-900 border border-slate-800 text-[10px] p-1.5 rounded text-right font-mono"
+                            />
+                            <input
+                              type="text"
+                              list="birim-listesi"
+                              placeholder="Birim"
+                              value={itemBirim}
+                              onChange={(e) => setItemBirim(e.target.value)}
+                              className="col-span-3 bg-slate-900 border border-slate-800 text-[10px] p-1.5 rounded"
                             />
                             <button
                               type="button"
@@ -745,6 +785,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                                 }]);
                                 setItemUrunAdi('');
                                 setItemMiktar('');
+                                setItemBirim('Adet');
                               }}
                               className="col-span-2 bg-amber-650 hover:bg-amber-600 text-slate-950 font-extrabold text-[10px] rounded"
                             >
