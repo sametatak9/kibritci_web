@@ -91,6 +91,29 @@ export interface Irsaliye {
   karsilastirmaRaporu?: string;
   kalemler: IrsaliyeItem[];
   eImzalar?: string[];
+  /** Kampçı vidanjör fişi irsaliye niteliğinde */
+  kaynak?: 'VIDANJOR_FIS' | string;
+  plaka?: string;
+  cekimAdedi?: number;
+  fisNo?: string;
+  vidanjorFisId?: string;
+}
+
+/** Kampçı — Şeker Vidanjör çekim fişi (irsaliye niteliğinde) */
+export interface VidanjorFis {
+  id: string;
+  tarih: string;
+  fisNo: string;
+  plaka: string;
+  cekimAdedi: number;
+  fisGorselUrl?: string;
+  firmaUnvan: string;
+  cariKartId?: string;
+  irsaliyeId?: string;
+  kapıLogId?: string;
+  kaydeden?: string;
+  olusturulma: string;
+  guncellenme?: string;
 }
 
 export interface FaturaItem {

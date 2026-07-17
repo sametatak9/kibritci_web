@@ -41,7 +41,7 @@ interface GuvenlikScreenProps {
   onSignOut?: () => void;
   userYetki?: string;
   isStandalone?: boolean;
-  addNotification?: (mesaj: string) => void;
+  addNotification?: (mesaj: string, meta?: Record<string, unknown>) => void | Promise<void>;
 }
 
 export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
@@ -1062,7 +1062,20 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
       await setDoc(doc(db, 'guvenlikTankerLoglari', logId), logData);
       if (addNotification) {
-        addNotification(`${currentLabel} ${logData.plaka} (${logData.firma}) şantiyeye giriş yaptı.`);
+        if (currentTip === 'VIDANJOR') {
+          await addNotification(
+            `🚛 Vidanjör sahaya girdi: ${logData.plaka} (${logData.firma}). Kampçı fiş yüklemeli.`,
+            {
+              tip: 'VIDANJOR_GIRIS',
+              hedefRol: 'KAMPÇI',
+              plaka: logData.plaka,
+              firma: logData.firma,
+              kapıLogId: logId,
+            }
+          );
+        } else {
+          addNotification(`${currentLabel} ${logData.plaka} (${logData.firma}) şantiyeye giriş yaptı.`);
+        }
       }
       setStPlaka('');
       setStFirma('');

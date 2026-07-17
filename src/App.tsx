@@ -1748,14 +1748,15 @@ export default function App() {
     });
   };
 
-  const addNotification = async (mesaj: string) => {
+  const addNotification = async (mesaj: string, meta?: Record<string, unknown>) => {
     try {
       const newNotif = {
         id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
         tarih: new Date().toISOString(),
         kullanici: currentUser?.email || 'Sistem',
         mesaj,
-        okundu: false
+        okundu: false,
+        ...(meta || {}),
       };
       await saveDocument('bildirimler', newNotif);
     } catch (err) {
@@ -2078,6 +2079,7 @@ export default function App() {
           onSignOut={handleSignOut}
           userYetki={matchedU?.yetki}
           isStandalone={true}
+          addNotification={addNotification}
         />
       );
     }
@@ -2099,6 +2101,7 @@ export default function App() {
           setYoklamalar={setYoklamalarWithSync}
           saveYoklamalarNow={saveYoklamalarNow}
           stokKartlar={stokKartlar}
+          faturalar={faturalar}
           currentUser={currentUser}
           onSignOut={handleSignOut}
           isStandalone={true}
@@ -2182,6 +2185,7 @@ export default function App() {
           onSignOut={handleSignOut}
           userYetki={matchedU?.yetki}
           isStandalone={true}
+          addNotification={addNotification}
         />
       );
     }
@@ -2203,6 +2207,7 @@ export default function App() {
           setYoklamalar={setYoklamalarWithSync}
           saveYoklamalarNow={saveYoklamalarNow}
           stokKartlar={stokKartlar}
+          faturalar={faturalar}
           currentUser={currentUser}
           onSignOut={handleSignOut}
           isStandalone={true}
@@ -2736,6 +2741,7 @@ export default function App() {
                     setYoklamalar={setYoklamalarWithSync}
                     saveYoklamalarNow={saveYoklamalarNow}
                     stokKartlar={stokKartlar}
+                    faturalar={faturalar}
                     currentUser={currentUser}
                     onSignOut={handleSignOut}
                     addNotification={addNotification}
