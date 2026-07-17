@@ -1073,6 +1073,17 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               kapıLogId: logId,
             }
           );
+        } else if (currentTip === 'SU_TANKERI') {
+          await addNotification(
+            `💧 Su tankeri sahaya girdi: ${logData.plaka} (${logData.firma}). Tesisatçı fiş yüklemeli.`,
+            {
+              tip: 'YILDIRIM_TANKER_GIRIS',
+              hedefRol: 'TESİSATÇI',
+              plaka: logData.plaka,
+              firma: logData.firma,
+              kapıLogId: logId,
+            }
+          );
         } else {
           addNotification(`${currentLabel} ${logData.plaka} (${logData.firma}) şantiyeye giriş yaptı.`);
         }
@@ -1446,7 +1457,10 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             </button>
 
             <button 
-              onClick={() => setActiveTab('su_tankeri')}
+              onClick={() => {
+                setActiveTab('su_tankeri');
+                setStFirma((prev) => prev.trim() || 'YILDIRIM TANKER');
+              }}
               className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'su_tankeri' ? 'bg-sky-600 text-white shadow-md shadow-sky-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <span className="flex items-center space-x-2"><Droplets size={13} /> <span>4. Su Tankeri</span></span>

@@ -31,6 +31,7 @@ import { FormenScreen } from './components/FormenScreen';
 import { queueArrayStateSync } from './lib/collectionSyncQueue';
 import { GuvenlikScreen } from './components/GuvenlikScreen';
 import { KampciScreen } from './components/KampciScreen';
+import { TesisatciMobilScreen } from './components/TesisatciMobilScreen';
 import { LojistikScreen } from './components/LojistikScreen';
 import { ProfilScreen } from './components/ProfilScreen';
 import { DepocuScreen } from './components/DepocuScreen';
@@ -2032,6 +2033,7 @@ export default function App() {
   const isAllowedFormen = userYetki === 'FORMEN' || isYonetici;
   const isAllowedGuvenlik = userYetki === 'GÜVENLİK' || isYonetici;
   const isAllowedKampci = userYetki === 'KAMPÇI' || isYonetici;
+  const isAllowedTesisatci = userYetki === 'TESİSATÇI' || isYonetici;
   const isAllowedLojistik = userYetki === 'LOJİSTİK' || isYonetici;
   const isAllowedDepocu = userYetki === 'DEPOCU' || isYonetici;
   const isTabRestricted = isPrivilegedAdmin
@@ -2102,6 +2104,23 @@ export default function App() {
           saveYoklamalarNow={saveYoklamalarNow}
           stokKartlar={stokKartlar}
           faturalar={faturalar}
+          currentUser={currentUser}
+          onSignOut={handleSignOut}
+          isStandalone={true}
+          addNotification={addNotification}
+        />
+      );
+    }
+    if (userYetki === 'TESİSATÇI') {
+      return (
+        <TesisatciMobilScreen
+          personeller={personeller}
+          yoklamalar={yoklamalar}
+          setYoklamalar={setYoklamalarWithSync}
+          saveYoklamalarNow={saveYoklamalarNow}
+          cariKartlar={cariKartlar}
+          faturalar={faturalar}
+          kampYerleskeleri={kampYerleskeleri}
           currentUser={currentUser}
           onSignOut={handleSignOut}
           isStandalone={true}
@@ -2208,6 +2227,23 @@ export default function App() {
           saveYoklamalarNow={saveYoklamalarNow}
           stokKartlar={stokKartlar}
           faturalar={faturalar}
+          currentUser={currentUser}
+          onSignOut={handleSignOut}
+          isStandalone={true}
+          addNotification={addNotification}
+        />
+      );
+    }
+    if (role === 'TESİSATÇI') {
+      return (
+        <TesisatciMobilScreen
+          personeller={personeller}
+          yoklamalar={yoklamalar}
+          setYoklamalar={setYoklamalarWithSync}
+          saveYoklamalarNow={saveYoklamalarNow}
+          cariKartlar={cariKartlar}
+          faturalar={faturalar}
+          kampYerleskeleri={kampYerleskeleri}
           currentUser={currentUser}
           onSignOut={handleSignOut}
           isStandalone={true}
@@ -2742,6 +2778,23 @@ export default function App() {
                     saveYoklamalarNow={saveYoklamalarNow}
                     stokKartlar={stokKartlar}
                     faturalar={faturalar}
+                    currentUser={currentUser}
+                    onSignOut={handleSignOut}
+                    addNotification={addNotification}
+                  />
+                ) : renderAccessDenied()
+              )}
+
+              {activeTab === "tesisatci_ekrani" && (
+                isAllowedTesisatci ? (
+                  <TesisatciMobilScreen
+                    personeller={personeller}
+                    yoklamalar={yoklamalar}
+                    setYoklamalar={setYoklamalarWithSync}
+                    saveYoklamalarNow={saveYoklamalarNow}
+                    cariKartlar={cariKartlar}
+                    faturalar={faturalar}
+                    kampYerleskeleri={kampYerleskeleri}
                     currentUser={currentUser}
                     onSignOut={handleSignOut}
                     addNotification={addNotification}

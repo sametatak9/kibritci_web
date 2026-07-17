@@ -8,10 +8,32 @@ export interface YoklamaGunKaydi {
 
 type PersonelYoklamaMap = GunlukYoklama | Record<string, YoklamaGunKaydi>;
 
+function normalizeGorevKey(gorev?: string): string {
+  return String(gorev || '')
+    .toUpperCase()
+    .replace(/İ/g, 'I')
+    .replace(/Ş/g, 'S')
+    .replace(/Ç/g, 'C')
+    .replace(/Ü/g, 'U')
+    .replace(/Ö/g, 'O')
+    .replace(/Ğ/g, 'G');
+}
+
+export function isTesisatciGorev(gorev?: string): boolean {
+  return normalizeGorevKey(gorev).includes('TESISATCI');
+}
+
 export function isKampciTesisatciMermerci(gorev?: string): boolean {
   if (!gorev) return false;
-  const g = gorev.toUpperCase().replace(/İ/g, 'I').replace(/Ş/g, 'S').replace(/Ç/g, 'C').replace(/Ü/g, 'U').replace(/Ö/g, 'O').replace(/Ğ/g, 'G');
+  const g = normalizeGorevKey(gorev);
   return g.includes('KAMPCI') || g.includes('TESISATCI') || g.includes('MERMERCI');
+}
+
+/** Kampçı yoklaması: kampçı + mermerci (tesisatçı kendi mobilinde) */
+export function isKampciMermerciGorev(gorev?: string): boolean {
+  if (!gorev) return false;
+  const g = normalizeGorevKey(gorev);
+  return (g.includes('KAMPCI') || g.includes('MERMERCI')) && !g.includes('TESISATCI');
 }
 
 /** GunlukYoklama → iterateMonthYoklama uyumlu kayıt haritası */

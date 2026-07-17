@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Building2, Users, CalendarCheck2, CreditCard, ShoppingCart, Truck, KeySquare, FileText, Tent, Mail, ChartBar as BarChart3, BookOpen, Contact as Contact2, Package, LogOut, Moon, Sun, Wallet, Hop as Home, ShieldCheck, PenTool, MessageSquare, Smartphone, HardHat, Banknote, Images, Sparkles, Link2, ChevronDown, ChevronRight, Search, Pin, PinOff } from 'lucide-react';
+import { Building2, Users, CalendarCheck2, CreditCard, ShoppingCart, Truck, KeySquare, FileText, Tent, Mail, ChartBar as BarChart3, BookOpen, Contact as Contact2, Package, LogOut, Moon, Sun, Wallet, Hop as Home, ShieldCheck, PenTool, MessageSquare, Smartphone, HardHat, Banknote, Images, Sparkles, Link2, ChevronDown, ChevronRight, Search, Pin, PinOff, Wrench } from 'lucide-react';
 import { getRoleAllowedTabs, normalizeYetki } from '../lib/yetkiUtils';
 
 interface SidebarProps {
@@ -88,6 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { key: "formen_ekrani", label: "Formen Mobil Paneli", icon: Contact2 },
         { key: "guvenlik_ekrani", label: "Güvenlik & Kapı Kontrol", icon: ShieldCheck },
         { key: "kampci_ekrani", label: "Kampçı Mobil Paneli", icon: Tent },
+        { key: "tesisatci_ekrani", label: "Tesisatçı Mobil Paneli", icon: Wrench },
         { key: "lojistik_ekrani", label: "Şöför Mobil Paneli", icon: Truck },
         { key: "depocu_ekrani", label: "Depocu Mobil Paneli", icon: Package },
         { key: "imalat_terminali", label: "İmalat Terminali", icon: Smartphone },
@@ -149,6 +150,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }
 
         if (item.key === 'kampci_ekrani') {
+          return isYonetici;
+        }
+
+        if (item.key === 'tesisatci_ekrani') {
           return isYonetici;
         }
 

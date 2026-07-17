@@ -92,11 +92,14 @@ export interface Irsaliye {
   kalemler: IrsaliyeItem[];
   eImzalar?: string[];
   /** Kampçı vidanjör fişi irsaliye niteliğinde */
-  kaynak?: 'VIDANJOR_FIS' | string;
+  kaynak?: 'VIDANJOR_FIS' | 'YILDIRIM_TANKER_FIS' | string;
   plaka?: string;
   cekimAdedi?: number;
   fisNo?: string;
   vidanjorFisId?: string;
+  yildirimTankerFisId?: string;
+  icmeSuyuAdet?: number;
+  sanayiSuyuAdet?: number;
 }
 
 /** Kampçı — Şeker Vidanjör çekim fişi (irsaliye niteliğinde) */
@@ -115,6 +118,44 @@ export interface VidanjorFis {
   kapıLogId?: string;
   kaydeden?: string;
   olusturulma: string;
+  guncellenme?: string;
+}
+
+/** Tesisatçı — Yıldırım Tanker su fişi (irsaliye niteliğinde) */
+export interface YildirimTankerFis {
+  id: string;
+  tarih: string;
+  fisNo: string;
+  icmeSuyuAdet: number;
+  sanayiSuyuAdet: number;
+  fisGorselUrl?: string;
+  firmaUnvan: string;
+  cariKartId?: string;
+  irsaliyeId?: string;
+  guvenlikEvrakId?: string;
+  kapıLogId?: string;
+  kaydeden?: string;
+  olusturulma: string;
+  guncellenme?: string;
+}
+
+/** Tesisatçı mobil — Kamp/Ofis alanı faaliyetleri */
+export interface TesisatciFaaliyet {
+  id: string;
+  tarih: string;
+  faaliyetGrubu: 'NORMAL' | 'MESAI';
+  isNiteligi: string;
+  /** Parsel/blok değil — kamp-ofis bölgesi */
+  calismaAlani: 'KAMP' | 'OFİS';
+  yerleskeAdi?: string;
+  aciklama: string;
+  fotoUrl?: string | null;
+  fotoUrls?: string[];
+  personelMesaiSaatleri?: Record<string, number>;
+  durum?: string;
+  kaydeden?: string;
+  kaynakEkran?: 'TESISATCI_MOBIL';
+  olusturulma?: string;
   guncellenme?: string;
 }
 
