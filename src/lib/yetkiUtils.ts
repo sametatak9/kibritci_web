@@ -26,6 +26,7 @@ export const PORTAL_PAGES = [
   { key: "formen_ekrani", label: "Formen Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
   { key: "guvenlik_ekrani", label: "Güvenlik & Kapı Kontrol", group: "İDARİ İŞLER & SAHA" },
   { key: "kampci_ekrani", label: "Kampçı Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
+  { key: "tesisatci_ekrani", label: "Tesisatçı Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
   { key: "lojistik_ekrani", label: "Şöför Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
   { key: "depocu_ekrani", label: "Depocu Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
   { key: "imalat_terminali", label: "İmalat Terminali", group: "İDARİ İŞLER & SAHA" },
@@ -43,6 +44,7 @@ export const MOBILE_ROLE_ALLOWED_TABS: Record<string, PortalPageKey[]> = {
   FORMEN: ['formen_ekrani', 'rapor_programlama', 'personel'],
   GÜVENLİK: ['guvenlik_ekrani'],
   KAMPÇI: ['kampci_ekrani'],
+  TESİSATÇI: ['tesisatci_ekrani'],
   LOJİSTİK: ['lojistik_ekrani'],
   DEPOCU: ['depocu_ekrani'],
   ANAHTARCI: ['imalat_terminali'],
@@ -61,6 +63,8 @@ const YETKI_ALIASES: Record<string, string> = {
   DEPO: 'DEPOCU',
   ŞOFÖR: 'LOJİSTİK',
   SOFOR: 'LOJİSTİK',
+  TESISATCI: 'TESİSATÇI',
+  TESİSATCI: 'TESİSATÇI',
 };
 
 export function normalizeYetki(yetki?: string | null): string {
@@ -94,6 +98,7 @@ export function getMobileRoleDisplayName(yetki?: string | null): string {
   const labels: Record<string, string> = {
     FORMEN: 'Formen Mobil + Personel',
     KAMPÇI: 'Kampçı Mobil',
+    TESİSATÇI: 'Tesisatçı Mobil',
     GÜVENLİK: 'Güvenlik Mobil',
     LOJİSTİK: 'Şöför Mobil',
     DEPOCU: 'Depocu Mobil',
@@ -155,6 +160,7 @@ export const YETKI_ROLLER = [
   'PARSEL_ŞEFİ',
   'FORMEN',
   'KAMPÇI',
+  'TESİSATÇI',
   'GÜVENLİK',
   'LOJİSTİK',
   'DEPOCU',
@@ -211,6 +217,9 @@ export function guessRoleFromEmail(email: string): string {
   }
   if (norm.includes('kamp') || norm.includes('camp')) {
     return 'KAMPÇI';
+  }
+  if (norm.includes('tesisat') || norm.includes('plumbing')) {
+    return 'TESİSATÇI';
   }
   if (norm.includes('depo') || norm.includes('store')) {
     return 'DEPOCU';

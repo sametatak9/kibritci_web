@@ -48,9 +48,11 @@ export interface Kullanici {
     | 'PARSEL_ŞEFİ'
     | 'FORMEN'
     | 'KAMPÇI'
+    | 'TESİSATÇI'
     | 'GÜVENLİK'
     | 'LOJİSTİK'
     | 'DEPOCU'
+    | 'ANAHTARCI'
     | 'MİSAFİR';
   durum: 'AKTİF' | 'KISITLI' | 'ONAY BEKLİYOR';
   kayitTarihi: string;
@@ -797,6 +799,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                                   <option value="PARSEL_ŞEFİ">🗺️ Parsel Şefi</option>
                                   <option value="FORMEN">👷 FORMEN — Mobil Panel + Personel Yönetimi</option>
                                   <option value="KAMPÇI">⛺ KAMPÇI — Yalnızca Kampçı Mobil</option>
+                                  <option value="TESİSATÇI">🔧 TESİSATÇI — Yalnızca Tesisatçı Mobil</option>
                                   <option value="GÜVENLİK">👮 GÜVENLİK — Yalnızca Güvenlik Mobil</option>
                                   <option value="LOJİSTİK">🚚 ŞOFÖR / LOJİSTİK — Yalnızca Şoför Mobil</option>
                                   <option value="DEPOCU">📦 DEPOCU — Yalnızca Depocu Mobil</option>
@@ -928,6 +931,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                           <option value="ANAHTARCI">ANAHTARCI</option>
                           <option value="MİSAFİR">MİSAFİR</option>
                           <option value="KAMPÇI">KAMPÇI</option>
+                          <option value="TESİSATÇI">TESİSATÇI</option>
                         </select>
                         <button
                           type="button"
@@ -1034,6 +1038,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                   <option value="DEPOCU">DEPOCU</option>
                   <option value="ANAHTARCI">ANAHTARCI</option>
                   <option value="KAMPÇI">KAMPÇI</option>
+                  <option value="TESİSATÇI">TESİSATÇI</option>
                   <option value="MİSAFİR">MİSAFİR</option>
                 </select>
               </div>
@@ -1393,6 +1398,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                   <option value="PARSEL_ŞEFİ">🗺️ Parsel Şefi</option>
                   <option value="FORMEN">👷 FORMEN (Mobil)</option>
                   <option value="KAMPÇI">⛺ KAMPÇI (Mobil)</option>
+                  <option value="TESİSATÇI">🔧 TESİSATÇI (Mobil)</option>
                   <option value="GÜVENLİK">👮 GÜVENLİK (Mobil)</option>
                   <option value="LOJİSTİK">🚚 ŞOFÖR / LOJİSTİK (Mobil)</option>
                   <option value="DEPOCU">📦 DEPOCU (Mobil)</option>

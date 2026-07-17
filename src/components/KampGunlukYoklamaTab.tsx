@@ -9,7 +9,8 @@ import {
   isDayActiveForPersonel, 
   isTaseronPersonel, 
   setYoklamaDay, 
-  isKampciTesisatciMermerci 
+  isKampciMermerciGorev,
+  isTesisatciGorev,
 } from '../lib/yoklamaUtils';
 import { todayDateKey, normalizeDateKey, formatDateLabelTr } from '../lib/dateKeyUtils';
 import { downloadCsv } from '../lib/reportExport';
@@ -21,6 +22,8 @@ interface KampGunlukYoklamaTabProps {
   saveYoklamalarNow?: (next: AylikYoklamaMap) => Promise<void>;
   currentUser: any;
   addNotification?: (mesaj: string) => void;
+  /** Varsayılan: kampçı+mermerci. Tesisatçı mobil: 'tesisatci' */
+  personelKapsami?: 'kamp' | 'tesisatci';
 }
 
 export const KampGunlukYoklamaTab: React.FC<KampGunlukYoklamaTabProps> = ({
@@ -29,7 +32,8 @@ export const KampGunlukYoklamaTab: React.FC<KampGunlukYoklamaTabProps> = ({
   setYoklamalar,
   saveYoklamalarNow,
   currentUser,
-  addNotification
+  addNotification,
+  personelKapsami = 'kamp',
 }) => {
   const [selectedDate, setSelectedDate] = useState<string>(todayDateKey());
   const [searchQuery, setSearchQuery] = useState('');
@@ -58,11 +62,14 @@ export const KampGunlukYoklamaTab: React.FC<KampGunlukYoklamaTabProps> = ({
   const activeStaff = useMemo(() => {
     return monthPersonelList.filter((p) => {
       if (isTaseronPersonel(p)) return false;
-      // SADECE Kampçı, Tesisatçı ve Mermerci personelleri listele
-      if (!isKampciTesisatciMermerci(p.gorev)) return false;
+      if (personelKapsami === 'tesisatci') {
+        if (!isTesisatciGorev(p.gorev)) return false;
+      } else if (!isKampciMermerciGorev(p.gorev)) {
+        return false;
+      }
       return isDayActiveForPersonel(p, year, month, day, yoklamalar[p.id] as any);
     });
-  }, [monthPersonelList, year, month, day, yoklamalar]);
+  }, [monthPersonelList, year, month, day, yoklamalar, personelKapsami]);
 
   // Load existing records when date changes
   useEffect(() => {
