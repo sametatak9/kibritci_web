@@ -113,10 +113,7 @@ export interface VidanjorFis {
   firmaUnvan: string;
   cariKartId?: string;
   irsaliyeId?: string;
-<<<<<<< HEAD
   /** Güvenlik sekmesi o günün gelen evrak listesindeki kayıt id */
-=======
->>>>>>> b8fb309 (feat: Tesisatçı Mobil paneli — kamp-ofis faaliyet, yoklama ve Yıldırım Tanker.)
   guvenlikEvrakId?: string;
   kapıLogId?: string;
   kaydeden?: string;
