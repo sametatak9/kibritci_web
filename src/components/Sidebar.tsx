@@ -320,10 +320,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         setActiveTab(item.key);
                         if (onClose) onClose();
                       }}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[13px] transition-all duration-200 text-left cursor-pointer ${
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[13px] transition-all duration-300 text-left cursor-pointer ${
                         isActive
-                          ? "bg-slate-900 text-white shadow-md shadow-slate-900/10 font-bold"
-                          : "text-slate-600 font-medium hover:bg-slate-50 hover:text-slate-900"
+                          ? "bg-slate-900 text-white shadow-md shadow-slate-900/15 font-bold translate-x-0.5"
+                          : "text-slate-600 font-medium hover:bg-slate-100/70 hover:text-slate-900 hover:translate-x-0.5"
                       }`}
                     >
                       <div className="flex items-center space-x-3 truncate">

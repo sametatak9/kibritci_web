@@ -175,10 +175,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   ];
 
   return (
-    <div className="flex-grow p-6 space-y-6 overflow-y-auto h-full font-sans bg-slate-55">
+    <div className="flex-grow p-6 space-y-6 overflow-y-auto h-full font-sans bg-slate-55 animate-slideUp">
       
       {/* Welcome Banner with Corporate Design */}
-      <div className="flex flex-col bg-gradient-to-r from-slate-950 via-[#1e293b] to-slate-950 text-white rounded-3xl p-6 shadow-lg relative overflow-hidden border border-slate-800 gap-6">
+      <div className="flex flex-col bg-gradient-to-r from-slate-950 via-[#1e293b] to-slate-950 text-white rounded-3xl p-6 shadow-lg relative overflow-hidden border border-slate-800 gap-6 gradient-border-accent">
         <div className="absolute right-0 top-0 w-64 h-64 bg-blue-600 rounded-full mix-blend-screen filter blur-[90px] opacity-10 -translate-y-20 translate-x-10 pointer-events-none" />
         <div className="absolute left-1/3 bottom-0 w-48 h-48 bg-rose-600 rounded-full mix-blend-screen filter blur-[70px] opacity-5 translate-y-10 pointer-events-none" />
         
@@ -247,8 +247,16 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((st, i) => {
           const Icon = st.icon;
+          let glowClass = "hover-glow-blue";
+          if (st.color.includes("emerald")) glowClass = "hover-glow-emerald";
+          else if (st.color.includes("rose")) glowClass = "hover-glow-rose";
+          else if (st.color.includes("amber")) glowClass = "hover-glow-amber";
+
           return (
-            <div key={i} className="p-5 rounded-3xl bg-white border border-slate-250 text-slate-800 shadow-xs flex flex-col justify-between hover:shadow-md hover:border-slate-350 transition-all duration-200">
+            <div 
+              key={i} 
+              className={`p-5 rounded-3xl bg-white border border-slate-200 text-slate-800 shadow-premium-sm flex flex-col justify-between hover:-translate-y-1 transition-all duration-300 ${glowClass}`}
+            >
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
