@@ -90,6 +90,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { key: "kampci_ekrani", label: "Kampçı Mobil Paneli", icon: Tent },
         { key: "lojistik_ekrani", label: "Şöför Mobil Paneli", icon: Truck },
         { key: "depocu_ekrani", label: "Depocu Mobil Paneli", icon: Package },
+        { key: "imalat_terminali", label: "İmalat Terminali", icon: Smartphone },
       ]
     },
     {
@@ -156,6 +157,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }
 
         if (item.key === 'depocu_ekrani') {
+          return isYonetici;
+        }
+
+        if (item.key === 'imalat_terminali') {
           return isYonetici;
         }
 

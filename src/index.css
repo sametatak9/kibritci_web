@@ -1,4 +1,4 @@
-﻿@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -342,7 +342,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* Cam Efektli (Glassmorphism) Modallar */
-.fixed.inset-0.bg-slate-900\\/50, .fixed.inset-0.bg-slate-800\\/50, .fixed.inset-0.bg-slate-950\\/75, .fixed.inset-0.bg-slate-950\\/50, .fixed.inset-0.bg-black\\/50 {
+.fixed.inset-0.bg-slate-900\/50, .fixed.inset-0.bg-slate-800\/50, .fixed.inset-0.bg-slate-950\/75, .fixed.inset-0.bg-slate-950\/50, .fixed.inset-0.bg-black\/50 {
   -webkit-backdrop-filter: blur(8px) !important;
   backdrop-filter: blur(8px) !important;
   background-color: rgba(15, 23, 42, 0.3) !important; /* Daha zarif ve şeffaf bir arka plan */

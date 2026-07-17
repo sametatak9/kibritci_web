@@ -34,6 +34,7 @@ import { KampciScreen } from './components/KampciScreen';
 import { LojistikScreen } from './components/LojistikScreen';
 import { ProfilScreen } from './components/ProfilScreen';
 import { DepocuScreen } from './components/DepocuScreen';
+import { ImalatTerminaliScreen } from './components/ImalatTerminaliScreen';
 import { EvrakAktarimiScreen } from './components/EvrakAktarimiScreen';
 import { MobileManagerScreen } from './components/MobileManagerScreen';
 import { KibarHakedisScreen } from './components/KibarHakedisScreen';
@@ -1015,6 +1016,14 @@ export default function App() {
       setMaasOdemeleri(list);
     });
 
+    const unsubTutanaklar = onSnapshot(collection(db, 'hazirTutanaklar'), (snapshot) => {
+      const list: HazirTutanak[] = [];
+      snapshot.forEach((docItem) => {
+        list.push({ id: docItem.id, ...docItem.data() } as any);
+      });
+      setHazirTutanaklar(list);
+    });
+
     const qNotif = query(collection(db, 'bildirimler'), orderBy('tarih', 'desc'), limit(30));
     const unsubNotif = onSnapshot(qNotif, (snapshot) => {
       const list: any[] = [];
@@ -1050,6 +1059,7 @@ export default function App() {
       unsubTaseronEnerji();
       unsubTaseronYemek();
       unsubMaasOde();
+      unsubTutanaklar();
     };
   }, [dbStatus, currentUser]);
 
@@ -2125,6 +2135,22 @@ export default function App() {
         />
       );
     }
+    if (userYetki === 'ANAHTARCI') {
+      return (
+        <ImalatTerminaliScreen
+          cariKartlar={cariKartlar}
+          personeller={personeller}
+          sahaFaaliyetleri={sahaFaaliyetleri}
+          setSahaFaaliyetleri={setSahaFaaliyetleriWithSync}
+          saveSahaFaaliyetNow={saveSahaFaaliyetNow}
+          hazirTutanaklar={hazirTutanaklar}
+          setHazirTutanaklar={setHazirTutanaklarWithSync}
+          currentUser={currentUser}
+          onSignOut={handleSignOut}
+          isStandalone={true}
+        />
+      );
+    }
   }
 
   if (isMobileMode && currentUser) {
@@ -2209,6 +2235,22 @@ export default function App() {
           onSignOut={handleSignOut}
           isStandalone={true}
           addNotification={addNotification}
+        />
+      );
+    }
+    if (role === 'ANAHTARCI') {
+      return (
+        <ImalatTerminaliScreen
+          cariKartlar={cariKartlar}
+          personeller={personeller}
+          sahaFaaliyetleri={sahaFaaliyetleri}
+          setSahaFaaliyetleri={setSahaFaaliyetleriWithSync}
+          saveSahaFaaliyetNow={saveSahaFaaliyetNow}
+          hazirTutanaklar={hazirTutanaklar}
+          setHazirTutanaklar={setHazirTutanaklarWithSync}
+          currentUser={currentUser}
+          onSignOut={handleSignOut}
+          isStandalone={true}
         />
       );
     }
@@ -2727,6 +2769,21 @@ export default function App() {
                     addNotification={addNotification}
                   />
                 ) : renderAccessDenied()
+              )}
+
+              {activeTab === "imalat_terminali" && (
+                <ImalatTerminaliScreen
+                  cariKartlar={cariKartlar}
+                  personeller={personeller}
+                  sahaFaaliyetleri={sahaFaaliyetleri}
+                  setSahaFaaliyetleri={setSahaFaaliyetleriWithSync}
+                  saveSahaFaaliyetNow={saveSahaFaaliyetNow}
+                  hazirTutanaklar={hazirTutanaklar}
+                  setHazirTutanaklar={setHazirTutanaklarWithSync}
+                  currentUser={currentUser}
+                  onSignOut={handleSignOut}
+                  isStandalone={hideSidebarAndTopbar}
+                />
               )}
 
               {activeTab === "evrak_aktarimi" && (

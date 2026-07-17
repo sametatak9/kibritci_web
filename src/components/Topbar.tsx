@@ -83,7 +83,8 @@ export const Topbar: React.FC<TopbarProps> = ({
       yz_karsilastir: "YZ Karşılaştır ve Yorumla",
       evrak_baglama: "Evrak Bağlama Merkezi",
       fatura_giris: "Fatura Girişi",
-      irsaliye_giris: "İrsaliye ve Fiş Girişi"
+      irsaliye_giris: "İrsaliye ve Fiş Girişi",
+      imalat_terminali: "İmalat Terminali"
     };
     return labels[tab] || tab;
   };

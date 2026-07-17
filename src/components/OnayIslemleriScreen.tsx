@@ -19,6 +19,7 @@ import {
 import { wrapCorporateReportHtml } from '../lib/corporateReportHtml';
 import { fetchApiJson } from '../lib/apiClient';
 import { GuvenlikEvrakOnayHavuzu } from './GuvenlikEvrakOnayHavuzu';
+import { KibritciLogo } from './KibritciLogo';
 
 interface OnayIslemleriScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
@@ -47,7 +48,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   signatureStyle,
   addNotification
 }) => {
-  const [activeTab, setActiveTab] = useState<'satin_alma' | 'guvenlik_belgeleri' | 'kampci_belgeleri' | 'formen_belgeleri' | 'gunluk_loglar' | 'sofor_talepleri' | 'depocu_talepleri' | 'gecmis' | 'imzalar'>('satin_alma');
+  const [activeTab, setActiveTab] = useState<'satin_alma' | 'guvenlik_belgeleri' | 'kampci_belgeleri' | 'formen_belgeleri' | 'gunluk_loglar' | 'sofor_talepleri' | 'depocu_talepleri' | 'gecmis' | 'imzalar' | 'anahtarci_tutanaklari'>('satin_alma');
   const [selectedYoneticiEmail, setSelectedYoneticiEmail] = useState<string>('');
   const [stampText, setStampText] = useState<string>('🔵 ŞİRKET GENEL MÜDÜRÜ (E-İMZA)');
   const [customStamp, setCustomStamp] = useState<string>('');
@@ -74,6 +75,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   // Security Gate Document Approval States
   const [gelenEvraklar, setGelenEvraklar] = useState<any[]>([]);
   const [activeGateDoc, setActiveGateDoc] = useState<any | null>(null);
+  const [anahtarciTutanaklari, setAnahtarciTutanaklari] = useState<any[]>([]);
   
   // Approval Wizard States
   const [approvalStep, setApprovalStep] = useState<'SELECT_METHOD' | 'FORM'>('SELECT_METHOD');
@@ -182,6 +184,25 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
     return () => {
       unsubArac();
       unsubHarcama();
+    };
+  }, []);
+
+  // Subscribe to Hazir Tutanaklar for Anahtarcı Tutanakları
+  useEffect(() => {
+    const unsubTutanaklar = onSnapshot(collection(db, 'hazirTutanaklar'), (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((docItem) => {
+        const data = docItem.data();
+        if (data.durum === 'ONAY BEKLİYOR' && (data.kaydedenAnahtarci || data.tutanakTipi === 'CEZA' || data.tutanakTipi === 'HASAR')) {
+          list.push({ id: docItem.id, ...data });
+        }
+      });
+      list.sort((a, b) => new Date(b.tarih || 0).getTime() - new Date(a.tarih || 0).getTime());
+      setAnahtarciTutanaklari(list);
+    });
+
+    return () => {
+      unsubTutanaklar();
     };
   }, []);
 
@@ -342,6 +363,36 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
         onayTarihi: new Date().toISOString().split('T')[0]
       });
       alert("🛑 Depo sayımı reddedildi.");
+    } catch (err) {
+      console.error(err);
+      alert("Reddetme işlemi başarısız.");
+    }
+  };
+
+  const handleApproveAnahtarciTutanak = async (item: any) => {
+    if (!window.confirm(`"${item.konu}" başlıklı tutanağı onaylıyor musunuz?`)) return;
+    try {
+      await updateDoc(doc(db, 'hazirTutanaklar', item.id), {
+        durum: 'ONAYLANDI',
+        onaylayanYonetici: currentUser?.email || 'Sistem Yöneticisi',
+        onayTarihi: new Date().toISOString().split('T')[0]
+      });
+      alert("🎉 Tutanak başarıyla onaylandı!");
+    } catch (err) {
+      console.error(err);
+      alert("Onaylama işlemi başarısız.");
+    }
+  };
+
+  const handleRejectAnahtarciTutanak = async (item: any) => {
+    if (!window.confirm(`"${item.konu}" başlıklı tutanağı reddetmek istediğinize emin misiniz?`)) return;
+    try {
+      await updateDoc(doc(db, 'hazirTutanaklar', item.id), {
+        durum: 'İPTAL',
+        reddedenYonetici: currentUser?.email || 'Sistem Yöneticisi',
+        redTarihi: new Date().toISOString().split('T')[0]
+      });
+      alert("🛑 Tutanak reddedildi (İptal durumuna getirildi).");
     } catch (err) {
       console.error(err);
       alert("Reddetme işlemi başarısız.");
@@ -1477,6 +1528,14 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
             >
               <span className="flex items-center space-x-2"><Package size={13} className={activeTab === 'depocu_talepleri' ? 'text-white' : 'text-indigo-500'} /> <span>Depocu Talepleri</span></span>
               {pendingDepocuCount > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'depocu_talepleri' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-800'}`}>{pendingDepocuCount}</span>}
+            </button>
+
+            <button 
+              onClick={() => setActiveTab('anahtarci_tutanaklari')}
+              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'anahtarci_tutanaklari' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+              <span className="flex items-center space-x-2"><FileText size={13} className={activeTab === 'anahtarci_tutanaklari' ? 'text-white' : 'text-amber-500'} /> <span>Anahtarcı Tutanakları</span></span>
+              {anahtarciTutanaklari.length > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'anahtarci_tutanaklari' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'}`}>{anahtarciTutanaklari.length}</span>}
             </button>
 
             <button 
@@ -3039,6 +3098,163 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {activeTab === 'anahtarci_tutanaklari' && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="border bg-slate-900 p-4.5 rounded-2xl border-slate-800 flex justify-between items-center text-xs text-white">
+                <div className="space-y-1">
+                  <span className="text-amber-400 font-bold block text-[11px] tracking-widest uppercase">🔑 ANAHTARCI &amp; İMALAT TUTANAKLARI ONAY HAVUZU</span>
+                  <p className="text-slate-450 leading-relaxed text-[11px]">
+                    İmalat terminalinden gönderilen hasarlı alan tutanaklarını ve taşeron ceza tutanaklarını buradan inceleyip onaylayabilirsiniz.
+                  </p>
+                </div>
+              </div>
+
+              {anahtarciTutanaklari.length === 0 ? (
+                <p className="text-xs text-slate-500 italic bg-white border p-4 rounded-xl">Onay bekleyen herhangi bir anahtarcı tutanağı bulunmuyor.</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-6">
+                  {anahtarciTutanaklari.map((item) => {
+                    const isCeza = item.tutanakTipi === 'CEZA';
+                    return (
+                      <div key={item.id} className="bg-white border border-slate-200 rounded-3xl p-6 flex flex-col space-y-4 shadow-sm relative overflow-hidden">
+                        
+                        {/* Header Info */}
+                        <div className="flex justify-between items-start border-b pb-3">
+                          <div>
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md ${
+                              isCeza ? 'bg-rose-50 text-rose-700 border border-rose-100' : 'bg-amber-50 text-amber-700 border border-amber-100'
+                            }`}>
+                              {item.tutanakTipi} TUTANAĞI
+                            </span>
+                            <h4 className="font-extrabold text-slate-800 text-sm mt-2">{item.konu}</h4>
+                            <p className="text-[10px] text-slate-400 mt-1 font-mono">{item.belgeNo} | Tarih: {item.tarih}</p>
+                          </div>
+                          
+                          <div className="text-right">
+                            <span className="text-[8px] text-slate-500 block uppercase font-bold">Gönderen Anahtarcı</span>
+                            <span className="text-[10.5px] font-bold text-slate-800 font-mono">{item.kaydedenAnahtarci}</span>
+                          </div>
+                        </div>
+
+                        {/* Ceza Details if any */}
+                        {isCeza && (
+                          <div className="bg-rose-50/30 p-4 rounded-2xl border border-rose-100 grid grid-cols-2 gap-4 text-xs font-sans">
+                            <div>
+                              <span className="text-slate-500 block text-[9px] uppercase font-bold">Muhatap Taşeron Firma</span>
+                              <strong className="text-rose-800 font-extrabold">{item.taseronAdi}</strong>
+                            </div>
+                            <div>
+                              <span className="text-slate-500 block text-[9px] uppercase font-bold">Kesilecek Ceza Tutarı</span>
+                              <strong className="text-rose-800 font-mono text-sm font-black">₺{(item.cezaTutari || 0).toLocaleString('tr-TR')}</strong>
+                            </div>
+                            <div>
+                              <span className="text-slate-500 block text-[9px] uppercase font-bold">Muhatap Personel</span>
+                              <span className="text-slate-700 font-bold">{item.muhatapPersonel || '-'}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-500 block text-[9px] uppercase font-bold">Teslim Eden Personel</span>
+                              <span className="text-slate-700 font-bold">{item.teslimEden || '-'}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Content text */}
+                        <div className="space-y-1">
+                          <span className="text-slate-400 text-[9px] uppercase font-bold block">Tutanak Metni ve Olay Özeti</span>
+                          <div className="p-4 bg-slate-50 border rounded-2xl text-xs text-slate-800 font-serif leading-relaxed whitespace-pre-wrap">
+                            {item.icerik}
+                          </div>
+                        </div>
+
+                        {/* Comparative Images or Single Images */}
+                        {(item.foto1 || item.foto2 || item.foto3) && (
+                          <div className="space-y-2">
+                            <span className="text-slate-400 text-[9px] uppercase font-bold block">Kanıt Fotoğrafları / Durum Karşılaştırması</span>
+                            
+                            {isCeza && item.foto1 && item.foto2 ? (
+                              // Ceza has initial and final photos side by side
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="border rounded-2xl overflow-hidden bg-slate-950 flex flex-col">
+                                  <div className="bg-slate-900 text-[9px] text-sky-400 p-2 font-bold text-center border-b border-slate-800 font-sans">
+                                    FOTOĞRAF 1: ANAHTAR TESLİM ANI (İLK HAL)
+                                  </div>
+                                  <img src={item.foto1} alt="Teslim" className="w-full aspect-video object-cover max-h-56" />
+                                </div>
+                                <div className="border rounded-2xl overflow-hidden bg-slate-950 flex flex-col">
+                                  <div className="bg-slate-900 text-[9px] text-rose-450 p-2 font-bold text-center border-b border-slate-800 font-sans">
+                                    FOTOĞRAF 2: GERİ ALMA ANI (HASAR DURUMU)
+                                  </div>
+                                  <img src={item.foto2} alt="Iade" className="w-full aspect-video object-cover max-h-56" />
+                                </div>
+                              </div>
+                            ) : (
+                              // HASAR tutanagi, show up to 3 photos in a row
+                              <div className="grid grid-cols-3 gap-3">
+                                {item.foto1 && (
+                                  <div className="border rounded-2xl overflow-hidden bg-slate-950">
+                                    <img src={item.foto1} alt="hasar1" className="w-full aspect-square object-cover" />
+                                  </div>
+                                )}
+                                {item.foto2 && (
+                                  <div className="border rounded-2xl overflow-hidden bg-slate-950">
+                                    <img src={item.foto2} alt="hasar2" className="w-full aspect-square object-cover" />
+                                  </div>
+                                )}
+                                {item.foto3 && (
+                                  <div className="border rounded-2xl overflow-hidden bg-slate-950">
+                                    <img src={item.foto3} alt="hasar3" className="w-full aspect-square object-cover" />
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Signature block with Kibritci Logo */}
+                        <div className="border-t pt-4 flex justify-between items-center bg-slate-50/50 p-4 rounded-2xl border border-slate-100 font-sans">
+                          <div className="flex items-center space-x-2 shrink-0">
+                            <KibritciLogo size={14} />
+                            <span className="text-[10px] font-black text-slate-850 tracking-wide">KİBRİTÇİ İNŞAAT A.Ş.</span>
+                          </div>
+                          
+                          <div className="flex gap-4 text-[9px] text-slate-500 font-bold">
+                            <div className="text-right">
+                              <span className="text-slate-400 block uppercase font-bold text-[8px]">Hazırlayan Yetkili</span>
+                              <span className="text-slate-800 font-extrabold">{item.teslimEden || 'Anahtarcı Yetkilisi'}</span>
+                            </div>
+                            {item.muhatapPersonel && (
+                              <div className="text-right border-l pl-4">
+                                <span className="text-slate-400 block uppercase font-bold text-[8px]">Muhatap Taşeron Yetkilisi</span>
+                                <span className="text-slate-800 font-extrabold">{item.muhatapPersonel}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex gap-3 pt-2">
+                          <button
+                            onClick={() => handleRejectAnahtarciTutanak(item)}
+                            className="flex-1 bg-rose-50 hover:bg-rose-105 text-rose-700 border border-rose-150 py-2.5 px-4 rounded-xl text-xs font-black tracking-widest transition flex items-center justify-center space-x-1.5 cursor-pointer uppercase"
+                          >
+                            <span>Tutanağı İptal Et / Reddet</span>
+                          </button>
+                          <button
+                            onClick={() => handleApproveAnahtarciTutanak(item)}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white py-2.5 px-4 rounded-xl text-xs font-black tracking-widest transition flex items-center justify-center space-x-1.5 border-b-2 border-emerald-800 cursor-pointer uppercase shadow-lg shadow-emerald-600/10"
+                          >
+                            <span>Tutanağı Onayla</span>
+                          </button>
+                        </div>
+
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 

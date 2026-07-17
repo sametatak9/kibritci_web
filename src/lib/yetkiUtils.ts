@@ -28,6 +28,7 @@ export const PORTAL_PAGES = [
   { key: "kampci_ekrani", label: "Kampçı Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
   { key: "lojistik_ekrani", label: "Şöför Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
   { key: "depocu_ekrani", label: "Depocu Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
+  { key: "imalat_terminali", label: "İmalat Terminali", group: "İDARİ İŞLER & SAHA" },
   { key: "sohbet", label: "Sohbet & Haberleşme", group: "RAPOR VE İLETİŞİM" },
   { key: "eposta", label: "E-Posta Merkezi", group: "RAPOR VE İLETİŞİM" },
   { key: "onay_islemleri", label: "Onay Havuzu & İmzalar", group: "RAPOR VE İLETİŞİM" },
@@ -44,6 +45,7 @@ export const MOBILE_ROLE_ALLOWED_TABS: Record<string, PortalPageKey[]> = {
   KAMPÇI: ['kampci_ekrani'],
   LOJİSTİK: ['lojistik_ekrani'],
   DEPOCU: ['depocu_ekrani'],
+  ANAHTARCI: ['imalat_terminali'],
 };
 
 /** @deprecated MOBILE_ROLE_ALLOWED_TABS kullanın */
@@ -95,6 +97,7 @@ export function getMobileRoleDisplayName(yetki?: string | null): string {
     GÜVENLİK: 'Güvenlik Mobil',
     LOJİSTİK: 'Şöför Mobil',
     DEPOCU: 'Depocu Mobil',
+    ANAHTARCI: 'İmalat Terminali Mobil',
   };
   return labels[n] || n;
 }
@@ -155,6 +158,7 @@ export const YETKI_ROLLER = [
   'GÜVENLİK',
   'LOJİSTİK',
   'DEPOCU',
+  'ANAHTARCI',
   'MİSAFİR',
 ] as const;
 
@@ -215,7 +219,10 @@ export function guessRoleFromEmail(email: string): string {
     return 'LOJİSTİK';
   }
   if (norm.includes('sofor') || norm.includes('driver')) {
-    return 'ŞOFÖR';
+    return 'LOJİSTİK';
+  }
+  if (norm.includes('anahtar') || norm.includes('key')) {
+    return 'ANAHTARCI';
   }
   return 'MİSAFİR';
 }

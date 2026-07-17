@@ -800,6 +800,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                                   <option value="GÜVENLİK">👮 GÜVENLİK — Yalnızca Güvenlik Mobil</option>
                                   <option value="LOJİSTİK">🚚 ŞOFÖR / LOJİSTİK — Yalnızca Şoför Mobil</option>
                                   <option value="DEPOCU">📦 DEPOCU — Yalnızca Depocu Mobil</option>
+                                  <option value="ANAHTARCI">🔑 ANAHTARCI — Yalnızca İmalat Terminali</option>
                                   <option value="MİSAFİR">⏳ MİSAFİR (Erişimsiz)</option>
                                 </select>
                                 {(pendingRoles[user.email] ?? user.yetki) !== user.yetki && (
@@ -924,6 +925,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                           <option value="GÜVENLİK">GÜVENLİK</option>
                           <option value="LOJİSTİK">LOJİSTİK</option>
                           <option value="DEPOCU">DEPOCU</option>
+                          <option value="ANAHTARCI">ANAHTARCI</option>
                           <option value="MİSAFİR">MİSAFİR</option>
                           <option value="KAMPÇI">KAMPÇI</option>
                         </select>
@@ -1030,6 +1032,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                   <option value="GÜVENLİK">GÜVENLİK</option>
                   <option value="LOJİSTİK">LOJİSTİK</option>
                   <option value="DEPOCU">DEPOCU</option>
+                  <option value="ANAHTARCI">ANAHTARCI</option>
                   <option value="KAMPÇI">KAMPÇI</option>
                   <option value="MİSAFİR">MİSAFİR</option>
                 </select>
@@ -1393,6 +1396,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                   <option value="GÜVENLİK">👮 GÜVENLİK (Mobil)</option>
                   <option value="LOJİSTİK">🚚 ŞOFÖR / LOJİSTİK (Mobil)</option>
                   <option value="DEPOCU">📦 DEPOCU (Mobil)</option>
+                  <option value="ANAHTARCI">🔑 ANAHTARCI (Mobil)</option>
                   <option value="MİSAFİR">⏳ MİSAFİR (Erişimsiz)</option>
                 </select>
               </div>

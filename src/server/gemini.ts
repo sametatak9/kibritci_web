@@ -131,12 +131,12 @@ export async function testGeminiConnection(): Promise<{
     const ai = getGeminiClient();
     let lastError: unknown = null;
 
-    for (const model of ['gemini-2.5-flash', 'gemini-2.0-flash']) {
+    for (const model of ['gemini-flash-lite-latest', 'gemini-flash-latest']) {
       try {
         const response = await ai.models.generateContent({
           model,
           contents: 'Reply with exactly: OK',
-          config: { maxOutputTokens: 16, temperature: 0 },
+          config: { maxOutputTokens: 128, temperature: 0 },
         });
         const text = response.text?.trim();
         if (text) {

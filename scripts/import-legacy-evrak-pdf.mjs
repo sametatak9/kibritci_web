@@ -148,24 +148,22 @@ const AUTO_SCHEMA = {
     donem: { type: Type.STRING },
     firma: { type: Type.STRING },
     cariUnvan: { type: Type.STRING },
-    toplamTutar: { type: Type.NUMBER },
-    kdvTutar: { type: Type.NUMBER },
-    genelToplam: { type: Type.NUMBER },
-    tutar: { type: Type.NUMBER },
+    toplamTutar: { type: Type.STRING },
+    kdvTutar: { type: Type.STRING },
+    genelToplam: { type: Type.STRING },
     aciklama: { type: Type.STRING },
     hareketTipi: { type: Type.STRING },
-    onayDurumu: { type: Type.STRING },
     kalemler: {
       type: Type.ARRAY,
       items: {
         type: Type.OBJECT,
         properties: {
           urunAdi: { type: Type.STRING },
-          miktar: { type: Type.NUMBER },
+          miktar: { type: Type.STRING },
           birim: { type: Type.STRING },
-          birimFiyat: { type: Type.NUMBER },
-          kdvOran: { type: Type.NUMBER },
-          toplam: { type: Type.NUMBER },
+          birimFiyat: { type: Type.STRING },
+          kdvOran: { type: Type.STRING },
+          toplam: { type: Type.STRING },
         },
       },
     },
@@ -177,10 +175,12 @@ const AUTO_PROMPT = `157-46 dograma / insaat santiye evragi. Sayfadaki belgeyi a
 detectedType: fatura | irsaliye | makbuz | hakedis | yoklama | saha_faaliyet
 Satın alma talep formu, malzeme siparişi, tedarik evrağı ise fatura veya irsaliye olarak siniflandir.
 Tarih YYYY-MM-DD. Firma/cariUnvan, evrak no, kalemler (urunAdi, miktar, birim, birimFiyat, kdvOran, toplam) cikar.
-157-46 dograma hesap evraklari icin urun adlarini net yaz.`;
+157-46 dograma hesap evraklari icin urun adlarini net yaz.
+Eğer belge irsaliye (waybill) ise, toplamTutar, kdvTutar, genelToplam alanlarını ve kalemler listesindeki birimFiyat, kdvOran, toplam alanlarını boş metin "" olarak doldur.
+Sayısal değerler için virgülden sonra en fazla 2 basamak kullan. Değeri olmayan veya belgede bulunmayan sayısal alanlar için boş metin "" yaz, asla 0.00000... gibi uzayan ondalık sıfırlar üretme.`;
 
 const localAi = !useRemote ? new GoogleGenAI({ apiKey }) : null;
-const LOCAL_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+const LOCAL_MODELS = ['gemini-flash-lite-latest', 'gemini-flash-latest'];
 
 const requestParseLocal = async (fileBase64, pageNo, retries = 5) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -201,7 +201,12 @@ const requestParseLocal = async (fileBase64, pageNo, retries = 5) => {
       });
       const text = response.text?.trim();
       if (!text) throw new Error('bos yanit');
-      return { success: true, data: JSON.parse(text) };
+      try {
+        return { success: true, data: JSON.parse(text) };
+      } catch (parseErr) {
+        console.error("RAW TEXT WAS:\n", text);
+        throw parseErr;
+      }
     } catch (err) {
       const msg = String(err?.message || err);
       const is429 = /429|quota|RESOURCE_EXHAUSTED|rate/i.test(msg);

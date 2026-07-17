@@ -1,6 +1,6 @@
 /** Firebase Auth custom claims + Firestore rules ile paylaşılan rol sabitleri */
 
-export const MOBILE_ROLES = ['FORMEN', 'GÜVENLİK', 'KAMPÇI', 'LOJİSTİK', 'DEPOCU'] as const;
+export const MOBILE_ROLES = ['FORMEN', 'GÜVENLİK', 'KAMPÇI', 'LOJİSTİK', 'DEPOCU', 'ANAHTARCI'] as const;
 
 export const FINANCE_DESK_ROLES = [
   'YÖNETİCİ',
