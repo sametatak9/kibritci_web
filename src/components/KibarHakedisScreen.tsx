@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { db, parseYoklamaSnapshotData, saveDocument } from '../lib/firebase';
 import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore';
-import { Personel, AylikYoklamaMap, SahaKolajFoto } from '../types/erp';
+import { Personel, AylikYoklamaMap, SahaKolajFoto, ProgramliFaaliyet } from '../types/erp';
 import { CorporateReportLayout } from './CorporateReportLayout';
 import { buildPersonelListForMonth, isDayActiveForPersonel, normalizeTurkishName } from '../lib/yoklamaUtils';
 import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
@@ -16,12 +16,13 @@ import {
   faaliyetIsTanimi,
   formatPersonelSayisi,
 } from '../lib/kibarReportUtils';
-import { groupKolajFotolari } from '../lib/sahaKolajUtils';
+import { groupKolajFotolari, mergeAlbumFotolari } from '../lib/sahaKolajUtils';
 
 interface KibarHakedisScreenProps {
   personeller: Personel[];
   yoklamalar: AylikYoklamaMap;
   sahaFaaliyetleri: any[];
+  programliFaaliyetler?: ProgramliFaaliyet[];
   currentUser: any;
 }
 
@@ -258,10 +259,12 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
   personeller,
   yoklamalar,
   sahaFaaliyetleri,
+  programliFaaliyetler = [],
   currentUser
 }) => {
-  const [selectedYear, setSelectedYear] = useState(2026);
-  const [selectedMonth, setSelectedMonth] = useState(5);
+  const now = new Date();
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [kampFaaliyetleri, setKampFaaliyetleri] = useState<any[]>([]);
   const [kolajFotolari, setKolajFotolari] = useState<SahaKolajFoto[]>([]);
   const [excludedStaffIds, setExcludedStaffIds] = useState<string[]>([]);
@@ -304,18 +307,33 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
     return () => unsub();
   }, [donemKey]);
 
+  const birlesikKolajFotolari = useMemo(
+    () =>
+      mergeAlbumFotolari({
+        albumKey: donemKey,
+        yil: selectedYear,
+        ay: selectedMonth,
+        kolajFotolari,
+        sahaFaaliyetleri,
+        programliFaaliyetler,
+      }),
+    [donemKey, selectedYear, selectedMonth, kolajFotolari, sahaFaaliyetleri, programliFaaliyetler]
+  );
+
+  // Yazdırma performansını korumak için üst sınır; tüm sayım subtitle'da gösterilir
+  const HAKEDIS_FOTO_LIMIT = 60;
   const kolajFotoLimit = useMemo(() => {
-    const gruplar = groupKolajFotolari(kolajFotolari).slice(0, 8);
+    const gruplar = groupKolajFotolari(birlesikKolajFotolari);
     const flat: SahaKolajFoto[] = [];
     for (const g of gruplar) {
       for (const f of g.fotolar) {
-        if (flat.length >= 24) break;
+        if (flat.length >= HAKEDIS_FOTO_LIMIT) break;
         flat.push(f);
       }
-      if (flat.length >= 24) break;
+      if (flat.length >= HAKEDIS_FOTO_LIMIT) break;
     }
     return flat;
-  }, [kolajFotolari]);
+  }, [birlesikKolajFotolari]);
 
   const monthPersoneller = useMemo(
     () => buildPersonelListForMonth(personeller, yoklamaSource, selectedYear, selectedMonth, resolveStubPersonelFromLegacyId),
@@ -867,14 +885,15 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
               <section>
                 <p className="rpt-sec-title m-0">4 · Saha Foto Albümü (Kolaj)</p>
                 <p className="rpt-sec-sub">
-                  {kolajFotolari.length} albüm fotoğrafı
-                  {kolajFotoLimit.length < kolajFotolari.length
-                    ? ` · raporda ${kolajFotoLimit.length} adet gösteriliyor`
+                  Toplam {birlesikKolajFotolari.length} fotoğraf
+                  {` · albüm: ${kolajFotolari.length} · faaliyet: ${Math.max(0, birlesikKolajFotolari.length - kolajFotolari.length)}`}
+                  {kolajFotoLimit.length < birlesikKolajFotolari.length
+                    ? ` · raporda ilk ${kolajFotoLimit.length} adet`
                     : ''}
                 </p>
                 {kolajFotoLimit.length === 0 ? (
                   <p className="text-[9px] text-slate-400 italic">
-                    Bu dönem için saha kolaj albümünde fotoğraf yok. İdari → Kolaj sekmesinden yükleyebilirsiniz.
+                    Bu dönem için saha kolaj / faaliyet fotoğrafı yok.
                   </p>
                 ) : (
                   <div className="space-y-2">
