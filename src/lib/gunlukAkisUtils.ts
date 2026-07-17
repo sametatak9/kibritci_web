@@ -35,7 +35,15 @@ export function buildFormenGunlukOzet(input: {
   sahaCount: number;
   girisCount: number;
   cikisCount: number;
+  mesaiToplamSaat?: number;
+  sahaOzetleri?: string[];
 }): string {
+  const mesai =
+    typeof input.mesaiToplamSaat === 'number' && input.mesaiToplamSaat > 0
+      ? `Mesai toplamı: ${input.mesaiToplamSaat} saat`
+      : 'Mesai toplamı: —';
+  const sahaSatirlar = (input.sahaOzetleri || []).filter(Boolean).slice(0, 8);
+
   return [
     'KİBRİTÇİ A.Ş. — FORMEN GÜNLÜK AKIŞ RAPORU',
     `Tarih: ${input.tarih.split('-').reverse().join('.')}`,
@@ -43,10 +51,12 @@ export function buildFormenGunlukOzet(input: {
     '',
     `Yoklama: ${input.gelen}/${input.toplam} personel sahada`,
     input.gelenIsimler.length ? `Gelenler: ${input.gelenIsimler.slice(0, 15).join(', ')}` : '',
+    mesai,
     `Saha faaliyeti kaydı: ${input.sahaCount} adet`,
+    ...sahaSatirlar.map((s) => `• ${s}`),
     `Personel giriş talebi: ${input.girisCount} · çıkış talebi: ${input.cikisCount}`,
     '',
-    'Bu rapor yönetim onayına sunulmuştur.',
+    'Bu rapor yönetim onayına sunulmuştur / şefe WhatsApp ile iletilebilir.',
   ]
     .filter(Boolean)
     .join('\n');
