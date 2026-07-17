@@ -11,6 +11,7 @@ import { BagliEvraklarListesi } from './BagliEvraklarListesi';
 import { EvrakTabBilgi } from './EvrakTabBilgi';
 import { warnIfDuplicateStok } from '../lib/duplicateNameUtils';
 import { kibritciLogoHtml } from '../lib/kibritciBrand';
+import { wrapCorporateReportHtml } from '../lib/corporateReportHtml';
 
 interface IrsaliyeGirisScreenProps {
   irsaliyeler: Irsaliye[];
@@ -303,33 +304,93 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
   };
 
   const handlePreviewIrsaliyePdf = (ir: Irsaliye) => {
-    const html = `
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <title>İrsaliye Raporu - ${ir.irsaliyeNo}</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 24px; color: #1f2937; }
-            h1 { font-size: 18px; margin: 0 0 8px; }
-            p { margin: 0 0 8px; font-size: 12px; color: #6b7280; }
-            table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
-            th, td { border: 1px solid #d1d5db; padding: 6px 8px; }
-            th { background: #f3f4f6; text-align: left; }
-          </style>
-        </head>
-        <body>
-          <div style="margin-bottom:12px;">${kibritciLogoHtml(44)}</div>
-          <h1 style="font-size:14px;margin:0 0 8px;">İRSALİYE RAPORU</h1>
-          <p>No: ${ir.irsaliyeNo || '-'} • Tarih: ${ir.tarih || '-'} • Firma: ${ir.firma || '-'}</p>
-          <table>
-            <thead><tr><th>Malzeme</th><th>Miktar</th><th>Birim</th></tr></thead>
-            <tbody>
-              ${(ir.kalemler || []).map((k) => `<tr><td>${k.urunAdi || '-'}</td><td>${k.miktar || 0}</td><td>${k.birim || '-'}</td></tr>`).join('')}
-            </tbody>
-          </table>
-        </body>
-      </html>
+    const innerBody = `
+      <div class="mb-6">
+        <h2 class="text-xl font-extrabold text-slate-800 tracking-tight">SEVK İRSALİYESİ RAPORU</h2>
+        <p class="text-xs text-slate-500 mt-1">Malzeme Sevk ve Teslim Tesellüm Belgesi</p>
+      </div>
+
+      <!-- Bilgi Kartları -->
+      <div class="grid grid-cols-2 gap-4 mb-6">
+        <div class="border border-slate-200 bg-slate-50/50 p-4 rounded-xl">
+          <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">🚚 Sevk &amp; İrsaliye Bilgileri</h4>
+          <div class="space-y-1 text-xs">
+            <div class="flex justify-between"><span class="text-slate-500">İrsaliye No:</span> <strong class="text-slate-800">${ir.irsaliyeNo || '-'}</strong></div>
+            <div class="flex justify-between"><span class="text-slate-500">İrsaliye Tarihi:</span> <strong class="text-slate-800">${ir.tarih || '-'}</strong></div>
+            <div class="flex justify-between"><span class="text-slate-500">Onay Durumu:</span> <strong class="text-indigo-600">${ir.onayDurumu || 'ONAY BEKLİYOR'}</strong></div>
+          </div>
+        </div>
+        
+        <div class="border border-slate-200 bg-slate-50/50 p-4 rounded-xl">
+          <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">🏢 Gönderici / Tedarikçi</h4>
+          <div class="space-y-1 text-xs">
+            <div class="flex justify-between"><span class="text-slate-500">Tedarikçi Firma:</span> <strong class="text-slate-800">${ir.firma || '-'}</strong></div>
+            <div class="flex justify-between"><span class="text-slate-500">İlişkili Fatura No:</span> <strong class="text-slate-800">${ir.faturaNo || 'Bağlanmadı'}</strong></div>
+            <div class="flex justify-between"><span class="text-slate-500">İlişkili Talep No:</span> <strong class="text-slate-800">${ir.saId || 'Bağlanmadı'}</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Malzeme Kalemleri Tablosu -->
+      <div class="border border-slate-200 rounded-xl overflow-hidden mb-6">
+        <table class="w-full text-xs text-left border-collapse">
+          <thead>
+            <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+              <th class="p-3 w-12 text-center">#</th>
+              <th class="p-3">Malzeme / Ürün Adı</th>
+              <th class="p-3 text-right w-32">Miktar</th>
+              <th class="p-3 w-24">Birim</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 bg-white">
+            ${(ir.kalemler || []).map((k, index) => `
+              <tr class="hover:bg-slate-50/50 transition">
+                <td class="p-3 text-center text-slate-400 font-mono">${index + 1}</td>
+                <td class="p-3 font-semibold text-slate-800">${k.urunAdi || '-'}</td>
+                <td class="p-3 text-right font-mono font-bold text-slate-900">${k.miktar || 0}</td>
+                <td class="p-3 text-slate-650">${k.birim || 'Adet'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Onay ve İmza Kanalları -->
+      <div class="mt-8">
+        <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">🖋️ Teslim Tesellüm İmza Alanları</h4>
+        <div class="grid grid-cols-3 gap-4">
+          <div class="border border-slate-200 p-4 rounded-xl text-center min-h-[100px] flex flex-col justify-between">
+            <span class="text-[10px] font-bold text-slate-500 block uppercase">Teslim Eden (Firma Şoförü)</span>
+            <span class="text-[10px] text-slate-400 font-mono italic">Ad Soyad / İmza</span>
+          </div>
+          <div class="border border-slate-200 p-4 rounded-xl text-center min-h-[100px] flex flex-col justify-between">
+            <span class="text-[10px] font-bold text-slate-500 block uppercase">Teslim Alan (Güvenlik / Depo)</span>
+            <span class="text-[10px] text-slate-400 font-mono italic">Ad Soyad / İmza</span>
+          </div>
+          <div class="border border-slate-200 p-4 rounded-xl text-center min-h-[100px] flex flex-col justify-between">
+            <span class="text-[10px] font-bold text-slate-500 block uppercase">Kontrol Eden (Şantiye Şefi)</span>
+            <span class="text-[10px] text-slate-400 font-mono italic">Ad Soyad / İmza</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dijital e-İmzalar -->
+      ${ir.eImzalar && ir.eImzalar.length > 0 ? `
+        <div class="mt-6 border border-emerald-100 bg-emerald-50/30 p-3 rounded-xl text-[10px] text-emerald-800 leading-relaxed">
+          <div class="font-bold flex items-center space-x-1 mb-1">
+            <span>🛡️ DİJİTAL ONAY ZİNCİRİ VE E-İMZA KANITLARI</span>
+          </div>
+          ${ir.eImzalar.map(im => `<div>• ${im}</div>`).join('')}
+        </div>
+      ` : ''}
     `;
+
+    const html = wrapCorporateReportHtml(innerBody, {
+      docCode: `İRSALİYE NO: ${ir.irsaliyeNo || 'İRSALİYE'}`,
+      orientation: 'portrait',
+      title: `Kibritçi İnşaat - İrsaliye Raporu - ${ir.irsaliyeNo}`,
+    });
+
     const blob = new Blob([html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const win = window.open(url, '_blank');
