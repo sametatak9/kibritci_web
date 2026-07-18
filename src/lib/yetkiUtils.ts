@@ -27,6 +27,7 @@ export const PORTAL_PAGES = [
   { key: "guvenlik_ekrani", label: "Güvenlik & Kapı Kontrol", group: "İDARİ İŞLER & SAHA" },
   { key: "kampci_ekrani", label: "Kampçı Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
   { key: "tesisatci_ekrani", label: "Tesisatçı Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
+  { key: "mermerci_ekrani", label: "Mermerci Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
   { key: "lojistik_ekrani", label: "Şöför Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
   { key: "depocu_ekrani", label: "Depocu Mobil Paneli", group: "İDARİ İŞLER & SAHA" },
   { key: "imalat_terminali", label: "İmalat Terminali", group: "İDARİ İŞLER & SAHA" },
@@ -45,6 +46,7 @@ export const MOBILE_ROLE_ALLOWED_TABS: Record<string, PortalPageKey[]> = {
   GÜVENLİK: ['guvenlik_ekrani'],
   KAMPÇI: ['kampci_ekrani'],
   TESİSATÇI: ['tesisatci_ekrani'],
+  MERMERCİ: ['mermerci_ekrani'],
   LOJİSTİK: ['lojistik_ekrani'],
   DEPOCU: ['depocu_ekrani'],
   ANAHTARCI: ['imalat_terminali'],
@@ -65,6 +67,7 @@ const YETKI_ALIASES: Record<string, string> = {
   SOFOR: 'LOJİSTİK',
   TESISATCI: 'TESİSATÇI',
   TESİSATCI: 'TESİSATÇI',
+  MERMERCI: 'MERMERCİ',
 };
 
 export function normalizeYetki(yetki?: string | null): string {
@@ -99,6 +102,7 @@ export function getMobileRoleDisplayName(yetki?: string | null): string {
     FORMEN: 'Formen Mobil + Personel',
     KAMPÇI: 'Kampçı Mobil',
     TESİSATÇI: 'Tesisatçı Mobil',
+    MERMERCİ: 'Mermerci Mobil',
     GÜVENLİK: 'Güvenlik Mobil',
     LOJİSTİK: 'Şöför Mobil',
     DEPOCU: 'Depocu Mobil',
@@ -161,6 +165,7 @@ export const YETKI_ROLLER = [
   'FORMEN',
   'KAMPÇI',
   'TESİSATÇI',
+  'MERMERCİ',
   'GÜVENLİK',
   'LOJİSTİK',
   'DEPOCU',
@@ -220,6 +225,9 @@ export function guessRoleFromEmail(email: string): string {
   }
   if (norm.includes('tesisat') || norm.includes('plumbing')) {
     return 'TESİSATÇI';
+  }
+  if (norm.includes('mermer') || norm.includes('marble')) {
+    return 'MERMERCİ';
   }
   if (norm.includes('depo') || norm.includes('store')) {
     return 'DEPOCU';

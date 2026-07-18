@@ -23,17 +23,23 @@ export function isTesisatciGorev(gorev?: string): boolean {
   return normalizeGorevKey(gorev).includes('TESISATCI');
 }
 
+export function isMermerciGorev(gorev?: string): boolean {
+  return normalizeGorevKey(gorev).includes('MERMERCI');
+}
+
+export function isKampciGorev(gorev?: string): boolean {
+  return normalizeGorevKey(gorev).includes('KAMPCI');
+}
+
 export function isKampciTesisatciMermerci(gorev?: string): boolean {
   if (!gorev) return false;
   const g = normalizeGorevKey(gorev);
   return g.includes('KAMPCI') || g.includes('TESISATCI') || g.includes('MERMERCI');
 }
 
-/** Kampçı yoklaması: kampçı + mermerci (tesisatçı kendi mobilinde) */
+/** @deprecated Kampçı yoklaması artık yalnızca kampçı — isKampciGorev kullanın */
 export function isKampciMermerciGorev(gorev?: string): boolean {
-  if (!gorev) return false;
-  const g = normalizeGorevKey(gorev);
-  return (g.includes('KAMPCI') || g.includes('MERMERCI')) && !g.includes('TESISATCI');
+  return isKampciGorev(gorev);
 }
 
 /** GunlukYoklama → iterateMonthYoklama uyumlu kayıt haritası */

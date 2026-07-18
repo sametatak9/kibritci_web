@@ -159,6 +159,25 @@ export interface TesisatciFaaliyet {
   guncellenme?: string;
 }
 
+/** Mermerci mobil — saha imalat faaliyeti (parsel / blok) */
+export interface MermerciFaaliyet {
+  id: string;
+  tarih: string;
+  faaliyetGrubu: 'NORMAL' | 'MESAI';
+  isNiteligi: string;
+  parsel: string;
+  blok: string;
+  aciklama: string;
+  fotoUrl?: string | null;
+  fotoUrls?: string[];
+  personelMesaiSaatleri?: Record<string, number>;
+  durum?: string;
+  kaydeden?: string;
+  kaynakEkran?: 'MERMERCI_MOBIL';
+  olusturulma?: string;
+  guncellenme?: string;
+}
+
 export interface FaturaItem {
   id: string;
   urunAdi: string;
