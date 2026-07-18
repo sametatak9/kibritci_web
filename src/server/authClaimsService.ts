@@ -144,6 +144,13 @@ export async function preparePasswordReset(email: string): Promise<{ prepared: b
     return { prepared: true, created: false };
   }
 
+  // Admin paneline bildirim düşmesi için Firestore belgesine talep bayrağını yazıyoruz
+  await admin.firestore().collection('kullanicilar').doc(emailKey).set({
+    sifreSifirlamaTalebi: true
+  }, { merge: true }).catch((e) => {
+    console.warn('sifreSifirlamaTalebi yazilamadi:', e);
+  });
+
   try {
     await admin.auth().getUserByEmail(emailKey);
     return { prepared: true, created: false };

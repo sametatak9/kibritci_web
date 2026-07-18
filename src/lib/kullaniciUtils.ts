@@ -41,6 +41,7 @@ export interface KullaniciLike {
   kisitliSayfalar?: string[];
   saltOkunurSayfalar?: string[];
   yetkiUpdatedAt?: string;
+  sifreSifirlamaTalebi?: boolean;
   /** Firestore belge kimliği (e-postadan farklı olabilir) */
   _docId?: string;
 }

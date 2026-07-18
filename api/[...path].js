@@ -458,6 +458,11 @@ async function preparePasswordReset(email) {
   if (!allowed) {
     return { prepared: true, created: false };
   }
+  await admin2.firestore().collection("kullanicilar").doc(emailKey).set({
+    sifreSifirlamaTalebi: true
+  }, { merge: true }).catch((e) => {
+    console.warn("sifreSifirlamaTalebi yazilamadi:", e);
+  });
   try {
     await admin2.auth().getUserByEmail(emailKey);
     return { prepared: true, created: false };

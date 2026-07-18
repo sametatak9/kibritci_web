@@ -67,6 +67,7 @@ export interface Kullanici {
   matchedPersonelId?: string;
   kisitliSayfalar?: string[];
   saltOkunurSayfalar?: string[];
+  sifreSifirlamaTalebi?: boolean;
 }
 
 export interface HataRaporu {
@@ -396,6 +397,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
         tcNo: editTcNo.trim(),
         yetki: editYetki as any,
         durum: editDurum,
+        sifreSifirlamaTalebi: false,
       };
 
       const saved = await saveKullanici(updatedUser);
@@ -724,6 +726,11 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                                 <div className="min-w-0 space-y-1">
                                   <p className="font-bold text-slate-900 truncate">
                                     {user.email} {isSelf && <span className="text-[8px] bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded ml-1 uppercase font-bold">BEN</span>}
+                                    {user.sifreSifirlamaTalebi && (
+                                      <span className="text-[8px] bg-rose-600 text-white border border-rose-500 px-2 py-0.5 rounded-full ml-1.5 font-black uppercase inline-flex items-center gap-1 animate-pulse shadow-sm">
+                                        🔑 ŞİFRE YENİLEME İSTEDİ
+                                      </span>
+                                    )}
                                   </p>
                                   
                                   {(user.ad || user.soyad || user.tcNo) && (
