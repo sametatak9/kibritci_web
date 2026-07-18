@@ -1,16 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Building2, Package, Plus, Search, Trash2, Pencil, Download,
-  ClipboardList, X, RefreshCw, FileText, Truck, Receipt, Home, User, Users
+  ClipboardList, X, RefreshCw, FileText, Truck, Receipt, Home, User, Users, Eye
 } from 'lucide-react';
-import { collection, getDocs } from 'firebase/firestore';
-import { CariKart, Personel, StokKart } from '../types/erp';
+import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
+import { CariKart, Fatura, Irsaliye, Personel, SatinAlmaTalebi, StokKart } from '../types/erp';
 import { db } from '../lib/firebase';
 import { warnIfDuplicateCari, warnIfDuplicateStok } from '../lib/duplicateNameUtils';
 import { exportHistoryReport } from '../lib/reportExport';
 import { firmaEslesir, personelForCariKart } from '../lib/taseronUtils';
 import { displayPersonelGorev, isPersonelActiveOnDate } from '../lib/guvenlikHelpers';
 import { todayDateKey } from '../lib/dateKeyUtils';
+import { EvrakDetayModal, EvrakDetayPayload } from './EvrakDetayModal';
+import { openBase64InNewTab } from '../lib/fileViewerUtils';
 
 interface CariStokScreenProps {
   cariKartlar: CariKart[];
@@ -20,6 +22,14 @@ interface CariStokScreenProps {
   personeller?: Personel[];
 }
 
+type HistoryCollection =
+  | 'satinAlmaTalepleri'
+  | 'irsaliyeler'
+  | 'faturalar'
+  | 'kampKayitlari'
+  | 'personelZimmetleri'
+  | 'cariIslemGecmisi';
+
 type HistoryLog = {
   id: string;
   type: string;
@@ -27,6 +37,14 @@ type HistoryLog = {
   desc: string;
   date: string;
   badgeColor: string;
+  collection?: HistoryCollection;
+};
+
+type GenericDetail = {
+  title: string;
+  rows: { label: string; value: string }[];
+  attachmentUrl?: string;
+  attachmentName?: string;
 };
 
 const TYPE_ICON: Record<string, React.ReactNode> = {
@@ -76,6 +94,9 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyList, setHistoryList] = useState<HistoryLog[]>([]);
   const [historyFilter, setHistoryFilter] = useState('ALL');
+  const [detayPayload, setDetayPayload] = useState<EvrakDetayPayload | null>(null);
+  const [genericDetail, setGenericDetail] = useState<GenericDetail | null>(null);
+  const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
 
   const filteredCariKartlar = useMemo(() => {
     const q = cariSearchQuery.trim().toLowerCase();
@@ -157,6 +178,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
               desc: `${data.aciklama || 'Açıklama yok'} (${data.kalemler?.length || 0} kalem). Onay: ${data.onayDurumu}`,
               date: data.tarih || '',
               badgeColor: 'bg-slate-100 text-slate-800',
+              collection: 'satinAlmaTalepleri',
             });
           }
         });
@@ -176,6 +198,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
               }${data.cekimAdedi != null ? ` · ${data.cekimAdedi} çekim` : ''}`,
               date: data.tarih || '',
               badgeColor: 'bg-amber-100 text-amber-800',
+              collection: 'irsaliyeler',
             });
           }
         });
@@ -191,6 +214,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
               desc: `Matrah: ₺${Number(data.toplamTutar || 0).toLocaleString('tr-TR')} · ${data.durum}`,
               date: data.tarih || '',
               badgeColor: 'bg-stone-200 text-stone-800',
+              collection: 'faturalar',
             });
           }
         });
@@ -206,6 +230,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
               desc: `${data.girisTarihi} · ${data.durum === 'AKTIF' ? 'Hâlâ konaklıyor' : 'Ayrıldı'}`,
               date: data.girisTarihi || '',
               badgeColor: 'bg-teal-100 text-teal-800',
+              collection: 'kampKayitlari',
             });
           }
         });
@@ -227,6 +252,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
             desc: data.islemDetay || '',
             date: data.tarih || '',
             badgeColor: 'bg-indigo-100 text-indigo-800',
+            collection: 'cariIslemGecmisi',
           });
         });
       } else {
@@ -244,6 +270,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
               desc: `Firma: ${data.cariFirma}`,
               date: data.tarih || '',
               badgeColor: 'bg-slate-100 text-slate-800',
+              collection: 'satinAlmaTalepleri',
             });
           }
         });
@@ -262,6 +289,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
               desc: `Firma: ${data.firma}`,
               date: data.tarih || '',
               badgeColor: 'bg-amber-100 text-amber-800',
+              collection: 'irsaliyeler',
             });
           }
         });
@@ -273,10 +301,11 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
             logs.push({
               id: docSnap.id,
               type: 'PERSONEL ZİMMET',
-              title: `Zimmet: ${data.personelName || 'Personel'}`,
+              title: `Zimmet: ${data.personelIsim || data.personelName || 'Personel'}`,
               desc: `${data.miktar} ${data.birim} · ${data.durum || 'ZİMMETLİ'}`,
               date: data.tarih || '',
               badgeColor: 'bg-indigo-100 text-indigo-800',
+              collection: 'personelZimmetleri',
             });
           }
         });
@@ -305,6 +334,88 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [csTab, selectedCariId, selectedStokId]);
+
+  const openHistoryDetay = async (log: HistoryLog) => {
+    if (!log.collection || log.id === 'init') return;
+    setDetailLoadingId(log.id);
+    try {
+      const snap = await getDoc(doc(db, log.collection, log.id));
+      if (!snap.exists()) {
+        alert('Evrak kaydı bulunamadı.');
+        return;
+      }
+      const data = { id: snap.id, ...snap.data() } as Record<string, unknown>;
+
+      if (log.collection === 'satinAlmaTalepleri') {
+        setDetayPayload({ kind: 'sa', sa: data as unknown as SatinAlmaTalebi });
+        return;
+      }
+      if (log.collection === 'irsaliyeler') {
+        setDetayPayload({ kind: 'irsaliye', irsaliye: data as unknown as Irsaliye });
+        return;
+      }
+      if (log.collection === 'faturalar') {
+        setDetayPayload({ kind: 'fatura', fatura: data as unknown as Fatura });
+        return;
+      }
+      if (log.collection === 'kampKayitlari') {
+        setGenericDetail({
+          title: `Konaklama · ${data.personelIsim || 'Personel'}`,
+          rows: [
+            { label: 'Personel', value: String(data.personelIsim || '—') },
+            { label: 'Firma', value: String(data.calistigiFirma || '—') },
+            { label: 'Yerleşke', value: String(data.yerleskeAdi || '—') },
+            { label: 'Kat / Oda', value: `${data.katAdi || '—'} / ${data.odaNo || '—'}` },
+            { label: 'Giriş', value: String(data.girisTarihi || '—') },
+            { label: 'Çıkış', value: String(data.cikisTarihi || '—') },
+            { label: 'Durum', value: String(data.durum || '—') },
+          ],
+        });
+        return;
+      }
+      if (log.collection === 'personelZimmetleri') {
+        setGenericDetail({
+          title: `Zimmet · ${data.personelIsim || data.personelName || 'Personel'}`,
+          rows: [
+            { label: 'Personel', value: String(data.personelIsim || data.personelName || '—') },
+            { label: 'Ürün', value: String(data.urunAdi || '—') },
+            { label: 'Kod', value: String(data.kod || '—') },
+            { label: 'Miktar', value: `${data.miktar ?? '—'} ${data.birim || ''}`.trim() },
+            { label: 'Teslim eden', value: String(data.teslimEden || '—') },
+            { label: 'Tarih', value: String(data.tarih || '—') },
+            { label: 'İade', value: String(data.iadeTarihi || '—') },
+            { label: 'Durum', value: String(data.durum || '—') },
+            { label: 'Açıklama', value: String(data.aciklama || '—') },
+          ],
+        });
+        return;
+      }
+      if (log.collection === 'cariIslemGecmisi') {
+        setGenericDetail({
+          title: String(data.islemBaslik || 'Cari işlem'),
+          rows: [
+            { label: 'İşlem', value: String(data.islemBaslik || '—') },
+            { label: 'Detay', value: String(data.islemDetay || '—') },
+            { label: 'Tip', value: String(data.islemTipi || '—') },
+            { label: 'Belge No', value: String(data.belgeNo || '—') },
+            { label: 'Tarih', value: String(data.tarih || '—') },
+            {
+              label: 'Tutar',
+              value:
+                data.tutar != null
+                  ? `₺${Number(data.tutar).toLocaleString('tr-TR')}`
+                  : '—',
+            },
+          ],
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Evrak detayı açılamadı.');
+    } finally {
+      setDetailLoadingId(null);
+    }
+  };
 
   const filteredHistory = useMemo(() => {
     if (historyFilter === 'ALL') return historyList;
@@ -817,7 +928,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
                     Alt işlemler / hareket geçmişi
                   </h3>
                   <p className="text-[11px] text-slate-500 mt-1">
-                    {historyList.length} kayıt · seçili karta bağlı satın alma, irsaliye, fatura ve diğer hareketler
+                    {historyList.length} kayıt · evrak varsa <strong>Detay</strong> ile kalemleri ve görselleri açın
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -896,6 +1007,21 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
                         <p className="text-xs font-black text-slate-900 mt-1">{log.title}</p>
                         <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">{log.desc}</p>
                       </div>
+                      {log.collection && (
+                        <button
+                          type="button"
+                          onClick={() => void openHistoryDetay(log)}
+                          disabled={detailLoadingId === log.id}
+                          className="shrink-0 self-center inline-flex items-center gap-1 text-[10px] font-black text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 px-2.5 py-1.5 rounded-lg cursor-pointer disabled:opacity-50"
+                        >
+                          {detailLoadingId === log.id ? (
+                            <RefreshCw size={12} className="animate-spin" />
+                          ) : (
+                            <Eye size={12} />
+                          )}
+                          Detay
+                        </button>
+                      )}
                     </div>
                   ))
                 )}
@@ -904,6 +1030,59 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
           )}
         </section>
       </div>
+
+      <EvrakDetayModal
+        open={!!detayPayload}
+        payload={detayPayload}
+        onClose={() => setDetayPayload(null)}
+      />
+
+      {genericDetail && (
+        <div
+          className="fixed inset-0 z-[60] bg-slate-950/70 flex items-center justify-center p-4"
+          onClick={() => setGenericDetail(null)}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-white">
+              <h3 className="font-bold text-sm text-slate-900">{genericDetail.title}</h3>
+              <button
+                type="button"
+                onClick={() => setGenericDetail(null)}
+                className="cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3 text-xs">
+              <dl className="grid grid-cols-2 gap-2">
+                {genericDetail.rows.map((row) => (
+                  <React.Fragment key={row.label}>
+                    <dt className="text-slate-500">{row.label}</dt>
+                    <dd className="font-semibold text-slate-800 break-words">{row.value}</dd>
+                  </React.Fragment>
+                ))}
+              </dl>
+              {genericDetail.attachmentUrl && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    openBase64InNewTab(
+                      genericDetail.attachmentUrl!,
+                      genericDetail.attachmentName || 'evrak.jpg'
+                    )
+                  }
+                  className="w-full inline-flex items-center justify-center gap-1.5 text-[11px] font-black text-indigo-700 bg-indigo-50 border border-indigo-200 py-2.5 rounded-xl cursor-pointer"
+                >
+                  <FileText size={13} /> Evrakı görüntüle
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Form drawer */}
       {showForm && (
