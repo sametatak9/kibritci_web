@@ -413,15 +413,11 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
       docCode: ht.belgeNo,
       orientation: 'portrait',
       title: ht.belgeNo,
-      autoPrint: true,
+      autoPrint: false,
     });
-    const w = window.open('', '_blank');
-    if (!w) {
-      alert('Pop-up engellendi.');
-      return;
-    }
-    w.document.write(html);
-    w.document.close();
+    void import('../lib/reportEmail').then(({ openHtmlReportWindow }) => {
+      openHtmlReportWindow(html, ht.belgeNo);
+    });
   };
 
   const taseronPersonelListesi = useMemo(() => {
@@ -989,14 +985,32 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
                               : ''}
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => printTutanakArsiv(ht)}
-                        className="p-2 border rounded-lg hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 text-[10px] font-bold"
-                        title="Antetli rapor"
-                      >
-                        <Printer size={14} /> Rapor
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void import('../lib/reportEmail').then(({ openReportEmailComposer }) => {
+                              openReportEmailComposer({
+                                subject: `Kibritçi — ${ht.belgeNo} ${ht.konu || ''}`,
+                                body: `${ht.tutanakTipi} · ${ht.tarih}\nTaşeron: ${ht.taseronAdi || selectedTaseron?.unvan || ''}\n${ht.icerik || ''}`,
+                                fileName: `${ht.belgeNo}.html`,
+                              });
+                            });
+                          }}
+                          className="p-2 border rounded-lg hover:bg-sky-50 cursor-pointer inline-flex items-center gap-1 text-[10px] font-bold text-sky-700"
+                          title="E-posta ile gönder"
+                        >
+                          <Mail size={14} /> E-posta
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => printTutanakArsiv(ht)}
+                          className="p-2 border rounded-lg hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 text-[10px] font-bold"
+                          title="Antetli rapor"
+                        >
+                          <Printer size={14} /> Rapor
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}

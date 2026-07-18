@@ -120,6 +120,9 @@ import { YetkiVermeScreen } from './components/YetkiVermeScreen';
 import { OperatorScreen } from './components/OperatorScreen';
 import { MaasOdeScreen } from './components/MaasOdeScreen';
 import { PublicGirisKayitScreen } from './components/PublicGirisKayitScreen';
+import { installReportEmailGlobalBridge } from './lib/reportEmail';
+
+installReportEmailGlobalBridge();
 
 export default function App() {
   const SECONDARY_ADMIN_EMAIL = 'mudur@gmail.com';

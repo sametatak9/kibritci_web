@@ -2,6 +2,7 @@ import {
   KIBRITCI_REPORT_HEADER_DATA_URL,
   KIBRITCI_REPORT_WATERMARK_DATA_URL,
 } from './reportBrandAssets';
+import { getReportEmailToolbarHtml } from './reportEmail';
 
 export const CORPORATE_COMPANY = {
   legalName: 'KİBRİTÇİ İNŞAAT TAAHHÜT TURİZM SANAYİ VE TİCARET LİMİTED ŞİRKETİ',
@@ -52,6 +53,11 @@ export function wrapCorporateReportHtml(
   const extraCss = options?.extraCss ?? '';
   const autoPrint = options?.autoPrint !== false;
 
+  const emailToolbar = getReportEmailToolbarHtml({
+    subject: title,
+    fileName: `${String(title).replace(/[^\w.\-ğüşıöçĞÜŞİÖÇ ]+/gi, '_').slice(0, 60) || 'Kibritci_Rapor'}.html`,
+  });
+
   return `<!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -61,6 +67,7 @@ export function wrapCorporateReportHtml(
   <style>${getCorporateReportCss()}${extraCss}</style>
 </head>
 <body class="bg-white text-slate-900 font-sans p-4 sm:p-8">
+  ${emailToolbar}
   <div class="corporate-report corporate-report--${orientation}" data-orientation="${orientation}" style="position:relative;background:#fff">
     <img src="${watermarkUrl}" alt="" class="corporate-report-watermark-img" aria-hidden="true" />
     <header class="corporate-report-header">

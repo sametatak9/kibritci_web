@@ -141,7 +141,15 @@ export function mailtoForRapor(konu: string, html: string, rapor: TaseronKesinti
     rapor.kesintiTipi === 'IS_MAKINESI'
       ? `${rapor.taseronFirmaAdi} — ${rapor.donemAy}/${rapor.donemYil} iş makinesi kesinti raporu.\nToplam: ${rapor.toplamSaat.toFixed(1)} saat × ${rapor.saatlikUcret} TL = ${rapor.kesintiTutari.toFixed(2)} TL`
       : konu;
-  window.open(`mailto:?subject=${encodeURIComponent(konu)}&body=${encodeURIComponent(plain)}`, '_blank');
+  const reportHtml = html || buildIsMakinesiKesintiReportHtml(rapor);
+  void import('./reportEmail').then(({ openReportEmailComposer }) => {
+    openReportEmailComposer({
+      subject: konu,
+      body: plain,
+      html: reportHtml,
+      fileName: `Kibritci_${rapor.taseronFirmaAdi}_${rapor.donemAy}_${rapor.donemYil}.html`,
+    });
+  });
 }
 
 export function indirIsMakinesiRaporu(rapor: TaseronKesintiRaporu): void {

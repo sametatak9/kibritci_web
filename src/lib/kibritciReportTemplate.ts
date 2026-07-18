@@ -1,5 +1,6 @@
 /** Kibritçi logolu analiz / evrak raporu HTML şablonu */
 import { kibritciLogoHtml, kibritciReportHeaderHtml } from './kibritciBrand';
+import { getReportEmailToolbarHtml, installReportEmailGlobalBridge } from './reportEmail';
 
 export function buildKibritciReportHtml(options: {
   title: string;
@@ -10,6 +11,11 @@ export function buildKibritciReportHtml(options: {
   const metaRows = (options.meta || [])
     .map((m) => `<p style="margin:0;font-size:11px;color:#64748b">${m}</p>`)
     .join('');
+
+  const emailToolbar = getReportEmailToolbarHtml({
+    subject: options.subtitle ? `${options.title} — ${options.subtitle}` : options.title,
+    fileName: `${String(options.title).replace(/[^\w.\-ğüşıöçĞÜŞİÖÇ ]+/gi, '_').slice(0, 60) || 'Kibritci_Rapor'}.html`,
+  });
 
   return `<!DOCTYPE html>
 <html lang="tr">
@@ -28,6 +34,7 @@ export function buildKibritciReportHtml(options: {
   </style>
 </head>
 <body>
+  ${emailToolbar}
   <div class="page">
     <div class="head">
       ${kibritciReportHeaderHtml(options.title, options.subtitle)}
@@ -41,6 +48,7 @@ export function buildKibritciReportHtml(options: {
 }
 
 export function openKibritciReportPrint(html: string, title: string): void {
+  installReportEmailGlobalBridge();
   const w = window.open('', '_blank');
   if (!w) {
     alert('Pop-up engellendi. Tarayıcı izinlerini kontrol edin.');
@@ -49,7 +57,14 @@ export function openKibritciReportPrint(html: string, title: string): void {
   w.document.write(html);
   w.document.close();
   w.document.title = title;
-  setTimeout(() => w.print(), 400);
+  // Kullanıcı araç çubuğundan yazdırabilir; otomatik print biraz gecikmeli
+  setTimeout(() => {
+    try {
+      w.focus();
+    } catch {
+      /* ignore */
+    }
+  }, 200);
 }
 
 export function downloadKibritciReportHtml(html: string, fileName: string): void {
