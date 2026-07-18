@@ -3,10 +3,13 @@ import { getGeminiClient, parseGeminiError } from './gemini';
 
 const IS_VERCEL = Boolean(process.env.VERCEL);
 
-/** Ücretsiz kotada 2.5-flash en hızlı doluyor — önce alternatif modeller */
-export const GEMINI_MODEL_FALLBACK = IS_VERCEL
-  ? ['gemini-flash-lite-latest', 'gemini-flash-latest']
-  : ['gemini-flash-lite-latest', 'gemini-flash-latest'];
+/** Ücretsiz kotada flash modelleri hızlı doluyor — geniş yedek listesi */
+export const GEMINI_MODEL_FALLBACK = [
+  'gemini-2.0-flash',
+  'gemini-flash-lite-latest',
+  'gemini-flash-latest',
+  'gemini-1.5-flash',
+];
 
 const MODELS = GEMINI_MODEL_FALLBACK;
 

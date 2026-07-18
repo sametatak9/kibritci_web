@@ -453,11 +453,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           const persistSignup = () =>
             saveKullaniciForSignup(kullaniciPayload, portalPayload as Record<string, unknown>);
 
+          // 1. Create Auth user first so they are signed in (allowing Firestore writes via legacyUnclaimedEmailUser rules)
+          let finalUid = '';
+          try {
+            finalUid = await resolveSignupAuthUid(emailLower, passTrim);
+          } catch (authErr: any) {
+            console.error('Auth kaydı hatası:', authErr);
+            setErrorMsg('Kullanıcı kimlik doğrulaması oluşturulamadı: ' + (authErr.message || authErr.code));
+            return;
+          }
+
+          // 2. Persist to Firestore
           try {
             await persistSignup();
           } catch (firstErr) {
-            if (!isFirestoreWriteFailure(firstErr)) throw firstErr;
-            console.warn('Doğrudan kayıt başarısız, admin onay kuyruğuna alınıyor...');
+            console.warn('Doğrudan kayıt başarısız, admin onay kuyruğuna alınıyor...', firstErr);
             const bekleyen = buildBekleyenFromSignup({
               email: emailLower,
               password: passTrim,
@@ -468,7 +478,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               imzaStyle: imzaStyle,
               imzaCanvas: imzaCanvas || undefined,
               matchedPersonelId: matchedPersonelId,
-              hataSebebi: isFirestoreWriteFailure(firstErr) ? 'quota_or_timeout' : 'unknown',
+              hataSebebi: isFirestoreWriteFailure(firstErr) ? 'quota_or_timeout' : 'permission_or_other',
             });
             const queueTarget = await queueSignupFallback(bekleyen);
             setInfoMsg(
@@ -481,20 +491,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             return;
           }
 
-          const fallbackUid = `u_${Date.now()}`;
-          finishSignup(fallbackUid, { email: emailLower, uid: fallbackUid, isMock: true });
-
-          void resolveSignupAuthUid(emailLower, passTrim)
-            .then((finalUid) => {
-              if (finalUid && finalUid !== fallbackUid) {
-                localStorage.setItem(
-                  'kibritci_portal_session',
-                  JSON.stringify({ email: emailLower, uid: finalUid })
-                );
-              }
-            })
-            .catch((authErr) => console.warn('Auth kaydı arka planda tamamlanamadı:', authErr));
-
+          finishSignup(finalUid, { email: emailLower, uid: finalUid });
           return;
         } catch (signupErr: unknown) {
           console.error('Üyelik kaydı hatası:', signupErr);

@@ -60,19 +60,6 @@ function formatGeminiKeyHint(format) {
       return "GEMINI_API_KEY ortam de\u011Fi\u015Fkeni tan\u0131ml\u0131 de\u011Fil.";
   }
 }
-function isGeminiQuotaError(error) {
-  const raw = error instanceof Error ? error.message : String(error);
-  if (/429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota|prepayment credits are depleted|billing#prepay/i.test(raw)) {
-    return true;
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    const inner = parsed?.error?.message ?? parsed?.message ?? "";
-    return /429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota|prepayment credits are depleted|billing#prepay/i.test(String(inner));
-  } catch {
-    return false;
-  }
-}
 function parseGeminiError(error) {
   const raw = error instanceof Error ? error.message : String(error);
   let msg = raw;
@@ -133,7 +120,13 @@ async function testGeminiConnection() {
   try {
     const ai = getGeminiClient();
     let lastError = null;
-    for (const model of ["gemini-flash-lite-latest", "gemini-flash-latest"]) {
+    const modelsToTest = [
+      "gemini-2.0-flash",
+      "gemini-flash-lite-latest",
+      "gemini-flash-latest",
+      "gemini-1.5-flash"
+    ];
+    for (const model of modelsToTest) {
       try {
         const response = await ai.models.generateContent({
           model,
@@ -146,9 +139,7 @@ async function testGeminiConnection() {
         }
       } catch (err) {
         lastError = err;
-        if (!isGeminiQuotaError(err)) {
-          return { ok: false, keyInfo, error: parseGeminiError(err) };
-        }
+        console.warn(`Gemini test model ${model} failed:`, err);
       }
     }
     return { ok: false, keyInfo, error: parseGeminiError(lastError) };
@@ -159,7 +150,12 @@ async function testGeminiConnection() {
 
 // src/server/geminiGenerate.ts
 var IS_VERCEL = Boolean(process.env.VERCEL);
-var GEMINI_MODEL_FALLBACK = IS_VERCEL ? ["gemini-flash-lite-latest", "gemini-flash-latest"] : ["gemini-flash-lite-latest", "gemini-flash-latest"];
+var GEMINI_MODEL_FALLBACK = [
+  "gemini-2.0-flash",
+  "gemini-flash-lite-latest",
+  "gemini-flash-latest",
+  "gemini-1.5-flash"
+];
 var MODELS = GEMINI_MODEL_FALLBACK;
 var MAX_RETRIES_PER_MODEL = IS_VERCEL ? 1 : 2;
 var RETRY_DELAY_MS = IS_VERCEL ? 350 : 1200;

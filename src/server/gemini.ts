@@ -131,7 +131,13 @@ export async function testGeminiConnection(): Promise<{
     const ai = getGeminiClient();
     let lastError: unknown = null;
 
-    for (const model of ['gemini-flash-lite-latest', 'gemini-flash-latest']) {
+    const modelsToTest = [
+      'gemini-2.0-flash',
+      'gemini-flash-lite-latest',
+      'gemini-flash-latest',
+      'gemini-1.5-flash'
+    ];
+    for (const model of modelsToTest) {
       try {
         const response = await ai.models.generateContent({
           model,
@@ -144,9 +150,7 @@ export async function testGeminiConnection(): Promise<{
         }
       } catch (err) {
         lastError = err;
-        if (!isGeminiQuotaError(err)) {
-          return { ok: false, keyInfo, error: parseGeminiError(err) };
-        }
+        console.warn(`Gemini test model ${model} failed:`, err);
       }
     }
 
