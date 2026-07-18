@@ -119,8 +119,6 @@ import { LoginScreen } from './components/LoginScreen';
 import { YetkiVermeScreen } from './components/YetkiVermeScreen';
 import { OperatorScreen } from './components/OperatorScreen';
 import { MaasOdeScreen } from './components/MaasOdeScreen';
-import { YapayZekaKarsilastirScreen } from './components/YapayZekaKarsilastirScreen';
-import { EvrakBaglamaScreen, EvrakBaglamaPrefill } from './components/EvrakBaglamaScreen';
 import { PublicGirisKayitScreen } from './components/PublicGirisKayitScreen';
 
 export default function App() {
@@ -128,12 +126,14 @@ export default function App() {
   const LAST_TAB_STORAGE_KEY = 'kibritci_last_tab_v1';
   const readLastTab = (): string => {
     try {
+      const removedTabs = new Set(['evrak_baglama', 'yz_karsilastir']);
       const direct = localStorage.getItem(LAST_TAB_STORAGE_KEY);
-      if (direct) return direct;
+      if (direct && !removedTabs.has(direct)) return direct;
       const rawSession = localStorage.getItem('kibritci_portal_session');
       if (!rawSession) return 'ana_sayfa';
       const parsed = JSON.parse(rawSession) as { lastTab?: string };
-      return parsed.lastTab || 'ana_sayfa';
+      const last = parsed.lastTab || 'ana_sayfa';
+      return removedTabs.has(last) ? 'ana_sayfa' : last;
     } catch {
       return 'ana_sayfa';
     }
@@ -279,7 +279,6 @@ export default function App() {
   // Public Personnel Boarding Document Viewer (WhatsApp link handler)
   const [publicViewGiris, setPublicViewGiris] = useState<any>(null);
   const [publicLoading, setPublicLoading] = useState<boolean>(false);
-  const [evrakBaglamaPrefill, setEvrakBaglamaPrefill] = useState<EvrakBaglamaPrefill | null>(null);
 
   // Error reporting state
   const [errorReport, setErrorReport] = useState<{ message: string; techDetails: string; contextInfo?: string } | null>(null);
@@ -517,8 +516,12 @@ export default function App() {
           setDbStatus('error');
           return;
         }
-        
-        setLoadingMsg('Güvenli veritabanı senkronizasyonu (Paralel Yükleme) başlatılıyor...');
+
+        // Oturum hazır → UI hemen açılsın; aynı sorgular arka planda sürer
+        setLoadingMsg('Veriler arka planda yükleniyor...');
+        setDbStatus('synced');
+        bootstrapDoneRef.current = true;
+
         const allowDemoSeed = initialSeedAllowed();
 
         const safeLoad = async <T,>(promise: Promise<T>, fallback: T, name: string): Promise<T> => {
@@ -704,9 +707,6 @@ export default function App() {
         setPersonelIslemGecmisi(loadedPersIslem);
         setCariIslemGecmisi(loadedCariIslem);
         setStokIslemGecmisi(loadedStokIslem);
-
-        setDbStatus('synced');
-        bootstrapDoneRef.current = true;
       } catch (err) {
         console.error('Firebase synchronisation error: ', err);
         const errText =
@@ -715,6 +715,12 @@ export default function App() {
             : typeof err === 'string'
               ? err
               : 'Bilinmeyen bağlantı hatası';
+
+        // UI zaten açıksa arka plan hatası ekranı kilitlemesin
+        if (bootstrapDoneRef.current) {
+          console.warn('Arka plan veri yüklemesi kısmi başarısız (uygulama açık kalır):', errText);
+          return;
+        }
 
         if (attempt < 2 && /FIRESTORE_TIMEOUT|network|offline|unavailable/i.test(errText)) {
           console.warn(`Başlangıç yeniden deneniyor (${attempt + 1}/2)...`);
@@ -1893,11 +1899,6 @@ export default function App() {
     }
   };
 
-  const navigateToEvrakBaglama = (prefill?: EvrakBaglamaPrefill) => {
-    if (prefill) setEvrakBaglamaPrefill(prefill);
-    handleTabNavigation('evrak_baglama');
-  };
-
   const handleTabNavigation = (targetTab: string) => {
     try {
       persistLastTab(targetTab);
@@ -2648,7 +2649,6 @@ export default function App() {
                   setStokKartlar={setStokKartlarWithSync}
                   currentUser={currentUser}
                   addNotification={addNotification}
-                  onNavigateToBaglama={navigateToEvrakBaglama}
                 />
               )}
 
@@ -2667,36 +2667,6 @@ export default function App() {
                   setStokKartlar={setStokKartlarWithSync}
                   currentUser={currentUser}
                   addNotification={addNotification}
-                  onNavigateToBaglama={navigateToEvrakBaglama}
-                />
-              )}
-
-              {activeTab === "evrak_baglama" && (
-                <EvrakBaglamaScreen
-                  satinAlmaTalepleri={satinAlmaTalepleri}
-                  irsaliyeler={irsaliyeler}
-                  faturalar={faturalar}
-                  setIrsaliyeler={setIrsaliyelerWithSync}
-                  setFaturalar={setFaturalarWithSync}
-                  evrakBaglantiGruplari={evrakBaglantiGruplari}
-                  setEvrakBaglantiGruplari={setEvrakBaglantiGruplariWithSync}
-                  prefill={evrakBaglamaPrefill}
-                  onClearPrefill={() => setEvrakBaglamaPrefill(null)}
-                  onNavigateToBaglama={navigateToEvrakBaglama}
-                  onNavigateToYz={() => handleTabNavigation('yz_karsilastir')}
-                  currentUser={currentUser}
-                />
-              )}
-
-              {activeTab === "yz_karsilastir" && (
-                <YapayZekaKarsilastirScreen
-                  faturalar={faturalar}
-                  irsaliyeler={irsaliyeler}
-                  satinAlmaTalepleri={satinAlmaTalepleri}
-                  evrakBaglantiGruplari={evrakBaglantiGruplari}
-                  onayliAnalizRaporlari={onayliAnalizRaporlari}
-                  setOnayliAnalizRaporlari={setOnayliAnalizRaporlariWithSync}
-                  currentUser={currentUser}
                 />
               )}
 

@@ -8,7 +8,6 @@ import { compressImage } from '../lib/imageCompress';
 import { fetchApiJson } from '../lib/apiClient';
 import { fileToAiPayload } from '../lib/aiFileUpload';
 import { faturaIsLinked } from '../lib/documentLinkUtils';
-import { BagliEvraklarListesi } from './BagliEvraklarListesi';
 import { EvrakTabBilgi } from './EvrakTabBilgi';
 import { kibritciLogoHtml } from '../lib/kibritciBrand';
 
@@ -26,7 +25,6 @@ interface FaturaGirisScreenProps {
   setEvrakBaglantiGruplari: React.Dispatch<React.SetStateAction<EvrakBaglantiGrubu[]>>;
   currentUser?: any;
   addNotification?: (mesaj: string) => void;
-  onNavigateToBaglama?: (prefill?: { saId?: string; irIds?: string[]; faturaId?: string; anchor?: 'satin_alma' | 'irsaliye' | 'fatura' }) => void;
 }
 
 export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
@@ -42,11 +40,8 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
   evrakBaglantiGruplari,
   setEvrakBaglantiGruplari,
   currentUser,
-  addNotification
-  ,
-  onNavigateToBaglama
+  addNotification,
 }) => {
-  const [activeTab, setActiveTab] = useState<'giris' | 'bagli'>('giris');
   
   // Form states
   const [ftNo, setFtNo] = useState("");
@@ -305,8 +300,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
     setFtItems([]);
     setFtAttachmentUrl(null);
     setFtSignedAttachmentUrl(null);
-    setActiveTab('giris');
-    alert("Fatura kaydedildi. Bağlama için «Bağlama» sekmesini kullanın.");
+    alert("Fatura kaydedildi.");
   };
 
   const handlePreviewPdf = (ft: Fatura) => {
@@ -499,34 +493,18 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
             💳 Şantiye Fatura Kayıt ve Yapay Zeka Eşleştirme Paneli
           </h2>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => {
-              setActiveTab('giris');
-              setEditingFtId(null);
-            }}
-            className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'giris' ? 'bg-[#2563eb] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
-          >
-            1 · Fatura Giriş (Manuel / AI)
-          </button>
-          <button
-            onClick={() => onNavigateToBaglama?.({ anchor: 'fatura' })}
-            className="px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200"
-          >
-            → Evrak Bağlama Merkezi
-          </button>
-          <button
-            onClick={() => setActiveTab('bagli')}
-            className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'bagli' ? 'bg-[#2563eb] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
-          >
-            2 · Bağlı Evraklar
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setEditingFtId(null)}
+          className="px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer bg-[#2563eb] text-white shadow-sm"
+        >
+          Fatura Giriş (Manuel / AI)
+        </button>
       </div>
 
-      {activeTab === 'giris' && <EvrakTabBilgi tab="fatura-giris" />}
+      <EvrakTabBilgi tab="fatura-giris" />
 
-      {activeTab === 'giris' && (
+      {(
         <div className="flex flex-col lg:flex-row gap-6">
           
           {/* Left Form Panel */}
@@ -594,7 +572,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
               </div>
 
               <p className="text-[10px] text-slate-800 bg-slate-50 border border-slate-200 rounded-xl p-2.5">
-                PO ve irsaliye bağlama «Bağlama» sekmesinde 2 aşamalı yapılır. YZ analiz için «YZ Karşılaştır» menüsünü kullanın.
+                Fatura kalemlerini girin; belge görselini AI ile okutabilirsiniz.
               </p>
 
               {/* Add items */}
@@ -699,7 +677,6 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
                   setFtAttachmentUrl(null);
                   setFtSignedAttachmentUrl(null);
                   setEditingFtId(null);
-                  setActiveTab('giris');
                 }}
                 className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl text-center cursor-pointer transition text-xs"
               >
@@ -720,7 +697,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
             <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
               <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">💡 Finansal Uyarı</h4>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Bağlama işlemi «Evrak Bağlama Merkezi» sekmesinde yapılır. YZ analiz için «YZ Karşılaştır ve Yorumla» menüsünü kullanın.
+                Kaydedilen faturalar sağdaki arşivde listelenir; rapor için Aç butonunu kullanın.
               </p>
             </div>
             <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
@@ -773,27 +750,6 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
           </div>
 
         </div>
-      )}
-
-      {activeTab === 'bagli' && (
-        <BagliEvraklarListesi
-          mode="fatura"
-          accent="blue"
-          faturalar={faturalar}
-          irsaliyeler={irsaliyeler}
-          satinAlmaTalepleri={satinAlmaTalepleri}
-          evrakBaglantiGruplari={evrakBaglantiGruplari}
-          setFaturalar={setFaturalar}
-          setIrsaliyeler={setIrsaliyeler}
-          onEditBinding={(g) => {
-            onNavigateToBaglama?.({
-              saId: g.saId,
-              irIds: g.irsaliyeIds,
-              faturaId: g.faturaId,
-              anchor: 'fatura',
-            });
-          }}
-        />
       )}
 
       {/* ➕ CARİ SUGGEST MODAL */}

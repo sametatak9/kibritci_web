@@ -34,6 +34,7 @@ import {
   yazdirIsMakinesiRaporu,
 } from '../lib/taseronReportUtils';
 import { downloadKibritciReportHtml } from '../lib/kibritciReportTemplate';
+import { wrapCorporateReportHtml } from '../lib/corporateReportHtml';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import {
@@ -81,7 +82,28 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
   addNotification,
   currentUser,
 }) => {
-  const taseronlar = useMemo(() => getTaseronCariKartlar(cariKartlar), [cariKartlar]);
+  /** Tip TASERON + malzeme teslim/ceza tutanağı bağlı cariler (Demirkaan vb.) */
+  const taseronlar = useMemo(() => {
+    const byId = new Map(
+      getTaseronCariKartlar(cariKartlar).map((c) => [c.id, c] as const)
+    );
+    for (const t of hazirTutanaklar || []) {
+      if (t.tutanakTipi !== 'TESLİM' && t.tutanakTipi !== 'CEZA') continue;
+      if (t.cariKartId && !byId.has(t.cariKartId)) {
+        const c = cariKartlar.find((x) => x.id === t.cariKartId && x.durum !== 'PASIF');
+        if (c) byId.set(c.id, c);
+      }
+      if (t.taseronAdi) {
+        const c = cariKartlar.find(
+          (x) => x.durum !== 'PASIF' && firmaEslesir(x.unvan, t.taseronAdi || '')
+        );
+        if (c && !byId.has(c.id)) byId.set(c.id, c);
+      }
+    }
+    return Array.from(byId.values()).sort((a, b) =>
+      (a.unvan || '').localeCompare(b.unvan || '', 'tr')
+    );
+  }, [cariKartlar, hazirTutanaklar]);
   const [selectedTaseronId, setSelectedTaseronId] = useState('');
   const [subPage, setSubPage] = useState<SubPage>('makine');
   const [selectedAy, setSelectedAy] = useState(new Date().getMonth() + 1);
@@ -344,9 +366,63 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
   const arsivRaporlari = useMemo(() => {
     if (!selectedTaseron) return [];
     return taseronKesintiRaporlari.filter(
-      (r) => r.taseronFirmaId === selectedTaseron.id || r.taseronFirmaAdi === selectedTaseron.unvan
+      (r) =>
+        r.taseronFirmaId === selectedTaseron.id ||
+        firmaEslesir(r.taseronFirmaAdi || '', selectedTaseron.unvan)
     );
   }, [taseronKesintiRaporlari, selectedTaseron]);
+
+  /** Malzeme teslim + ceza tutanakları bu taşeronun rapor arşivinde */
+  const arsivTutanaklari = useMemo(() => {
+    if (!selectedTaseron) return [] as HazirTutanak[];
+    return (hazirTutanaklar || [])
+      .filter((t) => {
+        if (t.tutanakTipi !== 'TESLİM' && t.tutanakTipi !== 'CEZA') return false;
+        if (t.cariKartId && t.cariKartId === selectedTaseron.id) return true;
+        return firmaEslesir(t.taseronAdi || '', selectedTaseron.unvan);
+      })
+      .sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || '')));
+  }, [hazirTutanaklar, selectedTaseron]);
+
+  const printTutanakArsiv = (ht: HazirTutanak) => {
+    const kalemler = ht.kalemler || [];
+    const rows = kalemler
+      .map(
+        (k, i) =>
+          `<tr><td style="padding:6px;border:1px solid #cbd5e1;text-align:center">${i + 1}</td><td style="padding:6px;border:1px solid #cbd5e1">${k.malzemeAdi || ''}</td><td style="padding:6px;border:1px solid #cbd5e1;text-align:right">${k.miktar ?? ''}</td><td style="padding:6px;border:1px solid #cbd5e1">${k.cinsi || ''}</td><td style="padding:6px;border:1px solid #cbd5e1">${k.aciklama || ''}</td></tr>`
+      )
+      .join('');
+    const body =
+      ht.tutanakTipi === 'TESLİM'
+        ? `<h2 style="font-size:16px;font-weight:800;margin:0 0 8px">MALZEME TESLİM TUTANAĞI</h2>
+           <p style="font-size:12px;margin:0 0 12px"><strong>${ht.belgeNo}</strong> · ${ht.tarih} · ${ht.taseronAdi || ''}</p>
+           <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px">
+             <thead><tr style="background:#f1f5f9"><th style="padding:6px;border:1px solid #cbd5e1">#</th><th style="padding:6px;border:1px solid #cbd5e1;text-align:left">Malzeme Adı</th><th style="padding:6px;border:1px solid #cbd5e1">Miktar</th><th style="padding:6px;border:1px solid #cbd5e1">Cinsi</th><th style="padding:6px;border:1px solid #cbd5e1;text-align:left">Açıklama</th></tr></thead>
+             <tbody>${rows || '<tr><td colspan="5" style="padding:8px;border:1px solid #cbd5e1;text-align:center">Kalem yok</td></tr>'}</tbody>
+           </table>
+           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px">
+             <div style="border:1px solid #cbd5e1;border-radius:12px;padding:12px;min-height:90px;text-align:center"><p style="margin:0;font-size:10px;font-weight:800;text-transform:uppercase;color:#64748b">Teslim Eden</p><div style="height:24px"></div><div style="margin-top:36px;font-size:10px;color:#64748b">İmza</div></div>
+             <div style="border:1px solid #cbd5e1;border-radius:12px;padding:12px;min-height:90px;text-align:center"><p style="margin:0;font-size:10px;font-weight:800;text-transform:uppercase;color:#64748b">Teslim Alan</p>${ht.teslimAlan ? `<p style="margin:8px 0 0;font-weight:700">${ht.teslimAlan}</p>` : '<div style="height:24px"></div>'}<div style="margin-top:36px;font-size:10px;color:#64748b">İmza</div></div>
+           </div>`
+        : `<h2 style="font-size:16px;font-weight:800">CEZA İHTAR TUTANAĞI</h2>
+           <p style="font-size:12px">${ht.belgeNo} · ${ht.tarih}</p>
+           <p style="font-size:13px;font-weight:700">${ht.konu}</p>
+           <p style="font-size:12px"><strong>Taşeron:</strong> ${ht.taseronAdi || ''} · <strong>Ceza:</strong> ₺${(ht.cezaTutari || 0).toLocaleString('tr-TR')}</p>
+           <p style="font-size:12px;white-space:pre-wrap">${ht.icerik || ''}</p>`;
+    const html = wrapCorporateReportHtml(body, {
+      docCode: ht.belgeNo,
+      orientation: 'portrait',
+      title: ht.belgeNo,
+      autoPrint: true,
+    });
+    const w = window.open('', '_blank');
+    if (!w) {
+      alert('Pop-up engellendi.');
+      return;
+    }
+    w.document.write(html);
+    w.document.close();
+  };
 
   const taseronPersonelListesi = useMemo(() => {
     if (!selectedTaseron) return [];
@@ -882,32 +958,82 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
           )}
 
           {subPage === 'arsiv' && (
-            <div className="space-y-3">
-              {arsivRaporlari.length === 0 ? (
-                <div className="bg-white border rounded-2xl p-8 text-center text-slate-400 text-xs">Henüz rapor yok.</div>
-              ) : (
-                arsivRaporlari.map((r) => (
-                  <div key={r.id} className="bg-white border rounded-2xl p-4 flex flex-wrap justify-between gap-3 items-start">
-                    <div>
-                      <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-slate-100 uppercase">{r.kesintiTipi || 'IS_MAKINESI'}</span>
-                      <p className="text-xs font-bold mt-1">{r.taseronFirmaAdi} · {ayAdi(Number(r.donemAy))} {r.donemYil}</p>
-                      <p className="text-[10px] text-slate-500">{r.onayDurumu} · {r.kesintiTipi === 'YEMEK' ? 'Adet raporu' : `${r.kesintiTutari.toLocaleString('tr-TR')} TL`}</p>
-                    </div>
-                    <div className="flex gap-1">
-                      {r.kesintiTipi === 'IS_MAKINESI' && !r.ucretOnayBekliyor && (
-                        <>
-                          <button type="button" onClick={() => yazdirIsMakinesiRaporu(r)} className="p-2 border rounded-lg hover:bg-slate-50 cursor-pointer" title="Yazdır"><Printer size={14} /></button>
-                          <button type="button" onClick={() => indirIsMakinesiRaporu(r)} className="p-2 border rounded-lg hover:bg-slate-50 cursor-pointer" title="İndir"><Download size={14} /></button>
-                          <button type="button" onClick={() => mailtoForRapor(`Kibritçi — ${r.taseronFirmaAdi} İş Makinesi Kesinti`, '', r)} className="p-2 border rounded-lg hover:bg-slate-50 cursor-pointer" title="E-posta"><Mail size={14} /></button>
-                        </>
-                      )}
-                      {r.kesintiTipi === 'ENERJI' && r.enerjiDetay && (
-                        <button type="button" onClick={() => downloadKibritciReportHtml(buildEnerjiKesintiReportHtml(r.taseronFirmaAdi, Number(r.donemAy), Number(r.donemYil), r.enerjiDetay!), `enerji_${r.id}.html`)} className="p-2 border rounded-lg cursor-pointer"><Download size={14} /></button>
-                      )}
-                    </div>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  Tutanaklar (Malzeme Teslim / Ceza) · {arsivTutanaklari.length}
+                </h4>
+                {arsivTutanaklari.length === 0 ? (
+                  <div className="bg-white border rounded-2xl p-6 text-center text-slate-400 text-xs">
+                    Bu taşerona bağlı tutanak yok. Personel İzin → Tutanaklar’dan Malzeme Teslim kaydı girin.
                   </div>
-                ))
-              )}
+                ) : (
+                  arsivTutanaklari.map((ht) => (
+                    <div
+                      key={ht.id}
+                      className="bg-white border rounded-2xl p-4 flex flex-wrap justify-between gap-3 items-start"
+                    >
+                      <div>
+                        <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 uppercase">
+                          {ht.tutanakTipi}
+                        </span>
+                        <p className="text-xs font-bold mt-1">
+                          {ht.belgeNo} · {ht.tarih}
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                          {ht.konu}
+                          {ht.tutanakTipi === 'TESLİM'
+                            ? ` · ${(ht.kalemler || []).length} kalem`
+                            : ht.cezaTutari
+                              ? ` · ₺${ht.cezaTutari.toLocaleString('tr-TR')}`
+                              : ''}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => printTutanakArsiv(ht)}
+                        className="p-2 border rounded-lg hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 text-[10px] font-bold"
+                        title="Antetli rapor"
+                      >
+                        <Printer size={14} /> Rapor
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  Kesinti raporları · {arsivRaporlari.length}
+                </h4>
+                {arsivRaporlari.length === 0 ? (
+                  <div className="bg-white border rounded-2xl p-6 text-center text-slate-400 text-xs">
+                    Henüz kesinti raporu yok.
+                  </div>
+                ) : (
+                  arsivRaporlari.map((r) => (
+                    <div key={r.id} className="bg-white border rounded-2xl p-4 flex flex-wrap justify-between gap-3 items-start">
+                      <div>
+                        <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-slate-100 uppercase">{r.kesintiTipi || 'IS_MAKINESI'}</span>
+                        <p className="text-xs font-bold mt-1">{r.taseronFirmaAdi} · {ayAdi(Number(r.donemAy))} {r.donemYil}</p>
+                        <p className="text-[10px] text-slate-500">{r.onayDurumu} · {r.kesintiTipi === 'YEMEK' ? 'Adet raporu' : `${r.kesintiTutari.toLocaleString('tr-TR')} TL`}</p>
+                      </div>
+                      <div className="flex gap-1">
+                        {r.kesintiTipi === 'IS_MAKINESI' && !r.ucretOnayBekliyor && (
+                          <>
+                            <button type="button" onClick={() => yazdirIsMakinesiRaporu(r)} className="p-2 border rounded-lg hover:bg-slate-50 cursor-pointer" title="Yazdır"><Printer size={14} /></button>
+                            <button type="button" onClick={() => indirIsMakinesiRaporu(r)} className="p-2 border rounded-lg hover:bg-slate-50 cursor-pointer" title="İndir"><Download size={14} /></button>
+                            <button type="button" onClick={() => mailtoForRapor(`Kibritçi — ${r.taseronFirmaAdi} İş Makinesi Kesinti`, '', r)} className="p-2 border rounded-lg hover:bg-slate-50 cursor-pointer" title="E-posta"><Mail size={14} /></button>
+                          </>
+                        )}
+                        {r.kesintiTipi === 'ENERJI' && r.enerjiDetay && (
+                          <button type="button" onClick={() => downloadKibritciReportHtml(buildEnerjiKesintiReportHtml(r.taseronFirmaAdi, Number(r.donemAy), Number(r.donemYil), r.enerjiDetay!), `enerji_${r.id}.html`)} className="p-2 border rounded-lg cursor-pointer"><Download size={14} /></button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           )}
         </>

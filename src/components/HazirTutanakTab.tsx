@@ -10,8 +10,13 @@ import {
 } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
 import { wrapCorporateReportHtml } from '../lib/corporateReportHtml';
-import { getTaseronCariKartlar } from '../lib/taseronUtils';
+import { firmaEslesir, getTaseronCariKartlar } from '../lib/taseronUtils';
 import { todayDateKey } from '../lib/dateKeyUtils';
+
+const cell = (v: unknown) => {
+  const s = v == null ? '' : String(v).trim();
+  return s || '&nbsp;';
+};
 
 interface HazirTutanakTabProps {
   hazirTutanaklar: HazirTutanak[];
@@ -56,6 +61,17 @@ export const HazirTutanakTab: React.FC<HazirTutanakTabProps> = ({
   const [deleteConfirmTutanakId, setDeleteConfirmTutanakId] = useState<string | null>(null);
 
   const taseronCariler = useMemo(() => getTaseronCariKartlar(cariKartlar), [cariKartlar]);
+  /** TESLİM için taşeron + diğer aktif cariler (Demirkaan vb. tip farkı engellemesin) */
+  const firmaSecenekleri = useMemo(() => {
+    const seen = new Set<string>();
+    const out: CariKart[] = [];
+    for (const c of [...taseronCariler, ...(cariKartlar || [])]) {
+      if (!c?.id || c.durum === 'PASIF' || seen.has(c.id)) continue;
+      seen.add(c.id);
+      out.push(c);
+    }
+    return out.sort((a, b) => (a.unvan || '').localeCompare(b.unvan || '', 'tr'));
+  }, [cariKartlar, taseronCariler]);
   const aktifStoklar = useMemo(
     () => (stokKartlar || []).filter((s) => s.durum !== 'PASIF'),
     [stokKartlar]
@@ -63,17 +79,28 @@ export const HazirTutanakTab: React.FC<HazirTutanakTabProps> = ({
 
   const resolveTaseron = (): { cariKartId?: string; taseronAdi: string } => {
     if (taseronKaynak && taseronKaynak !== 'MANUEL') {
-      const c = taseronCariler.find((x) => x.id === taseronKaynak);
+      const c =
+        taseronCariler.find((x) => x.id === taseronKaynak) ||
+        cariKartlar.find((x) => x.id === taseronKaynak);
       return { cariKartId: c?.id, taseronAdi: c?.unvan || '' };
     }
-    return { taseronAdi: taseronManuel.trim() };
+    const name = taseronManuel.trim();
+    if (!name) return { taseronAdi: '' };
+    // Elle yazılsa bile cari unvanıyla eşleştir (Demirkaan vb.)
+    const match =
+      taseronCariler.find((c) => firmaEslesir(c.unvan, name)) ||
+      cariKartlar.find((c) => firmaEslesir(c.unvan, name));
+    return {
+      cariKartId: match?.id,
+      taseronAdi: match?.unvan || name,
+    };
   };
 
   const resolveMuhatapLabel = (ht: HazirTutanak): string => {
     if (ht.muhatapPersonel?.trim()) return ht.muhatapPersonel.trim();
     const p = personeller.find((x) => x.id === ht.personelId);
     if (p) return `${p.ad} ${p.soyad}`;
-    return '—';
+    return '';
   };
 
   const appendCariHistory = (tutanak: HazirTutanak, action: 'create' | 'edit' | 'delete') => {
@@ -328,13 +355,15 @@ export const HazirTutanakTab: React.FC<HazirTutanakTabProps> = ({
         (k, i) => `
       <tr>
         <td style="padding:8px;border:1px solid #cbd5e1;text-align:center;font-family:monospace">${i + 1}</td>
-        <td style="padding:8px;border:1px solid #cbd5e1;font-weight:600">${k.malzemeAdi || '—'}</td>
-        <td style="padding:8px;border:1px solid #cbd5e1;text-align:right;font-family:monospace">${k.miktar ?? '—'}</td>
-        <td style="padding:8px;border:1px solid #cbd5e1">${k.cinsi || '—'}</td>
-        <td style="padding:8px;border:1px solid #cbd5e1">${k.aciklama || '—'}</td>
+        <td style="padding:8px;border:1px solid #cbd5e1;font-weight:600">${cell(k.malzemeAdi)}</td>
+        <td style="padding:8px;border:1px solid #cbd5e1;text-align:right;font-family:monospace">${cell(k.miktar)}</td>
+        <td style="padding:8px;border:1px solid #cbd5e1">${cell(k.cinsi)}</td>
+        <td style="padding:8px;border:1px solid #cbd5e1">${cell(k.aciklama)}</td>
       </tr>`
       )
       .join('');
+
+    const teslimAlanAd = (ht.teslimAlan || muhatap || '').trim();
 
     const body = isTeslim
       ? `
@@ -351,8 +380,8 @@ export const HazirTutanakTab: React.FC<HazirTutanakTabProps> = ({
         </div>
         <div style="border:1px solid #e2e8f0;border-radius:12px;padding:12px;background:#f8fafc">
           <p style="margin:0 0 6px;font-size:9px;font-weight:800;color:#64748b;text-transform:uppercase">Muhatap</p>
-          <p style="margin:0"><strong>Taşeron Firma:</strong> ${ht.taseronAdi || '—'}</p>
-          <p style="margin:4px 0 0"><strong>Muhatap Personel:</strong> ${muhatap}</p>
+          <p style="margin:0"><strong>Taşeron Firma:</strong> ${ht.taseronAdi || ''}</p>
+          <p style="margin:4px 0 0"><strong>Muhatap Personel:</strong> ${muhatap || ''}</p>
         </div>
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:20px">
@@ -381,13 +410,13 @@ export const HazirTutanakTab: React.FC<HazirTutanakTabProps> = ({
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px">
         <div style="border:1px solid #cbd5e1;border-radius:12px;padding:14px;min-height:110px;text-align:center">
           <p style="margin:0;font-size:10px;font-weight:800;text-transform:uppercase;color:#64748b">Teslim Eden</p>
-          <p style="margin:8px 0 0;font-size:12px;font-weight:700">${ht.teslimEden || 'Ad Soyad / İmza'}</p>
-          <div style="margin-top:36px;border-top:1px dashed #94a3b8;padding-top:6px;font-size:10px;color:#94a3b8">İmza</div>
+          <div style="height:28px"></div>
+          <div style="margin-top:40px;font-size:10px;color:#64748b">İmza</div>
         </div>
         <div style="border:1px solid #cbd5e1;border-radius:12px;padding:14px;min-height:110px;text-align:center">
           <p style="margin:0;font-size:10px;font-weight:800;text-transform:uppercase;color:#64748b">Teslim Alan</p>
-          <p style="margin:8px 0 0;font-size:12px;font-weight:700">${ht.teslimAlan || muhatap || 'Ad Soyad / İmza'}</p>
-          <div style="margin-top:36px;border-top:1px dashed #94a3b8;padding-top:6px;font-size:10px;color:#94a3b8">İmza</div>
+          ${teslimAlanAd ? `<p style="margin:8px 0 0;font-size:12px;font-weight:700">${teslimAlanAd}</p>` : `<div style="height:28px"></div>`}
+          <div style="margin-top:40px;font-size:10px;color:#64748b">İmza</div>
         </div>
       </div>
     `
@@ -499,9 +528,10 @@ export const HazirTutanakTab: React.FC<HazirTutanakTabProps> = ({
                 }}
               >
                 <option value="">-- Taşeron Seç (Cari) --</option>
-                {taseronCariler.map((c) => (
+                {(isTeslimForm ? firmaSecenekleri : taseronCariler).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.unvan}
+                    {c.kartTipi === 'TASERON' ? '' : ` (${c.kartTipi})`}
                   </option>
                 ))}
                 <option value="MANUEL">Elle yazacağım…</option>
@@ -520,7 +550,7 @@ export const HazirTutanakTab: React.FC<HazirTutanakTabProps> = ({
               )}
               {isTeslimForm && (
                 <p className="text-[9px] text-amber-800/80">
-                  Kayıt seçilen taşeron cari kartının altına düşer; arşivde aranabilir.
+                  Kayıt seçilen firmanın cari kartı altına ve Taşeron → Rapor Arşivi’ne düşer.
                 </p>
               )}
               {tutanakType === 'CEZA' && (

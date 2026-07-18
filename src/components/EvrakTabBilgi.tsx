@@ -15,7 +15,7 @@ const MESSAGES: Record<TabKey, { title: string; body: string }> = {
   'fatura-giris': {
     title: 'Fatura Giriş — Kayıt & Arşiv',
     body:
-      'Gelen faturaları sisteme kaydedin ve arşivleyin. AI okuyucu ile hızlı giriş yapabilirsiniz. Bağlama işlemi «Evrak Bağlama Merkezi» sekmesindedir.',
+      'Gelen faturaları sisteme kaydedin ve arşivleyin. AI okuyucu ile hızlı giriş yapabilirsiniz.',
   },
   'fatura-baglama': {
     title: 'Fatura Bağlama — Finans Kontrol',
@@ -30,7 +30,7 @@ const MESSAGES: Record<TabKey, { title: string; body: string }> = {
   'irsaliye-giris': {
     title: 'İrsaliye Giriş — Sevkiyat Kaydı',
     body:
-      'Teslim alınan irsaliye/fişleri kaydedin. AI ile otomatik okuma desteklenir. Evrak bağlama «Evrak Bağlama Merkezi» sekmesinde yapılır.',
+      'Teslim alınan irsaliye/fişleri kaydedin. AI ile otomatik okuma desteklenir.',
   },
   'irsaliye-baglama': {
     title: 'İrsaliye Bağlama — Sevkiyat ↔ Sipariş',
