@@ -4,12 +4,47 @@ export function getTaseronCariKartlar(cariKartlar: CariKart[]): CariKart[] {
   return cariKartlar.filter((c) => c.kartTipi === 'TASERON' && c.durum !== 'PASIF');
 }
 
+/** Boşlukları sadeleştir + tr-TR küçük harf (YURT MEKANİK ↔ Yurt Mekanik) */
 export function normFirma(s: string): string {
-  return s.trim().toLocaleLowerCase('tr-TR');
+  return String(s || '')
+    .trim()
+    .toLocaleLowerCase('tr-TR')
+    .replace(/\s+/g, ' ');
+}
+
+/** Türkçe karakterleri katla — Ltd/Şti farklarını da ayıklar */
+export function foldFirma(s: string): string {
+  return normFirma(s)
+    .replace(/ı/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function stripFirmaSuffix(s: string): string {
+  return foldFirma(s)
+    .replace(
+      /\b(ltd|sti|as|a s|san|tic|insaat|ins|ticaret|limited|sirketi|sirket)\b/g,
+      ' '
+    )
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export function firmaEslesir(a: string, b: string): boolean {
-  return normFirma(a) === normFirma(b);
+  const left = String(a || '').trim();
+  const right = String(b || '').trim();
+  if (!left || !right) return false;
+  if (normFirma(left) === normFirma(right)) return true;
+  if (foldFirma(left) === foldFirma(right)) return true;
+  const sa = stripFirmaSuffix(left);
+  const sb = stripFirmaSuffix(right);
+  return sa.length >= 4 && sb.length >= 4 && sa === sb;
 }
 
 export function faaliyetlerForTaseron(
@@ -118,15 +153,22 @@ function normalizePersonelName(value: string): string {
 }
 
 export function personelForTaseron(personeller: Personel[], taseron: CariKart): Personel[] {
+  const unvan = taseron?.unvan || '';
   return personeller
     .filter((p) => {
-      if (p.firmaTipi === 'TASERON' && firmaEslesir(p.firmaAdi || '', taseron.unvan)) return true;
-      if (p.firmaTipi !== 'ANA_FIRMA' && p.firmaAdi && firmaEslesir(p.firmaAdi, taseron.unvan)) return true;
-      return false;
+      const firmaAdi = String(p.firmaAdi || '').trim();
+      if (!firmaAdi || !unvan) return false;
+      // Firma adı cari unvan ile eşleşiyorsa göster (firmaTipi yanlış olsa bile)
+      return firmaEslesir(firmaAdi, unvan);
     })
     .sort((a, b) =>
       `${a.ad} ${a.soyad}`.localeCompare(`${b.ad} ${b.soyad}`, 'tr', { sensitivity: 'base' })
     );
+}
+
+/** Herhangi bir cari kart için bağlı personeller (taşeron / tedarikçi adı eşleşmesi) */
+export function personelForCariKart(personeller: Personel[], cari: CariKart): Personel[] {
+  return personelForTaseron(personeller, cari);
 }
 
 export function formatPersonelKampYerlesim(
