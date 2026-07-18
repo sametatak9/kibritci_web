@@ -229,7 +229,7 @@ export const EvrakDetayModal: React.FC<EvrakDetayModalProps> = ({ open, payload,
               />
               <AttachmentBlock
                 label="Fatura evrakı"
-                url={(fatura as { evrakUrl?: string }).evrakUrl}
+                url={fatura.evrakUrl}
                 fileName={`fatura_${fatura.faturaNo || 'evrak'}.jpg`}
               />
             </>
