@@ -144,6 +144,37 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
   setItemKdvOran,
 }) => {
   const [isZoomed, setIsZoomed] = useState(false);
+  const [cardZoomUrl, setCardZoomUrl] = useState<string | null>(null);
+  const [cardZoomName, setCardZoomName] = useState('');
+
+  const isImageUrl = (url?: string | null) => {
+    if (!url) return false;
+    const lower = url.toLowerCase();
+    return (
+      lower.startsWith('data:image/') ||
+      lower.includes('.jpg') ||
+      lower.includes('.jpeg') ||
+      lower.includes('.png') ||
+      lower.includes('.webp') ||
+      lower.includes('.gif')
+    );
+  };
+
+  const isPdfUrl = (url?: string | null, fileName?: string) => {
+    if (!url && !fileName) return false;
+    const blob = `${url || ''} ${fileName || ''}`.toLowerCase();
+    return blob.includes('pdf') || blob.startsWith('data:application/pdf');
+  };
+
+  const openCardPreview = (url: string, fileName?: string) => {
+    if (isImageUrl(url)) {
+      setCardZoomUrl(url);
+      setCardZoomName(fileName || 'Belge');
+      return;
+    }
+    openBase64InNewTab(url, fileName || 'Belge');
+  };
+
   return (
     <div className="space-y-6">
       <datalist id="birim-listesi">
@@ -160,133 +191,188 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
         <option value="Metre" />
         <option value="Rulo" />
       </datalist>
-      <div className="border bg-slate-950 p-4.5 rounded-2xl border-slate-800/80 flex justify-between items-center text-xs">
+      <div className="border bg-white p-4 rounded-2xl border-slate-200 shadow-sm flex justify-between items-center text-xs">
         <div className="space-y-1">
-          <span className="text-emerald-500 font-bold block text-[11px] tracking-widest uppercase">🛡️ GÜVENLİK KAPISI EVRAK ONAY HAVUZU</span>
-          <p className="text-slate-400 leading-relaxed text-[11px]">
-            Kapıdaki güvenlik personelleri tarafından çoklu yüklenen fatura, irsaliye, makbuz ve genel evrakların dijital onay, arşivleme ve Yapay Zeka mutabakat paneli.
+          <span className="text-emerald-700 font-bold block text-[11px] tracking-widest uppercase">Güvenlik Kapısı Evrak Onay Havuzu</span>
+          <p className="text-slate-500 leading-relaxed text-[11px]">
+            Kapıdan yüklenen fatura, irsaliye, makbuz ve genel evrakları önizleyin; Yapay Zeka veya manuel form ile onaylayıp arşivleyin.
           </p>
+        </div>
+        <div className="hidden sm:flex items-center gap-2 text-[10px] font-bold text-slate-500">
+          <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-1 rounded-lg">{pendingGateDocs.length} kapı</span>
+          <span className="bg-amber-50 text-amber-800 border border-amber-100 px-2 py-1 rounded-lg">{pendingWaybills.length} irsaliye</span>
+          <span className="bg-violet-50 text-violet-700 border border-violet-100 px-2 py-1 rounded-lg">{pendingInvoices.length} fatura</span>
         </div>
       </div>
 
       {/* 1. GÜVENLİK KAPISINDAN GELEN EVRAKLAR */}
       <div className="space-y-3">
-        <h3 className="font-display font-black text-xs text-slate-350 tracking-wider flex items-center space-x-2 uppercase">
+        <h3 className="font-display font-black text-xs text-slate-600 tracking-wider flex items-center space-x-2 uppercase">
           <FileText size={14} className="text-indigo-500" />
           <span>Güvenlik Kapısı Girişleri ({pendingGateDocs.length})</span>
         </h3>
 
         {pendingGateDocs.length === 0 ? (
-          <div className="bg-slate-950 rounded-3xl p-10 text-center flex flex-col items-center justify-center space-y-3 border border-slate-800/50">
-            <span className="text-3xl">🎉</span>
+          <div className="bg-white rounded-3xl p-10 text-center flex flex-col items-center justify-center space-y-3 border border-slate-200 shadow-sm">
             <div>
-              <h3 className="text-xs font-bold text-slate-200">Güvenlik kapısından onay bekleyen yeni evrak bulunmuyor.</h3>
+              <h3 className="text-xs font-bold text-slate-800">Güvenlik kapısından onay bekleyen yeni evrak bulunmuyor.</h3>
               <p className="text-[10px] text-slate-500 mt-1">Kapı evrak girişleri mutabıktır.</p>
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {pendingGateDocs.map(docItem => (
-              <div key={docItem.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition space-y-3 shadow-lg">
-                <div>
-                  <div className="flex justify-between items-start">
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded ${
-                      docItem.evrakTuru === 'FATURA' ? 'bg-purple-950/40 text-purple-400 border border-purple-800/40' :
-                      docItem.evrakTuru === 'İRSALİYE' ? 'bg-amber-950/40 text-amber-400 border border-amber-800/40' :
-                      docItem.evrakTuru === 'MAKBUZ' ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/40' :
-                      'bg-slate-950 text-slate-400 border border-slate-800'
-                    }`}>
-                      {docItem.evrakTuru}
-                    </span>
-                    <span className="text-[9px] text-slate-500 font-mono">{docItem.tarih} - {docItem.saat}</span>
-                  </div>
-
-                  <div className="text-xs text-slate-200 font-bold mt-2 truncate">
-                    Dosya: {docItem.fileName || 'Belge.jpg'}
-                  </div>
-                  
-                  {docItem.aciklama && (
-                    <p className="text-[11px] text-slate-450 leading-relaxed italic bg-slate-900/50 p-2 rounded-lg border border-slate-800/50 mt-2 truncate">
-                      "{docItem.aciklama}"
-                    </p>
-                  )}
-                  
-                  <div className="text-[10px] text-slate-500 mt-1 font-semibold">
-                    Yükleyen: {docItem.kaydeden || 'Güvenlik'}
-                  </div>
-
-                  {/* AI Status & Parsed Preview */}
-                  {docItem.aiParsed && (
-                    <div className="mt-2 text-[10px] bg-indigo-950/40 border border-indigo-900/30 p-2.5 rounded-xl text-indigo-300 font-sans">
-                      <span className="font-bold block text-[8px] uppercase tracking-wider text-indigo-400 mb-1 flex items-center gap-1">
-                        <Sparkles size={9} className="text-amber-400 animate-pulse" /> YAYINLANAN YZ VERİLERİ
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {pendingGateDocs.map(docItem => {
+              const previewUrl = docItem.fotoUrl || docItem.fotoUrls?.[0];
+              const imagePreview = isImageUrl(previewUrl);
+              const pdfPreview = isPdfUrl(previewUrl, docItem.fileName);
+              return (
+              <div key={docItem.id} className="bg-white border border-slate-200 rounded-2xl flex flex-col hover:border-emerald-300 hover:shadow-md transition shadow-sm overflow-hidden">
+                {/* Evrak önizleme */}
+                <button
+                  type="button"
+                  onClick={() => previewUrl && openCardPreview(previewUrl, docItem.fileName)}
+                  className="relative w-full h-40 bg-slate-100 border-b border-slate-200 flex items-center justify-center overflow-hidden group cursor-zoom-in"
+                  title={previewUrl ? 'Önizlemeyi büyüt' : 'Önizleme yok'}
+                  disabled={!previewUrl}
+                >
+                  {imagePreview ? (
+                    <img
+                      src={previewUrl}
+                      alt={docItem.fileName || 'Evrak önizleme'}
+                      className="w-full h-full object-cover group-hover:scale-[1.03] transition duration-300"
+                    />
+                  ) : previewUrl ? (
+                    <div className="flex flex-col items-center gap-2 text-slate-500 px-4">
+                      <FileText size={36} className={pdfPreview ? 'text-rose-500' : 'text-indigo-500'} />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">
+                        {pdfPreview ? 'PDF belgesi' : 'Dosya önizleme'}
                       </span>
-                      <div className="truncate"><strong>Firma:</strong> {docItem.firma || '-'}</div>
-                      <div className="truncate"><strong>No/Kod:</strong> {docItem.evrakNo || '-'}</div>
-                      <div className="truncate"><strong>Miktar:</strong> {docItem.kalemler?.length || 0} Kalem</div>
+                      <span className="text-[10px] text-slate-400 truncate max-w-full">{docItem.fileName || 'Belge'}</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-slate-400">
+                      <FileText size={28} />
+                      <span className="text-[10px] font-semibold">Önizleme yok</span>
                     </div>
                   )}
-                  {docItem.aiStatus === 'PARSING' && (
-                    <div className="mt-2 text-[10px] bg-slate-900 border border-slate-800 p-2 rounded-xl text-slate-400 font-sans flex items-center gap-1.5 animate-pulse">
-                      <Loader2 size={10} className="animate-spin text-indigo-500" />
-                      <span>Yapay Zeka evrakı okuyor...</span>
-                    </div>
+                  {previewUrl && (
+                    <span className="absolute bottom-2 right-2 bg-white/95 border border-slate-200 text-slate-700 text-[9px] font-bold px-2 py-1 rounded-lg flex items-center gap-1 shadow-sm opacity-0 group-hover:opacity-100 transition">
+                      <ZoomIn size={11} /> Büyüt
+                    </span>
                   )}
-                </div>
+                </button>
 
-                <div className="flex gap-2 pt-2 border-t border-slate-900">
-                  <button
-                    onClick={() => handleOpenGateDocApproval(docItem)}
-                    className="flex-grow bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] py-2 px-3 rounded-lg transition tracking-wider uppercase flex items-center justify-center space-x-1"
-                  >
-                    <Sparkles size={12} />
-                    <span>Onayla &amp; İşle</span>
-                  </button>
-                  <button
-                    onClick={() => handleRejectGateDoc(docItem.id)}
-                    className="bg-rose-950/50 hover:bg-rose-900 border border-rose-900 text-rose-400 font-bold text-[10px] py-2 px-3 rounded-lg transition"
-                  >
-                    Reddet
-                  </button>
+                <div className="p-4 flex flex-col flex-1 space-y-3">
+                  <div>
+                    <div className="flex justify-between items-start gap-2">
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded ${
+                        docItem.evrakTuru === 'FATURA' ? 'bg-violet-50 text-violet-700 border border-violet-200' :
+                        docItem.evrakTuru === 'İRSALİYE' ? 'bg-amber-50 text-amber-800 border border-amber-200' :
+                        docItem.evrakTuru === 'MAKBUZ' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
+                        'bg-slate-50 text-slate-600 border border-slate-200'
+                      }`}>
+                        {docItem.evrakTuru || 'EVRAK'}
+                      </span>
+                      <span className="text-[9px] text-slate-500 font-mono shrink-0">{docItem.tarih}{docItem.saat ? ` · ${docItem.saat}` : ''}</span>
+                    </div>
+
+                    <div className="text-xs text-slate-800 font-bold mt-2 truncate" title={docItem.fileName}>
+                      {docItem.fileName || 'Belge.jpg'}
+                    </div>
+                    
+                    {docItem.aciklama && (
+                      <p className="text-[11px] text-slate-500 leading-relaxed bg-slate-50 p-2 rounded-lg border border-slate-100 mt-2 line-clamp-2">
+                        {docItem.aciklama}
+                      </p>
+                    )}
+                    
+                    <div className="text-[10px] text-slate-500 mt-1.5 font-semibold">
+                      Yükleyen: {docItem.kaydeden || 'Güvenlik'}
+                    </div>
+
+                    {docItem.aiParsed && (
+                      <div className="mt-2 text-[10px] bg-indigo-50 border border-indigo-100 p-2.5 rounded-xl text-indigo-800 font-sans">
+                        <span className="font-bold block text-[8px] uppercase tracking-wider text-indigo-600 mb-1 flex items-center gap-1">
+                          <Sparkles size={9} className="text-amber-500" /> YZ ön okuma
+                        </span>
+                        <div className="truncate"><strong>Firma:</strong> {docItem.firma || '-'}</div>
+                        <div className="truncate"><strong>No/Kod:</strong> {docItem.evrakNo || '-'}</div>
+                        <div className="truncate"><strong>Kalem:</strong> {docItem.kalemler?.length || 0}</div>
+                      </div>
+                    )}
+                    {docItem.aiStatus === 'PARSING' && (
+                      <div className="mt-2 text-[10px] bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-600 font-sans flex items-center gap-1.5 animate-pulse">
+                        <Loader2 size={10} className="animate-spin text-indigo-500" />
+                        <span>Yapay Zeka evrakı okuyor...</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2 pt-2 border-t border-slate-100 mt-auto">
+                    {previewUrl && (
+                      <button
+                        type="button"
+                        onClick={() => openCardPreview(previewUrl, docItem.fileName)}
+                        className="bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-[10px] py-2 px-2.5 rounded-lg transition flex items-center justify-center"
+                        title="Önizle"
+                      >
+                        <Eye size={13} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleOpenGateDocApproval(docItem)}
+                      className="flex-grow bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] py-2 px-3 rounded-lg transition tracking-wider uppercase flex items-center justify-center space-x-1"
+                    >
+                      <Sparkles size={12} />
+                      <span>Onayla &amp; İşle</span>
+                    </button>
+                    <button
+                      onClick={() => handleRejectGateDoc(docItem.id)}
+                      className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-[10px] py-2 px-3 rounded-lg transition"
+                    >
+                      Reddet
+                    </button>
+                  </div>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         )}
       </div>
 
       {/* 2. DİĞER BEKLEYEN ONALAR (OFİS LİSTESİ) */}
-      <div className="border-t border-slate-800/60 pt-6 space-y-4">
+      <div className="border-t border-slate-200 pt-6 space-y-4">
         {(pendingWaybills.length > 0 || pendingInvoices.length > 0) && (
           <div className="space-y-6">
             {/* İrsaliyeler Grid */}
             {pendingWaybills.length > 0 && (
               <div className="space-y-3">
-                <h3 className="font-display font-black text-xs text-slate-450 tracking-wider flex items-center space-x-2 uppercase">
+                <h3 className="font-display font-black text-xs text-slate-500 tracking-wider flex items-center space-x-2 uppercase">
                   <Truck size={14} className="text-emerald-500" />
                   <span>Ofisten Kayıtlı Bekleyen İrsaliyeler ({pendingWaybills.length})</span>
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {pendingWaybills.map(doc => (
-                    <div key={doc.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition space-y-3">
+                    <div key={doc.id} className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col justify-between hover:border-slate-300 hover:shadow-md transition space-y-3 shadow-sm">
                       <div>
                         <div className="flex justify-between items-start">
-                          <span className="font-mono bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                          <span className="font-mono bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-md">
                             {doc.irsaliyeNo}
                           </span>
                           <span className="text-[10px] text-slate-500 font-mono font-bold">{doc.tarih}</span>
                         </div>
-                        <p className="text-xs text-slate-200 font-bold mt-2.5">Firma: {doc.firma}</p>
-                        <p className="text-[10.5px] text-slate-450 mt-1">İlişkili Sipariş No: {doc.saId || 'Doğrudan Sevkiyat'}</p>
+                        <p className="text-xs text-slate-800 font-bold mt-2.5">Firma: {doc.firma}</p>
+                        <p className="text-[10.5px] text-slate-500 mt-1">İlişkili Sipariş No: {doc.saId || 'Doğrudan Sevkiyat'}</p>
 
-                        <div className="mt-2.5 pt-2 border-t border-slate-800">
+                        <div className="mt-2.5 pt-2 border-t border-slate-200">
                           <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block mb-1">Gelen Malzemeler</span>
                           <div className="space-y-1 text-[10px] font-mono text-slate-400">
                             {doc.kalemler?.slice(0, 3).map((k: any, idx: number) => (
                               <div key={k.id || idx} className="flex justify-between">
                                 <span className="truncate max-w-[150px]">{k.urunAdi}</span>
-                                <span className="text-white font-bold">{k.miktar} {k.birim}</span>
+                                <span className="text-slate-800 font-bold">{k.miktar} {k.birim}</span>
                               </div>
                             ))}
                             {doc.kalemler?.length > 3 && <div className="text-[9px] text-slate-500">+ {doc.kalemler.length - 3} kalem daha</div>}
@@ -294,10 +380,10 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                         </div>
                       </div>
 
-                      <div className="flex gap-2 pt-2.5 border-t border-slate-900">
+                      <div className="flex gap-2 pt-2.5 border-t border-slate-100">
                         <button 
                           onClick={() => setActiveDocForDetail({ id: doc.id, type: 'waybill', data: doc })}
-                          className="flex-1 bg-slate-900 border border-slate-800 hover:bg-slate-800 hover:border-slate-700 text-white py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1"
+                          className="flex-1 bg-slate-50 border border-slate-200 hover:bg-slate-100 hover:border-slate-300 text-slate-800 py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1"
                         >
                           <Eye size={11} />
                           <span>Detay İncele</span>
@@ -319,34 +405,34 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
             {/* Faturalar Grid */}
             {pendingInvoices.length > 0 && (
               <div className="space-y-3 pt-4">
-                <h3 className="font-display font-black text-xs text-slate-450 tracking-wider flex items-center space-x-2 uppercase">
+                <h3 className="font-display font-black text-xs text-slate-500 tracking-wider flex items-center space-x-2 uppercase">
                   <CreditCard size={14} className="text-purple-500" />
                   <span>Ofisten Kayıtlı Bekleyen Faturalar ({pendingInvoices.length})</span>
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {pendingInvoices.map(doc => (
-                    <div key={doc.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition space-y-3">
+                    <div key={doc.id} className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col justify-between hover:border-slate-300 hover:shadow-md transition space-y-3 shadow-sm">
                       <div>
                         <div className="flex justify-between items-start">
-                          <span className="font-mono bg-purple-500/10 border border-purple-200/20 text-purple-400 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                          <span className="font-mono bg-purple-50 border border-purple-200 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded-md">
                             {doc.faturaNo}
                           </span>
-                          <span className="text-[10px] text-slate-550 font-mono font-bold">{doc.tarih}</span>
+                          <span className="text-[10px] text-slate-500 font-mono font-bold">{doc.tarih}</span>
                         </div>
-                        <p className="text-xs text-slate-200 font-bold mt-2.5">Cari Unvan: {doc.cariUnvan}</p>
-                        <p className="text-[10.5px] text-slate-455 mt-1">Eşleşen İrsaliyeler: {doc.bagliIrsaliyeler?.join(', ') || 'Manuel Bağsız'}</p>
+                        <p className="text-xs text-slate-800 font-bold mt-2.5">Cari Unvan: {doc.cariUnvan}</p>
+                        <p className="text-[10.5px] text-slate-500 mt-1">Eşleşen İrsaliyeler: {doc.bagliIrsaliyeler?.join(', ') || 'Manuel Bağsız'}</p>
                         
-                        <div className="mt-2.5 p-2 bg-purple-500/5 rounded border border-purple-500/10 flex justify-between items-center text-[10px]">
-                          <span className="text-slate-450 font-bold">Toplam Tutar:</span>
-                          <span className="text-purple-400 font-black font-mono">₺{doc.genelToplam?.toLocaleString()}</span>
+                        <div className="mt-2.5 p-2 bg-purple-50 rounded border border-purple-100 flex justify-between items-center text-[10px]">
+                          <span className="text-slate-500 font-bold">Toplam Tutar:</span>
+                          <span className="text-purple-700 font-black font-mono">₺{doc.genelToplam?.toLocaleString()}</span>
                         </div>
                       </div>
 
-                      <div className="flex gap-2 pt-2.5 border-t border-slate-900">
+                      <div className="flex gap-2 pt-2.5 border-t border-slate-100">
                         <button 
                           onClick={() => setActiveDocForDetail({ id: doc.id, type: 'invoice', data: doc })}
-                          className="flex-1 bg-slate-900 border border-slate-800 hover:bg-slate-800 hover:border-slate-700 text-white py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1"
+                          className="flex-1 bg-slate-50 border border-slate-200 hover:bg-slate-100 hover:border-slate-300 text-slate-800 py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1"
                         >
                           <Eye size={11} />
                           <span>Karşılaştır &amp; Gör</span>
@@ -370,11 +456,11 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
 
       {/* 3. EVRAK ONAY & ARŞİVLEME SİHİRBAZI MODAL */}
       {activeGateDoc && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col md:flex-row shadow-2xl text-white">
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col md:flex-row shadow-2xl text-slate-800">
             
             {/* Left half: Document image preview */}
-            <div className="w-full md:w-1/2 p-5 bg-slate-950 flex flex-col justify-between border-r border-slate-800">
+            <div className="w-full md:w-1/2 p-5 bg-slate-50 flex flex-col justify-between border-r border-slate-200">
               <div className="flex justify-between items-center mb-3">
                 <span className="font-bold text-[10px] text-slate-400 uppercase tracking-widest">Evrak Görseli / Önizleme</span>
                 {activeGateDoc.fotoUrl && (
@@ -382,7 +468,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                     <button
                       type="button"
                       onClick={() => setIsZoomed(true)}
-                      className="text-[10px] text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-0 font-semibold"
+                      className="text-[10px] text-indigo-600 hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-0 font-semibold"
                     >
                       <ZoomIn size={12} />
                       <span>Yakınlaştır</span>
@@ -397,7 +483,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                         link.click();
                         document.body.removeChild(link);
                       }}
-                      className="text-[10px] text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-0 font-semibold"
+                      className="text-[10px] text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-0 font-semibold"
                     >
                       <Download size={12} />
                       <span>İndir</span>
@@ -408,7 +494,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                         event.preventDefault();
                         openBase64InNewTab(activeGateDoc.fotoUrl, activeGateDoc.fileName || 'Belge');
                       }}
-                      className="text-[10px] text-slate-400 hover:underline flex items-center gap-1 font-semibold"
+                      className="text-[10px] text-slate-600 hover:underline flex items-center gap-1 font-semibold"
                     >
                       <ExternalLink size={12} />
                       <span>Yeni Sekmede Aç</span>
@@ -417,7 +503,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                 )}
               </div>
               
-              <div className="flex-grow flex items-center justify-center overflow-hidden bg-slate-900 rounded-2xl border border-slate-800 p-3 min-h-[300px]">
+              <div className="flex-grow flex items-center justify-center overflow-hidden bg-white rounded-2xl border border-slate-200 p-3 min-h-[300px]">
                 {activeGateDoc.fotoUrl ? (
                   activeGateDoc.fotoUrl.startsWith('data:image/') || activeGateDoc.fotoUrl.includes('.jpg') || activeGateDoc.fotoUrl.includes('.png') ? (
                     <img
@@ -437,7 +523,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                           event.preventDefault();
                           openBase64InNewTab(activeGateDoc.fotoUrl, activeGateDoc.fileName || 'Belge');
                         }}
-                        className="inline-block bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-xl text-xs font-bold transition"
+                        className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition"
                       >
                         Dosyayı İndir / Aç
                       </a>
@@ -453,19 +539,19 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
             <div className="w-full md:w-1/2 p-6 flex flex-col justify-between overflow-y-auto max-h-[90vh]">
               <div>
                 {/* Header */}
-                <div className="flex justify-between items-start border-b border-slate-800 pb-3 mb-4">
+                <div className="flex justify-between items-start border-b border-slate-200 pb-3 mb-4">
                   <div>
-                    <h2 className="font-display font-black text-sm uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+                    <h2 className="font-display font-black text-sm uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
                       <Sparkles size={16} />
                       <span>Evrak İşleme Sihirbazı</span>
                     </h2>
                     <p className="text-[10px] text-slate-500 font-medium mt-0.5">
-                      Kapı Kayıt Ref: <span className="font-mono text-slate-300">{activeGateDoc.id}</span>
+                      Kapı Kayıt Ref: <span className="font-mono text-slate-700">{activeGateDoc.id}</span>
                     </p>
                   </div>
                   <button
                     onClick={() => setActiveGateDoc(null)}
-                    className="text-slate-400 hover:text-slate-200 p-1 hover:bg-slate-800 rounded-full transition"
+                    className="text-slate-500 hover:text-slate-800 p-1 hover:bg-slate-100 rounded-full transition"
                   >
                     <X size={18} />
                   </button>
@@ -481,7 +567,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                       <select
                         value={selectedDocType}
                         onChange={(e) => setSelectedDocType(e.target.value as any)}
-                        className="w-full bg-slate-950 border border-slate-800 text-amber-400 p-3 rounded-xl font-bold text-xs"
+                        className="w-full bg-white border border-slate-200 text-amber-700 p-3 rounded-xl font-bold text-xs"
                       >
                         <option value="İRSALİYE">📄 İRSALİYE ARŞİVİNE KAYDET</option>
                         <option value="FATURA">💰 FATURA ARŞİVİNE KAYDET</option>
@@ -490,9 +576,9 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                       </select>
                     </div>
 
-                    <div className="bg-indigo-950/20 border border-indigo-900/30 p-3 rounded-xl space-y-1">
-                      <span className="text-[10px] font-black text-indigo-400 uppercase tracking-wide block">Nöbetçi Açıklaması</span>
-                      <p className="text-slate-300 text-xs font-semibold italic">
+                    <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-xl space-y-1">
+                      <span className="text-[10px] font-black text-indigo-700 uppercase tracking-wide block">Nöbetçi Açıklaması</span>
+                      <p className="text-slate-700 text-xs font-semibold italic">
                         "{activeGateDoc.aciklama || 'Açıklama belirtilmemiş'}"
                       </p>
                     </div>
@@ -502,7 +588,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                         <button
                           onClick={handleAnalyzeGateDocWithAi}
                           disabled={isAiResolving}
-                          className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-550 hover:to-indigo-550 text-white font-extrabold text-xs p-4 rounded-2xl transition disabled:opacity-50 flex items-center justify-center space-x-2 shadow-lg shadow-indigo-950/25"
+                          className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-extrabold text-xs p-4 rounded-2xl transition disabled:opacity-50 flex items-center justify-center space-x-2 shadow-lg shadow-indigo-200"
                         >
                           {isAiResolving ? (
                             <>
@@ -520,7 +606,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
 
                       <button
                         onClick={handleStartManualGateDocApproval}
-                        className="bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 font-extrabold text-xs p-3.5 rounded-2xl transition flex items-center justify-center space-x-1.5"
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 font-extrabold text-xs p-3.5 rounded-2xl transition flex items-center justify-center space-x-1.5"
                       >
                         <span>✍️ MANUEL OLARAK KART DOLDUR</span>
                       </button>
@@ -543,7 +629,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                               required
                               value={faturaNo}
                               onChange={(e) => setFaturaNo(e.target.value)}
-                              className="w-full bg-slate-950 border border-slate-800 text-white p-2 rounded-lg font-mono font-bold"
+                              className="w-full bg-white border border-slate-200 text-slate-900 p-2 rounded-lg font-mono font-bold"
                             />
                           </div>
                           <div className="space-y-1">
@@ -553,7 +639,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                               required
                               value={faturaTarih}
                               onChange={(e) => setFaturaTarih(e.target.value)}
-                              className="w-full bg-slate-950 border border-slate-800 text-white p-2 rounded-lg"
+                              className="w-full bg-white border border-slate-200 text-slate-900 p-2 rounded-lg"
                             />
                           </div>
                         </div>
@@ -565,7 +651,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                             required
                             value={faturaFirma}
                             onChange={(e) => setFaturaFirma(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 text-white p-2 rounded-lg font-bold"
+                            className="w-full bg-white border border-slate-200 text-slate-900 p-2 rounded-lg font-bold"
                           />
                         </div>
 
@@ -582,7 +668,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                                 setFaturaToplam(v);
                                 setFaturaGenelToplam(v + faturaKdv);
                               }}
-                              className="w-full bg-slate-950 border border-slate-800 text-white p-2 rounded-lg font-mono font-bold"
+                              className="w-full bg-white border border-slate-200 text-slate-900 p-2 rounded-lg font-mono font-bold"
                             />
                           </div>
                           <div className="space-y-1">
@@ -597,7 +683,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                                 setFaturaKdv(v);
                                 setFaturaGenelToplam(faturaToplam + v);
                               }}
-                              className="w-full bg-slate-955 border border-slate-800 text-white p-2 rounded-lg font-mono font-bold"
+                              className="w-full bg-white border border-slate-200 text-slate-900 p-2 rounded-lg font-mono font-bold"
                             />
                           </div>
                           <div className="space-y-1">
@@ -608,13 +694,13 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                               required
                               value={faturaGenelToplam}
                               onChange={(e) => setFaturaGenelToplam(Number(e.target.value))}
-                              className="w-full bg-slate-955 border border-indigo-900 text-indigo-450 p-2 rounded-lg font-mono font-black"
+                              className="w-full bg-indigo-50 border border-indigo-200 text-indigo-800 p-2 rounded-lg font-mono font-black"
                             />
                           </div>
                         </div>
 
                 {/* Items table for Fatura */}
-                        <div className="space-y-2 border-t border-slate-800 pt-3">
+                        <div className="space-y-2 border-t border-slate-200 pt-3">
                           <span className="text-[9px] font-black text-purple-400 block uppercase tracking-wider">Malzeme Kalemleri ({faturaKalemler.length})</span>
                           
                           <datalist id="birim-listesi">
@@ -627,20 +713,20 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                           </datalist>
 
                           {/* Add row */}
-                          <div className="grid grid-cols-12 gap-1 bg-slate-950 p-2 border border-slate-800 rounded-xl">
+                          <div className="grid grid-cols-12 gap-1 bg-slate-50 p-2 border border-slate-200 rounded-xl">
                             <input
                               type="text"
                               placeholder="Malzeme Adı"
                               value={itemUrunAdi}
                               onChange={(e) => setItemUrunAdi(e.target.value)}
-                              className="col-span-4 bg-slate-900 border border-slate-800 text-[10px] p-1.5 rounded"
+                              className="col-span-4 bg-white border border-slate-200 text-slate-900 text-[10px] p-1.5 rounded"
                             />
                             <input
                               type="number"
                               placeholder="Miktar"
                               value={itemMiktar}
                               onChange={(e) => setItemMiktar(e.target.value === '' ? '' : Number(e.target.value))}
-                              className="col-span-2 bg-slate-900 border border-slate-800 text-[10px] p-1.5 rounded text-right font-mono"
+                              className="col-span-2 bg-white border border-slate-200 text-slate-900 text-[10px] p-1.5 rounded text-right font-mono"
                             />
                             <input
                               type="text"
@@ -648,14 +734,14 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                               placeholder="Birim"
                               value={itemBirim}
                               onChange={(e) => setItemBirim(e.target.value)}
-                              className="col-span-2 bg-slate-900 border border-slate-800 text-[10px] p-1.5 rounded"
+                              className="col-span-2 bg-white border border-slate-200 text-slate-900 text-[10px] p-1.5 rounded"
                             />
                             <input
                               type="number"
                               placeholder="B.Fiyat"
                               value={itemBirimFiyat}
                               onChange={(e) => setItemBirimFiyat(e.target.value === '' ? '' : Number(e.target.value))}
-                              className="col-span-2 bg-slate-900 border border-slate-800 text-[10px] p-1.5 rounded text-right font-mono"
+                              className="col-span-2 bg-white border border-slate-200 text-slate-900 text-[10px] p-1.5 rounded text-right font-mono"
                             />
                             <button
                               type="button"
@@ -680,24 +766,24 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                                 setItemBirim('Adet');
                                 setItemBirimFiyat('');
                               }}
-                              className="col-span-2 bg-purple-700 hover:bg-purple-650 text-white font-extrabold text-[10px] rounded"
+                              className="col-span-2 bg-violet-600 hover:bg-violet-700 text-white font-extrabold text-[10px] rounded"
                             >
                               Ekle
                             </button>
                           </div>
 
                           {faturaKalemler.length > 0 && (
-                            <div className="max-h-[150px] overflow-y-auto bg-slate-950 border border-slate-800 rounded-xl text-[10px] divide-y divide-slate-800">
+                            <div className="max-h-[150px] overflow-y-auto bg-white border border-slate-200 rounded-xl text-[10px] divide-y divide-slate-100">
                               {faturaKalemler.map((it, idx) => (
-                                <div key={idx} className="flex justify-between items-center p-2 hover:bg-slate-900 transition">
-                                  <div className="font-semibold text-slate-200 truncate max-w-[200px]" title={it.urunAdi}>{it.urunAdi}</div>
+                                <div key={idx} className="flex justify-between items-center p-2 hover:bg-slate-50 transition">
+                                  <div className="font-semibold text-slate-800 truncate max-w-[200px]" title={it.urunAdi}>{it.urunAdi}</div>
                                   <div className="flex items-center space-x-3 text-right">
                                     <span className="font-mono text-slate-400">{it.miktar} {it.birim} × ₺{it.birimFiyat?.toLocaleString()}</span>
                                     <span className="font-mono font-bold text-indigo-400">₺{it.toplam?.toLocaleString()}</span>
                                     <button
                                       type="button"
                                       onClick={() => setFaturaKalemler(prev => prev.filter((_, i) => i !== idx))}
-                                      className="text-rose-505 hover:text-rose-400 text-[10px] px-1 font-bold"
+                                      className="text-rose-500 hover:text-rose-600 text-[10px] px-1 font-bold"
                                     >
                                       Sil
                                     </button>
@@ -720,7 +806,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                               required
                               value={irsaliyeNo}
                               onChange={(e) => setIrsaliyeNo(e.target.value)}
-                              className="w-full bg-slate-950 border border-slate-800 text-white p-2 rounded-lg font-mono font-bold"
+                              className="w-full bg-white border border-slate-200 text-slate-900 p-2 rounded-lg font-mono font-bold"
                             />
                           </div>
                           <div className="space-y-1">
@@ -730,7 +816,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                               required
                               value={irsaliyeTarih}
                               onChange={(e) => setIrsaliyeTarih(e.target.value)}
-                              className="w-full bg-slate-950 border border-slate-800 text-white p-2 rounded-lg"
+                              className="w-full bg-white border border-slate-200 text-slate-900 p-2 rounded-lg"
                             />
                           </div>
                         </div>
@@ -742,29 +828,29 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                             required
                             value={irsaliyeFirma}
                             onChange={(e) => setIrsaliyeFirma(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 text-white p-2 rounded-lg font-bold"
+                            className="w-full bg-white border border-slate-200 text-slate-900 p-2 rounded-lg font-bold"
                           />
                         </div>
 
                         {/* Items table for Irsaliye */}
-                        <div className="space-y-2 border-t border-slate-800 pt-3 text-xs">
+                        <div className="space-y-2 border-t border-slate-200 pt-3 text-xs">
                           <span className="text-[9px] font-black text-amber-500 block uppercase tracking-wider">Sevk Edilen Malzeme Kalemleri ({irsaliyeKalemler.length})</span>
                           
                           {/* Add row */}
-                          <div className="grid grid-cols-12 gap-1 bg-slate-955 p-2 border border-slate-800 rounded-xl">
+                          <div className="grid grid-cols-12 gap-1 bg-slate-50 p-2 border border-slate-200 rounded-xl">
                             <input
                               type="text"
                               placeholder="Malzeme Adı"
                               value={itemUrunAdi}
                               onChange={(e) => setItemUrunAdi(e.target.value)}
-                              className="col-span-5 bg-slate-900 border border-slate-800 text-[10px] p-1.5 rounded"
+                              className="col-span-5 bg-white border border-slate-200 text-slate-900 text-[10px] p-1.5 rounded"
                             />
                             <input
                               type="number"
                               placeholder="Miktar"
                               value={itemMiktar}
                               onChange={(e) => setItemMiktar(e.target.value === '' ? '' : Number(e.target.value))}
-                              className="col-span-2 bg-slate-900 border border-slate-800 text-[10px] p-1.5 rounded text-right font-mono"
+                              className="col-span-2 bg-white border border-slate-200 text-slate-900 text-[10px] p-1.5 rounded text-right font-mono"
                             />
                             <input
                               type="text"
@@ -772,7 +858,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                               placeholder="Birim"
                               value={itemBirim}
                               onChange={(e) => setItemBirim(e.target.value)}
-                              className="col-span-3 bg-slate-900 border border-slate-800 text-[10px] p-1.5 rounded"
+                              className="col-span-3 bg-white border border-slate-200 text-slate-900 text-[10px] p-1.5 rounded"
                             />
                             <button
                               type="button"
@@ -787,23 +873,23 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                                 setItemMiktar('');
                                 setItemBirim('Adet');
                               }}
-                              className="col-span-2 bg-amber-650 hover:bg-amber-600 text-slate-950 font-extrabold text-[10px] rounded"
+                              className="col-span-2 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-[10px] rounded"
                             >
                               Ekle
                             </button>
                           </div>
 
                           {irsaliyeKalemler.length > 0 && (
-                            <div className="max-h-[150px] overflow-y-auto bg-slate-950 border border-slate-800 rounded-xl text-[10px] divide-y divide-slate-800">
+                            <div className="max-h-[150px] overflow-y-auto bg-white border border-slate-200 rounded-xl text-[10px] divide-y divide-slate-100">
                               {irsaliyeKalemler.map((it, idx) => (
-                                <div key={idx} className="flex justify-between items-center p-2 hover:bg-slate-900 transition">
-                                  <div className="font-semibold text-slate-200 truncate max-w-[250px]">{it.urunAdi}</div>
+                                <div key={idx} className="flex justify-between items-center p-2 hover:bg-slate-50 transition">
+                                  <div className="font-semibold text-slate-800 truncate max-w-[250px]">{it.urunAdi}</div>
                                   <div className="flex items-center space-x-3 text-right">
                                     <span className="font-mono text-amber-500 font-bold">{it.miktar} {it.birim || 'Adet'}</span>
                                     <button
                                       type="button"
                                       onClick={() => setIrsaliyeKalemler(prev => prev.filter((_, i) => i !== idx))}
-                                      className="text-rose-505 hover:text-rose-400 text-[10px] px-1 font-bold"
+                                      className="text-rose-500 hover:text-rose-600 text-[10px] px-1 font-bold"
                                     >
                                       Sil
                                     </button>
@@ -826,7 +912,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                               required
                               value={makbuzRefNo}
                               onChange={(e) => setMakbuzRefNo(e.target.value)}
-                              className="w-full bg-slate-950 border border-slate-800 text-white p-2 rounded-lg font-mono font-bold"
+                              className="w-full bg-white border border-slate-200 text-slate-900 p-2 rounded-lg font-mono font-bold"
                             />
                           </div>
                           <div className="space-y-1">
@@ -836,7 +922,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                               required
                               value={makbuzTarih}
                               onChange={(e) => setMakbuzTarih(e.target.value)}
-                              className="w-full bg-slate-950 border border-slate-800 text-white p-2 rounded-lg"
+                              className="w-full bg-white border border-slate-200 text-slate-900 p-2 rounded-lg"
                             />
                           </div>
                         </div>
@@ -849,7 +935,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                               required
                               value={makbuzFirma}
                               onChange={(e) => setMakbuzFirma(e.target.value)}
-                              className="w-full bg-slate-950 border border-slate-800 text-white p-2 rounded-lg font-bold"
+                              className="w-full bg-white border border-slate-200 text-slate-900 p-2 rounded-lg font-bold"
                             />
                           </div>
                           <div className="col-span-4 space-y-1">
@@ -857,7 +943,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                             <select
                               value={makbuzTip}
                               onChange={(e) => setMakbuzTip(e.target.value as any)}
-                              className="w-full bg-slate-950 border border-slate-800 text-white p-2 rounded-lg font-bold"
+                              className="w-full bg-white border border-slate-200 text-slate-900 p-2 rounded-lg font-bold"
                             >
                               <option value="ÇIKIŞ">💰 NAKİT ÇIKIŞI</option>
                               <option value="GİRİŞ">💵 NAKİT TAHMİNAT / GİRİŞ</option>
@@ -873,7 +959,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                             step="0.01"
                             value={makbuzTutar}
                             onChange={(e) => setMakbuzTutar(Number(e.target.value))}
-                            className="w-full bg-slate-950 border border-slate-800 text-emerald-450 p-2.5 rounded-lg font-mono font-black text-sm"
+                            className="w-full bg-emerald-50 border border-emerald-200 text-emerald-800 p-2.5 rounded-lg font-mono font-black text-sm"
                           />
                         </div>
 
@@ -884,7 +970,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                             required
                             value={makbuzAciklama}
                             onChange={(e) => setMakbuzAciklama(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 text-white p-2 rounded-lg"
+                            className="w-full bg-white border border-slate-200 text-slate-900 p-2 rounded-lg"
                           />
                         </div>
                       </div>
@@ -899,7 +985,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                             rows={4}
                             value={genelAciklama}
                             onChange={(e) => setGenelAciklama(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 text-white p-3 rounded-lg text-xs leading-relaxed"
+                            className="w-full bg-white border border-slate-200 text-slate-900 p-3 rounded-lg text-xs leading-relaxed"
                             placeholder="Evrakın kime teslim edildiği, içeriği veya takip kargo numarası vb..."
                           />
                         </div>
@@ -907,11 +993,11 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                     )}
 
                     {/* Buttons */}
-                    <div className="flex justify-end gap-2.5 border-t border-slate-800 pt-4 mt-6">
+                    <div className="flex justify-end gap-2.5 border-t border-slate-200 pt-4 mt-6">
                       <button
                         type="button"
                         onClick={() => setApprovalStep('SELECT_METHOD')}
-                        className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs py-2.5 px-5 rounded-xl transition"
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 px-5 rounded-xl transition"
                       >
                         Geri
                       </button>
@@ -932,14 +1018,16 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
       )}
 
       {/* 4. GÖRSEL YAKINLAŞTIRMA OVERLAY MODALI */}
-      {isZoomed && activeGateDoc && activeGateDoc.fotoUrl && (
-        <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4">
-          <div className="absolute top-4 right-4 flex items-center gap-3">
+      {(isZoomed && activeGateDoc?.fotoUrl) || cardZoomUrl ? (
+        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center p-4">
+          <div className="absolute top-4 right-4 flex items-center gap-3 z-10">
             <button
               onClick={() => {
+                const src = cardZoomUrl || activeGateDoc?.fotoUrl;
+                if (!src) return;
                 const link = document.createElement('a');
-                link.href = activeGateDoc.fotoUrl;
-                link.download = activeGateDoc.fileName || 'evrak.png';
+                link.href = src;
+                link.download = cardZoomName || activeGateDoc?.fileName || 'evrak.png';
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
@@ -950,26 +1038,35 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
               <span>İndir</span>
             </button>
             <button
-              onClick={() => setIsZoomed(false)}
-              className="bg-slate-800 hover:bg-slate-750 text-white p-2 rounded-xl transition shadow-lg cursor-pointer border-0"
+              onClick={() => {
+                setIsZoomed(false);
+                setCardZoomUrl(null);
+              }}
+              className="bg-white hover:bg-slate-100 text-slate-800 p-2 border border-slate-200 rounded-xl transition shadow-lg cursor-pointer"
               title="Kapat"
             >
               <X size={20} />
             </button>
           </div>
-          <div className="max-w-5xl max-h-[85vh] overflow-auto flex items-center justify-center p-2 rounded-2xl bg-slate-900/50 border border-slate-800">
+          <div className="max-w-5xl max-h-[85vh] overflow-auto flex items-center justify-center p-2 rounded-2xl bg-white border border-slate-200 shadow-xl">
             <img
-              src={activeGateDoc.fotoUrl}
+              src={cardZoomUrl || activeGateDoc?.fotoUrl}
               alt="Evrak Zoomed"
               className="max-w-full max-h-[80vh] object-contain rounded-lg"
             />
           </div>
-          <span className="text-slate-400 text-xs mt-3 font-semibold font-mono">
-            {activeGateDoc.fileName || 'Belge Görseli'} (Tıklayarak veya sağ üstteki X butonu ile kapatabilirsiniz)
+          <span className="text-slate-600 text-xs mt-3 font-semibold font-mono bg-white/90 px-3 py-1 rounded-lg border border-slate-200">
+            {cardZoomName || activeGateDoc?.fileName || 'Belge Görseli'}
           </span>
-          <div className="absolute inset-0 -z-10 cursor-zoom-out" onClick={() => setIsZoomed(false)} />
+          <div
+            className="absolute inset-0 -z-10 cursor-zoom-out"
+            onClick={() => {
+              setIsZoomed(false);
+              setCardZoomUrl(null);
+            }}
+          />
         </div>
-      )}
+      ) : null}
     </div>
   );
 };
