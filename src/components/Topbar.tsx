@@ -64,6 +64,7 @@ export const Topbar: React.FC<TopbarProps> = ({
     const labels: { [key: string]: string } = {
       personel: "Personel Yönetimi",
       yoklama: "Yoklama ve Puantaj",
+      faaliyet_personel: "Faaliyeti Olan Personeller",
       maas: "Maaş Hesaplama",
       personel_izin: "Personel İzin Formu",
       satin_alma: "Satın Alma Talep",

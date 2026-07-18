@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, ChevronRight, LayoutDashboard, Users, CreditCard, Tent, Truck, Settings } from 'lucide-react';
+import { Search, ChevronRight, LayoutDashboard, Users, CreditCard, Tent, Truck, Settings, Camera } from 'lucide-react';
 
 interface CommandPaletteProps {
   onSelect: (route: string) => void;
@@ -36,6 +36,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ onSelect }) => {
     { key: 'ana_sayfa', label: 'Dashboard Ana Sayfa', icon: <LayoutDashboard size={16} /> },
     { key: 'personel', label: 'Personel Yönetimi', icon: <Users size={16} /> },
     { key: 'yoklama', label: 'Yoklama & Puantaj', icon: <Users size={16} /> },
+    { key: 'faaliyet_personel', label: 'Faaliyeti Olan Personeller', icon: <Camera size={16} /> },
     { key: 'maas', label: 'Maaş Hesaplama', icon: <CreditCard size={16} /> },
     { key: 'satin_alma', label: 'Satın Alma', icon: <CreditCard size={16} /> },
     { key: 'kamp', label: 'Kamp Yönetimi', icon: <Tent size={16} /> },
