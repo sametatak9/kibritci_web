@@ -12,6 +12,7 @@ import { compressImage } from '../lib/imageCompress';
 import { wrapCorporateReportHtml } from '../lib/corporateReportHtml';
 import { firmaEslesir, getTaseronCariKartlar } from '../lib/taseronUtils';
 import { todayDateKey } from '../lib/dateKeyUtils';
+import { installReportEmailGlobalBridge, openReportEmailComposer } from '../lib/reportEmail';
 
 const cell = (v: unknown) => {
   const s = v == null ? '' : String(v).trim();
@@ -446,8 +447,9 @@ export const HazirTutanakTab: React.FC<HazirTutanakTabProps> = ({
       docCode: ht.belgeNo,
       orientation: 'portrait',
       title: `${ht.belgeNo} — ${ht.konu}`,
-      autoPrint: true,
+      autoPrint: false,
     });
+    installReportEmailGlobalBridge();
     const w = window.open('', '_blank');
     if (!w) {
       alert('Pop-up engellendi. Rapor için tarayıcıda pencereye izin verin.');
@@ -455,6 +457,21 @@ export const HazirTutanakTab: React.FC<HazirTutanakTabProps> = ({
     }
     w.document.write(html);
     w.document.close();
+  };
+
+  const handleEmailReport = (ht: HazirTutanak) => {
+    const muhatap = resolveMuhatapLabel(ht);
+    const kalemOzet = (ht.kalemler || [])
+      .map(
+        (k, i) =>
+          `${i + 1}) ${k.malzemeAdi} · ${k.miktar ?? ''} ${k.cinsi || ''}${k.aciklama ? ` (${k.aciklama})` : ''}`
+      )
+      .join('\n');
+    openReportEmailComposer({
+      subject: `Kibritçi — ${ht.belgeNo} ${ht.konu}`,
+      body: `${ht.tutanakTipi} tutanağı\nBelge: ${ht.belgeNo}\nTarih: ${ht.tarih}\nTaşeron: ${ht.taseronAdi || '-'}\nMuhatap: ${muhatap || '-'}\n\n${kalemOzet || ht.icerik || ''}`,
+      fileName: `${ht.belgeNo}.html`,
+    });
   };
 
   const filtered = useMemo(() => {
@@ -885,17 +902,13 @@ export const HazirTutanakTab: React.FC<HazirTutanakTabProps> = ({
                     />
                   </label>
 
-                  {(ht.imzaliEvrakUrl || ht.durum === 'ONAYLANDI') && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        alert(`${ht.belgeNo} e-posta ile merkez ofise gönderildi (simülasyon).`)
-                      }
-                      className="bg-sky-600 text-white font-bold py-1 px-2.5 rounded-lg cursor-pointer flex items-center gap-1"
-                    >
-                      <Send size={11} /> E-Posta
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleEmailReport(ht)}
+                    className="bg-sky-600 text-white font-bold py-1 px-2.5 rounded-lg cursor-pointer flex items-center gap-1"
+                  >
+                    <Send size={11} /> E-posta
+                  </button>
 
                   <button
                     type="button"

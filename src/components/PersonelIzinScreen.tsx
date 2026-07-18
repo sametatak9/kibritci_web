@@ -6,6 +6,7 @@ import { db } from '../lib/firebase';
 import { CorporateReportLayout } from './CorporateReportLayout';
 import { collection, query, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { HazirTutanakTab } from './HazirTutanakTab';
+import { ReportEmailButton } from './ReportEmailButton';
 
 interface IzinFormu {
   id: string;
@@ -687,7 +688,20 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({
               </div>
             </div>
 
-            <div className="p-4 border-t bg-slate-50 flex justify-end gap-3 shrink-0">
+            <div className="p-4 border-t bg-slate-50 flex flex-wrap justify-end gap-3 shrink-0">
+              <ReportEmailButton
+                className="bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs py-2 px-4 rounded-xl flex items-center space-x-1 cursor-pointer"
+                payload={() => {
+                  const printContent = document.getElementById('izin-print-area')?.innerHTML || '';
+                  const htmlSnippet = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>İzin Formu</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-white p-8">${printContent}</body></html>`;
+                  return {
+                    subject: `Kibritçi — Personel İzin Formu — ${selectedIzinForPdf.personelIsim}`,
+                    body: `Personel: ${selectedIzinForPdf.personelIsim}\nUnvan: ${selectedIzinForPdf.unvan}\nİzin: ${selectedIzinForPdf.izinTipi}\nTarih: ${selectedIzinForPdf.baslangicTarihi} – ${selectedIzinForPdf.bitisTarihi}\nGün: ${selectedIzinForPdf.toplamGun}\nAçıklama: ${selectedIzinForPdf.aciklama || '-'}`,
+                    html: htmlSnippet,
+                    fileName: `Kibritci_IzinFormu_${selectedIzinForPdf.personelIsim.replace(/\s+/g, '_')}.html`,
+                  };
+                }}
+              />
               <button 
                 onClick={() => {
                   const printContent = document.getElementById('izin-print-area')?.innerHTML;

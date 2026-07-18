@@ -346,10 +346,15 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
   const handleRaporGonder = (rapor: TaseronKesintiRaporu) => {
     const konu = `Kibritçi İnşaat - ${rapor.taseronFirmaAdi} ${rapor.donemAy}/${rapor.donemYil} Kesinti Raporu`;
     const icerik = `Sayın Yetkili,\n\n${rapor.donemAy}/${rapor.donemYil} dönemine ait iş makinesi kesinti raporu:\n\nFirma: ${rapor.taseronFirmaAdi}\nToplam Saat: ${rapor.toplamSaat.toFixed(1)} saat\nSaatlik Ücret: ${rapor.saatlikUcret} TL\nKesinti Tutarı: ${rapor.kesintiTutari.toFixed(2)} TL\n\nFaaliyetler:\n${rapor.faaliyetler.map(f => `- ${f.tarih}: ${f.yapilanIs} (${f.calismaSuresi.toFixed(1)} saat)`).join('\n')}\n\nSaygılarımızla,\nKibritçi İnşaat Taahhüt A.Ş.`;
-    
-    const mailto = `mailto:?subject=${encodeURIComponent(konu)}&body=${encodeURIComponent(icerik)}`;
-    window.open(mailto, '_blank');
-    
+
+    void import('../lib/reportEmail').then(({ openReportEmailComposer }) => {
+      openReportEmailComposer({
+        subject: konu,
+        body: icerik,
+        fileName: `Kibritci_Kesinti_${rapor.taseronFirmaAdi}_${rapor.donemAy}_${rapor.donemYil}.html`,
+      });
+    });
+
     setTaseronKesintiRaporlari(prev => prev.map(r => 
       r.id === rapor.id ? { ...r, onayDurumu: 'GONDERILDI' as const, epostaGonderildi: true, gonderimTarihi: new Date().toISOString() } : r
     ));

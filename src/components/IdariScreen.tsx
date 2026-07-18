@@ -1928,14 +1928,18 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       notlar: "E-posta istemcisi tetiklendi ve başarıyla ulaştırıldı."
     };
 
-    // Trigger standard native mail client with the predefined subject and template content!
-    const emailBody = encodeURIComponent(`Sayın Yetkili,\n\nKibritçi ERP Dijital Portalı üzerinden oluşturulan "${mailSubject}" başlıklı ve ${mailModul} modülüne ait rapor eki ekte bilginize sunulmuştur.\n\nBilgilerinize sunar, iyi çalışmalar dileriz.\n\nKibritçi İnşaat Sanayi ve Ticaret A.Ş.\nERP Otomasyon Merkezi`);
-    window.open(`mailto:${mailTo}?subject=${encodeURIComponent(mailSubject)}&body=${emailBody}`, '_self');
+    void import('../lib/reportEmail').then(({ openReportEmailComposer }) => {
+      openReportEmailComposer({
+        subject: mailSubject,
+        defaultTo: mailTo,
+        body: `Sayın Yetkili,\n\nKibritçi ERP Dijital Portalı üzerinden oluşturulan "${mailSubject}" başlıklı ve ${mailModul} modülüne ait rapor bilginize sunulmuştur.\n\nBilgilerinize sunar, iyi çalışmalar dileriz.\n\nKibritçi İnşaat Sanayi ve Ticaret A.Ş.\nERP Otomasyon Merkezi`,
+        fileName: `Kibritci_${mailModul}_${mailSubject.slice(0, 30)}.html`,
+      });
+    });
 
     setEpostaGonderimleri(prev => [newMail, ...prev]);
     setMailSubject("");
     setMailTo("");
-    alert("E-posta istemciniz başarıyla tetiklendi. Rapor gönderiliyor!");
   };
 
 

@@ -11,6 +11,8 @@ import { EvrakTabBilgi } from './EvrakTabBilgi';
 import { warnIfDuplicateStok } from '../lib/duplicateNameUtils';
 import { kibritciLogoHtml } from '../lib/kibritciBrand';
 import { wrapCorporateReportHtml } from '../lib/corporateReportHtml';
+import { getReportEmailToolbarHtml, openHtmlReportWindow } from '../lib/reportEmail';
+import { ReportEmailButton } from './ReportEmailButton';
 
 interface IrsaliyeGirisScreenProps {
   irsaliyeler: Irsaliye[];
@@ -384,12 +386,9 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
       docCode: `İRSALİYE NO: ${ir.irsaliyeNo || 'İRSALİYE'}`,
       orientation: 'portrait',
       title: `Kibritçi İnşaat - İrsaliye Raporu - ${ir.irsaliyeNo}`,
+      autoPrint: false,
     });
-
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const win = window.open(url, '_blank');
-    if (win) win.print();
+    openHtmlReportWindow(html, `İrsaliye ${ir.irsaliyeNo}`);
   };
 
   const handleIrsaliyeArchiveReport = () => {
@@ -422,6 +421,7 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
           </style>
         </head>
         <body>
+          ${getReportEmailToolbarHtml({ subject: 'İrsaliye Evrak Arşiv Raporu', fileName: 'Kibritci_Irsaliye_Arsiv.html' })}
           <div style="margin-bottom:12px;">${kibritciLogoHtml(44)}</div>
           <h1 style="font-size:14px;margin:0 0 8px;">İRSALİYE EVRAK ARŞİV RAPORU</h1>
           <p>Kayıt sayısı: ${irsaliyeler.length} • Üretim: ${new Date().toLocaleString('tr-TR')}</p>
@@ -436,10 +436,7 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
         </body>
       </html>
     `;
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const win = window.open(url, '_blank');
-    if (win) win.print();
+    openHtmlReportWindow(html, 'İrsaliye Evrak Arşiv Raporu');
   };
 
   return (
@@ -659,13 +656,23 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
             <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">📚 İrsaliye Evrak Arşivi</h4>
-                <button
-                  type="button"
-                  onClick={handleIrsaliyeArchiveReport}
-                  className="text-[10px] bg-slate-900 hover:bg-slate-950 text-white px-3 py-1.5 rounded-lg font-bold cursor-pointer"
-                >
-                  PDF Rapor (Yazdır)
-                </button>
+                <div className="flex items-center gap-2">
+                  <ReportEmailButton
+                    className="text-[10px] bg-sky-600 hover:bg-sky-700 text-white px-3 py-1.5 rounded-lg font-bold cursor-pointer inline-flex items-center gap-1"
+                    payload={() => ({
+                      subject: 'Kibritçi — İrsaliye Evrak Arşiv Raporu',
+                      body: `İrsaliye arşiv özeti\nKayıt sayısı: ${irsaliyeler.length}\nÜretim: ${new Date().toLocaleString('tr-TR')}`,
+                      fileName: 'Kibritci_Irsaliye_Arsiv.html',
+                    })}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleIrsaliyeArchiveReport}
+                    className="text-[10px] bg-slate-900 hover:bg-slate-950 text-white px-3 py-1.5 rounded-lg font-bold cursor-pointer"
+                  >
+                    PDF Rapor (Yazdır)
+                  </button>
+                </div>
               </div>
               <p className="text-xs text-slate-500 leading-relaxed">
                 İrsaliye belgelerinizi burada arşivleyip tek ekrandan raporlayabilirsiniz.

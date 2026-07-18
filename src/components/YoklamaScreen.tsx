@@ -1793,6 +1793,26 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.querySelector('.printable-document');
+                    const html = el
+                      ? `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Yoklama / Maaş Raporu</title></head><body>${el.innerHTML}</body></html>`
+                      : undefined;
+                    void import('../lib/reportEmail').then(({ openReportEmailComposer }) => {
+                      openReportEmailComposer({
+                        subject: 'Kibritçi — Yoklama / Puantaj Raporu',
+                        body: 'Yoklama ve puantaj raporu ekte / mesaj gövdesinde sunulmuştur.',
+                        html,
+                        fileName: 'Kibritci_Yoklama_Raporu.html',
+                      });
+                    });
+                  }}
+                  className="bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow cursor-pointer"
+                >
+                  📧 E-posta ile Gönder
+                </button>
+                <button
                   onClick={handlePrint}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow cursor-pointer"
                 >

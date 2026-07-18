@@ -908,15 +908,15 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
       orientation: 'portrait',
       title: `ONAYLI BELGE - ${code}`,
       extraCss: onayExtraCss,
+      autoPrint: false,
     });
 
-    const printWin = window.open("", "_blank");
-    if (printWin) {
-      printWin.document.write(htmlContent);
-      printWin.document.close();
-    } else {
-      alert("Lütfen baskı pencerelerini açabilmek için tarayıcınızın pop-up engelleyicisini devre dışı bırakın.");
-    }
+    void import('../lib/reportEmail').then(({ openHtmlReportWindow }) => {
+      const printWin = openHtmlReportWindow(htmlContent, `ONAYLI BELGE - ${code}`);
+      if (!printWin) {
+        alert('Lütfen baskı pencerelerini açabilmek için tarayıcınızın pop-up engelleyicisini devre dışı bırakın.');
+      }
+    });
   };
 
   // Custom states for view / detail modal in Approvals Screen

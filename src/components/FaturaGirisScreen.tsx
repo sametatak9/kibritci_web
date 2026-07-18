@@ -10,6 +10,8 @@ import { fileToAiPayload } from '../lib/aiFileUpload';
 import { faturaIsLinked } from '../lib/documentLinkUtils';
 import { EvrakTabBilgi } from './EvrakTabBilgi';
 import { kibritciLogoHtml } from '../lib/kibritciBrand';
+import { getReportEmailToolbarHtml, openHtmlReportWindow } from '../lib/reportEmail';
+import { ReportEmailButton } from './ReportEmailButton';
 
 interface FaturaGirisScreenProps {
   faturalar: Fatura[];
@@ -423,10 +425,14 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
         </body>
       </html>
     `;
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const win = window.open(url, '_blank');
-    if (win) win.print();
+    const withToolbar = htmlContent.replace(
+      '<body>',
+      `<body>${getReportEmailToolbarHtml({
+        subject: `Kibritçi Fatura — ${ft.faturaNo || ''}`,
+        fileName: `Kibritci_Fatura_${ft.faturaNo || 'rapor'}.html`,
+      })}`
+    );
+    openHtmlReportWindow(withToolbar, `Fatura ${ft.faturaNo}`);
   };
 
   const handleFaturaArchiveReport = () => {
@@ -460,6 +466,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
           </style>
         </head>
         <body>
+          ${getReportEmailToolbarHtml({ subject: 'Fatura Evrak Arşiv Raporu', fileName: 'Kibritci_Fatura_Arsiv.html' })}
           <div style="margin-bottom:12px;">${kibritciLogoHtml(44)}</div>
           <h1 style="font-size:14px;margin:0 0 8px;">FATURA EVRAK ARŞİV RAPORU</h1>
           <p>Kayıt sayısı: ${faturalar.length} • Üretim: ${new Date().toLocaleString('tr-TR')}</p>
@@ -474,10 +481,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
         </body>
       </html>
     `;
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const win = window.open(url, '_blank');
-    if (win) win.print();
+    openHtmlReportWindow(html, 'Fatura Evrak Arşiv Raporu');
   };
 
   const bagimsizFaturalar = faturalar.filter(ft => !faturaIsLinked(ft));
@@ -703,13 +707,23 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
             <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">📚 Fatura Evrak Arşivi</h4>
-                <button
-                  type="button"
-                  onClick={handleFaturaArchiveReport}
-                  className="text-[10px] bg-slate-900 hover:bg-slate-950 text-white px-3 py-1.5 rounded-lg font-bold cursor-pointer"
-                >
-                  PDF Rapor (Yazdır)
-                </button>
+                <div className="flex items-center gap-2">
+                  <ReportEmailButton
+                    className="text-[10px] bg-sky-600 hover:bg-sky-700 text-white px-3 py-1.5 rounded-lg font-bold cursor-pointer inline-flex items-center gap-1"
+                    payload={() => ({
+                      subject: 'Kibritçi — Fatura Evrak Arşiv Raporu',
+                      body: `Fatura arşiv özeti\nKayıt sayısı: ${faturalar.length}\nÜretim: ${new Date().toLocaleString('tr-TR')}`,
+                      fileName: 'Kibritci_Fatura_Arsiv.html',
+                    })}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleFaturaArchiveReport}
+                    className="text-[10px] bg-slate-900 hover:bg-slate-950 text-white px-3 py-1.5 rounded-lg font-bold cursor-pointer"
+                  >
+                    PDF Rapor (Yazdır)
+                  </button>
+                </div>
               </div>
               <div className="max-h-64 overflow-auto border border-slate-100 rounded-xl">
                 <table className="w-full text-[11px]">

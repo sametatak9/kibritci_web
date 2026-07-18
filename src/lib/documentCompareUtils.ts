@@ -128,9 +128,20 @@ export function saveComparisonReports(key: string, reports: unknown[]) {
   localStorage.setItem(key, JSON.stringify(reports));
 }
 
-export function sendReportEmail(report: { status: string; report: string; faturaNo?: string; saId?: string }, subject: string) {
-  const body = encodeURIComponent(
-    `Kibritçi İnşaat — ${subject}\n\nDurum: ${report.status}\n\n${report.report}\n\n---\nBu rapor ERP sisteminden gönderilmiştir.`
-  );
-  window.open(`mailto:santiye@kibritci.com?subject=${encodeURIComponent(subject)}&body=${body}`, '_blank');
+export function sendReportEmail(
+  report: { status: string; report: string; faturaNo?: string; saId?: string } | string,
+  subject: string
+) {
+  const text =
+    typeof report === 'string'
+      ? report
+      : `Kibritçi İnşaat — ${subject}\n\nDurum: ${report.status}\n\n${report.report}\n\n---\nBu rapor ERP sisteminden gönderilmiştir.`;
+  void import('./reportEmail').then(({ openReportEmailComposer }) => {
+    openReportEmailComposer({
+      subject,
+      body: text,
+      defaultTo: typeof report === 'string' ? '' : 'santiye@kibritci.com',
+      fileName: `Kibritci_${subject.replace(/[^\w.\-]+/g, '_').slice(0, 40)}.txt`,
+    });
+  });
 }
