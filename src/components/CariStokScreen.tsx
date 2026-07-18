@@ -146,12 +146,17 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
         const waybillsSnap = await getDocs(collection(db, 'irsaliyeler'));
         waybillsSnap.forEach((docSnap) => {
           const data = docSnap.data();
-          if (data.firma?.toLowerCase() === name.toLowerCase()) {
+          const firmaMatch =
+            String(data.firma || '').toLowerCase() === name.toLowerCase();
+          const cariIdMatch = Boolean(data.cariKartId && data.cariKartId === id);
+          if (firmaMatch || cariIdMatch) {
             logs.push({
               id: docSnap.id,
               type: 'İRSALİYE',
               title: `İrsaliye: ${data.irsaliyeNo || 'İRS-KOD'}`,
-              desc: `Durum: ${data.onayDurumu}${data.kaynak ? ` · Kaynak: ${data.kaynak}` : ''}`,
+              desc: `Durum: ${data.onayDurumu}${data.kaynak ? ` · Kaynak: ${data.kaynak}` : ''}${
+                data.plaka ? ` · ${data.plaka}` : ''
+              }${data.cekimAdedi != null ? ` · ${data.cekimAdedi} çekim` : ''}`,
               date: data.tarih || '',
               badgeColor: 'bg-amber-100 text-amber-800',
             });

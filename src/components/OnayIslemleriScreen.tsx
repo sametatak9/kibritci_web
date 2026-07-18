@@ -4,7 +4,7 @@ import {
   Truck, CreditCard, ChevronRight, PenTool, Check, CheckCircle2, UserCheck, Eye, Trash2,
   FileUp, ExternalLink, MessageSquare, AlertTriangle, Sparkles, Package, Tent, X
 } from 'lucide-react';
-import { SatinAlmaTalebi, Irsaliye, Fatura } from '../types/erp';
+import { SatinAlmaTalebi, Irsaliye, Fatura, CariKart, CariKartIslem } from '../types/erp';
 import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { collection, doc, setDoc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
@@ -19,6 +19,7 @@ import {
 import { wrapCorporateReportHtml } from '../lib/corporateReportHtml';
 import { fetchApiJson } from '../lib/apiClient';
 import { GuvenlikEvrakOnayHavuzu } from './GuvenlikEvrakOnayHavuzu';
+import { VidanjorFisOnayPanel } from './VidanjorFisOnayPanel';
 import { KibritciLogo } from './KibritciLogo';
 
 interface OnayIslemleriScreenProps {
@@ -32,7 +33,10 @@ interface OnayIslemleriScreenProps {
   currentUser: any;
   signatureText: string;
   signatureStyle: string;
-  addNotification?: (mesaj: string) => void;
+  addNotification?: (mesaj: string, meta?: Record<string, unknown>) => void | Promise<void>;
+  cariKartlar?: CariKart[];
+  setCariKartlar?: React.Dispatch<React.SetStateAction<CariKart[]>>;
+  setCariIslemGecmisi?: React.Dispatch<React.SetStateAction<CariKartIslem[]>>;
 }
 
 export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
@@ -46,7 +50,10 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   currentUser,
   signatureText,
   signatureStyle,
-  addNotification
+  addNotification,
+  cariKartlar = [],
+  setCariKartlar,
+  setCariIslemGecmisi,
 }) => {
   const [activeTab, setActiveTab] = useState<'satin_alma' | 'guvenlik_belgeleri' | 'kampci_belgeleri' | 'formen_belgeleri' | 'gunluk_loglar' | 'sofor_talepleri' | 'depocu_talepleri' | 'gecmis' | 'imzalar' | 'anahtarci_tutanaklari'>('satin_alma');
   const [selectedYoneticiEmail, setSelectedYoneticiEmail] = useState<string>('');
@@ -986,9 +993,26 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   const pendingSayimCount = depoSayimTalepleri.length;
   const pendingDepocuCount = pendingStokCount + pendingSayimCount;
 
-  const pendingGateDocs = gelenEvraklar.filter(x => x.durum === 'BEKLEMEDE');
+  // Vidanjör fişleri özel panelde onaylanır — genel güvenlik sihirbazına düşmesin
+  const pendingGateDocs = gelenEvraklar.filter(
+    (x) => x.durum === 'BEKLEMEDE' && x.kaynak !== 'VIDANJOR_FIS'
+  );
+  const pendingVidanjorGateCount = gelenEvraklar.filter(
+    (x) => x.durum === 'BEKLEMEDE' && x.kaynak === 'VIDANJOR_FIS'
+  ).length;
 
-  const totalPendingCount = pendingRequests.length + pendingWaybills.length + pendingInvoices.length + pendingPersonelCount + pendingKampSayimlar.length + pendingKampFaaliyetler.length + pendingGunlukAkis.length + pendingSoforCount + pendingDepocuCount + pendingGateDocs.length;
+  const totalPendingCount =
+    pendingRequests.length +
+    pendingWaybills.length +
+    pendingInvoices.length +
+    pendingPersonelCount +
+    pendingKampSayimlar.length +
+    pendingKampFaaliyetler.length +
+    pendingGunlukAkis.length +
+    pendingSoforCount +
+    pendingDepocuCount +
+    pendingGateDocs.length +
+    pendingVidanjorGateCount;
 
   // Gecmis onaylar list (approved or updated documents)
   const approvedRequests = satinAlmaTalepleri.filter(doc => doc.onayDurumu.includes('TAMAMLANDI') || doc.onayDurumu === 'ONAYLANDI' || doc.onayDurumu === 'DİJİTAL ONAYLANDI');
@@ -1522,7 +1546,11 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
               className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'kampci_belgeleri' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <span className="flex items-center space-x-2"><Package size={13} className={activeTab === 'kampci_belgeleri' ? 'text-white' : 'text-slate-600'} /> <span>Kampçı Belgeleri</span></span>
-              {(pendingKampSayimlar.length + pendingKampFaaliyetler.length) > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'kampci_belgeleri' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-800'}`}>{pendingKampSayimlar.length + pendingKampFaaliyetler.length}</span>}
+              {(pendingKampSayimlar.length + pendingKampFaaliyetler.length + pendingVidanjorGateCount) > 0 && (
+                <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'kampci_belgeleri' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-800'}`}>
+                  {pendingKampSayimlar.length + pendingKampFaaliyetler.length + pendingVidanjorGateCount}
+                </span>
+              )}
             </button>
 
             <button 
@@ -1722,6 +1750,15 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
           {activeTab === 'kampci_belgeleri' && (
             <div className="space-y-6">
+              <VidanjorFisOnayPanel
+                currentUser={currentUser}
+                cariKartlar={cariKartlar}
+                setCariKartlar={setCariKartlar}
+                setIrsaliyeler={setIrsaliyeler}
+                setCariIslemGecmisi={setCariIslemGecmisi}
+                addNotification={addNotification}
+              />
+
               <div className="border bg-slate-950 p-4.5 rounded-2xl border-slate-800/80 flex justify-between items-center text-xs">
                 <div className="space-y-1">
                   <span className="text-slate-700 font-bold block text-[11px] tracking-widest uppercase">🏕️ KAMPÇI BELGELERİ (AMİRLİK &amp; DEPO SAYIMI)</span>

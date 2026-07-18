@@ -2799,6 +2799,9 @@ export default function App() {
                   signatureText={signatureText}
                   signatureStyle={signatureStyle}
                   addNotification={addNotification}
+                  cariKartlar={cariKartlar}
+                  setCariKartlar={setCariKartlarWithSync}
+                  setCariIslemGecmisi={setCariIslemGecmisiWithSync}
                 />
               )}
 
