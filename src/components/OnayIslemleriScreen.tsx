@@ -1622,20 +1622,20 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           
           {activeTab === 'satin_alma' && (
             <div className="space-y-6">
-              <div className="border bg-slate-950 p-4.5 rounded-2xl border-slate-800/80 flex justify-between items-center text-xs">
+              <div className="border bg-white p-4.5 rounded-2xl border-slate-200 flex justify-between items-center text-xs">
                 <div className="space-y-1">
                   <span className="text-amber-500 font-bold block text-[11px] tracking-widest uppercase">🛒 SATIN ALMA TALEPLERİ</span>
-                  <p className="text-slate-405 leading-relaxed text-[11px]">
+                  <p className="text-slate-500 leading-relaxed text-[11px]">
                     Sisteme düşen satın alma taleplerini inceleyerek dijital imzanızla onaylayabilir veya reddedebilirsiniz.
                   </p>
                 </div>
               </div>
 
               {pendingRequests.length === 0 ? (
-                <div className="bg-slate-950 rounded-3xl p-15 text-center flex flex-col items-center justify-center space-y-4 border border-slate-800/50">
+                <div className="bg-white rounded-3xl p-15 text-center flex flex-col items-center justify-center space-y-4 border border-slate-200">
                   <span className="text-4xl">🎉</span>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-200">Onay bekleyen satın alma talebi bulunmuyor.</h3>
+                    <h3 className="text-sm font-bold text-slate-800">Onay bekleyen satın alma talebi bulunmuyor.</h3>
                     <p className="text-xs text-slate-500 mt-1">Sistem tamamen güncel ve mutabıktır.</p>
                   </div>
                 </div>
@@ -1644,25 +1644,25 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                   {/* Satın Alma Talepleri Grid */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {pendingRequests.map(doc => (
-                      <div key={doc.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition space-y-3">
+                      <div key={doc.id} className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col justify-between hover:border-slate-300 transition space-y-3">
                         <div>
                           <div className="flex justify-between items-start">
-                            <span className="font-mono bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                            <span className="font-mono bg-amber-500/10 border border-amber-500/20 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-md">
                               {doc.saId || 'KOD BELİRTİLMEDİ'}
                             </span>
                             <span className="text-[10px] text-slate-500 font-mono font-bold">{doc.tarih}</span>
                           </div>
-                          <p className="text-xs text-slate-200 font-bold mt-2.5">Tedarikçi Firma: {doc.cariFirma}</p>
+                          <p className="text-xs text-slate-800 font-bold mt-2.5">Tedarikçi Firma: {doc.cariFirma}</p>
                           <p className="text-[10.5px] text-slate-400 mt-1 italic">Talep Eden: {doc.talepEden}</p>
-                          {doc.aciklama && <p className="text-[10.5px] text-slate-505 mt-1 truncate">Notlar: {doc.aciklama}</p>}
+                          {doc.aciklama && <p className="text-[10.5px] text-slate-500 mt-1 truncate">Notlar: {doc.aciklama}</p>}
                           
-                          <div className="mt-2.5 pt-2 border-t border-slate-800">
+                          <div className="mt-2.5 pt-2 border-t border-slate-200">
                             <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block mb-1">Talep Kalemleri</span>
                             <div className="space-y-1 text-[10px] font-mono text-slate-400">
                               {doc.kalemler?.slice(0, 3).map((k, idx) => (
                                 <div key={k.id || idx} className="flex justify-between">
                                   <span className="truncate max-w-[150px]">{k.urunAdi}</span>
-                                  <span className="text-white font-bold">{k.miktar} {k.birim}</span>
+                                  <span className="text-slate-800 font-bold">{k.miktar} {k.birim}</span>
                                 </div>
                               ))}
                               {doc.kalemler?.length > 3 && <div className="text-[9px] text-slate-500">+ {doc.kalemler.length - 3} kalem daha</div>}
@@ -1670,10 +1670,10 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                           </div>
                         </div>
 
-                        <div className="flex gap-2 pt-2.5 border-t border-slate-900">
+                        <div className="flex gap-2 pt-2.5 border-t border-slate-100">
                           <button 
                             onClick={() => setActiveDocForDetail({ id: doc.id, type: 'request', data: doc })}
-                            className="flex-1 bg-slate-900 border border-slate-800 hover:bg-slate-800 hover:border-slate-705 text-white py-1.5 px-3 rounded-lg text-[10px] font-black tracking-wiest transition flex items-center justify-center space-x-1"
+                            className="flex-1 bg-slate-50 border border-slate-200 hover:bg-slate-100 hover:border-slate-300 text-slate-800 py-1.5 px-3 rounded-lg text-[10px] font-black tracking-wiest transition flex items-center justify-center space-x-1"
                           >
                             <Eye size={11} />
                             <span>Detay İncele</span>
@@ -1783,20 +1783,20 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                 addNotification={addNotification}
               />
 
-              <div className="border bg-slate-950 p-4.5 rounded-2xl border-slate-800/80 flex justify-between items-center text-xs">
+              <div className="border bg-white p-4.5 rounded-2xl border-slate-200 flex justify-between items-center text-xs">
                 <div className="space-y-1">
                   <span className="text-slate-700 font-bold block text-[11px] tracking-widest uppercase">🏕️ KAMPÇI BELGELERİ (AMİRLİK &amp; DEPO SAYIMI)</span>
-                  <p className="text-slate-405 leading-relaxed text-[11px]">
+                  <p className="text-slate-500 leading-relaxed text-[11px]">
                     Kamp sorumlusu tarafından gönderilen depo stok mutabakatları ile şantiye içi günlük kamp faaliyet raporları.
                   </p>
                 </div>
               </div>
 
               {(pendingKampSayimlar.length === 0 && pendingKampFaaliyetler.length === 0) ? (
-                <div className="bg-slate-950 rounded-3xl p-15 text-center flex flex-col items-center justify-center space-y-4 border border-slate-800/50">
+                <div className="bg-white rounded-3xl p-15 text-center flex flex-col items-center justify-center space-y-4 border border-slate-200">
                   <span className="text-4xl">🎉</span>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-200">Onay bekleyen kamp amirliği veya depo belgesi bulunmuyor.</h3>
+                    <h3 className="text-sm font-bold text-slate-800">Onay bekleyen kamp amirliği veya depo belgesi bulunmuyor.</h3>
                     <p className="text-xs text-slate-500 mt-1">Sistem tamamen güncel ve mutabıktır.</p>
                   </div>
                 </div>
@@ -1805,7 +1805,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                   {/* Kamp Depo Sayımları Grid */}
                   {pendingKampSayimlar.length > 0 && (
                     <div className="space-y-3">
-                      <h3 className="font-display font-black text-xs text-slate-350 tracking-wider flex items-center space-x-2 uppercase">
+                      <h3 className="font-display font-black text-xs text-slate-600 tracking-wider flex items-center space-x-2 uppercase">
                         <Package size={14} className="text-slate-600" />
                         <span>Kamp Depo Sayım Onayları ({pendingKampSayimlar.length})</span>
                       </h3>
@@ -1814,7 +1814,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                         {pendingKampSayimlar.map(doc => {
                           const view = normalizeKampSayimForDisplay(doc);
                           return (
-                          <div key={doc.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition space-y-3">
+                          <div key={doc.id} className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col justify-between hover:border-slate-300 transition space-y-3">
                             <div>
                               <div className="flex justify-between items-start">
                                 <span className="font-mono bg-slate-500/10 border border-slate-200/20 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded-md">
@@ -1822,25 +1822,25 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                                 </span>
                                 <span className="text-[10px] text-slate-500 font-mono font-bold">{doc.tarih}</span>
                               </div>
-                              <p className="text-xs text-slate-200 font-bold mt-2.5">Kamp Alanı: {view.kampAdi}</p>
+                              <p className="text-xs text-slate-800 font-bold mt-2.5">Kamp Alanı: {view.kampAdi}</p>
                               <p className="text-[10.5px] text-slate-400 mt-1">Sayan: {view.sayanPersonel}</p>
-                              <p className="text-[10px] text-amber-400/80 mt-0.5">Gönderen: {view.kaydeden}</p>
+                              <p className="text-[10px] text-amber-700/80 mt-0.5">Gönderen: {view.kaydeden}</p>
                               
-                              <div className="mt-2.5 p-2 bg-slate-900 rounded border border-slate-800 space-y-1.5">
-                                <div className="text-[10px] font-bold text-slate-400 border-b border-slate-800 pb-1 flex justify-between">
+                              <div className="mt-2.5 p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5">
+                                <div className="text-[10px] font-bold text-slate-400 border-b border-slate-200 pb-1 flex justify-between">
                                   <span>Malzeme / Stok</span>
                                   <span>Miktar</span>
                                 </div>
                                 {Object.entries(view.sayimlar).map(([malzeme, miktar]) => (
-                                  <div key={malzeme} className="text-[10px] font-mono text-slate-300 flex justify-between">
+                                  <div key={malzeme} className="text-[10px] font-mono text-slate-600 flex justify-between">
                                     <span>{malzeme}</span>
-                                    <span className="font-bold text-white">{miktar}</span>
+                                    <span className="font-bold text-slate-800">{miktar}</span>
                                   </div>
                                 ))}
                               </div>
                             </div>
 
-                            <div className="flex gap-2 pt-2.5 border-t border-slate-900">
+                            <div className="flex gap-2 pt-2.5 border-t border-slate-100">
                               <button 
                                 onClick={() => handleRejectKampItem('sayim', doc.id)}
                                 className="flex-1 bg-red-950 hover:bg-red-900 border border-red-900/30 text-red-300 py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1"
@@ -1850,7 +1850,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                               </button>
                               <button 
                                 onClick={() => handleApproveKampItem('sayim', doc.id)}
-                                className="flex-1 bg-slate-900 hover:bg-slate-900 active:scale-95 text-white py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1"
+                                className="flex-1 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1"
                               >
                                 <Check size={11} />
                                 <span>Onayla</span>
@@ -1865,9 +1865,9 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
                   {/* Kamp Günlük Faaliyetleri Grid */}
                   {pendingKampFaaliyetler.length > 0 && (
-                    <div className="space-y-3 pt-4 border-t border-slate-900 mt-4">
-                      <h3 className="font-display font-black text-xs text-slate-350 tracking-wider flex items-center space-x-2 uppercase">
-                        <Tent size={14} className="text-amber-400" />
+                    <div className="space-y-3 pt-4 border-t border-slate-100 mt-4">
+                      <h3 className="font-display font-black text-xs text-slate-600 tracking-wider flex items-center space-x-2 uppercase">
+                        <Tent size={14} className="text-amber-700" />
                         <span>Kamp Günlük Faaliyet Onayları ({pendingKampFaaliyetler.length})</span>
                       </h3>
 
@@ -1875,21 +1875,21 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                         {pendingKampFaaliyetler.map(doc => {
                           const view = normalizeKampFaaliyetForDisplay(doc);
                           return (
-                          <div key={doc.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition space-y-3">
+                          <div key={doc.id} className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col justify-between hover:border-slate-300 transition space-y-3">
                             <div>
                               <div className="flex justify-between items-start">
-                                <span className="font-mono bg-amber-500/10 border border-amber-200/20 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                                <span className="font-mono bg-amber-500/10 border border-amber-200/20 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-md">
                                   FAALİYET #{doc.id.substring(0,6).toUpperCase()}
                                 </span>
                                 <span className="text-[10px] text-slate-500 font-mono font-bold">{doc.tarih}</span>
                               </div>
-                              <p className="text-xs text-slate-200 font-bold mt-2.5">Kategori: {view.kategori}</p>
+                              <p className="text-xs text-slate-800 font-bold mt-2.5">Kategori: {view.kategori}</p>
                               <p className="text-[10.5px] text-slate-400 mt-1">Yerleşke: {view.yerleske || '—'}</p>
                               <p className="text-[10.5px] text-slate-400 mt-1">Açıklama: {view.aciklama}</p>
-                              <p className="text-[10px] text-amber-400/80 mt-0.5">Gönderen: {view.kaydeden}</p>
+                              <p className="text-[10px] text-amber-700/80 mt-0.5">Gönderen: {view.kaydeden}</p>
 
                               {view.photo && (
-                                <div className="mt-2.5 rounded-xl overflow-hidden border border-slate-800 aspect-video bg-slate-900 flex items-center justify-center relative group">
+                                <div className="mt-2.5 rounded-xl overflow-hidden border border-slate-200 aspect-video bg-slate-100 flex items-center justify-center relative group">
                                   <img 
                                     src={view.photo} 
                                     alt="Faaliyet" 
@@ -1900,7 +1900,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                               )}
                             </div>
 
-                            <div className="flex gap-2 pt-2.5 border-t border-slate-900">
+                            <div className="flex gap-2 pt-2.5 border-t border-slate-100">
                               <button 
                                 onClick={() => handleRejectKampItem('faaliyet', doc.id)}
                                 className="flex-1 bg-red-950 hover:bg-red-900 border border-red-900/30 text-red-300 py-1.5 px-3 rounded-lg text-[10px] font-black tracking-widest transition flex items-center justify-center space-x-1"
@@ -1929,9 +1929,9 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
           {activeTab === 'gecmis' && (
             <div className="space-y-6 animate-in fade-in duration-200">
-              <div className="bg-slate-950 p-4 border border-slate-805 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="bg-white p-4 border border-slate-200 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
                     <span>✍️ Dijital İmza ile Onaylanmış Son Belgeler Arşivi</span>
                   </h3>
                   <p className="text-[11px] text-slate-400 mt-0.5">Yönetici dijital imzası uygulanarak muhasebeye aktarılan arşiv.</p>
@@ -1942,7 +1942,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                     placeholder="Arşivde ara (Belge no, unvan, kaşe...)"
                     value={onaySearchKeyword}
                     onChange={(e) => setOnaySearchKeyword(e.target.value)}
-                    className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 font-sans focus:outline-none  w-full sm:w-64"
+                    className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 bg-white font-sans focus:outline-none  w-full sm:w-64"
                   />
                 </div>
               </div>
@@ -1953,14 +1953,14 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                   const isEditing = editingOnayStampId === doc.id;
                   const isDeleteConfirm = deleteConfirmOnayId === doc.id;
                   return (
-                    <div key={doc.id} className="bg-slate-950/60 border border-slate-800 p-4 rounded-xl flex flex-col md:flex-row md:justify-between md:items-center gap-4 text-xs">
+                    <div key={doc.id} className="bg-white border border-slate-200 p-4 rounded-xl flex flex-col md:flex-row md:justify-between md:items-center gap-4 text-xs">
                       <div className="space-y-1 flex-1">
                         <div className="flex items-center space-x-2.5 flex-wrap gap-y-1">
                           <span className="font-mono bg-slate-500/10 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded">TALEP: {doc.saId}</span>
                           <span className="text-slate-500 font-mono text-[9px] font-semibold">{doc.tarih}</span>
-                          <span className="bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-[9.5px] font-bold px-2 py-0.2 rounded">Onaylandı</span>
+                          <span className="bg-emerald-500/25 border border-emerald-500/30 text-emerald-700 text-[9.5px] font-bold px-2 py-0.2 rounded">Onaylandı</span>
                         </div>
-                        <p className="text-slate-300 font-bold mt-1">Sipariş Cari Firma: {doc.cariFirma}</p>
+                        <p className="text-slate-600 font-bold mt-1">Sipariş Cari Firma: {doc.cariFirma}</p>
                         
                         {isEditing ? (
                           <div className="flex items-center space-x-2 mt-2">
@@ -1968,7 +1968,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                               type="text"
                               value={tempStampValue}
                               onChange={(e) => setTempStampValue(e.target.value)}
-                              className="bg-slate-900 border border-slate-700 px-2 py-1 rounded text-xs text-white max-w-sm"
+                              className="bg-slate-50 border border-slate-300 px-2 py-1 rounded text-xs text-slate-800 max-w-sm bg-white"
                             />
                             <button
                               onClick={() => handleSaveUpdatedStamp('request', doc.id)}
@@ -2002,7 +2002,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                       <div className="flex items-center gap-2 flex-wrap">
                         <button
                           onClick={() => handleGenerateSignedPdf('request', doc)}
-                          className="bg-slate-900 hover:bg-slate-500 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1"
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1"
                         >
                           <FileText size={12} />
                           <span>PDF Raporu Yap</span>
@@ -2010,7 +2010,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                         
                         <button
                           onClick={() => handleUndoApproval('request', doc.id)}
-                          className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition"
+                          className="bg-slate-800 hover:bg-slate-700 text-slate-600 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition"
                           title="Onayı geri alıp bekleyenlere gönder"
                         >
                           Geri Al
@@ -2019,7 +2019,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                         <button
                           onClick={() => handleDeleteApprovedDoc('request', doc.id)}
                           className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition ${
-                            isDeleteConfirm ? 'bg-red-600 text-white animate-pulse' : 'bg-slate-900/40 text-rose-500 hover:bg-rose-950/20'
+                            isDeleteConfirm ? 'bg-red-600 text-white animate-pulse' : 'bg-rose-50 text-rose-500 hover:bg-rose-50'
                           }`}
                         >
                           {isDeleteConfirm ? 'Emin misiniz?' : 'Sil'}
@@ -2034,14 +2034,14 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                   const isEditing = editingOnayStampId === doc.id;
                   const isDeleteConfirm = deleteConfirmOnayId === doc.id;
                   return (
-                    <div key={doc.id} className="bg-slate-950/60 border border-slate-800 p-4 rounded-xl flex flex-col md:flex-row md:justify-between md:items-center gap-4 text-xs">
+                    <div key={doc.id} className="bg-white border border-slate-200 p-4 rounded-xl flex flex-col md:flex-row md:justify-between md:items-center gap-4 text-xs">
                       <div className="space-y-1 flex-1">
                         <div className="flex items-center space-x-2.5 flex-wrap gap-y-1">
-                          <span className="font-mono bg-emerald-500/10 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded">İRSALİYE: {doc.irsaliyeNo}</span>
+                          <span className="font-mono bg-emerald-500/10 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded">İRSALİYE: {doc.irsaliyeNo}</span>
                           <span className="text-slate-500 font-mono text-[9px] font-semibold">{doc.tarih}</span>
-                          <span className="bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-[9.5px] font-bold px-2 py-0.2 rounded">Onaylandı</span>
+                          <span className="bg-emerald-500/25 border border-emerald-500/30 text-emerald-700 text-[9.5px] font-bold px-2 py-0.2 rounded">Onaylandı</span>
                         </div>
-                        <p className="text-slate-300 font-bold mt-1">Şantiyeci Teslimat Noktası: {doc.firma}</p>
+                        <p className="text-slate-600 font-bold mt-1">Şantiyeci Teslimat Noktası: {doc.firma}</p>
                         
                         {isEditing ? (
                           <div className="flex items-center space-x-2 mt-2">
@@ -2049,7 +2049,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                               type="text"
                               value={tempStampValue}
                               onChange={(e) => setTempStampValue(e.target.value)}
-                              className="bg-slate-900 border border-slate-700 px-2 py-1 rounded text-xs text-white max-w-sm"
+                              className="bg-slate-50 border border-slate-300 px-2 py-1 rounded text-xs text-slate-800 max-w-sm bg-white"
                             />
                             <button
                               onClick={() => handleSaveUpdatedStamp('waybill', doc.id)}
@@ -2083,7 +2083,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                       <div className="flex items-center gap-2 flex-wrap">
                         <button
                           onClick={() => handleGenerateSignedPdf('waybill', doc)}
-                          className="bg-slate-900 hover:bg-slate-500 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1"
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1"
                         >
                           <FileText size={12} />
                           <span>PDF Raporu Yap</span>
@@ -2091,7 +2091,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                         
                         <button
                           onClick={() => handleUndoApproval('waybill', doc.id)}
-                          className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition"
+                          className="bg-slate-800 hover:bg-slate-700 text-slate-600 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition"
                           title="Onayı geri alıp bekleyenlere gönder"
                         >
                           Geri Al
@@ -2100,7 +2100,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                         <button
                           onClick={() => handleDeleteApprovedDoc('waybill', doc.id)}
                           className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition ${
-                            isDeleteConfirm ? 'bg-red-600 text-white animate-pulse' : 'bg-slate-900/40 text-rose-500 hover:bg-rose-950/20'
+                            isDeleteConfirm ? 'bg-red-600 text-white animate-pulse' : 'bg-rose-50 text-rose-500 hover:bg-rose-50'
                           }`}
                         >
                           {isDeleteConfirm ? 'Emin misiniz?' : 'Sil'}
@@ -2115,14 +2115,14 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                   const isEditing = editingOnayStampId === doc.id;
                   const isDeleteConfirm = deleteConfirmOnayId === doc.id;
                   return (
-                    <div key={doc.id} className="bg-slate-950/60 border border-slate-800 p-4 rounded-xl flex flex-col md:flex-row md:justify-between md:items-center gap-4 text-xs">
+                    <div key={doc.id} className="bg-white border border-slate-200 p-4 rounded-xl flex flex-col md:flex-row md:justify-between md:items-center gap-4 text-xs">
                       <div className="space-y-1 flex-1">
                         <div className="flex items-center space-x-2.5 flex-wrap gap-y-1">
                           <span className="font-mono bg-purple-500/10 text-purple-400 text-[10px] font-bold px-2 py-0.5 rounded">FATURA: {doc.faturaNo}</span>
                           <span className="text-slate-500 font-mono text-[9px] font-semibold">{doc.tarih}</span>
-                          <span className="bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-[9.5px] font-bold px-2 py-0.2 rounded">Yasa Uygun / Eşlendi</span>
+                          <span className="bg-emerald-500/25 border border-emerald-500/30 text-emerald-700 text-[9.5px] font-bold px-2 py-0.2 rounded">Yasa Uygun / Eşlendi</span>
                         </div>
-                        <p className="text-slate-300 font-bold mt-1">Tutar: ₺{doc.genelToplam?.toLocaleString()} ({doc.cariUnvan})</p>
+                        <p className="text-slate-600 font-bold mt-1">Tutar: ₺{doc.genelToplam?.toLocaleString()} ({doc.cariUnvan})</p>
                         
                         {isEditing ? (
                           <div className="flex items-center space-x-2 mt-2">
@@ -2130,7 +2130,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                               type="text"
                               value={tempStampValue}
                               onChange={(e) => setTempStampValue(e.target.value)}
-                              className="bg-slate-900 border border-slate-700 px-2 py-1 rounded text-xs text-white max-w-sm"
+                              className="bg-slate-50 border border-slate-300 px-2 py-1 rounded text-xs text-slate-800 max-w-sm bg-white"
                             />
                             <button
                               onClick={() => handleSaveUpdatedStamp('invoice', doc.id)}
@@ -2164,7 +2164,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                       <div className="flex items-center gap-2 flex-wrap">
                         <button
                           onClick={() => handleGenerateSignedPdf('invoice', doc)}
-                          className="bg-slate-900 hover:bg-slate-500 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1"
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1"
                         >
                           <FileText size={12} />
                           <span>PDF Raporu Yap</span>
@@ -2172,7 +2172,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                         
                         <button
                           onClick={() => handleUndoApproval('invoice', doc.id)}
-                          className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition"
+                          className="bg-slate-800 hover:bg-slate-700 text-slate-600 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition"
                           title="Onayı geri alıp bekleyenlere gönder"
                         >
                           Geri Al
@@ -2181,7 +2181,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                         <button
                           onClick={() => handleDeleteApprovedDoc('invoice', doc.id)}
                           className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition ${
-                            isDeleteConfirm ? 'bg-red-600 text-white animate-pulse' : 'bg-slate-900/40 text-rose-500 hover:bg-rose-950/20'
+                            isDeleteConfirm ? 'bg-red-600 text-white animate-pulse' : 'bg-rose-50 text-rose-500 hover:bg-rose-50'
                           }`}
                         >
                           {isDeleteConfirm ? 'Emin misiniz?' : 'Sil'}
@@ -2196,9 +2196,9 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                 )}
 
                 {/* 📋 UNIFIED İŞLEM KAYITLARI AUDIT LOG */}
-                <div className="mt-8 bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 text-xs text-slate-350">
-                  <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                    <span className="font-display font-black text-xs text-white uppercase tracking-widest block">📋 Tesis Onaylı İşlem Kayıtları (Audit Log)</span>
+                <div className="mt-8 bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 text-xs text-slate-600">
+                  <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                    <span className="font-display font-black text-xs text-slate-800 uppercase tracking-widest block">📋 Tesis Onaylı İşlem Kayıtları (Audit Log)</span>
                     <span className="bg-slate-800 text-slate-400 font-mono text-[9px] px-2 py-0.5 rounded">SİSTEM DENETİMİ</span>
                   </div>
                   <p className="text-[11px] text-slate-400">
@@ -2206,9 +2206,9 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                   </p>
                   
                   <div className="overflow-x-auto">
-                    <table className="w-full text-slate-300">
+                    <table className="w-full text-slate-600">
                       <thead>
-                        <tr className="border-b border-slate-800 text-left font-bold text-slate-500">
+                        <tr className="border-b border-slate-200 text-left font-bold text-slate-500">
                           <th className="py-2 pr-4">Tarih</th>
                           <th className="py-2 pr-4">Belge Tipi</th>
                           <th className="py-2 pr-4">Belge Referansı</th>
@@ -2217,34 +2217,34 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                           <th className="py-2 text-right">Tutar/Miktar</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-800/50 font-mono text-[11px]">
+                      <tbody className="divide-y divide-slate-200 font-mono text-[11px]">
                         {satinAlmaTalepleri.filter(doc => doc.onayDurumu === 'ONAYLANDI' || doc.onayDurumu === '2. ONAY TAMAMLANDI').map(doc => (
-                          <tr key={doc.id} className="hover:bg-slate-800/25 transition">
+                          <tr key={doc.id} className="hover:bg-slate-100/25 transition">
                             <td className="py-2 pr-4">{doc.tarih}</td>
-                            <td className="py-2 pr-4 text-amber-400 font-bold">PO (Satın Alma)</td>
+                            <td className="py-2 pr-4 text-amber-700 font-bold">PO (Satın Alma)</td>
                             <td className="py-2 pr-4">{doc.saId}</td>
                             <td className="py-2 pr-4 text-slate-400 truncate max-w-[120px]">{doc.cariFirma}</td>
-                            <td className="py-2 pr-4 text-emerald-400">{doc.onayStamp || 'Islak İmzalı / E-İmzalı'}</td>
+                            <td className="py-2 pr-4 text-emerald-700">{doc.onayStamp || 'Islak İmzalı / E-İmzalı'}</td>
                             <td className="py-2 text-right text-slate-400">{doc.kalemler?.length || 0} Kalem</td>
                           </tr>
                         ))}
                         {irsaliyeler.filter(doc => doc.onayDurumu === 'ONAYLANDI' || doc.onayDurumu.includes('TAMAMLANDI')).map(doc => (
-                          <tr key={doc.id} className="hover:bg-slate-800/25 transition">
+                          <tr key={doc.id} className="hover:bg-slate-100/25 transition">
                             <td className="py-2 pr-4">{doc.tarih}</td>
-                            <td className="py-2 pr-4 text-emerald-400 font-bold">İRSALİYE</td>
+                            <td className="py-2 pr-4 text-emerald-700 font-bold">İRSALİYE</td>
                             <td className="py-2 pr-4">{doc.irsaliyeNo}</td>
                             <td className="py-2 pr-4 text-slate-400 truncate max-w-[120px]">{doc.firma}</td>
-                            <td className="py-2 pr-4 text-emerald-400">{doc.onayStamp || 'Müdür Onaylı'}</td>
+                            <td className="py-2 pr-4 text-emerald-700">{doc.onayStamp || 'Müdür Onaylı'}</td>
                             <td className="py-2 text-right text-slate-400">{doc.kalemler?.length || 0} Kalem</td>
                           </tr>
                         ))}
                         {faturalar.filter(doc => doc.durum === 'ONAYLANDI' || doc.durum === 'UYUMLU').map(doc => (
-                          <tr key={doc.id} className="hover:bg-slate-800/25 transition">
+                          <tr key={doc.id} className="hover:bg-slate-100/25 transition">
                             <td className="py-2 pr-4">{doc.tarih}</td>
                             <td className="py-2 pr-4 text-purple-400 font-bold">FATURA</td>
                             <td className="py-2 pr-4">{doc.faturaNo}</td>
                             <td className="py-2 pr-4 text-slate-400 truncate max-w-[120px]">{doc.cariUnvan}</td>
-                            <td className="py-2 pr-4 text-emerald-400">{doc.onayStamp || doc.eImzalar?.[0] || 'Kaşeli Onay'}</td>
+                            <td className="py-2 pr-4 text-emerald-700">{doc.onayStamp || doc.eImzalar?.[0] || 'Kaşeli Onay'}</td>
                             <td className="py-2 text-right text-purple-300 font-bold">₺{doc.genelToplam?.toLocaleString()}</td>
                           </tr>
                         ))}
@@ -2265,26 +2265,26 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
           {activeTab === 'imzalar' && (
             <div className="space-y-6">
-              <div className="bg-slate-950 p-5 border border-slate-800 rounded-3xl space-y-4">
-                <span className="font-display font-black text-xs text-white uppercase tracking-widest block border-b pb-2">✒️ Yetkili Dijital İmza &amp; Kaşe Seçenekleri</span>
-                <p className="text-xs text-slate-450 leading-relaxed">
+              <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
+                <span className="font-display font-black text-xs text-slate-800 uppercase tracking-widest block border-b pb-2">✒️ Yetkili Dijital İmza &amp; Kaşe Seçenekleri</span>
+                <p className="text-xs text-slate-500 leading-relaxed">
                   Şirket yetkililerine atanan hazır e-imza kaşelerini aşağıdan görebilir, belge onaylarında basılmasını sağlayabilirsiniz:
                 </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-                  <div className="bg-slate-900 p-4 border border-slate-805 rounded-xl space-y-2">
+                  <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl space-y-2">
                     <span className="text-slate-600 font-bold block">🔵 YÖNETİM KURULU BAŞKANLIĞI (YKB)</span>
                     <p className="text-[11px] text-slate-500">Mevcut Kaşe: [KİBRİTÇİ İNŞAAT A.Ş. YÖNETİM KURULU ONAY MÜHRÜ]</p>
                   </div>
-                  <div className="bg-slate-900 p-4 border border-slate-805 rounded-xl space-y-2">
+                  <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl space-y-2">
                     <span className="text-amber-405 font-bold block">🔴 PROJELER GENEL KOORDİNATÖRLÜĞÜ (PGK)</span>
                     <p className="text-[11px] text-slate-500">Mevcut Kaşe: [ŞANTİYE VE PROJELER GENEL KOORDİNATÖRÜ MÜHRÜ]</p>
                   </div>
-                  <div className="bg-slate-900 p-4 border border-slate-805 rounded-xl space-y-2">
-                    <span className="text-emerald-400 font-bold block">🟢 GENEL MÜDÜRLÜK MAKAMI (GM)</span>
+                  <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl space-y-2">
+                    <span className="text-emerald-700 font-bold block">🟢 GENEL MÜDÜRLÜK MAKAMI (GM)</span>
                     <p className="text-[11px] text-slate-500">Mevcut Kaşe: [KİBRİTÇİ İNŞAAT A.Ş. GENEL MÜDÜRLÜK KAŞESİ]</p>
                   </div>
-                  <div className="bg-slate-900 p-4 border border-slate-805 rounded-xl space-y-2">
+                  <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl space-y-2">
                     <span className="text-purple-400 font-bold block">🟣 MALİ İŞLER CONTRE DİREKTÖRLÜĞÜ (MİD)</span>
                     <p className="text-[11px] text-slate-500">Mevcut Kaşe: [MALİ İŞLER VE MUHASEBE GÜVENLİK CONTRESİ]</p>
                   </div>
@@ -2295,27 +2295,27 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
           {activeTab === 'gunluk_loglar' && (
             <div className="space-y-6">
-              <div className="border bg-slate-950 p-4.5 rounded-2xl border-slate-800/80 text-xs">
-                <span className="text-amber-400 font-bold block text-[11px] tracking-widest uppercase">📋 FORMEN & KAMPÇI GÜNLÜK AKIŞ RAPORLARI</span>
+              <div className="border bg-white p-4.5 rounded-2xl border-slate-200 text-xs">
+                <span className="text-amber-700 font-bold block text-[11px] tracking-widest uppercase">📋 FORMEN & KAMPÇI GÜNLÜK AKIŞ RAPORLARI</span>
                 <p className="text-slate-400 mt-1 text-[11px]">
                   Saha formenleri ve kampçıların gün sonu gönderdiği özet raporlar. İdari İşler, Muhasebe, Şantiye Şefi, Proje Müdürü veya Kurucu onayı ile arşive alınır.
                 </p>
               </div>
 
               {pendingGunlukAkis.length === 0 ? (
-                <div className="bg-slate-950 rounded-3xl p-12 text-center border border-slate-800">
-                  <p className="text-sm text-slate-300 font-bold">Onay bekleyen günlük rapor yok.</p>
+                <div className="bg-white rounded-3xl p-12 text-center border border-slate-200">
+                  <p className="text-sm text-slate-600 font-bold">Onay bekleyen günlük rapor yok.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {pendingGunlukAkis.map((rapor) => (
-                    <div key={rapor.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-3">
+                    <div key={rapor.id} className="bg-white border border-slate-200 p-4 rounded-2xl space-y-3">
                       <div className="flex justify-between items-start">
-                        <span className="text-[10px] font-black text-amber-400 uppercase">{rapor.tip} · {rapor.tarih}</span>
+                        <span className="text-[10px] font-black text-amber-700 uppercase">{rapor.tip} · {rapor.tarih}</span>
                         <span className="text-[9px] text-slate-500">{new Date(rapor.olusturulma).toLocaleString('tr-TR')}</span>
                       </div>
-                      <p className="text-[10px] text-slate-400">Gönderen: <strong className="text-slate-200">{rapor.gonderenEmail}</strong></p>
-                      <pre className="text-[9px] text-slate-300 whitespace-pre-wrap bg-slate-900 p-3 rounded-xl border border-slate-800 max-h-48 overflow-y-auto font-mono leading-relaxed">
+                      <p className="text-[10px] text-slate-400">Gönderen: <strong className="text-slate-800">{rapor.gonderenEmail}</strong></p>
+                      <pre className="text-[9px] text-slate-600 whitespace-pre-wrap bg-slate-50 p-3 rounded-xl border border-slate-200 max-h-48 overflow-y-auto font-mono leading-relaxed">
                         {rapor.ozetMetin}
                       </pre>
                       <div className="flex gap-2">
@@ -2355,21 +2355,21 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
             <div className="space-y-6">
               
               {/* Header Info */}
-              <div className="border bg-slate-950 p-4.5 rounded-2xl border-slate-800/80 flex justify-between items-center text-xs">
+              <div className="border bg-white p-4.5 rounded-2xl border-slate-200 flex justify-between items-center text-xs">
                 <div className="space-y-1">
                   <span className="text-slate-600 font-bold block text-[11px] tracking-widest uppercase">👷 SAHA KAPISI PERSONEL GİRİŞ TAKİP SİSTEMİ</span>
-                  <p className="text-slate-405 leading-relaxed text-[11px]">
+                  <p className="text-slate-500 leading-relaxed text-[11px]">
                     Saha formenleri tarafından kapıdan gönderilen yeni personellerin bilgileri, işten çıkış talepleri ve bilgi güncelleme istekleri buraya düşer. Yetkililer talepleri onaylayarak personel veri havuzunu güncel tutabilir.
                   </p>
                 </div>
               </div>
 
               {/* Subtabs for Personnel Management */}
-              <div className="flex space-x-2 border-b border-slate-800 pb-px">
+              <div className="flex space-x-2 border-b border-slate-200 pb-px">
                 <button
                   onClick={() => setFormenSubTab('giris')}
                   className={`px-4 py-2 text-xs font-bold border-b-2 transition duration-150 cursor-pointer ${
-                    formenSubTab === 'giris' ? 'border-[#2563EB] text-white font-black' : 'border-transparent text-slate-400 hover:text-white'
+                    formenSubTab === 'giris' ? 'border-[#2563EB] text-slate-900 font-black' : 'border-transparent text-slate-500 hover:text-slate-800'
                   }`}
                 >
                   🚪 İşe Giriş Talepleri ({personelGirisTalepleri.filter(p => p.durum === 'BEKLEMEDE' || p.durum === 'WP_GÖNDERİLDİ').length})
@@ -2377,7 +2377,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                 <button
                   onClick={() => setFormenSubTab('cikis')}
                   className={`px-4 py-2 text-xs font-bold border-b-2 transition duration-150 cursor-pointer ${
-                    formenSubTab === 'cikis' ? 'border-[#2563EB] text-white font-black' : 'border-transparent text-slate-400 hover:text-white'
+                    formenSubTab === 'cikis' ? 'border-[#2563EB] text-slate-900 font-black' : 'border-transparent text-slate-500 hover:text-slate-800'
                   }`}
                 >
                   🛑 İşten Çıkış Talepleri ({personelCikisTalepleri.filter(p => p.durum === 'BEKLEMEDE').length})
@@ -2385,7 +2385,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                 <button
                   onClick={() => setFormenSubTab('guncelleme')}
                   className={`px-4 py-2 text-xs font-bold border-b-2 transition duration-150 cursor-pointer ${
-                    formenSubTab === 'guncelleme' ? 'border-[#2563EB] text-white font-black' : 'border-transparent text-slate-400 hover:text-white'
+                    formenSubTab === 'guncelleme' ? 'border-[#2563EB] text-slate-900 font-black' : 'border-transparent text-slate-500 hover:text-slate-800'
                   }`}
                 >
                   📝 Bilgi Güncelleme ({personelGuncellemeTalepleri.filter(p => p.durum === 'BEKLEMEDE').length})
@@ -2396,22 +2396,22 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
               {formenSubTab === 'giris' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {personelGirisTalepleri.length === 0 ? (
-                  <div className="bg-slate-950/40 border border-slate-850 rounded-3xl p-10 text-center col-span-2 text-slate-500 italic">
+                  <div className="bg-slate-50 border border-slate-200 rounded-3xl p-10 text-center col-span-2 text-slate-500 italic">
                     Şu an onay bekleyen veya kayıtlı herhangi bir saha giriş talebi bulunmuyor.
                   </div>
                 ) : (
                   personelGirisTalepleri.map((item) => {
                     const isPending = item.durum === 'BEKLEMEDE' || item.durum === 'WP_GÖNDERİLDİ';
                     return (
-                      <div key={item.id} className="bg-slate-950 border border-slate-800 rounded-3xl p-4.5 flex flex-col justify-between space-y-3.5 relative overflow-hidden">
+                      <div key={item.id} className="bg-white border border-slate-200 rounded-3xl p-4.5 flex flex-col justify-between space-y-3.5 relative overflow-hidden">
                         
                         {/* Status Tag */}
                         <div className="flex justify-between items-start">
                           <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider ${
-                            item.durum === 'ONAYLANDI' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                            item.durum === 'WP_GÖNDERİLDİ' ? 'bg-slate-500/10 text-slate-600 border border-slate-800/20' :
+                            item.durum === 'ONAYLANDI' ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20' :
+                            item.durum === 'WP_GÖNDERİLDİ' ? 'bg-slate-500/10 text-slate-600 border border-slate-200/20' :
                             item.durum === 'REDDEDİLDİ' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
-                            'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            'bg-amber-500/10 text-amber-700 border border-amber-500/20'
                           }`}>
                             {item.durum === 'ONAYLANDI' ? 'ONAYLANDI (GİRİŞ YAPILDI)' :
                              item.durum === 'WP_GÖNDERİLDİ' ? 'YÖNETİCİYE WP İLETİLDİ' :
@@ -2425,19 +2425,19 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                         <div className="flex space-x-3">
                           {/* Thumbnail / Click to zoom */}
                           {item.kimlikFotoUrl ? (
-                            <div className="w-20 h-20 bg-slate-905 rounded-2xl overflow-hidden border border-slate-800 shrink-0 relative group">
+                            <div className="w-20 h-20 bg-slate-905 rounded-2xl overflow-hidden border border-slate-200 shrink-0 relative group">
                               <img src={item.kimlikFotoUrl} alt="Kimlik Foto" className="w-full h-full object-cover" />
                               <a 
                                 href={item.kimlikFotoUrl} 
                                 target="_blank" 
                                 rel="noreferrer"
-                                className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition text-[8px] font-bold text-white uppercase"
+                                className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition text-[8px] font-bold text-slate-900 uppercase"
                               >
                                 Kimliği Büyüt
                               </a>
                             </div>
                           ) : (
-                            <div className="w-20 h-20 bg-slate-900 rounded-2xl flex items-center justify-center border border-slate-800 shrink-0">
+                            <div className="w-20 h-20 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-200 shrink-0">
                               <span className="text-[8px] text-slate-500 text-center">Fotoğraf Yok</span>
                             </div>
                           )}
@@ -2451,13 +2451,13 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
                         {/* Documents & Download link */}
                         {item.girisEvrakPdfUrl && (
-                          <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800/80 flex items-center justify-between text-[10px]">
+                          <div className="bg-slate-50/60 p-2 rounded-xl border border-slate-200 flex items-center justify-between text-[10px]">
                             <span className="text-slate-400 font-bold">📄 İşe Giriş Bildirgesi:</span>
                             <a 
                               href={item.girisEvrakPdfUrl} 
                               target="_blank" 
                               rel="noreferrer"
-                              className="text-amber-400 hover:underline font-black uppercase text-[8px] flex items-center space-x-0.5"
+                              className="text-amber-700 hover:underline font-black uppercase text-[8px] flex items-center space-x-0.5"
                             >
                               <span>Belgeyi İndir</span>
                               <ExternalLink size={9} />
@@ -2466,7 +2466,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                         )}
 
                         {/* Action buttons based on status & role */}
-                        <div className="border-t border-slate-900 pt-3 flex flex-wrap gap-2">
+                        <div className="border-t border-slate-100 pt-3 flex flex-wrap gap-2">
                           
                           {/* 1. WHATSAPP NOTIFICATION SEND (For Muhasebe, İdari İşler, Şantiye Şefi) */}
                           {isPending && (
@@ -2496,7 +2496,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                                   window.open(buildWhatsAppUrl(waText), '_blank');
                                 }
                               }}
-                              className="bg-slate-900 hover:bg-slate-900 active:scale-95 text-white font-extrabold text-[9px] py-1.5 px-3 rounded-xl flex items-center space-x-1.5 cursor-pointer border-b-2 border-slate-800 transition"
+                              className="bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 font-extrabold text-[9px] py-1.5 px-3 rounded-xl flex items-center space-x-1.5 cursor-pointer border-b-2 border-slate-200 transition"
                             >
                               <MessageSquare size={11} />
                               <span>WhatsApp'tan Yöneticiye İlet</span>
@@ -2530,12 +2530,12 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
                           {/* 2. PDF UPLOAD PANEL (For Manager / Yönetici / Company Official) */}
                           {isPending && (
-                            <div className="w-full space-y-2 mt-1.5 bg-slate-900/40 p-2.5 rounded-2xl border border-slate-850">
+                            <div className="w-full space-y-2 mt-1.5 bg-rose-50 p-2.5 rounded-2xl border border-slate-200">
                               <span className="text-[8px] font-bold text-slate-400 block uppercase tracking-wider">🔒 Yönetici Giriş Belgesi Onayı</span>
                               
                               {activePdfUploadId === item.id ? (
                                 <div className="space-y-1.5">
-                                  <label className="border border-dashed border-slate-700 bg-slate-950 p-2 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-slate-900 transition text-[9px] text-slate-400">
+                                  <label className="border border-dashed border-slate-300 bg-white p-2 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 transition text-[9px] text-slate-400">
                                     <FileUp size={14} className="text-amber-500 mb-0.5" />
                                     <span>{uploadedPdfBase64 ? '✓ Belge Yüklendi (Değiştir)' : 'PDF / Görsel Seç'}</span>
                                     <input 
@@ -2679,21 +2679,21 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
               {formenSubTab === 'cikis' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {personelCikisTalepleri.length === 0 ? (
-                    <div className="bg-slate-950/40 border border-slate-850 rounded-3xl p-10 text-center col-span-2 text-slate-500 italic">
+                    <div className="bg-slate-50 border border-slate-200 rounded-3xl p-10 text-center col-span-2 text-slate-500 italic">
                       Şu an onay bekleyen veya kayıtlı herhangi bir işten çıkış talebi bulunmuyor.
                     </div>
                   ) : (
                     personelCikisTalepleri.map((item) => {
                       const isPending = item.durum === 'BEKLEMEDE';
                       return (
-                        <div key={item.id} className="bg-slate-950 border border-slate-800 rounded-3xl p-4.5 flex flex-col justify-between space-y-3.5 relative overflow-hidden">
+                        <div key={item.id} className="bg-white border border-slate-200 rounded-3xl p-4.5 flex flex-col justify-between space-y-3.5 relative overflow-hidden">
                           
                           {/* Status Tag */}
                           <div className="flex justify-between items-start">
                             <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider ${
-                              item.durum === 'ONAYLANDI' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                              item.durum === 'ONAYLANDI' ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20' :
                               item.durum === 'REDDEDİLDİ' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
-                              'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                              'bg-amber-500/10 text-amber-700 border border-amber-500/20'
                             }`}>
                               {item.durum}
                             </span>
@@ -2701,15 +2701,15 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                           </div>
 
                           {/* Person details */}
-                          <div className="space-y-1.5 text-xs text-slate-300">
+                          <div className="space-y-1.5 text-xs text-slate-600">
                             <div>
                               <span className="text-slate-500 font-bold uppercase text-[8px] block">PERSONEL ADI SOYADI</span>
-                              <p className="font-extrabold text-white text-[13px]">{item.personelIsim}</p>
+                              <p className="font-extrabold text-slate-900 text-[13px]">{item.personelIsim}</p>
                             </div>
                             <div className="grid grid-cols-2 gap-2 text-[11px]">
                               <div>
                                 <span className="text-slate-500 font-bold block text-[8px]">GÖREVİ / BRANŞI</span>
-                                <p className="font-medium text-slate-350">{item.personelGorev || 'Belirtilmedi'}</p>
+                                <p className="font-medium text-slate-600">{item.personelGorev || 'Belirtilmedi'}</p>
                               </div>
                               <div>
                                 <span className="text-slate-500 font-bold block text-[8px]">PLANLANAN ÇIKIŞ TARİHİ</span>
@@ -2724,14 +2724,14 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                               <span className="text-slate-500 font-bold block text-[8px]">HEDEF ONAY GRUBU</span>
                               <p className="font-bold text-slate-600 text-[10px]">{item.hedefYoneticiRole || 'GENEL YÖNETİM'}</p>
                             </div>
-                            <div className="bg-slate-900 border border-slate-850 p-2.5 rounded-xl">
+                            <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl">
                               <span className="text-rose-400 font-bold block text-[8px] mb-1">ÇIKIŞ SEBEBİ & GEREKÇE</span>
-                              <p className="text-slate-300 italic text-[10.5px] leading-relaxed">"{item.cikisNedeni || 'Sebebi belirtilmemiş.'}"</p>
+                              <p className="text-slate-600 italic text-[10.5px] leading-relaxed">"{item.cikisNedeni || 'Sebebi belirtilmemiş.'}"</p>
                             </div>
                           </div>
 
                           {/* Action Bar */}
-                          <div className="flex flex-col space-y-2 pt-2 border-t border-slate-800/60">
+                          <div className="flex flex-col space-y-2 pt-2 border-t border-slate-200/60">
                             {isPending ? (
                               <div className="grid grid-cols-2 gap-2">
                                 <button
@@ -2750,8 +2750,8 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                                 </button>
                               </div>
                             ) : (
-                              <div className="w-full bg-slate-900/40 p-2 rounded-xl text-center text-[10px] text-slate-450">
-                                Onaylayan Yetkili: <span className="font-bold text-slate-300">{item.onaylayanYonetici || 'Bilinmiyor'}</span>
+                              <div className="w-full bg-rose-50 p-2 rounded-xl text-center text-[10px] text-slate-500">
+                                Onaylayan Yetkili: <span className="font-bold text-slate-600">{item.onaylayanYonetici || 'Bilinmiyor'}</span>
                                 {item.onayTarihi && <span className="block text-[8px] text-slate-500 mt-0.5">{new Date(item.onayTarihi).toLocaleString('tr-TR')}</span>}
                               </div>
                             )}
@@ -2786,21 +2786,21 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
               {formenSubTab === 'guncelleme' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {personelGuncellemeTalepleri.length === 0 ? (
-                    <div className="bg-slate-950/40 border border-slate-850 rounded-3xl p-10 text-center col-span-2 text-slate-500 italic">
+                    <div className="bg-slate-50 border border-slate-200 rounded-3xl p-10 text-center col-span-2 text-slate-500 italic">
                       Şu an onay bekleyen veya kayıtlı herhangi bir bilgi güncelleme talebi bulunmuyor.
                     </div>
                   ) : (
                     personelGuncellemeTalepleri.map((item) => {
                       const isPending = item.durum === 'BEKLEMEDE';
                       return (
-                        <div key={item.id} className="bg-slate-950 border border-slate-800 rounded-3xl p-4.5 flex flex-col justify-between space-y-3.5 relative overflow-hidden">
+                        <div key={item.id} className="bg-white border border-slate-200 rounded-3xl p-4.5 flex flex-col justify-between space-y-3.5 relative overflow-hidden">
                           
                           {/* Status Tag */}
                           <div className="flex justify-between items-start">
                             <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider ${
-                              item.durum === 'ONAYLANDI' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                              item.durum === 'ONAYLANDI' ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20' :
                               item.durum === 'REDDEDİLDİ' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
-                              'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                              'bg-amber-500/10 text-amber-700 border border-amber-500/20'
                             }`}>
                               {item.durum}
                             </span>
@@ -2808,15 +2808,15 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                           </div>
 
                           {/* Details comparing old vs new */}
-                          <div className="space-y-3 text-xs text-slate-300">
+                          <div className="space-y-3 text-xs text-slate-600">
                             <div>
                               <span className="text-slate-500 font-bold uppercase text-[8px] block">PERSONEL BİLGİ DEĞİŞİMİ</span>
-                              <h6 className="font-extrabold text-white text-sm">{item.eskiBilgiler?.ad} {item.eskiBilgiler?.soyad}</h6>
+                              <h6 className="font-extrabold text-slate-900 text-sm">{item.eskiBilgiler?.ad} {item.eskiBilgiler?.soyad}</h6>
                             </div>
 
                             <div className="grid grid-cols-2 gap-2 text-[10.5px]">
                               {/* Old info column */}
-                              <div className="bg-slate-900/50 p-2 rounded-xl border border-slate-900/80 space-y-1">
+                              <div className="bg-slate-50/50 p-2 rounded-xl border border-slate-900/80 space-y-1">
                                 <span className="text-slate-500 font-bold block text-[8px] uppercase">ESKİ BİLGİLER</span>
                                 <div className="leading-snug">
                                   <p><span className="text-slate-400">Görev:</span> {item.eskiBilgiler?.gorev}</p>
@@ -2827,29 +2827,29 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                               </div>
                               
                               {/* New info column */}
-                              <div className="bg-slate-900/25 p-2 rounded-xl border border-slate-800/40 space-y-1">
+                              <div className="bg-slate-50/25 p-2 rounded-xl border border-slate-200/40 space-y-1">
                                 <span className="text-slate-600 font-bold block text-[8px] uppercase">YENİ BİLGİLER</span>
                                 <div className="leading-snug">
-                                  <p><span className="text-slate-300">Görev:</span> <span className={item.eskiBilgiler?.gorev !== item.yeniBilgiler?.gorev ? "text-amber-400 font-bold" : ""}>{item.yeniBilgiler?.gorev}</span></p>
-                                  <p><span className="text-slate-300">Tel:</span> <span className={item.eskiBilgiler?.telefon !== item.yeniBilgiler?.telefon ? "text-amber-400 font-bold" : ""}>{item.yeniBilgiler?.telefon || '-'}</span></p>
-                                  <p><span className="text-slate-300">Banka:</span> <span className={item.eskiBilgiler?.bankaAdi !== item.yeniBilgiler?.bankaAdi ? "text-amber-400 font-bold" : ""}>{item.yeniBilgiler?.bankaAdi || '-'}</span></p>
-                                  <p className="font-mono text-[8px] overflow-hidden truncate"><span className="text-slate-300">IBAN:</span> <span className={item.eskiBilgiler?.ibanNo !== item.yeniBilgiler?.ibanNo ? "text-amber-400 font-bold" : ""}>{item.yeniBilgiler?.ibanNo || '-'}</span></p>
+                                  <p><span className="text-slate-600">Görev:</span> <span className={item.eskiBilgiler?.gorev !== item.yeniBilgiler?.gorev ? "text-amber-700 font-bold" : ""}>{item.yeniBilgiler?.gorev}</span></p>
+                                  <p><span className="text-slate-600">Tel:</span> <span className={item.eskiBilgiler?.telefon !== item.yeniBilgiler?.telefon ? "text-amber-700 font-bold" : ""}>{item.yeniBilgiler?.telefon || '-'}</span></p>
+                                  <p><span className="text-slate-600">Banka:</span> <span className={item.eskiBilgiler?.bankaAdi !== item.yeniBilgiler?.bankaAdi ? "text-amber-700 font-bold" : ""}>{item.yeniBilgiler?.bankaAdi || '-'}</span></p>
+                                  <p className="font-mono text-[8px] overflow-hidden truncate"><span className="text-slate-600">IBAN:</span> <span className={item.eskiBilgiler?.ibanNo !== item.yeniBilgiler?.ibanNo ? "text-amber-700 font-bold" : ""}>{item.yeniBilgiler?.ibanNo || '-'}</span></p>
                                 </div>
                               </div>
                             </div>
 
-                            <div className="bg-slate-900 border border-slate-850 p-2 rounded-xl">
+                            <div className="bg-slate-50 border border-slate-200 p-2 rounded-xl">
                               <span className="text-slate-600 font-bold block text-[8px] mb-0.5">DÜZELTME / GÜNCELLEME GEREKÇESİ</span>
-                              <p className="text-slate-300 italic text-[10px] leading-relaxed">"{item.guncellemeNedeni || 'Neden belirtilmemiş.'}"</p>
+                              <p className="text-slate-600 italic text-[10px] leading-relaxed">"{item.guncellemeNedeni || 'Neden belirtilmemiş.'}"</p>
                             </div>
 
                             <div className="text-[10px]">
-                              <span className="text-slate-500 font-bold">GÖNDEREN FORMEN:</span> <span className="font-mono text-slate-450">{item.gonderenFormen}</span>
+                              <span className="text-slate-500 font-bold">GÖNDEREN FORMEN:</span> <span className="font-mono text-slate-500">{item.gonderenFormen}</span>
                             </div>
                           </div>
 
                           {/* Action Bar */}
-                          <div className="flex flex-col space-y-2 pt-2 border-t border-slate-800/60">
+                          <div className="flex flex-col space-y-2 pt-2 border-t border-slate-200/60">
                             {isPending ? (
                               <div className="grid grid-cols-2 gap-2">
                                 <button
@@ -2868,8 +2868,8 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                                 </button>
                               </div>
                             ) : (
-                              <div className="w-full bg-slate-900/40 p-2 rounded-xl text-center text-[10px] text-slate-450">
-                                Onaylayan Yetkili: <span className="font-bold text-slate-300">{item.onaylayanYonetici || 'Bilinmiyor'}</span>
+                              <div className="w-full bg-rose-50 p-2 rounded-xl text-center text-[10px] text-slate-500">
+                                Onaylayan Yetkili: <span className="font-bold text-slate-600">{item.onaylayanYonetici || 'Bilinmiyor'}</span>
                                 {item.onayTarihi && <span className="block text-[8px] text-slate-500 mt-0.5">{new Date(item.onayTarihi).toLocaleString('tr-TR')}</span>}
                               </div>
                             )}
@@ -2906,7 +2906,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           {activeTab === 'sofor_talepleri' && (
             <div className="space-y-6">
               {/* Header */}
-              <div className="border bg-slate-900 p-4.5 rounded-2xl border-slate-800 flex justify-between items-center text-xs text-white">
+              <div className="border bg-white p-4.5 rounded-2xl border-slate-200 flex justify-between items-center text-xs text-slate-800">
                 <div className="space-y-1">
                   <span className="text-sky-400 font-bold block text-[11px] tracking-widest uppercase">🚛 ŞÖFÖR MOBİL PANELİ TALEPLERİ</span>
                   <p className="text-slate-400 leading-relaxed text-[11px]">
@@ -2944,11 +2944,11 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                         </div>
 
                         <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100 font-mono">
-                          <div><span className="text-slate-450 font-sans">Muayene KM:</span> <span className="font-bold text-slate-800">{item.muayeneKm}</span></div>
-                          <div><span className="text-slate-450 font-sans">Muayene Tar:</span> <span className="font-bold text-slate-800">{item.muayeneTarihi}</span></div>
-                          <div><span className="text-slate-450 font-sans">Yag Bakım KM:</span> <span className="font-bold text-slate-800">{item.sonYagBakimKm}</span></div>
-                          <div><span className="text-slate-450 font-sans">Yag Bakım Aralığı:</span> <span className="font-bold text-slate-800">{item.yagBakimKmAraligi} KM</span></div>
-                          <div className="col-span-2"><span className="text-slate-450 font-sans">Yağ Bakım Tar:</span> <span className="font-bold text-slate-800">{item.yagBakimTarihi}</span></div>
+                          <div><span className="text-slate-500 font-sans">Muayene KM:</span> <span className="font-bold text-slate-800">{item.muayeneKm}</span></div>
+                          <div><span className="text-slate-500 font-sans">Muayene Tar:</span> <span className="font-bold text-slate-800">{item.muayeneTarihi}</span></div>
+                          <div><span className="text-slate-500 font-sans">Yag Bakım KM:</span> <span className="font-bold text-slate-800">{item.sonYagBakimKm}</span></div>
+                          <div><span className="text-slate-500 font-sans">Yag Bakım Aralığı:</span> <span className="font-bold text-slate-800">{item.yagBakimKmAraligi} KM</span></div>
+                          <div className="col-span-2"><span className="text-slate-500 font-sans">Yağ Bakım Tar:</span> <span className="font-bold text-slate-800">{item.yagBakimTarihi}</span></div>
                         </div>
 
                         <div className="flex justify-between items-center text-[10px] text-slate-400">
@@ -3020,7 +3020,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
                           {item.faturaFotoUrl && (
                             <div className="border border-slate-100 rounded-xl overflow-hidden bg-slate-50 flex flex-col items-center justify-center p-2">
-                              <span className="text-[8px] font-bold text-slate-450 uppercase tracking-wider block mb-1">📷 Harcama Belgesi (Fiş/Fatura)</span>
+                              <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wider block mb-1">📷 Harcama Belgesi (Fiş/Fatura)</span>
                               <img
                                 src={item.faturaFotoUrl}
                                 alt="Fis Görseli"
@@ -3063,7 +3063,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
           {activeTab === 'depocu_talepleri' && (
             <div className="space-y-6">
-              <div className="border bg-slate-900 p-4.5 rounded-2xl border-slate-800 flex justify-between items-center text-xs text-white">
+              <div className="border bg-white p-4.5 rounded-2xl border-slate-200 flex justify-between items-center text-xs text-slate-800">
                 <div className="space-y-1">
                   <span className="text-indigo-400 font-bold block text-[11px] tracking-widest uppercase">📦 DEPOCU TALEPLERİ (STOK KARTLARI &amp; HAFTALIK SAYIMLAR)</span>
                   <p className="text-slate-400 leading-relaxed text-[11px]">
@@ -3191,10 +3191,10 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
           {activeTab === 'anahtarci_tutanaklari' && (
             <div className="space-y-6 animate-fadeIn">
-              <div className="border bg-slate-900 p-4.5 rounded-2xl border-slate-800 flex justify-between items-center text-xs text-white">
+              <div className="border bg-white p-4.5 rounded-2xl border-slate-200 flex justify-between items-center text-xs text-slate-800">
                 <div className="space-y-1">
-                  <span className="text-amber-400 font-bold block text-[11px] tracking-widest uppercase">🔑 ANAHTARCI &amp; İMALAT TUTANAKLARI ONAY HAVUZU</span>
-                  <p className="text-slate-450 leading-relaxed text-[11px]">
+                  <span className="text-amber-700 font-bold block text-[11px] tracking-widest uppercase">🔑 ANAHTARCI &amp; İMALAT TUTANAKLARI ONAY HAVUZU</span>
+                  <p className="text-slate-500 leading-relaxed text-[11px]">
                     İmalat terminalinden gönderilen hasarlı alan tutanaklarını ve taşeron ceza tutanaklarını buradan inceleyip onaylayabilirsiniz.
                   </p>
                 </div>
@@ -3265,14 +3265,14 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                             {isCeza && item.foto1 && item.foto2 ? (
                               // Ceza has initial and final photos side by side
                               <div className="grid grid-cols-2 gap-4">
-                                <div className="border rounded-2xl overflow-hidden bg-slate-950 flex flex-col">
-                                  <div className="bg-slate-900 text-[9px] text-sky-400 p-2 font-bold text-center border-b border-slate-800 font-sans">
+                                <div className="border rounded-2xl overflow-hidden bg-white flex flex-col">
+                                  <div className="bg-slate-50 text-[9px] text-sky-400 p-2 font-bold text-center border-b border-slate-200 font-sans">
                                     FOTOĞRAF 1: ANAHTAR TESLİM ANI (İLK HAL)
                                   </div>
                                   <img src={item.foto1} alt="Teslim" className="w-full aspect-video object-cover max-h-56" />
                                 </div>
-                                <div className="border rounded-2xl overflow-hidden bg-slate-950 flex flex-col">
-                                  <div className="bg-slate-900 text-[9px] text-rose-450 p-2 font-bold text-center border-b border-slate-800 font-sans">
+                                <div className="border rounded-2xl overflow-hidden bg-white flex flex-col">
+                                  <div className="bg-slate-50 text-[9px] text-rose-450 p-2 font-bold text-center border-b border-slate-200 font-sans">
                                     FOTOĞRAF 2: GERİ ALMA ANI (HASAR DURUMU)
                                   </div>
                                   <img src={item.foto2} alt="Iade" className="w-full aspect-video object-cover max-h-56" />
@@ -3282,17 +3282,17 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                               // HASAR tutanagi, show up to 3 photos in a row
                               <div className="grid grid-cols-3 gap-3">
                                 {item.foto1 && (
-                                  <div className="border rounded-2xl overflow-hidden bg-slate-950">
+                                  <div className="border rounded-2xl overflow-hidden bg-white">
                                     <img src={item.foto1} alt="hasar1" className="w-full aspect-square object-cover" />
                                   </div>
                                 )}
                                 {item.foto2 && (
-                                  <div className="border rounded-2xl overflow-hidden bg-slate-950">
+                                  <div className="border rounded-2xl overflow-hidden bg-white">
                                     <img src={item.foto2} alt="hasar2" className="w-full aspect-square object-cover" />
                                   </div>
                                 )}
                                 {item.foto3 && (
-                                  <div className="border rounded-2xl overflow-hidden bg-slate-950">
+                                  <div className="border rounded-2xl overflow-hidden bg-white">
                                     <img src={item.foto3} alt="hasar3" className="w-full aspect-square object-cover" />
                                   </div>
                                 )}
@@ -3351,31 +3351,31 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
       {/* Detail Modal */}
       {activeDocForDetail && (
-        <div className="fixed inset-0 bg-slate-950/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-[600px] overflow-hidden shadow-2xl animate-in scale-in duration-200">
+        <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-[600px] overflow-hidden shadow-2xl animate-in scale-in duration-200">
             
-            <div className="bg-slate-950 p-4 flex justify-between items-center border-b border-slate-800">
-              <h4 className="font-display font-medium text-xs text-white uppercase tracking-wider">📋 Detaylı Belge İncelemesi</h4>
-              <button onClick={() => setActiveDocForDetail(null)} className="text-slate-450 hover:text-white font-bold cursor-pointer">✖ Kapat</button>
+            <div className="bg-white p-4 flex justify-between items-center border-b border-slate-200">
+              <h4 className="font-display font-medium text-xs text-slate-800 uppercase tracking-wider">📋 Detaylı Belge İncelemesi</h4>
+              <button onClick={() => setActiveDocForDetail(null)} className="text-slate-500 hover:text-slate-900 font-bold cursor-pointer">✖ Kapat</button>
             </div>
 
-            <div className="p-6 space-y-4 text-xs text-slate-300 max-h-[70vh] overflow-y-auto">
+            <div className="p-6 space-y-4 text-xs text-slate-600 max-h-[70vh] overflow-y-auto">
               {activeDocForDetail.type === 'request' && (
                 <div className="space-y-3">
-                  <div className="flex justify-between border-b border-slate-800 pb-2">
-                    <span className="text-slate-450">Talep Kodu / Tarih:</span>
-                    <span className="font-bold text-white font-mono">{activeDocForDetail.data.saId} ({activeDocForDetail.data.tarih})</span>
+                  <div className="flex justify-between border-b border-slate-200 pb-2">
+                    <span className="text-slate-500">Talep Kodu / Tarih:</span>
+                    <span className="font-bold text-slate-900 font-mono">{activeDocForDetail.data.saId} ({activeDocForDetail.data.tarih})</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-450">Cari Firma:</span>
-                    <span className="font-bold text-white">{activeDocForDetail.data.cariFirma}</span>
+                    <span className="text-slate-500">Cari Firma:</span>
+                    <span className="font-bold text-slate-900">{activeDocForDetail.data.cariFirma}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-450">Talep Eden Sorumlu:</span>
-                    <span className="font-bold text-white">{activeDocForDetail.data.talepEden}</span>
+                    <span className="text-slate-500">Talep Eden Sorumlu:</span>
+                    <span className="font-bold text-slate-900">{activeDocForDetail.data.talepEden}</span>
                   </div>
                   {activeDocForDetail.data.aciklama && (
-                    <div className="p-3 bg-slate-950/60 rounded border border-slate-850">
+                    <div className="p-3 bg-white rounded border border-slate-200">
                       <span className="text-[9px] text-slate-500 font-bold block uppercase mb-1">Açıklama / Şantiye Notu:</span>
                       <p>{activeDocForDetail.data.aciklama}</p>
                     </div>
@@ -3383,18 +3383,18 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
                   <div className="pt-2">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1.5">Malzeme Listesi</span>
-                    <table className="w-full text-left font-mono text-[10px] border border-slate-800 rounded-lg overflow-hidden">
+                    <table className="w-full text-left font-mono text-[10px] border border-slate-200 rounded-lg overflow-hidden">
                       <thead>
-                        <tr className="bg-slate-950 text-slate-400">
+                        <tr className="bg-white text-slate-400">
                           <th className="p-2">Urun Adı</th>
                           <th className="p-2 text-right">Miktar / Birim</th>
                         </tr>
                       </thead>
                       <tbody>
                         {activeDocForDetail.data.kalemler?.map((item: any, idx: number) => (
-                          <tr key={idx} className="border-t border-slate-850">
-                            <td className="p-2 text-slate-200">{item.urunAdi}</td>
-                            <td className="p-2 text-right text-amber-400 font-bold">{item.miktar} {item.birim}</td>
+                          <tr key={idx} className="border-t border-slate-200">
+                            <td className="p-2 text-slate-800">{item.urunAdi}</td>
+                            <td className="p-2 text-right text-amber-700 font-bold">{item.miktar} {item.birim}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -3412,35 +3412,35 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
               {activeDocForDetail.type === 'waybill' && (
                 <div className="space-y-3">
-                  <div className="flex justify-between border-b border-slate-800 pb-2">
-                    <span className="text-slate-450">İrsaliye Kodu / Tarih:</span>
-                    <span className="font-bold text-white font-mono">{activeDocForDetail.data.irsaliyeNo} ({activeDocForDetail.data.tarih})</span>
+                  <div className="flex justify-between border-b border-slate-200 pb-2">
+                    <span className="text-slate-500">İrsaliye Kodu / Tarih:</span>
+                    <span className="font-bold text-slate-900 font-mono">{activeDocForDetail.data.irsaliyeNo} ({activeDocForDetail.data.tarih})</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-450">Sevkiyat Yapan Firma / Şantiye:</span>
-                    <span className="font-bold text-white">{activeDocForDetail.data.firma}</span>
+                    <span className="text-slate-500">Sevkiyat Yapan Firma / Şantiye:</span>
+                    <span className="font-bold text-slate-900">{activeDocForDetail.data.firma}</span>
                   </div>
                   {activeDocForDetail.data.saId && (
                     <div className="flex justify-between">
-                      <span className="text-slate-450 font-bold text-emerald-450">İlişkili Satın Alma Sipariş Kodu:</span>
-                      <span className="font-black text-amber-400 font-mono">{activeDocForDetail.data.saId}</span>
+                      <span className="text-slate-500 font-bold text-emerald-700">İlişkili Satın Alma Sipariş Kodu:</span>
+                      <span className="font-black text-amber-700 font-mono">{activeDocForDetail.data.saId}</span>
                     </div>
                   )}
 
                   <div className="pt-2">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1.5">Teslim Alınan Malzemeler</span>
-                    <table className="w-full text-left font-mono text-[10px] border border-slate-800 rounded-lg overflow-hidden">
+                    <table className="w-full text-left font-mono text-[10px] border border-slate-200 rounded-lg overflow-hidden">
                       <thead>
-                        <tr className="bg-slate-950 text-slate-400">
+                        <tr className="bg-white text-slate-400">
                           <th className="p-2">Urun Adı</th>
                           <th className="p-2 text-right">Teslim Miktarı</th>
                         </tr>
                       </thead>
                       <tbody>
                         {activeDocForDetail.data.kalemler?.map((item: any, idx: number) => (
-                          <tr key={idx} className="border-t border-slate-850">
-                            <td className="p-2 text-slate-200">{item.urunAdi}</td>
-                            <td className="p-2 text-right text-emerald-400 font-bold">{item.miktar} {item.birim}</td>
+                          <tr key={idx} className="border-t border-slate-200">
+                            <td className="p-2 text-slate-800">{item.urunAdi}</td>
+                            <td className="p-2 text-right text-emerald-700 font-bold">{item.miktar} {item.birim}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -3450,7 +3450,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                   {activeDocForDetail.data.karsilastirmaRaporu && (
                     <div className="p-3 bg-indigo-950/40 border border-indigo-900 rounded-xl">
                       <span className="font-bold text-[9px] text-slate-500 block mb-1 uppercase tracking-wider">📋 İrsaliye Analiz &amp; Sapma Raporu</span>
-                      <p className="font-mono text-[9px] text-slate-350 whitespace-pre-wrap leading-relaxed">{activeDocForDetail.data.karsilastirmaRaporu}</p>
+                      <p className="font-mono text-[9px] text-slate-600 whitespace-pre-wrap leading-relaxed">{activeDocForDetail.data.karsilastirmaRaporu}</p>
                     </div>
                   )}
 
@@ -3465,26 +3465,26 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
               {activeDocForDetail.type === 'invoice' && (
                 <div className="space-y-3">
-                  <div className="flex justify-between border-b border-slate-800 pb-2">
-                    <span className="text-slate-450">Fatura Kodu / Tarih:</span>
-                    <span className="font-bold text-white font-mono">{activeDocForDetail.data.faturaNo} ({activeDocForDetail.data.tarih})</span>
+                  <div className="flex justify-between border-b border-slate-200 pb-2">
+                    <span className="text-slate-500">Fatura Kodu / Tarih:</span>
+                    <span className="font-bold text-slate-900 font-mono">{activeDocForDetail.data.faturaNo} ({activeDocForDetail.data.tarih})</span>
                   </div>
                   <div className="flex justify-between font-bold text-purple-400">
                     <span className="text-slate-400">Mükellef Cari Kart Unvanı:</span>
                     <span>{activeDocForDetail.data.cariUnvan}</span>
                   </div>
-                  <div className="flex justify-between p-2 bg-slate-950 rounded border border-slate-850 text-[10px]">
-                    <span className="text-slate-505 font-bold">Matrah Tutarı:</span>
+                  <div className="flex justify-between p-2 bg-white rounded border border-slate-200 text-[10px]">
+                    <span className="text-slate-500 font-bold">Matrah Tutarı:</span>
                     <span className="font-mono text-purple-300">₺{activeDocForDetail.data.toplamTutar?.toLocaleString()}</span>
-                    <span className="text-slate-505 font-bold">KDV (%20):</span>
+                    <span className="text-slate-500 font-bold">KDV (%20):</span>
                     <span className="font-mono text-purple-300">₺{activeDocForDetail.data.kdvTutar?.toLocaleString()}</span>
                   </div>
 
                   <div className="pt-2">
                     <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Fatura Kalemleri &amp; Birim Fiyatlar</span>
-                    <table className="w-full text-left font-mono text-[10px] border border-slate-800 rounded-lg overflow-hidden">
+                    <table className="w-full text-left font-mono text-[10px] border border-slate-200 rounded-lg overflow-hidden">
                       <thead>
-                        <tr className="bg-slate-950 text-slate-400">
+                        <tr className="bg-white text-slate-400">
                           <th className="p-2">Hizmet/Malzeme</th>
                           <th className="p-2 text-center">Fiyat (KDV Hariç)</th>
                           <th className="p-2 text-right">Toplam Tutarı</th>
@@ -3492,8 +3492,8 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                       </thead>
                       <tbody>
                         {activeDocForDetail.data.kalemler?.map((item: any, idx: number) => (
-                          <tr key={idx} className="border-t border-slate-850">
-                            <td className="p-2 text-slate-200">{item.urunAdi} ({item.miktar} {item.birim})</td>
+                          <tr key={idx} className="border-t border-slate-200">
+                            <td className="p-2 text-slate-800">{item.urunAdi} ({item.miktar} {item.birim})</td>
                             <td className="p-2 text-center text-slate-400">₺{item.birimFiyat?.toLocaleString()}</td>
                             <td className="p-2 text-right text-purple-400 font-bold">₺{item.toplam?.toLocaleString()}</td>
                           </tr>
@@ -3505,7 +3505,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                   {activeDocForDetail.data.rapor && (
                     <div className="p-3 bg-purple-950/40 border border-purple-900 rounded-xl">
                       <span className="font-bold text-[9px] text-purple-300 block mb-1 uppercase tracking-wider">📋 Üçlü Mutabakat Analiz &amp; Sapma Raporu</span>
-                      <p className="font-mono text-[9px] text-slate-350 whitespace-pre-wrap leading-relaxed">{activeDocForDetail.data.rapor}</p>
+                      <p className="font-mono text-[9px] text-slate-600 whitespace-pre-wrap leading-relaxed">{activeDocForDetail.data.rapor}</p>
                     </div>
                   )}
 
@@ -3519,7 +3519,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
               )}
             </div>
 
-            <div className="p-4 bg-slate-950/80 border-t border-slate-800 flex gap-2.5 justify-end">
+            <div className="p-4 bg-white/80 border-t border-slate-200 flex gap-2.5 justify-end">
               <button 
                 onClick={() => handleRejectDocument(activeDocForDetail.type, activeDocForDetail.id)}
                 className="bg-rose-900/40 border border-rose-800/80 text-rose-300 py-1.5 px-4 rounded-xl text-xs font-bold hover:bg-rose-900/60 cursor-pointer transition"
