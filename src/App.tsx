@@ -26,6 +26,7 @@ import { PlanliOrganizasyonScreen } from './components/PlanliOrganizasyonScreen'
 import { PersonelKartlariScreen } from './components/PersonelKartlariScreen';
 import { KasaScreen } from './components/KasaScreen';
 import { IdariScreen } from './components/IdariScreen';
+import { CariStokScreen } from './components/CariStokScreen';
 import { OnayIslemleriScreen } from './components/OnayIslemleriScreen';
 import { SohbetScreen } from './components/SohbetScreen';
 import { FormenScreen } from './components/FormenScreen';
@@ -2704,8 +2705,17 @@ export default function App() {
                 />
               )}
 
-              {/* Combined Idari Panels: arac, kamp, saha, tutanak, cari_stok, eposta */}
-              {["arac", "kamp", "saha", "tutanak", "cari_stok", "eposta"].includes(activeTab) && (
+              {activeTab === "cari_stok" && (
+                <CariStokScreen
+                  cariKartlar={cariKartlar}
+                  setCariKartlar={setCariKartlarWithSync}
+                  stokKartlar={stokKartlar}
+                  setStokKartlar={setStokKartlarWithSync}
+                />
+              )}
+
+              {/* Combined Idari Panels: arac, kamp, saha, tutanak, eposta */}
+              {["arac", "kamp", "saha", "tutanak", "eposta"].includes(activeTab) && (
                 <IdariScreen 
                   currentSubTab={activeTab}
                   araclar={araclar}
