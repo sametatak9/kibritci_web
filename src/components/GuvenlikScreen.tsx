@@ -35,6 +35,10 @@ import {
   NobetVardiyaTipi,
 } from '../lib/guvenlikHelpers';
 import { GuvenlikTabDateBar } from './GuvenlikTabDateBar';
+import {
+  GuvenlikDuzenleKind,
+  GuvenlikKayitDuzenleModal,
+} from './GuvenlikKayitDuzenleModal';
 import { normalizeDateKey, todayDateKey, formatDateLabelTr } from '../lib/dateKeyUtils';
 
 interface GuvenlikScreenProps {
@@ -76,6 +80,15 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   const [editingEvrak, setEditingEvrak] = useState<any | null>(null);
   const [editEvrakTuru, setEditEvrakTuru] = useState<'FATURA' | 'İRSALİYE' | 'MAKBUZ' | 'GENEL_EVRAK'>('İRSALİYE');
   const [editAciklama, setEditAciklama] = useState('');
+  const [editEvrakNo, setEditEvrakNo] = useState('');
+  const [editEvrakFirma, setEditEvrakFirma] = useState('');
+  const [editEvrakTarih, setEditEvrakTarih] = useState('');
+  const [editEvrakSaat, setEditEvrakSaat] = useState('');
+  const [editingKayit, setEditingKayit] = useState<{
+    kind: GuvenlikDuzenleKind;
+    record: any;
+    tankerLabel?: string;
+  } | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
@@ -489,7 +502,12 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       await setDoc(doc(db, 'guvenlikGelenEvraklar', editingEvrak.id), {
         ...editingEvrak,
         evrakTuru: editEvrakTuru,
-        aciklama: editAciklama
+        aciklama: editAciklama,
+        evrakNo: editEvrakNo.trim() || editingEvrak.evrakNo,
+        firma: editEvrakFirma.trim(),
+        tarih: editEvrakTarih || editingEvrak.tarih,
+        saat: editEvrakSaat || editingEvrak.saat,
+        duzeltmeZamani: new Date().toISOString(),
       }, { merge: true });
 
       showStatus('success', 'Evrak bilgileri güncellendi.');
@@ -497,6 +515,45 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     } catch (err) {
       console.error(err);
       alert('Güncellenemedi.');
+    }
+  };
+
+  const openEvrakDuzenle = (e: any) => {
+    setEditingEvrak(e);
+    setEditEvrakTuru(e.evrakTuru || 'İRSALİYE');
+    setEditAciklama(e.aciklama || '');
+    setEditEvrakNo(e.evrakNo || '');
+    setEditEvrakFirma(e.firma || '');
+    setEditEvrakTarih(e.tarih || islemTarihi);
+    setEditEvrakSaat(e.saat || '');
+  };
+
+  const handleSaveDuzenlenenKayit = async (patch: Record<string, unknown>) => {
+    if (!editingKayit) return;
+    const { kind, record } = editingKayit;
+    const collectionName =
+      kind === 'personel'
+        ? 'guvenlikGirisCikisLoglari'
+        : kind === 'arac'
+          ? 'guvenlikAracLoglari'
+          : kind === 'tanker'
+            ? 'guvenlikTankerLoglari'
+            : 'guvenlikZiyaretciLoglari';
+
+    await setDoc(doc(db, collectionName, record.id), patch, { merge: true });
+    showStatus('success', 'Kayıt güncellendi.');
+    setEditingKayit(null);
+  };
+
+  const handleDeleteTankerLog = async (id: string) => {
+    if (!window.confirm('Bu tanker / kamyon kaydı silinsin mi?')) return;
+    try {
+      await deleteDoc(doc(db, 'guvenlikTankerLoglari', id));
+      setSelectedSuTankeriLogIds((prev) => prev.filter((x) => x !== id));
+      showStatus('success', 'Tanker kaydı silindi.');
+    } catch (e) {
+      console.error(e);
+      showStatus('error', 'Silinemedi.');
     }
   };
 
@@ -1589,16 +1646,11 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                 kaydetDisabled={uploadQueue.length === 0}
                 kaydetLoading={loadingIrsaliye}
                 onGuncelle={() => {
-                  if (!editingEvrak && seciliGunEvraklar[0]) {
-                    const e = seciliGunEvraklar[0];
-                    setEditingEvrak(e);
-                    setEditEvrakTuru(e.evrakTuru || 'İRSALİYE');
-                    setEditAciklama(e.aciklama || '');
+                  if (seciliGunEvraklar[0]) {
+                    openEvrakDuzenle(seciliGunEvraklar[0]);
                     showStatus('success', 'İlk kayıt düzenleme için açıldı. Listeden Düzenle ile de seçebilirsiniz.');
-                  } else if (editingEvrak) {
-                    showStatus('success', 'Düzenleme formu açık — Değişiklikleri Kaydet ile güncelleyin.');
                   } else {
-                    showStatus('error', 'Güncellenecek evrak yok. Önce listeden Düzenle seçin.');
+                    showStatus('error', 'Güncellenecek evrak yok.');
                   }
                 }}
                 guncelleDisabled={seciliGunEvraklar.length === 0}
@@ -1879,29 +1931,20 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                               </td>
                               <td className="p-3 text-center">
                                 <div className="flex justify-center items-center gap-1.5">
-                                  {e.durum === 'BEKLEMEDE' && (
-                                    <>
-                                      <button
-                                        onClick={() => {
-                                          setEditingEvrak(e);
-                                          setEditEvrakTuru(e.evrakTuru);
-                                          setEditAciklama(e.aciklama || '');
-                                        }}
-                                        className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2.5 py-1 rounded transition cursor-pointer"
-                                      >
-                                        ✏️ Değiştir
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteEvrak(e.id)}
-                                        className="bg-rose-50 hover:bg-rose-105 text-rose-600 text-[10px] font-bold px-2.5 py-1 rounded transition cursor-pointer"
-                                      >
-                                        🗑️ Sil
-                                      </button>
-                                    </>
-                                  )}
-                                  {e.durum !== 'BEKLEMEDE' && (
-                                    <span className="text-[10px] text-slate-400 italic">Değiştirilemez</span>
-                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => openEvrakDuzenle(e)}
+                                    className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2.5 py-1 rounded transition cursor-pointer"
+                                  >
+                                    Düzenle
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteEvrak(e.id)}
+                                    className="bg-rose-50 hover:bg-rose-100 text-rose-600 text-[10px] font-bold px-2.5 py-1 rounded transition cursor-pointer"
+                                  >
+                                    Sil
+                                  </button>
                                 </div>
                               </td>
                             </tr>
@@ -1943,6 +1986,50 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                         </select>
                       </div>
 
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block">Evrak No</label>
+                          <input
+                            type="text"
+                            value={editEvrakNo}
+                            onChange={(e) => setEditEvrakNo(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-medium text-slate-800 font-mono"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block">Firma</label>
+                          <input
+                            type="text"
+                            value={editEvrakFirma}
+                            onChange={(e) => setEditEvrakFirma(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-medium text-slate-800"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block">Tarih</label>
+                          <input
+                            type="date"
+                            required
+                            value={editEvrakTarih}
+                            onChange={(e) => setEditEvrakTarih(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-medium text-slate-800"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block">Saat</label>
+                          <input
+                            type="time"
+                            required
+                            value={editEvrakSaat}
+                            onChange={(e) => setEditEvrakSaat(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-medium text-slate-800"
+                          />
+                        </div>
+                      </div>
+
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-500 uppercase block">Açıklama</label>
                         <input
@@ -1958,15 +2045,15 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                         <button
                           type="button"
                           onClick={() => setEditingEvrak(null)}
-                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded-xl transition"
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded-xl transition cursor-pointer"
                         >
                           İptal
                         </button>
                         <button
                           type="submit"
-                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-5 py-2 rounded-xl transition"
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-5 py-2 rounded-xl transition cursor-pointer"
                         >
-                          Değişiklikleri Kaydet
+                          Güncelle
                         </button>
                       </div>
                     </form>
@@ -1997,7 +2084,16 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                   )
                 }
                 kaydetLabel="Tarihe Bağla"
-                onGuncelle={handleGuncelleSeciliPersonelTarih}
+                onGuncelle={() => {
+                  if (selectedPersonelLogIds.length === 1) {
+                    const log = personelLoglar.find((l) => l.id === selectedPersonelLogIds[0]);
+                    if (log) {
+                      setEditingKayit({ kind: 'personel', record: log });
+                      return;
+                    }
+                  }
+                  handleGuncelleSeciliPersonelTarih();
+                }}
                 guncelleDisabled={selectedPersonelLogIds.length === 0}
                 onSil={handleBulkDeletePersonelLogs}
                 silDisabled={selectedPersonelLogIds.length === 0}
@@ -2141,13 +2237,22 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                             <span className="text-[9px] text-slate-500 block font-mono mt-0.5">
                               {new Date(log.zaman).toLocaleTimeString('tr-TR')}
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => handleDeletePersonelLog(log.id)}
-                              className="text-[8px] font-black px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200"
-                            >
-                              Sil
-                            </button>
+                            <div className="flex gap-1 justify-end">
+                              <button
+                                type="button"
+                                onClick={() => setEditingKayit({ kind: 'personel', record: log })}
+                                className="text-[8px] font-black px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 cursor-pointer"
+                              >
+                                Düzenle
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeletePersonelLog(log.id)}
+                                className="text-[8px] font-black px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 cursor-pointer"
+                              >
+                                Sil
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );
@@ -2185,7 +2290,16 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                   )
                 }
                 kaydetLabel="Tarihe Bağla"
-                onGuncelle={handleGuncelleSeciliAracTarih}
+                onGuncelle={() => {
+                  if (selectedAracLogIds.length === 1) {
+                    const log = tumAracLoglar.find((l) => l.id === selectedAracLogIds[0]);
+                    if (log) {
+                      setEditingKayit({ kind: 'arac', record: log });
+                      return;
+                    }
+                  }
+                  handleGuncelleSeciliAracTarih();
+                }}
                 guncelleDisabled={selectedAracLogIds.length === 0}
                 onSil={handleBulkDeleteAracLogs}
                 silDisabled={selectedAracLogIds.length === 0}
@@ -2300,13 +2414,23 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                           <p className="text-[9px] text-slate-500 pt-1">Giriş Saati: {new Date(item.girisZamani).toLocaleString('tr-TR')}</p>
                         </div>
 
-                        <button
-                          onClick={() => handleAracCikis(item.id)}
-                          className="w-full bg-rose-600/10 hover:bg-rose-600 text-rose-400 hover:text-white font-extrabold text-[10px] py-1.5 px-3 rounded-xl border border-rose-500/20 transition cursor-pointer flex items-center justify-center space-x-1"
-                        >
-                          <X size={11} />
-                          <span>ŞANTİYEDEN ÇIKIŞ YAPTI OLARAK İŞARETLE</span>
-                        </button>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditingKayit({ kind: 'arac', record: item })}
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-[10px] py-1.5 px-2 rounded-xl border border-indigo-200 transition cursor-pointer"
+                          >
+                            Düzenle
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAracCikis(item.id)}
+                            className="bg-rose-600/10 hover:bg-rose-600 text-rose-400 hover:text-white font-extrabold text-[10px] py-1.5 px-2 rounded-xl border border-rose-500/20 transition cursor-pointer flex items-center justify-center space-x-1"
+                          >
+                            <X size={11} />
+                            <span>ÇIKIŞ</span>
+                          </button>
+                        </div>
                       </div>
                     ))}
 
@@ -2362,13 +2486,22 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                           <span className="text-[9px] text-slate-500 block font-mono mt-0.5">
                             {log.girisZamani ? new Date(log.girisZamani).toLocaleTimeString('tr-TR') : '—'}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteAracLog(log.id)}
-                            className="text-[8px] font-black px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200"
-                          >
-                            Sil
-                          </button>
+                          <div className="flex gap-1 justify-end">
+                            <button
+                              type="button"
+                              onClick={() => setEditingKayit({ kind: 'arac', record: log })}
+                              className="text-[8px] font-black px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 cursor-pointer"
+                            >
+                              Düzenle
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteAracLog(log.id)}
+                              className="text-[8px] font-black px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 cursor-pointer"
+                            >
+                              Sil
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -2436,27 +2569,42 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
             return (
               <div className="space-y-6">
-                
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white p-4 border border-slate-200 rounded-3xl gap-3 shadow-sm">
-                  <div className="flex items-center space-x-2">
-                    <span className="font-display font-black text-sm text-slate-800 uppercase tracking-widest flex items-center space-x-2">
-                      {currentIcon}
-                      <span>{currentLabel} Kontrol Paneli</span>
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
-                    <label className="text-[9px] font-bold text-slate-500 uppercase">İşlem Tarihi:</label>
-                    <input 
-                      type="date" 
-                      value={islemTarihi} 
-                      onChange={(e) => setIslemTarihi(e.target.value)} 
-                      className="bg-transparent text-xs font-bold text-slate-800 outline-none" 
-                    />
-                  </div>
-                </div>
+                <GuvenlikTabDateBar
+                  islemTarihi={islemTarihi}
+                  onTarihChange={setIslemTarihi}
+                  tabLabel={currentLabel}
+                  logCount={historyList.length}
+                  archivedCount={seciliGunNobetArsivleri.length}
+                  onGoster={() => handleGosterSeciliGun(currentLabel, historyList.length)}
+                  onKaydet={() =>
+                    showStatus(
+                      'success',
+                      `${seciliTarihLabel} için ${currentLabel.toLowerCase()} girişleri formdan kaydedilir. Bu güne ${historyList.length} kayıt bağlı.`
+                    )
+                  }
+                  kaydetLabel="Formdan Kaydet"
+                  onGuncelle={() => {
+                    const first = historyList[0];
+                    if (!first) {
+                      showStatus('error', 'Güncellenecek kayıt yok. Listeden Düzenle seçin.');
+                      return;
+                    }
+                    setEditingKayit({
+                      kind: 'tanker',
+                      record: first,
+                      tankerLabel: currentLabel,
+                    });
+                  }}
+                  guncelleDisabled={historyList.length === 0}
+                  onSil={() => {
+                    if (!historyList[0]) return;
+                    handleDeleteTankerLog(historyList[0].id);
+                  }}
+                  silDisabled={historyList.length === 0}
+                />
 
                 <div className={`${currentTextClass} border rounded-2xl p-4 text-xs font-semibold`}>
-                  {currentLabel} girişlerini bu sekmeden takip edebilirsiniz. Günlük loglar seçilen işleme tarihine göre listelenir.
+                  {currentLabel} girişlerini bu sekmeden takip edebilirsiniz. Her kayıtta <strong>Düzenle</strong> ile güncelleme yapabilirsiniz.
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -2629,21 +2777,48 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                             </div>
                           </div>
 
-                          <div className="pt-2">
+                          <div className="pt-2 grid grid-cols-2 gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditingKayit({
+                                  kind: 'tanker',
+                                  record: item,
+                                  tankerLabel: currentLabel,
+                                })
+                              }
+                              className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-[10px] py-1.5 px-2 rounded-xl border border-indigo-200 transition cursor-pointer"
+                            >
+                              Düzenle
+                            </button>
                             {item.durum === 'ÇIKTI' ? (
-                              <div className="w-full bg-slate-100 text-slate-500 text-center font-extrabold text-[10px] py-2 rounded-xl border border-slate-200">
-                                Çıkış Yapıldı
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTankerLog(item.id)}
+                                className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-[10px] py-1.5 px-2 rounded-xl border border-rose-200 transition cursor-pointer"
+                              >
+                                Sil
+                              </button>
                             ) : (
                               <button
+                                type="button"
                                 onClick={() => handleTankerCikis(item.id)}
-                                className="w-full bg-rose-600/10 hover:bg-rose-600 text-rose-400 hover:text-white font-extrabold text-[10px] py-1.5 px-3 rounded-xl border border-rose-500/20 transition cursor-pointer flex items-center justify-center space-x-1"
+                                className="bg-rose-600/10 hover:bg-rose-600 text-rose-400 hover:text-white font-extrabold text-[10px] py-1.5 px-2 rounded-xl border border-rose-500/20 transition cursor-pointer flex items-center justify-center space-x-1"
                               >
                                 <X size={11} />
-                                <span>ŞANTİYEDEN ÇIKIŞ YAPTI OLARAK İŞARETLE</span>
+                                <span>ÇIKIŞ</span>
                               </button>
                             )}
                           </div>
+                          {item.durum !== 'ÇIKTI' && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTankerLog(item.id)}
+                              className="w-full text-[9px] font-bold text-slate-500 hover:text-rose-600 underline cursor-pointer"
+                            >
+                              Kaydı sil
+                            </button>
+                          )}
                         </div>
                       ))}
 
@@ -2679,6 +2854,15 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                   )
                 }
                 kaydetLabel="Tarihe Bağla"
+                onGuncelle={() => {
+                  const first = seciliGunZiyaretciLoglar[0];
+                  if (!first) {
+                    showStatus('error', 'Güncellenecek ziyaretçi kaydı yok.');
+                    return;
+                  }
+                  setEditingKayit({ kind: 'ziyaretci', record: first });
+                }}
+                guncelleDisabled={seciliGunZiyaretciLoglar.length === 0}
                 onSil={() => {
                   if (seciliGunZiyaretciLoglar.length === 0) return;
                   handleDeleteZiyaretciLog(seciliGunZiyaretciLoglar[0].id);
@@ -2781,8 +2965,16 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                           <p className="text-[9px] text-slate-500 pt-1">Giriş Saati: {new Date(item.girisZamani).toLocaleString('tr-TR')}</p>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-1.5 pt-1 border-t border-slate-950/60">
+                        <div className="grid grid-cols-4 gap-1.5 pt-1 border-t border-slate-950/60">
                           <button
+                            type="button"
+                            onClick={() => setEditingKayit({ kind: 'ziyaretci', record: item })}
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[9px] font-extrabold py-1.5 rounded-xl border border-indigo-200 transition cursor-pointer"
+                          >
+                            Düzenle
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => setActiveBadgeGuest(item)}
                             className="bg-slate-800 hover:bg-slate-750 text-slate-700 text-[9px] font-extrabold py-1.5 rounded-xl border border-slate-700 transition cursor-pointer flex items-center justify-center space-x-1"
                           >
@@ -2800,6 +2992,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                           </button>
                           
                           <button
+                            type="button"
                             onClick={() => handleZiyaretciCikis(item.id)}
                             className="bg-rose-600/10 hover:bg-rose-600 text-rose-400 hover:text-white text-[9px] font-extrabold py-1.5 rounded-xl border border-rose-500/20 transition cursor-pointer flex items-center justify-center space-x-1"
                           >
@@ -2851,15 +3044,22 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                         <div className="flex gap-1 justify-end">
                           <button
                             type="button"
+                            onClick={() => setEditingKayit({ kind: 'ziyaretci', record: log })}
+                            className="text-[8px] font-black px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 cursor-pointer"
+                          >
+                            Düzenle
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleZiyaretciWhatsApp(log)}
-                            className="text-[8px] font-black px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            className="text-[8px] font-black px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-pointer"
                           >
                             WP
                           </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteZiyaretciLog(log.id)}
-                            className="text-[8px] font-black px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200"
+                            className="text-[8px] font-black px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 cursor-pointer"
                           >
                             Sil
                           </button>
@@ -3806,6 +4006,16 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
           </div>
         </div>
+      )}
+
+      {editingKayit && (
+        <GuvenlikKayitDuzenleModal
+          kind={editingKayit.kind}
+          record={editingKayit.record}
+          tankerLabel={editingKayit.tankerLabel}
+          onClose={() => setEditingKayit(null)}
+          onSave={handleSaveDuzenlenenKayit}
+        />
       )}
 
     </div>
