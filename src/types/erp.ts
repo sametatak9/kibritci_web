@@ -464,11 +464,23 @@ export interface SahaKolajFoto {
   blok?: string;
 }
 
+/** Malzeme Teslim Tutanağı satırı (stok güncellemez — sadece isim önerisi) */
+export interface MalzemeTeslimKalem {
+  id: string;
+  malzemeAdi: string;
+  miktar: number | string;
+  cinsi: string;
+  aciklama: string;
+  stokKartId?: string;
+}
+
 export interface HazirTutanak {
   id: string;
   tutanakTipi: 'TAHSİS' | 'TESLİM' | 'SEVK' | 'HASAR' | 'GENEL' | 'CEZA';
   belgeNo: string;
   personelId?: string;
+  /** Elle girilen muhatap (personel seçilmezse) */
+  muhatapPersonel?: string;
   cariKartId?: string;
   taseronAdi?: string;
   cezaTutari?: number;
@@ -478,7 +490,11 @@ export interface HazirTutanak {
   icerik: string;
   pdfUrl?: string;
   aciklama: string;
-  durum: 'TASLAK' | 'ONAYLANDI' | 'İPTAL';
+  durum: 'TASLAK' | 'ONAY BEKLİYOR' | 'ONAYLANDI' | 'İPTAL';
+  /** TESLİM tipi — excel tarzı malzeme satırları */
+  kalemler?: MalzemeTeslimKalem[];
+  teslimEden?: string;
+  teslimAlan?: string;
 }
 
 export interface CariKart {

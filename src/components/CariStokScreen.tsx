@@ -28,7 +28,8 @@ type HistoryCollection =
   | 'faturalar'
   | 'kampKayitlari'
   | 'personelZimmetleri'
-  | 'cariIslemGecmisi';
+  | 'cariIslemGecmisi'
+  | 'hazirTutanaklar';
 
 type HistoryLog = {
   id: string;
@@ -57,6 +58,7 @@ const TYPE_ICON: Record<string, React.ReactNode> = {
   'PERSONEL ZİMMET': <User size={14} />,
   'PERSONEL': <Users size={14} />,
   'TAŞERON PERSONEL': <Users size={14} />,
+  'MALZEME TESLİM': <Package size={14} />,
 };
 
 export const CariStokScreen: React.FC<CariStokScreenProps> = ({
@@ -235,7 +237,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
           }
         });
 
-        // Personel kaydı / güncelleme geçmişi (PersonelScreen → cariIslemGecmisi)
+        // Personel + malzeme teslim geçmişi (cariIslemGecmisi)
         const cariIslemSnap = await getDocs(collection(db, 'cariIslemGecmisi'));
         cariIslemSnap.forEach((docSnap) => {
           const data = docSnap.data();
@@ -243,16 +245,40 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
           const baslik = String(data.islemBaslik || '').toLocaleLowerCase('tr-TR');
           const detay = String(data.islemDetay || '').toLocaleLowerCase('tr-TR');
           const isPersonelIslem = baslik.includes('personel') || detay.includes('personel');
-          if (!isPersonelIslem && data.islemTipi !== 'DIGER') return;
-          if (!isPersonelIslem) return;
+          const isMalzemeTeslim =
+            baslik.includes('malzeme teslim') || baslik.includes('teslim tutanağı');
+          if (!isPersonelIslem && !isMalzemeTeslim) return;
           logs.push({
-            id: docSnap.id,
-            type: 'TAŞERON PERSONEL',
-            title: data.islemBaslik || 'Taşeron Personel',
+            id: isMalzemeTeslim && data.islemId ? String(data.islemId) : docSnap.id,
+            type: isMalzemeTeslim ? 'MALZEME TESLİM' : 'TAŞERON PERSONEL',
+            title: data.islemBaslik || (isMalzemeTeslim ? 'Malzeme Teslim Tutanağı' : 'Taşeron Personel'),
             desc: data.islemDetay || '',
             date: data.tarih || '',
-            badgeColor: 'bg-indigo-100 text-indigo-800',
-            collection: 'cariIslemGecmisi',
+            badgeColor: isMalzemeTeslim
+              ? 'bg-emerald-100 text-emerald-800'
+              : 'bg-indigo-100 text-indigo-800',
+            collection: isMalzemeTeslim ? 'hazirTutanaklar' : 'cariIslemGecmisi',
+          });
+        });
+
+        // Doğrudan tutanak koleksiyonundan (cariKartId / taseron unvan eşleşmesi)
+        const tutanakSnap = await getDocs(collection(db, 'hazirTutanaklar'));
+        tutanakSnap.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (data.tutanakTipi !== 'TESLİM') return;
+          const idMatch = data.cariKartId === id;
+          const nameMatch = firmaEslesir(String(data.taseronAdi || ''), name);
+          if (!idMatch && !nameMatch) return;
+          if (logs.some((l) => l.collection === 'hazirTutanaklar' && l.id === docSnap.id)) return;
+          const kalemSayisi = Array.isArray(data.kalemler) ? data.kalemler.length : 0;
+          logs.push({
+            id: docSnap.id,
+            type: 'MALZEME TESLİM',
+            title: `Teslim: ${data.belgeNo || docSnap.id}`,
+            desc: `${data.konu || 'Malzeme Teslim'} · ${kalemSayisi} kalem · ${data.durum || ''}`,
+            date: data.tarih || '',
+            badgeColor: 'bg-emerald-100 text-emerald-800',
+            collection: 'hazirTutanaklar',
           });
         });
       } else {
@@ -407,6 +433,33 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
                   : '—',
             },
           ],
+        });
+        return;
+      }
+      if (log.collection === 'hazirTutanaklar') {
+        const kalemler = Array.isArray(data.kalemler) ? data.kalemler : [];
+        const kalemOzet = kalemler
+          .map(
+            (k: any, i: number) =>
+              `${i + 1}) ${k.malzemeAdi || '—'} · ${k.miktar ?? '—'} ${k.cinsi || ''} ${k.aciklama ? `· ${k.aciklama}` : ''}`
+          )
+          .join('\n');
+        setGenericDetail({
+          title: `Malzeme Teslim · ${data.belgeNo || data.id}`,
+          rows: [
+            { label: 'Belge No', value: String(data.belgeNo || '—') },
+            { label: 'Tarih', value: String(data.tarih || '—') },
+            { label: 'Konu', value: String(data.konu || '—') },
+            { label: 'Taşeron', value: String(data.taseronAdi || '—') },
+            { label: 'Muhatap', value: String(data.muhatapPersonel || '—') },
+            { label: 'Teslim Eden', value: String(data.teslimEden || '—') },
+            { label: 'Teslim Alan', value: String(data.teslimAlan || '—') },
+            { label: 'Durum', value: String(data.durum || '—') },
+            { label: 'Kalemler', value: kalemOzet || '—' },
+            { label: 'Not', value: String(data.icerik || '—') },
+          ],
+          attachmentUrl: data.imzaliEvrakUrl ? String(data.imzaliEvrakUrl) : undefined,
+          attachmentName: `teslim_${data.belgeNo || 'tutanak'}.jpg`,
         });
       }
     } catch (err) {

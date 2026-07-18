@@ -2612,6 +2612,9 @@ export default function App() {
                   currentUser={currentUser}
                   hazirTutanaklar={hazirTutanaklar}
                   setHazirTutanaklar={setHazirTutanaklarWithSync}
+                  cariKartlar={cariKartlar}
+                  stokKartlar={stokKartlar}
+                  setCariIslemGecmisi={setCariIslemGecmisiWithSync}
                 />
               )}
 

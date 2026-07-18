@@ -37,6 +37,8 @@ interface PersonelIzinScreenProps {
   hazirTutanaklar?: any[];
   setHazirTutanaklar?: any;
   cariKartlar?: any[];
+  stokKartlar?: any[];
+  setCariIslemGecmisi?: any;
 }
 
 export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({ 
@@ -44,7 +46,9 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({
   currentUser, 
   hazirTutanaklar = [], 
   setHazirTutanaklar,
-  cariKartlar = []
+  cariKartlar = [],
+  stokKartlar = [],
+  setCariIslemGecmisi,
 }) => {
   const [activeTab, setActiveTab] = useState<'izin' | 'tutanak'>('izin');
   
@@ -559,8 +563,10 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({
           <HazirTutanakTab 
             hazirTutanaklar={hazirTutanaklar}
             setHazirTutanaklar={setHazirTutanaklar}
-            personeller={personeller}
+            personeller={personeller as any}
             cariKartlar={cariKartlar}
+            stokKartlar={stokKartlar}
+            setCariIslemGecmisi={setCariIslemGecmisi}
           />
         </div>
       )}
