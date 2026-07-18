@@ -21,6 +21,7 @@ import {
   buildNobetGunlukRaporHtml,
   canAccessGuvenlikScreen,
   canTakeAkvizyonYoklama,
+  collectNobetGunlukFotograflar,
   filterGuvenlikLogsByTarih,
   filterNobetAracZiyaretLoglari,
   filterNobetEvrakLoglari,
@@ -30,6 +31,7 @@ import {
   isPersonelActiveOnDate,
   openWhatsAppText,
   buildAkvizyonYoklamaReportHtml,
+  resolveNobetArsivFotograflar,
   NobetVardiyaTipi,
 } from '../lib/guvenlikHelpers';
 import { GuvenlikTabDateBar } from './GuvenlikTabDateBar';
@@ -655,6 +657,18 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         selectedVardiya,
         getIslemZamani()
       );
+      const filteredVidanjor = filterNobetAracZiyaretLoglari(
+        tumVidanjorLoglar,
+        todayStr,
+        selectedVardiya,
+        getIslemZamani()
+      );
+      const filteredPetrol = filterNobetAracZiyaretLoglari(
+        tumPetrolTankeriLoglar,
+        todayStr,
+        selectedVardiya,
+        getIslemZamani()
+      );
       const filteredMiciStabilize = filterNobetAracZiyaretLoglari(
         tumMiciStabilizeLoglar,
         todayStr,
@@ -668,6 +682,13 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         getIslemZamani()
       );
       const filteredEvraklar = filterNobetEvrakLoglari(gelenEvraklar, todayStr, selectedVardiya);
+      const gunlukFotograflar = collectNobetGunlukFotograflar({
+        evrakLoglari: filteredEvraklar,
+        suTankeriLoglari: filteredSuTanker,
+        vidanjorLoglari: filteredVidanjor,
+        petrolTankeriLoglari: filteredPetrol,
+        miciStabilizeLoglari: filteredMiciStabilize,
+      });
       const akvizyonSnap = akvizyonArchives.find((a) => a.tarih === todayStr);
 
       const archivePayload = {
@@ -679,17 +700,23 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         personelLoglari: filteredLogs,
         aracLoglari: filteredAraclar,
         suTankeriLoglari: filteredSuTanker,
+        vidanjorLoglari: filteredVidanjor,
+        petrolTankeriLoglari: filteredPetrol,
         miciStabilizeLoglari: filteredMiciStabilize,
         ziyaretciLoglari: filteredZiyaretciler,
         evrakLoglari: filteredEvraklar,
+        fotograflar: gunlukFotograflar,
         akvizyonYoklama: akvizyonSnap?.yoklama || null,
         ozet: {
           personel: filteredLogs.length,
           arac: filteredAraclar.length,
           suTankeri: filteredSuTanker.length,
+          vidanjor: filteredVidanjor.length,
+          petrolTankeri: filteredPetrol.length,
           miciStabilize: filteredMiciStabilize.length,
           ziyaretci: filteredZiyaretciler.length,
           evrak: filteredEvraklar.length,
+          foto: gunlukFotograflar.length,
         },
       };
 
@@ -1204,6 +1231,14 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   const tumSuTankeriLoglar = useMemo(
     () => [...iceridekiSuTankerleri, ...suTankeriGecmisLoglar],
     [iceridekiSuTankerleri, suTankeriGecmisLoglar]
+  );
+  const tumVidanjorLoglar = useMemo(
+    () => [...iceridekiVidanjorler, ...vidanjorGecmisLoglar],
+    [iceridekiVidanjorler, vidanjorGecmisLoglar]
+  );
+  const tumPetrolTankeriLoglar = useMemo(
+    () => [...iceridekiPetrolTankerleri, ...petrolTankeriGecmisLoglar],
+    [iceridekiPetrolTankerleri, petrolTankeriGecmisLoglar]
   );
   const tumMiciStabilizeLoglar = useMemo(
     () => [...iceridekiMiciStabilize, ...miciStabilizeGecmisLoglar],
@@ -2918,19 +2953,44 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                       selectedVardiya,
                       getIslemZamani()
                     ).length;
-                    const sSu = filterNobetAracZiyaretLoglari(
+                    const sSuLogs = filterNobetAracZiyaretLoglari(
                       tumSuTankeriLoglar,
                       islemTarihi,
                       selectedVardiya,
                       getIslemZamani()
-                    ).length;
+                    );
+                    const sVidLogs = filterNobetAracZiyaretLoglari(
+                      tumVidanjorLoglar,
+                      islemTarihi,
+                      selectedVardiya,
+                      getIslemZamani()
+                    );
+                    const sPetrolLogs = filterNobetAracZiyaretLoglari(
+                      tumPetrolTankeriLoglar,
+                      islemTarihi,
+                      selectedVardiya,
+                      getIslemZamani()
+                    );
+                    const sMiciLogs = filterNobetAracZiyaretLoglari(
+                      tumMiciStabilizeLoglar,
+                      islemTarihi,
+                      selectedVardiya,
+                      getIslemZamani()
+                    );
                     const sGuests = filterNobetAracZiyaretLoglari(
                       tumZiyaretciLoglar,
                       islemTarihi,
                       selectedVardiya,
                       getIslemZamani()
                     ).length;
-                    const sEvrak = filterNobetEvrakLoglari(gelenEvraklar, islemTarihi, selectedVardiya).length;
+                    const sEvrakLogs = filterNobetEvrakLoglari(gelenEvraklar, islemTarihi, selectedVardiya);
+                    const sFotolar = collectNobetGunlukFotograflar({
+                      evrakLoglari: sEvrakLogs,
+                      suTankeriLoglari: sSuLogs,
+                      vidanjorLoglari: sVidLogs,
+                      petrolTankeriLoglari: sPetrolLogs,
+                      miciStabilizeLoglari: sMiciLogs,
+                    }).length;
 
                     return (
                       <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-3">
@@ -2951,7 +3011,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
                           <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40">
                             <span className="text-[9px] font-bold text-slate-500 block uppercase font-sans">Su Tankeri</span>
-                            <span className="text-sm font-black text-slate-805 font-mono">{sSu} Sefer</span>
+                            <span className="text-sm font-black text-slate-805 font-mono">{sSuLogs.length} Sefer</span>
                           </div>
 
                           <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40">
@@ -2959,9 +3019,14 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                             <span className="text-sm font-black text-slate-805 font-mono">{sGuests} Kayıt</span>
                           </div>
 
-                          <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40 col-span-2">
+                          <div className="bg-white/60 p-2.5 rounded-xl border border-slate-200/40">
                             <span className="text-[9px] font-bold text-slate-500 block uppercase font-sans">Evrak</span>
-                            <span className="text-sm font-black text-slate-805 font-mono">{sEvrak} Belge</span>
+                            <span className="text-sm font-black text-slate-805 font-mono">{sEvrakLogs.length} Belge</span>
+                          </div>
+
+                          <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-200/80">
+                            <span className="text-[9px] font-bold text-amber-700 block uppercase font-sans">Fotoğraf</span>
+                            <span className="text-sm font-black text-amber-900 font-mono">{sFotolar} Yükleme</span>
                           </div>
                         </div>
                       </div>
@@ -3073,6 +3138,8 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                                   <span>E: <strong className="text-slate-805">{archive.evrakLoglari?.length || 0}</strong></span>
                                 </>
                               )}
+                              <span className="text-slate-700">|</span>
+                              <span>F: <strong className="text-amber-700">{resolveNobetArsivFotograflar(archive).length}</strong></span>
                             </div>
 
                             <button
@@ -3489,7 +3556,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                     {selectedArchive.evrakLoglari?.map((evr: any, idx: number) => (
                       <div key={evr.id || idx} className="bg-white p-2.5 rounded-xl border border-slate-200 space-y-1">
                         <div className="flex justify-between items-center">
-                          <span className="font-bold text-amber-400 uppercase font-mono">{evr.evrakNo}</span>
+                          <span className="font-bold text-amber-400 uppercase font-mono">{evr.evrakNo || evr.fileName || 'Evrak'}</span>
                           <span className="bg-slate-50 text-slate-500 text-[8px] font-bold px-2 py-0.5 rounded">
                             {evr.evrakTuru}
                           </span>
@@ -3500,7 +3567,18 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                             {evr.kalemler.map((k: any) => `${k.urunAdi} (${k.miktar} ${k.birim})`).join(', ')}
                           </div>
                         )}
-                        <span className="text-[9px] font-mono text-slate-550 block mt-1">Giriş Saati: {evr.saat}</span>
+                        <div className="flex justify-between items-center mt-1">
+                          <span className="text-[9px] font-mono text-slate-550 block">Giriş Saati: {evr.saat}</span>
+                          {evr.fotoUrl && (
+                            <button
+                              type="button"
+                              onClick={() => openBase64InNewTab(evr.fotoUrl, evr.fileName || 'Belge')}
+                              className="text-[9px] font-black text-amber-700 hover:text-amber-900 underline cursor-pointer"
+                            >
+                              Belgeyi Aç
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                     {(!selectedArchive.evrakLoglari || selectedArchive.evrakLoglari.length === 0) && (
@@ -3510,6 +3588,63 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                 </div>
 
               </div>
+
+              {/* 5. O gün yüklenen fotoğraflar */}
+              {(() => {
+                const arsivFotolar = resolveNobetArsivFotograflar(selectedArchive);
+                return (
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+                    <span className="font-bold text-[10px] text-slate-500 uppercase tracking-widest block border-b border-slate-200 pb-1.5">
+                      📷 NÖBET GÜNÜ YÜKLENEN FOTOĞRAFLAR ({arsivFotolar.length})
+                    </span>
+                    {arsivFotolar.length > 0 ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[320px] overflow-y-auto pr-1">
+                        {arsivFotolar.map((foto) => {
+                          const isImage =
+                            String(foto.fotoUrl || '').startsWith('data:image/') ||
+                            /\.(jpe?g|png|webp|gif)(\?|$)/i.test(String(foto.fotoUrl || '')) ||
+                            /\.(jpe?g|png|webp|gif)$/i.test(String(foto.fileName || ''));
+                          return (
+                            <button
+                              key={foto.id}
+                              type="button"
+                              onClick={() => openBase64InNewTab(foto.fotoUrl, foto.fileName || 'Fotoğraf')}
+                              className="text-left bg-white border border-slate-200 rounded-xl overflow-hidden hover:border-amber-400 transition cursor-pointer"
+                            >
+                              {isImage ? (
+                                <img
+                                  src={foto.fotoUrl}
+                                  alt={foto.fileName || 'Nöbet fotoğrafı'}
+                                  className="w-full h-28 object-cover bg-slate-100"
+                                />
+                              ) : (
+                                <div className="w-full h-28 bg-slate-100 flex flex-col items-center justify-center gap-1 text-slate-500 px-2">
+                                  <FileText size={18} />
+                                  <span className="text-[9px] font-bold text-center truncate w-full">
+                                    {foto.fileName || 'Belge'}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="p-2 space-y-0.5">
+                                <span className="text-[9px] font-black uppercase text-amber-700 tracking-wide block">
+                                  {foto.kaynakEtiket}
+                                </span>
+                                <p className="text-[10px] text-slate-600 line-clamp-2 leading-snug">
+                                  {foto.aciklama || foto.fileName || '—'}
+                                </p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-500 italic">
+                        Bu nöbet arşivinde yüklenmiş fotoğraf bulunmuyor.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
 
             </div>
 
