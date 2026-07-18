@@ -1,7 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Camera, ChevronLeft, ChevronRight, Search, Users, Calendar,
-  Clock, AlertTriangle, CheckCircle2, XCircle, FileText, MapPin
+  Camera,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  Users,
+  Calendar,
+  Clock,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  FileText,
+  MapPin,
+  Images,
+  HardHat,
+  UserRound,
+  Layers,
+  X,
 } from 'lucide-react';
 import { AylikYoklamaMap, Personel, SahaFaaliyeti } from '../types/erp';
 import {
@@ -11,9 +26,12 @@ import {
 } from '../lib/sahaFaaliyetUtils';
 import {
   buildFaaliyetPersoneller,
+  buildPeriodFaaliyetOzeti,
   buildPersonelAyOzeti,
+  countPersonFaaliyetFotolar,
   formatFaaliyetTarihLabel,
   getPersonFaaliyetleriInPeriod,
+  resolveFaaliyetEkip,
 } from '../lib/faaliyetPersonelUtils';
 import { normalizeTurkishName } from '../lib/yoklamaUtils';
 
@@ -41,6 +59,16 @@ const DURUM_KISA: Record<string, string> = {
   Girilmedi: '·',
 };
 
+function kaynakEtiket(kaynak?: string): string {
+  const k = String(kaynak || '').toUpperCase();
+  if (k === 'FORMEN_MOBIL') return 'Formen Mobil';
+  if (k === 'IDARI_SAHA') return 'İdari Saha';
+  if (k === 'TESISATCI_MOBIL') return 'Tesisatçı';
+  if (k === 'MERMERCI_MOBIL') return 'Mermerci';
+  if (k === 'KAMPCI') return 'Kampçı';
+  return k ? k.replace(/_/g, ' ') : 'Saha kaydı';
+}
+
 export const FaaliyetPersonelScreen: React.FC<FaaliyetPersonelScreenProps> = ({
   personeller,
   yoklamalar,
@@ -50,7 +78,7 @@ export const FaaliyetPersonelScreen: React.FC<FaaliyetPersonelScreenProps> = ({
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ urls: string[]; index: number } | null>(null);
 
   const periodLabel = useMemo(
     () =>
@@ -66,6 +94,11 @@ export const FaaliyetPersonelScreen: React.FC<FaaliyetPersonelScreenProps> = ({
     [sahaFaaliyetleri, personeller, selectedYear, selectedMonth]
   );
 
+  const periodOzet = useMemo(
+    () => buildPeriodFaaliyetOzeti(sahaFaaliyetleri, personeller, selectedYear, selectedMonth),
+    [sahaFaaliyetleri, personeller, selectedYear, selectedMonth]
+  );
+
   const filteredList = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     const base = !term
@@ -78,7 +111,6 @@ export const FaaliyetPersonelScreen: React.FC<FaaliyetPersonelScreenProps> = ({
             (p.gorev || '').toLowerCase().includes(term)
           );
         });
-    // isim tekilleştirme
     const byName = new Map<string, Personel>();
     for (const p of base) {
       const key = normalizeTurkishName(`${p.ad} ${p.soyad}`);
@@ -95,7 +127,6 @@ export const FaaliyetPersonelScreen: React.FC<FaaliyetPersonelScreenProps> = ({
   }, [filteredList, selectedPersonId]);
 
   useEffect(() => {
-    // Ay değişince ilk personeli seç
     setSelectedPersonId((prev) => {
       if (prev && filteredList.some((p) => p.id === prev)) return prev;
       return filteredList[0]?.id || null;
@@ -121,6 +152,11 @@ export const FaaliyetPersonelScreen: React.FC<FaaliyetPersonelScreenProps> = ({
     [selectedPerson, sahaFaaliyetleri, selectedYear, selectedMonth]
   );
 
+  const personFotoSayisi = useMemo(
+    () => personFaaliyetleri.reduce((n, f) => n + getFaaliyetFotolar(f).length, 0),
+    [personFaaliyetleri]
+  );
+
   const ayOzeti = useMemo(
     () =>
       selectedPerson
@@ -144,10 +180,48 @@ export const FaaliyetPersonelScreen: React.FC<FaaliyetPersonelScreenProps> = ({
     setSelectedYear(y);
   };
 
+  const openLightbox = (urls: string[], index: number) => {
+    if (!urls.length) return;
+    setLightbox({ urls, index: Math.max(0, Math.min(index, urls.length - 1)) });
+  };
+
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightbox(null);
+      if (e.key === 'ArrowRight') {
+        setLightbox((prev) =>
+          prev
+            ? { ...prev, index: (prev.index + 1) % prev.urls.length }
+            : prev
+        );
+      }
+      if (e.key === 'ArrowLeft') {
+        setLightbox((prev) =>
+          prev
+            ? {
+                ...prev,
+                index: (prev.index - 1 + prev.urls.length) % prev.urls.length,
+              }
+            : prev
+        );
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightbox]);
+
   return (
     <div className="space-y-4 max-w-[1400px] mx-auto">
-      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-amber-950 rounded-3xl p-5 sm:p-6 text-white shadow-lg">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-amber-950 rounded-3xl p-5 sm:p-6 text-white shadow-lg overflow-hidden relative">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-30"
+          style={{
+            backgroundImage:
+              'radial-gradient(circle at 20% 20%, rgba(251,191,36,0.25), transparent 40%), radial-gradient(circle at 80% 0%, rgba(148,163,184,0.2), transparent 35%)',
+          }}
+        />
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-300/90">
               Personel · Faaliyet Geçmişi
@@ -156,9 +230,9 @@ export const FaaliyetPersonelScreen: React.FC<FaaliyetPersonelScreenProps> = ({
               Faaliyeti Olan Personeller
             </h1>
             <p className="text-xs text-slate-300 mt-2 max-w-xl leading-relaxed">
-              Bu sekme salt okunur bir çalışma günlüğü gibidir: personel işe gelmiş mi, o ay ne
-              yapmış, hangi parsel/blokta çalışmış, mesai ve devamsızlık özeti nedir — hepsi burada.
-              Yoklama düzenleme Yoklama &amp; Puantaj sekmesinde kalır.
+              Salt okunur çalışma günlüğü: yoklama özeti, mesai, ekip, parsel/blok ve saha
+              fotoğraflarının tamamı burada. Bir kayıtta birden fazla foto varsa hepsi galeride
+              açılır.
             </p>
           </div>
           <div className="flex items-center gap-2 bg-white/10 border border-white/15 rounded-2xl p-2">
@@ -204,21 +278,36 @@ export const FaaliyetPersonelScreen: React.FC<FaaliyetPersonelScreenProps> = ({
             </button>
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap gap-3 text-[11px]">
-          <span className="inline-flex items-center gap-1.5 bg-white/10 border border-white/10 rounded-full px-3 py-1 font-bold">
-            <Calendar size={12} className="text-amber-300" /> {periodLabel}
-          </span>
-          <span className="inline-flex items-center gap-1.5 bg-white/10 border border-white/10 rounded-full px-3 py-1 font-bold">
-            <Users size={12} className="text-amber-300" /> {faaliyetPersoneller.length} personel
-          </span>
-          <span className="inline-flex items-center gap-1.5 bg-white/10 border border-white/10 rounded-full px-3 py-1 font-semibold text-slate-300">
-            Eski aylarda kayıt yoksa liste boş görünür — beklenen durumdur
-          </span>
+
+        <div className="relative mt-5 grid grid-cols-2 sm:grid-cols-5 gap-2">
+          {[
+            { icon: Calendar, label: 'Dönem', value: periodLabel, mono: false },
+            { icon: Users, label: 'Personel', value: String(periodOzet.personelSayisi) },
+            { icon: Layers, label: 'Faaliyet', value: String(periodOzet.faaliyetSayisi) },
+            { icon: Images, label: 'Fotoğraf', value: String(periodOzet.fotoSayisi) },
+            { icon: MapPin, label: 'Parsel', value: String(periodOzet.parselSayisi) },
+          ].map((item) => (
+            <div
+              key={item.label}
+              className="rounded-2xl bg-white/10 border border-white/10 px-3 py-2.5"
+            >
+              <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider text-amber-200/90">
+                <item.icon size={11} />
+                {item.label}
+              </div>
+              <p
+                className={`mt-1 font-black text-white ${
+                  item.mono === false ? 'text-[11px] leading-snug capitalize' : 'text-lg'
+                }`}
+              >
+                {item.value}
+              </p>
+            </div>
+          ))}
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-[60vh]">
-        {/* Sol: personel listesi */}
         <aside className="lg:col-span-4 xl:col-span-3 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col overflow-hidden max-h-[75vh]">
           <div className="p-3 border-b border-slate-100 space-y-2">
             <label className="relative block">
@@ -249,6 +338,12 @@ export const FaaliyetPersonelScreen: React.FC<FaaliyetPersonelScreenProps> = ({
                   selectedYear,
                   selectedMonth
                 ).length;
+                const fotoCount = countPersonFaaliyetFotolar(
+                  p,
+                  sahaFaaliyetleri,
+                  selectedYear,
+                  selectedMonth
+                );
                 const active = p.id === selectedPersonId;
                 return (
                   <button
@@ -256,18 +351,39 @@ export const FaaliyetPersonelScreen: React.FC<FaaliyetPersonelScreenProps> = ({
                     type="button"
                     onClick={() => setSelectedPersonId(p.id)}
                     className={`w-full text-left px-3 py-3 border-b border-slate-50 transition cursor-pointer ${
-                      active ? 'bg-amber-50 border-l-4 border-l-amber-500' : 'hover:bg-slate-50 border-l-4 border-l-transparent'
+                      active
+                        ? 'bg-amber-50 border-l-4 border-l-amber-500'
+                        : 'hover:bg-slate-50 border-l-4 border-l-transparent'
                     }`}
                   >
                     <div className="flex justify-between gap-2 items-start">
-                      <div className="min-w-0">
-                        <p className="text-xs font-black text-slate-900 truncate">
-                          {p.ad} {p.soyad}
-                        </p>
-                        <p className="text-[10px] text-slate-500 mt-0.5 truncate">
-                          {p.gorev || 'Görev yok'}
-                          {p.tcNo ? ` · ${p.tcNo}` : ''}
-                        </p>
+                      <div className="min-w-0 flex items-start gap-2.5">
+                        {p.fotografUrl ? (
+                          <img
+                            src={p.fotografUrl}
+                            alt=""
+                            className="w-9 h-9 rounded-xl object-cover border border-slate-200 shrink-0"
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-[10px] font-black text-slate-500 shrink-0">
+                            {(p.ad?.[0] || '').toUpperCase()}
+                            {(p.soyad?.[0] || '').toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-black text-slate-900 truncate">
+                            {p.ad} {p.soyad}
+                          </p>
+                          <p className="text-[10px] text-slate-500 mt-0.5 truncate">
+                            {p.gorev || 'Görev yok'}
+                            {p.tcNo ? ` · ${p.tcNo}` : ''}
+                          </p>
+                          {fotoCount > 0 && (
+                            <p className="text-[9px] text-amber-700 font-bold mt-1 flex items-center gap-1">
+                              <Images size={10} /> {fotoCount} foto
+                            </p>
+                          )}
+                        </div>
                       </div>
                       <span className="shrink-0 text-[9px] font-black bg-slate-900 text-white rounded-full px-2 py-0.5">
                         {count} iş
@@ -280,29 +396,48 @@ export const FaaliyetPersonelScreen: React.FC<FaaliyetPersonelScreenProps> = ({
           </div>
         </aside>
 
-        {/* Sağ: detay */}
         <section className="lg:col-span-8 xl:col-span-9 space-y-4">
           {!selectedPerson || !ayOzeti ? (
             <div className="bg-white border border-dashed border-slate-200 rounded-2xl p-12 text-center text-slate-400 text-sm">
-              Soldan bir personel seçin; o ay geldiği günler, mesai/devamsızlık ve yaptığı işler burada açılır.
+              Soldan bir personel seçin; o ay geldiği günler, mesai/devamsızlık, ekip ve tüm saha
+              fotoğrafları burada açılır.
             </div>
           ) : (
             <>
               <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm">
                 <div className="flex flex-wrap justify-between gap-3 items-start">
-                  <div>
-                    <h2 className="text-lg font-black text-slate-900">
-                      {selectedPerson.ad} {selectedPerson.soyad}
-                    </h2>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {[selectedPerson.gorev, selectedPerson.tcNo && `TC ${selectedPerson.tcNo}`, selectedPerson.iseGirisTarihi && `Giriş ${selectedPerson.iseGirisTarihi}`]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </p>
-                    <p className="text-[11px] text-slate-600 mt-2 font-medium">
-                      {periodLabel} döneminde bu personel için {personFaaliyetleri.length} saha
-                      faaliyet kaydı bulundu.
-                    </p>
+                  <div className="flex items-start gap-3 min-w-0">
+                    {selectedPerson.fotografUrl ? (
+                      <img
+                        src={selectedPerson.fotografUrl}
+                        alt=""
+                        className="w-14 h-14 rounded-2xl object-cover border border-slate-200 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-14 h-14 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-sm font-black text-slate-500 shrink-0">
+                        {(selectedPerson.ad?.[0] || '').toUpperCase()}
+                        {(selectedPerson.soyad?.[0] || '').toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-black text-slate-900">
+                        {selectedPerson.ad} {selectedPerson.soyad}
+                      </h2>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {[
+                          selectedPerson.gorev,
+                          selectedPerson.tcNo && `TC ${selectedPerson.tcNo}`,
+                          selectedPerson.iseGirisTarihi && `Giriş ${selectedPerson.iseGirisTarihi}`,
+                          selectedPerson.firmaAdi,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
+                      <p className="text-[11px] text-slate-600 mt-2 font-medium">
+                        {periodLabel}: {personFaaliyetleri.length} faaliyet · {personFotoSayisi}{' '}
+                        saha fotoğrafı
+                      </p>
+                    </div>
                   </div>
                   <div className="text-[10px] font-bold uppercase tracking-wide text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
                     Salt okunur · düzenleme yok
@@ -362,10 +497,18 @@ export const FaaliyetPersonelScreen: React.FC<FaaliyetPersonelScreenProps> = ({
               </div>
 
               <div className="space-y-3">
-                <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
-                  <Camera size={14} className="text-amber-600" />
-                  Yaptığı işler / saha faaliyetleri ({personFaaliyetleri.length})
-                </h3>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                    <Camera size={14} className="text-amber-600" />
+                    Yaptığı işler / saha faaliyetleri ({personFaaliyetleri.length})
+                  </h3>
+                  {personFotoSayisi > 0 && (
+                    <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1 inline-flex items-center gap-1">
+                      <Images size={12} />
+                      {personFotoSayisi} fotoğraf bu personelde
+                    </span>
+                  )}
+                </div>
 
                 {personFaaliyetleri.length === 0 ? (
                   <div className="bg-slate-50 border border-slate-200 rounded-2xl p-8 text-center text-slate-400 text-xs">
@@ -374,89 +517,172 @@ export const FaaliyetPersonelScreen: React.FC<FaaliyetPersonelScreenProps> = ({
                 ) : (
                   personFaaliyetleri.map((f) => {
                     const fotolar = getFaaliyetFotolar(f);
-                    const foto = fotolar[0] || '';
+                    const ekip = resolveFaaliyetEkip(f, personeller);
+                    const mesaiLabel = isMesaiSahaFaaliyet(f)
+                      ? formatMesaiFaaliyetLabel(f, personeller)
+                      : '';
+
                     return (
                       <article
                         key={f.id}
-                        className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col sm:flex-row"
+                        className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm"
                       >
-                        <div
-                          className={`shrink-0 bg-slate-100 relative ${
-                            foto ? 'sm:w-52 h-40 sm:h-auto min-h-[10rem]' : 'hidden'
-                          }`}
-                        >
-                          {foto ? (
-                            <button
-                              type="button"
-                              className="w-full h-full cursor-pointer"
-                              onClick={() => setLightboxUrl(foto)}
-                            >
-                              <img
-                                src={foto}
-                                alt="Saha"
-                                className="w-full h-full object-cover min-h-[10rem]"
-                                loading="lazy"
-                              />
-                              {fotolar.length > 1 && (
-                                <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">
-                                  +{fotolar.length - 1} foto
+                        <div className="p-4 sm:p-5 space-y-4">
+                          <div className="flex flex-wrap justify-between gap-2 items-start">
+                            <div className="space-y-1.5 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-[11px] font-bold text-slate-700">
+                                  {formatFaaliyetTarihLabel(f.tarih)}
                                 </span>
+                                <span className="text-[9px] font-black uppercase tracking-wide text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
+                                  {kaynakEtiket(f.kaynakEkran)}
+                                </span>
+                                {isMesaiSahaFaaliyet(f) && (
+                                  <span className="text-[8px] font-black uppercase bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                                    Mesai faaliyet
+                                  </span>
+                                )}
+                                {fotolar.length > 0 && (
+                                  <span className="text-[9px] font-black uppercase bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                                    <Images size={10} />
+                                    {fotolar.length} foto
+                                  </span>
+                                )}
+                              </div>
+                              <h4 className="text-base font-black text-slate-900">
+                                {f.isNiteligi || 'İş niteliği belirtilmemiş'}
+                              </h4>
+                              {(f.parsel || f.blok) && (
+                                <p className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
+                                  <MapPin size={12} className="text-amber-600" />
+                                  {[f.parsel && `Parsel ${f.parsel}`, f.blok && `Blok ${f.blok}`]
+                                    .filter(Boolean)
+                                    .join(' · ')}
+                                </p>
                               )}
-                            </button>
-                          ) : null}
-                        </div>
-                        <div className="flex-1 p-4 min-w-0 space-y-2">
-                          <div className="flex flex-wrap justify-between gap-2">
-                            <span className="text-[11px] font-bold text-slate-700">
-                              {formatFaaliyetTarihLabel(f.tarih)}
-                            </span>
-                            {f.kaynakEkran && (
-                              <span className="text-[9px] font-black uppercase tracking-wide text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
-                                {String(f.kaynakEkran).replace(/_/g, ' ')}
-                              </span>
-                            )}
+                            </div>
+                            <div className="text-right text-[10px] text-slate-500 space-y-1">
+                              {(f.kaydeden || f.kaydedenFormen) && (
+                                <p className="font-semibold">
+                                  Kaydeden:{' '}
+                                  <span className="text-slate-700">
+                                    {f.kaydedenFormen || f.kaydeden}
+                                  </span>
+                                </p>
+                              )}
+                              {(f.ustaSayisi != null || f.isciSayisi != null) && (
+                                <p className="inline-flex items-center gap-1 font-bold text-slate-600">
+                                  <HardHat size={11} />
+                                  {[
+                                    f.ustaSayisi != null && `${f.ustaSayisi} usta`,
+                                    f.isciSayisi != null && `${f.isciSayisi} işçi`,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · ')}
+                                </p>
+                              )}
+                            </div>
                           </div>
-                          <h4 className="text-sm font-black text-slate-900 flex flex-wrap items-center gap-2">
-                            {f.isNiteligi || 'İş niteliği belirtilmemiş'}
-                            {isMesaiSahaFaaliyet(f) && (
-                              <span className="text-[8px] font-black uppercase bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
-                                Mesai faaliyet
-                              </span>
-                            )}
-                          </h4>
-                          {(f.parsel || f.blok) && (
-                            <p className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
-                              <MapPin size={12} />
-                              {[f.parsel && `Parsel ${f.parsel}`, f.blok && `Blok ${f.blok}`]
-                                .filter(Boolean)
-                                .join(' · ')}
-                            </p>
+
+                          {fotolar.length > 0 ? (
+                            <div className="space-y-2">
+                              <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                                <Camera size={12} className="text-amber-600" />
+                                Saha fotoğrafları ({fotolar.length})
+                              </p>
+                              <div
+                                className={`grid gap-2 ${
+                                  fotolar.length === 1
+                                    ? 'grid-cols-1'
+                                    : fotolar.length === 2
+                                      ? 'grid-cols-2'
+                                      : 'grid-cols-2 sm:grid-cols-3'
+                                }`}
+                              >
+                                {fotolar.map((url, idx) => (
+                                  <button
+                                    key={`${f.id}-foto-${idx}`}
+                                    type="button"
+                                    onClick={() => openLightbox(fotolar, idx)}
+                                    className={`relative group overflow-hidden rounded-xl border border-slate-200 bg-slate-100 cursor-pointer ${
+                                      fotolar.length === 1
+                                        ? 'h-52 sm:h-64'
+                                        : 'h-36 sm:h-40'
+                                    }`}
+                                  >
+                                    <img
+                                      src={url}
+                                      alt={`Saha fotoğrafı ${idx + 1}`}
+                                      className="w-full h-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                                      loading="lazy"
+                                    />
+                                    <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2.5 py-2 text-[10px] font-bold text-white opacity-0 group-hover:opacity-100 transition">
+                                      {idx + 1} / {fotolar.length} · büyüt
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-[11px] text-slate-400 italic flex items-center gap-2">
+                              <Camera size={14} />
+                              Bu kayıtta saha fotoğrafı yok
+                            </div>
                           )}
+
                           {f.aciklama ? (
-                            <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
-                              {f.aciklama}
-                            </p>
+                            <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5">
+                              <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                                Açıklama
+                              </p>
+                              <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
+                                {f.aciklama}
+                              </p>
+                            </div>
                           ) : (
                             <p className="text-[11px] text-slate-400 italic">Açıklama girilmemiş.</p>
                           )}
+
+                          {ekip.length > 0 && (
+                            <div className="space-y-2">
+                              <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                                <UserRound size={12} />
+                                Bu işteki ekip ({ekip.length})
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {ekip.map((u) => {
+                                  const isSelf =
+                                    selectedPerson &&
+                                    (u.id === selectedPerson.id ||
+                                      normalizeTurkishName(u.adSoyad) ===
+                                        normalizeTurkishName(
+                                          `${selectedPerson.ad} ${selectedPerson.soyad}`
+                                        ));
+                                  return (
+                                    <span
+                                      key={`${f.id}-${u.adSoyad}`}
+                                      className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                                        isSelf
+                                          ? 'bg-amber-50 text-amber-900 border-amber-200'
+                                          : 'bg-white text-slate-700 border-slate-200'
+                                      }`}
+                                    >
+                                      {u.adSoyad}
+                                      {u.mesaiSaati != null && u.mesaiSaati > 0 && (
+                                        <span className="text-amber-700 font-black">
+                                          · {u.mesaiSaati}sa
+                                        </span>
+                                      )}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
                           {isMesaiSahaFaaliyet(f) && (
-                            <p className="text-[11px] text-amber-800 font-semibold">
-                              Mesai: {formatMesaiFaaliyetLabel(f, personeller) || '—'}
-                            </p>
-                          )}
-                          {(f.ustaSayisi != null || f.isciSayisi != null) && (
-                            <p className="text-[10px] text-slate-400">
-                              {[
-                                f.ustaSayisi != null && `Usta: ${f.ustaSayisi}`,
-                                f.isciSayisi != null && `İşçi: ${f.isciSayisi}`,
-                              ]
-                                .filter(Boolean)
-                                .join(' · ')}
-                            </p>
-                          )}
-                          {!foto && (
-                            <p className="text-[10px] text-slate-400 italic flex items-center gap-1">
-                              <Camera size={12} /> Fotoğraf eklenmemiş
+                            <p className="text-[11px] text-amber-800 font-semibold bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                              Mesai özeti: {mesaiLabel || '—'}
                             </p>
                           )}
                         </div>
@@ -470,16 +696,91 @@ export const FaaliyetPersonelScreen: React.FC<FaaliyetPersonelScreenProps> = ({
         </section>
       </div>
 
-      {lightboxUrl && (
+      {lightbox && (
         <div
-          className="fixed inset-0 z-[70] bg-black/80 flex items-center justify-center p-4 cursor-pointer"
-          onClick={() => setLightboxUrl(null)}
+          className="fixed inset-0 z-[70] bg-black/90 flex flex-col items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
         >
-          <img
-            src={lightboxUrl}
-            alt="Büyütülmüş saha fotoğrafı"
-            className="max-h-[90vh] max-w-full rounded-xl object-contain"
-          />
+          <div
+            className="relative w-full max-w-5xl flex flex-col items-center gap-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-full flex items-center justify-between text-white/90 text-xs font-bold px-1">
+              <span>
+                Fotoğraf {lightbox.index + 1} / {lightbox.urls.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => setLightbox(null)}
+                className="inline-flex items-center gap-1 bg-white/10 hover:bg-white/20 rounded-xl px-3 py-1.5 cursor-pointer"
+              >
+                <X size={14} /> Kapat
+              </button>
+            </div>
+
+            <div className="relative w-full flex items-center justify-center">
+              {lightbox.urls.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLightbox((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            index:
+                              (prev.index - 1 + prev.urls.length) % prev.urls.length,
+                          }
+                        : prev
+                    )
+                  }
+                  className="absolute left-0 sm:-left-2 z-10 p-2 rounded-full bg-white/15 hover:bg-white/25 text-white cursor-pointer"
+                  aria-label="Önceki fotoğraf"
+                >
+                  <ChevronLeft size={22} />
+                </button>
+              )}
+              <img
+                src={lightbox.urls[lightbox.index]}
+                alt={`Saha fotoğrafı ${lightbox.index + 1}`}
+                className="max-h-[78vh] max-w-full rounded-xl object-contain shadow-2xl"
+              />
+              {lightbox.urls.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLightbox((prev) =>
+                      prev
+                        ? { ...prev, index: (prev.index + 1) % prev.urls.length }
+                        : prev
+                    )
+                  }
+                  className="absolute right-0 sm:-right-2 z-10 p-2 rounded-full bg-white/15 hover:bg-white/25 text-white cursor-pointer"
+                  aria-label="Sonraki fotoğraf"
+                >
+                  <ChevronRight size={22} />
+                </button>
+              )}
+            </div>
+
+            {lightbox.urls.length > 1 && (
+              <div className="flex flex-wrap justify-center gap-1.5 max-w-full overflow-x-auto pb-1">
+                {lightbox.urls.map((url, idx) => (
+                  <button
+                    key={`thumb-${idx}`}
+                    type="button"
+                    onClick={() => setLightbox((prev) => (prev ? { ...prev, index: idx } : prev))}
+                    className={`w-14 h-14 rounded-lg overflow-hidden border-2 cursor-pointer shrink-0 ${
+                      idx === lightbox.index
+                        ? 'border-amber-400'
+                        : 'border-white/20 opacity-70 hover:opacity-100'
+                    }`}
+                  >
+                    <img src={url} alt="" className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
