@@ -293,6 +293,7 @@ export default function App() {
   const roleHomeRoutedRef = useRef(false);
   const claimsSyncedRef = useRef(false);
   const bootstrapDoneRef = useRef(false);
+  const idariPersonelSeedRef = useRef(false);
   const kampRepairInFlightRef = useRef(false);
   const personelAutoCreateBlocklistRef = useRef(new Set<string>());
   const persistenceFailureRef = useRef<(collection: string, message: string) => void>((c, m) => {
@@ -648,9 +649,24 @@ export default function App() {
           })();
         }
 
-        setPersoneller(personnelData);
+        // İdari kadro: yoklamaya girmez; izin/tutanak/araç tahsis vb. için DB'ye yüklenir
+        const { mergeIdariIntoPersonelList } = await import('./data/idariPersonelSeed');
+        const idariMerged = mergeIdariIntoPersonelList(personnelData);
+        setPersoneller(idariMerged.list);
+        if (idariMerged.toSave.length > 0) {
+          void (async () => {
+            for (const p of idariMerged.toSave) {
+              try {
+                await saveDocument('personeller', p);
+              } catch (e) {
+                console.warn('İdari personel kaydı atlandı:', p.tcNo, e);
+              }
+            }
+            console.log(`İdari personel senkronu: ${idariMerged.toSave.length} kayıt`);
+          })();
+        }
         setYoklamalar(attData);
-        if (hasSubstantialYoklamaData(attData) || personnelData.length >= 20) {
+        if (hasSubstantialYoklamaData(attData) || idariMerged.list.length >= 20) {
           markProductionLive();
         }
 
@@ -863,6 +879,24 @@ export default function App() {
       // #endregion
       setPersoneller(list);
       if (list.length >= 20) markProductionLive();
+
+      // Eksik idari kadro TC'leri bir kez tamamla (snapshot üzerine yazılmaz; sadece eksikler kaydedilir)
+      if (!idariPersonelSeedRef.current) {
+        idariPersonelSeedRef.current = true;
+        void import('./data/idariPersonelSeed').then(({ mergeIdariIntoPersonelList }) => {
+          const { toSave } = mergeIdariIntoPersonelList(list);
+          if (toSave.length === 0) return;
+          void (async () => {
+            for (const p of toSave) {
+              try {
+                await saveDocument('personeller', p);
+              } catch (e) {
+                console.warn('İdari personel snapshot senkronu atlandı:', p.tcNo, e);
+              }
+            }
+          })();
+        });
+      }
     });
 
     const unsubYoklamalar = onSnapshot(doc(db, 'yoklamalar', 'global_yoklama_map'), (snap) => {

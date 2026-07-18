@@ -320,6 +320,18 @@ export function isTaseronPersonel(p?: Personel): boolean {
   return !isKibritciCompany(firmaAdi);
 }
 
+/** İdari kadro — ana firma puantaj/yoklamasına girmez; izin/tutanak/araç tahsis vb. evraklarda seçilir */
+export function isIdariPersonel(p?: Personel): boolean {
+  if (!p) return false;
+  if (p.personelGrubu === 'IDARI') return true;
+  const dep = String(p.departman || '')
+    .trim()
+    .toLocaleUpperCase('tr-TR')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  return dep === 'IDARI' || dep.includes('IDARI PERSONEL') || dep === 'OFIS / IDARI';
+}
+
 export function findPersonelByName(personeller: Personel[], adSoyad: string): Personel | undefined {
   const target = normalizeTurkishName(adSoyad);
   if (!target) return undefined;
@@ -376,8 +388,8 @@ export function buildPersonelListForMonth(
   const ids = new Set<string>();
 
   personeller.forEach(p => {
-    // Taşeron personeller kamp/personel kart akışında tutulur; yoklama listesine girmez.
-    if (isTaseronPersonel(p)) return;
+    // Taşeron + idari kadro yoklama/puantaj listesine girmez.
+    if (isTaseronPersonel(p) || isIdariPersonel(p)) return;
     if (isPersonelVisibleInMonth(p, year, month, asYoklamaGunMap(yoklamalar[p.id]))) ids.add(p.id);
   });
   Object.entries(yoklamalar).forEach(([id, map]) => {
@@ -385,7 +397,7 @@ export function buildPersonelListForMonth(
     // Bu, "kayıtlı olmayan personel yoklamada görünüyor" ve mükerrer satır riskini azaltır.
     const existing = byId.get(id);
     if (!existing) return;
-    if (isTaseronPersonel(existing)) return;
+    if (isTaseronPersonel(existing) || isIdariPersonel(existing)) return;
     const personMap = asYoklamaGunMap(map);
     if (!personHasYoklamaInMonth(personMap, year, month)) return;
     if (!isPersonelVisibleInMonth(existing, year, month, personMap)) return;
