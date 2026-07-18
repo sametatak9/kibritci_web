@@ -723,6 +723,11 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                                 Yıldırım
                               </span>
                             )}
+                            {(ir as any).kaynak === 'MICIR_STABILIZE_FIS' && (
+                              <span className="ml-1 text-[8px] font-black uppercase bg-emerald-100 text-emerald-700 px-1 py-0.5 rounded">
+                                Mıcır/Stabilize
+                              </span>
+                            )}
                           </td>
                           <td className="px-2 py-1.5">
                             {ir.firma}
@@ -735,6 +740,8 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                               ? `${(ir as any).cekimAdedi ?? (ir.kalemler || [])[0]?.miktar ?? 0} çekim`
                               : (ir as any).kaynak === 'YILDIRIM_TANKER_FIS'
                                 ? `İ:${(ir as any).icmeSuyuAdet ?? 0} / S:${(ir as any).sanayiSuyuAdet ?? 0}`
+                              : (ir as any).kaynak === 'MICIR_STABILIZE_FIS'
+                                ? `${(ir as any).tonaj ?? (ir.kalemler || [])[0]?.miktar ?? 0} ton`
                               : (ir.kalemler || []).length}
                           </td>
                           <td className="px-2 py-1.5">

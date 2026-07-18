@@ -20,6 +20,7 @@ import { wrapCorporateReportHtml } from '../lib/corporateReportHtml';
 import { fetchApiJson } from '../lib/apiClient';
 import { GuvenlikEvrakOnayHavuzu } from './GuvenlikEvrakOnayHavuzu';
 import { VidanjorFisOnayPanel } from './VidanjorFisOnayPanel';
+import { MicirFisOnayPanel } from './MicirFisOnayPanel';
 import { KibritciLogo } from './KibritciLogo';
 
 interface OnayIslemleriScreenProps {
@@ -942,8 +943,8 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   });
 
   const pendingWaybills = irsaliyeler.filter(doc => {
-    // Eski vidanjör irsaliyeleri özel panelden yönetilir
-    if (doc.kaynak === 'VIDANJOR_FIS') return false;
+    // Vidanjör / mıcır-stabilize özel panelden yönetilir
+    if (doc.kaynak === 'VIDANJOR_FIS' || doc.kaynak === 'MICIR_STABILIZE_FIS') return false;
     const isPending = doc.onayDurumu === 'ONAY BEKLİYOR' || doc.onayDurumu === 'FARK VAR — YÖNETİCİ BİLDİRİLDİ';
     if (!isPending) return false;
     const targets = (doc as any).onayGonderilenYoneticiMailleri;
@@ -995,12 +996,18 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   const pendingSayimCount = depoSayimTalepleri.length;
   const pendingDepocuCount = pendingStokCount + pendingSayimCount;
 
-  // Vidanjör fişleri özel panelde onaylanır — genel güvenlik sihirbazına düşmesin
+  // Vidanjör / mıcır-stabilize özel panelde onaylanır — genel güvenlik sihirbazına düşmesin
   const pendingGateDocs = gelenEvraklar.filter(
-    (x) => x.durum === 'BEKLEMEDE' && x.kaynak !== 'VIDANJOR_FIS'
+    (x) =>
+      x.durum === 'BEKLEMEDE' &&
+      x.kaynak !== 'VIDANJOR_FIS' &&
+      x.kaynak !== 'MICIR_STABILIZE_FIS'
   );
   const pendingVidanjorGateCount = gelenEvraklar.filter(
     (x) => x.durum === 'BEKLEMEDE' && x.kaynak === 'VIDANJOR_FIS'
+  ).length;
+  const pendingMicirGateCount = gelenEvraklar.filter(
+    (x) => x.durum === 'BEKLEMEDE' && x.kaynak === 'MICIR_STABILIZE_FIS'
   ).length;
 
   const totalPendingCount =
@@ -1014,7 +1021,8 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
     pendingSoforCount +
     pendingDepocuCount +
     pendingGateDocs.length +
-    pendingVidanjorGateCount;
+    pendingVidanjorGateCount +
+    pendingMicirGateCount;
 
   // Gecmis onaylar list (approved or updated documents)
   const approvedRequests = satinAlmaTalepleri.filter(doc => doc.onayDurumu.includes('TAMAMLANDI') || doc.onayDurumu === 'ONAYLANDI' || doc.onayDurumu === 'DİJİTAL ONAYLANDI');
@@ -1540,7 +1548,11 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
               className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'guvenlik_belgeleri' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <span className="flex items-center space-x-2"><Truck size={13} className={activeTab === 'guvenlik_belgeleri' ? 'text-white' : 'text-emerald-500'} /> <span>Güvenlik Belgeleri</span></span>
-              {(pendingWaybills.length + pendingInvoices.length) > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'guvenlik_belgeleri' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'}`}>{pendingWaybills.length + pendingInvoices.length}</span>}
+              {(pendingWaybills.length + pendingInvoices.length + pendingMicirGateCount + pendingGateDocs.length) > 0 && (
+                <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'guvenlik_belgeleri' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
+                  {pendingWaybills.length + pendingInvoices.length + pendingMicirGateCount + pendingGateDocs.length}
+                </span>
+              )}
             </button>
 
             <button 
@@ -1683,6 +1695,15 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           )}
 
           {activeTab === 'guvenlik_belgeleri' && (
+            <div className="space-y-6">
+            <MicirFisOnayPanel
+              currentUser={currentUser}
+              cariKartlar={cariKartlar}
+              setCariKartlar={setCariKartlar}
+              setIrsaliyeler={setIrsaliyeler}
+              setCariIslemGecmisi={setCariIslemGecmisi}
+              addNotification={addNotification}
+            />
             <GuvenlikEvrakOnayHavuzu
               pendingGateDocs={pendingGateDocs}
               pendingWaybills={pendingWaybills}
@@ -1748,6 +1769,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
               itemKdvOran={itemKdvOran}
               setItemKdvOran={setItemKdvOran}
             />
+            </div>
           )}
 
           {activeTab === 'kampci_belgeleri' && (

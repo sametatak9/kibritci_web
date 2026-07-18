@@ -4,7 +4,7 @@ import {
   Check, X, FileUp, Camera, Printer, Clock, AlertTriangle, Key, Download, ArrowRight, RefreshCw, Barcode,
   Archive, Calendar, Lock, ClipboardList, MessageCircle, Droplets, Fuel
 } from 'lucide-react';
-import { Personel, Irsaliye, IrsaliyeItem, Fatura } from '../types/erp';
+import { Personel, Irsaliye, IrsaliyeItem, Fatura, MicirStabilizeFis } from '../types/erp';
 import { db } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { fetchApiJson } from '../lib/apiClient';
@@ -40,6 +40,12 @@ import {
   GuvenlikKayitDuzenleModal,
 } from './GuvenlikKayitDuzenleModal';
 import { normalizeDateKey, todayDateKey, formatDateLabelTr } from '../lib/dateKeyUtils';
+import {
+  ENTO_MADEN_UNVAN,
+  malzemeTipiLabel,
+  MicirMalzemeTipi,
+} from '../lib/micirUtils';
+import { buildMicirKalemler } from '../lib/micirOnayUtils';
 
 interface GuvenlikScreenProps {
   personeller: Personel[];
@@ -150,8 +156,12 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   const [stSurucu, setStSurucu] = useState('');
   const [stMiktar, setStMiktar] = useState('');
   const [stAciklama, setStAciklama] = useState('');
+  const [stIrsaliyeNo, setStIrsaliyeNo] = useState('');
+  const [stMalzemeTipi, setStMalzemeTipi] = useState<MicirMalzemeTipi>('MICIR');
   const [tankerFotoUrl, setTankerFotoUrl] = useState('');
   const [tankerFileName, setTankerFileName] = useState('');
+  const [micirArama, setMicirArama] = useState('');
+  const [micirTumKayitlar, setMicirTumKayitlar] = useState<any[]>([]);
   
   const [iceridekiSuTankerleri, setIceridekiSuTankerleri] = useState<any[]>([]);
   const [suTankeriGecmisLoglar, setSuTankeriGecmisLoglar] = useState<any[]>([]);
@@ -321,6 +331,13 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       const micirList = list.filter(x => x.tip === 'MICIR_STABILIZE');
       setIceridekiMiciStabilize(micirList.filter(x => x.durum === 'İÇERİDE'));
       setMiciStabilizeGecmisLoglar(micirList.filter(x => x.durum === 'ÇIKTI'));
+      setMicirTumKayitlar(
+        [...micirList].sort((a, b) =>
+          String(b.girisZamani || b.islemTarihi || '').localeCompare(
+            String(a.girisZamani || a.islemTarihi || '')
+          )
+        )
+      );
     });
 
     // 3. Aktif ve geçmiş ziyaretçiler
@@ -1108,33 +1125,62 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
   const handleTankerGiris = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!stPlaka.trim() || !stFirma.trim()) {
+
+    const currentTip =
+      activeTab === 'vidanjor'
+        ? 'VIDANJOR'
+        : activeTab === 'petrol_tankeri'
+          ? 'PETROL_TANKERI'
+          : activeTab === 'mici_stabilize'
+            ? 'MICIR_STABILIZE'
+            : 'SU_TANKERI';
+
+    const currentLabel =
+      activeTab === 'vidanjor'
+        ? 'Vidanjör'
+        : activeTab === 'petrol_tankeri'
+          ? 'Petrol Tankeri'
+          : activeTab === 'mici_stabilize'
+            ? 'Mıcır & Stabilize'
+            : 'Su Tankeri';
+
+    const isMicir = currentTip === 'MICIR_STABILIZE';
+    const firma = isMicir ? ENTO_MADEN_UNVAN : stFirma.trim();
+    const tonajNum = Number(String(stMiktar).replace(',', '.'));
+
+    if (!stPlaka.trim() || !firma) {
       alert('Lütfen plaka ve firmasını girin!');
       return;
     }
-
-    const currentTip = 
-      activeTab === 'vidanjor' ? 'VIDANJOR' : 
-      activeTab === 'petrol_tankeri' ? 'PETROL_TANKERI' : 
-      activeTab === 'mici_stabilize' ? 'MICIR_STABILIZE' : 
-      'SU_TANKERI';
-
-    const currentLabel = 
-      activeTab === 'vidanjor' ? 'Vidanjör' : 
-      activeTab === 'petrol_tankeri' ? 'Petrol Tankeri' : 
-      activeTab === 'mici_stabilize' ? 'Mıcır & Stabilize' : 
-      'Su Tankeri';
+    if (isMicir) {
+      if (!stIrsaliyeNo.trim()) {
+        alert('İrsaliye no zorunludur.');
+        return;
+      }
+      if (!Number.isFinite(tonajNum) || tonajNum <= 0) {
+        alert('Tonaj zorunludur (örn: 25).');
+        return;
+      }
+    }
 
     try {
       const logId = `tk_${Date.now()}`;
-      const logData = {
+      const micirFisId = isMicir ? `mfis_${Date.now()}` : null;
+      const guvenlikEvrakId = isMicir ? `EVR-MIC-${micirFisId}` : null;
+      const irsaliyeId = isMicir ? `IR-MIC-${micirFisId}` : null;
+      const malzeme = stMalzemeTipi === 'STABILIZE' ? 'STABILIZE' : 'MICIR';
+      const malzemeAdi = malzemeTipiLabel(malzeme);
+
+      const logData: Record<string, unknown> = {
         id: logId,
         tip: currentTip,
         plaka: stPlaka.toUpperCase().trim(),
-        firma: stFirma.trim(),
+        firma,
         surucuAdi: stSurucu.trim(),
-        miktar: stMiktar.trim() || 'Belirtilmedi',
-        aciklama: stAciklama.trim(),
+        miktar: isMicir ? String(tonajNum) : stMiktar.trim() || 'Belirtilmedi',
+        aciklama: isMicir
+          ? `${malzemeAdi} irsaliye teslimi · ${stIrsaliyeNo.trim().toUpperCase()}${stAciklama.trim() ? ` · ${stAciklama.trim()}` : ''}`
+          : stAciklama.trim(),
         fotoUrl: tankerFotoUrl || null,
         fileName: tankerFileName || null,
         durum: 'İÇERİDE',
@@ -1144,7 +1190,67 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         kaydeden: currentUser?.email || 'guvenlik_gate',
       };
 
+      if (isMicir && micirFisId) {
+        logData.irsaliyeNo = stIrsaliyeNo.trim().toUpperCase();
+        logData.tonaj = tonajNum;
+        logData.malzemeTipi = malzeme;
+        logData.micirFisId = micirFisId;
+        logData.guvenlikEvrakId = guvenlikEvrakId;
+        logData.irsaliyeId = irsaliyeId;
+        logData.onayDurumu = 'YONETICI_ONAYINDA';
+      }
+
       await setDoc(doc(db, 'guvenlikTankerLoglari', logId), logData);
+
+      // Mıcır/Stabilize = kapı irsaliye teslimi → yönetici onayına düşer (irsaliye/cari henüz oluşmaz)
+      if (isMicir && micirFisId && guvenlikEvrakId && irsaliyeId) {
+        const fis: MicirStabilizeFis = {
+          id: micirFisId,
+          tarih: islemTarihi,
+          irsaliyeNo: stIrsaliyeNo.trim().toUpperCase(),
+          plaka: stPlaka.toUpperCase().trim(),
+          tonaj: tonajNum,
+          malzemeTipi: malzeme,
+          fisGorselUrl: tankerFotoUrl || '',
+          firmaUnvan: ENTO_MADEN_UNVAN,
+          irsaliyeId,
+          guvenlikEvrakId,
+          kapıLogId: logId,
+          kaydeden: currentUser?.email || 'guvenlik_gate',
+          durum: 'YONETICI_ONAYINDA',
+          olusturulma: new Date().toISOString(),
+          guncellenme: new Date().toISOString(),
+        };
+        await setDoc(doc(db, 'micirStabilizeFisleri', micirFisId), fis);
+        await setDoc(
+          doc(db, 'guvenlikGelenEvraklar', guvenlikEvrakId),
+          {
+            id: guvenlikEvrakId,
+            evrakNo: fis.irsaliyeNo,
+            evrakTuru: 'İRSALİYE',
+            firma: ENTO_MADEN_UNVAN,
+            tarih: fis.tarih,
+            saat: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+            fotoUrl: fis.fisGorselUrl || '',
+            fileName: `micir_${fis.irsaliyeNo}.jpg`,
+            fileType: 'image/jpeg',
+            durum: 'BEKLEMEDE',
+            aciklama: `Kapı ${malzemeAdi} irsaliye teslimi · Plaka ${fis.plaka} · ${fis.tonaj} ton — yönetici onayı bekliyor`,
+            kaydeden: currentUser?.email || 'guvenlik_gate',
+            kaynak: 'MICIR_STABILIZE_FIS',
+            micirFisId,
+            kapıLogId: logId,
+            irsaliyeId,
+            plaka: fis.plaka,
+            tonaj: fis.tonaj,
+            malzemeTipi: fis.malzemeTipi,
+            kalemler: buildMicirKalemler(micirFisId, fis.tonaj, malzeme),
+            aiStatus: 'SKIPPED',
+          },
+          { merge: true }
+        );
+      }
+
       if (addNotification) {
         if (currentTip === 'VIDANJOR') {
           await addNotification(
@@ -1168,18 +1274,39 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               kapıLogId: logId,
             }
           );
+        } else if (isMicir) {
+          await addNotification(
+            `Mıcır/Stabilize kapı irsaliyesi yönetici onayına gönderildi: ${stIrsaliyeNo.trim().toUpperCase()} · ${stPlaka.toUpperCase().trim()} · ${tonajNum} ton`,
+            {
+              tip: 'MICIR_FIS_ONAY',
+              hedefRol: 'YÖNETİCİ',
+              micirFisId,
+              guvenlikEvrakId,
+              irsaliyeId,
+              kapıLogId: logId,
+              plaka: stPlaka.toUpperCase().trim(),
+              firma: ENTO_MADEN_UNVAN,
+            }
+          );
         } else {
           addNotification(`${currentLabel} ${logData.plaka} (${logData.firma}) şantiyeye giriş yaptı.`);
         }
       }
       setStPlaka('');
-      setStFirma('');
+      setStFirma(isMicir ? ENTO_MADEN_UNVAN : '');
       setStSurucu('');
       setStMiktar('');
       setStAciklama('');
+      setStIrsaliyeNo('');
+      setStMalzemeTipi('MICIR');
       setTankerFotoUrl('');
       setTankerFileName('');
-      showStatus('success', `${currentLabel} giriş kaydı yapıldı!`);
+      showStatus(
+        'success',
+        isMicir
+          ? 'Kapı irsaliye kaydı listelendi ve yönetici onayına gönderildi.'
+          : `${currentLabel} giriş kaydı yapıldı!`
+      );
     } catch (err) {
       console.error(err);
       showStatus('error', 'Kayıt başarısız!');
@@ -1585,7 +1712,10 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             </button>
 
             <button 
-              onClick={() => setActiveTab('mici_stabilize')}
+              onClick={() => {
+                setActiveTab('mici_stabilize');
+                setStFirma(ENTO_MADEN_UNVAN);
+              }}
               className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'mici_stabilize' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <span className="flex items-center space-x-2"><Truck size={13} /> <span>7. Mıcır &amp; Stabilize</span></span>
@@ -2604,7 +2734,18 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                 />
 
                 <div className={`${currentTextClass} border rounded-2xl p-4 text-xs font-semibold`}>
-                  {currentLabel} girişlerini bu sekmeden takip edebilirsiniz. Her kayıtta <strong>Düzenle</strong> ile güncelleme yapabilirsiniz.
+                  {activeTab === 'mici_stabilize' ? (
+                    <>
+                      Bu sekme <strong>irsaliyenin kapıdan teslim alınışı</strong>dır. Tonaj, plaka, irsaliye no
+                      ve tarih kaydedilir; alta listelenir. Yönetici onaylayınca irsaliye +{' '}
+                      <strong>{ENTO_MADEN_UNVAN}</strong> cari kartına kayıt oluşur.
+                    </>
+                  ) : (
+                    <>
+                      {currentLabel} girişlerini bu sekmeden takip edebilirsiniz. Her kayıtta{' '}
+                      <strong>Düzenle</strong> ile güncelleme yapabilirsiniz.
+                    </>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -2612,7 +2753,10 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                   {/* Yeni Giriş Formu */}
                   <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
                     <span className="font-display font-black text-xs text-slate-805 uppercase tracking-widest block border-b border-slate-200 pb-2">
-                      {currentIcon} YENİ {currentLabel.toUpperCase()} GİRİŞ KAYDI
+                      {currentIcon}{' '}
+                      {activeTab === 'mici_stabilize'
+                        ? 'KAPI IRSALİYE TESLİM KAYDI'
+                        : `YENİ ${currentLabel.toUpperCase()} GİRİŞ KAYDI`}
                     </span>
 
                     <form onSubmit={handleTankerGiris} className="space-y-3.5 text-xs text-slate-700">
@@ -2628,50 +2772,121 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                         />
                       </div>
 
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-slate-500 uppercase">Tedarikçi / Firma *</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="Örn: ABC Lojistik"
-                          value={stFirma}
-                          onChange={(e) => setStFirma(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold text-xs"
-                        />
-                      </div>
+                      {activeTab === 'mici_stabilize' ? (
+                        <>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Cari / Firma</label>
+                            <input
+                              type="text"
+                              readOnly
+                              value={ENTO_MADEN_UNVAN}
+                              className="w-full bg-emerald-50 border border-emerald-200 text-emerald-900 p-2.5 rounded-xl font-bold text-xs"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">İrsaliye No *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="Örn: IRS-2026-001"
+                              value={stIrsaliyeNo}
+                              onChange={(e) => setStIrsaliyeNo(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold text-xs uppercase"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Malzeme *</label>
+                            <select
+                              value={stMalzemeTipi}
+                              onChange={(e) => setStMalzemeTipi(e.target.value as MicirMalzemeTipi)}
+                              className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold text-xs"
+                            >
+                              <option value="MICIR">Mıcır</option>
+                              <option value="STABILIZE">Stabilize</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Tonaj *</label>
+                            <input
+                              type="number"
+                              required
+                              min={0.01}
+                              step={0.01}
+                              placeholder="Örn: 25"
+                              value={stMiktar}
+                              onChange={(e) => setStMiktar(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold text-xs"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Sürücü (opsiyonel)</label>
+                            <input
+                              type="text"
+                              placeholder="Örn: Ahmet Yılmaz"
+                              value={stSurucu}
+                              onChange={(e) => setStSurucu(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl text-xs"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Not</label>
+                            <input
+                              type="text"
+                              placeholder="Opsiyonel açıklama..."
+                              value={stAciklama}
+                              onChange={(e) => setStAciklama(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl text-xs"
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Tedarikçi / Firma *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="Örn: ABC Lojistik"
+                              value={stFirma}
+                              onChange={(e) => setStFirma(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold text-xs"
+                            />
+                          </div>
 
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-slate-500 uppercase">Sürücü Adı Soyadı</label>
-                        <input
-                          type="text"
-                          placeholder="Örn: Ahmet Yılmaz"
-                          value={stSurucu}
-                          onChange={(e) => setStSurucu(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl text-xs"
-                        />
-                      </div>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Sürücü Adı Soyadı</label>
+                            <input
+                              type="text"
+                              placeholder="Örn: Ahmet Yılmaz"
+                              value={stSurucu}
+                              onChange={(e) => setStSurucu(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl text-xs"
+                            />
+                          </div>
 
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-slate-500 uppercase">Miktar (m³ / Litre)</label>
-                        <input
-                          type="text"
-                          placeholder="Örn: 15 m³ veya 10000 Lt"
-                          value={stMiktar}
-                          onChange={(e) => setStMiktar(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl text-xs"
-                        />
-                      </div>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Miktar (m³ / Litre)</label>
+                            <input
+                              type="text"
+                              placeholder="Örn: 15 m³ veya 10000 Lt"
+                              value={stMiktar}
+                              onChange={(e) => setStMiktar(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl text-xs"
+                            />
+                          </div>
 
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-slate-500 uppercase">Açıklama</label>
-                        <input
-                          type="text"
-                          placeholder="Genel şantiye ihtiyacı vb..."
-                          value={stAciklama}
-                          onChange={(e) => setStAciklama(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl text-xs"
-                        />
-                      </div>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Açıklama</label>
+                            <input
+                              type="text"
+                              placeholder="Genel şantiye ihtiyacı vb..."
+                              value={stAciklama}
+                              onChange={(e) => setStAciklama(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl text-xs"
+                            />
+                          </div>
+                        </>
+                      )}
 
                       {/* Document Upload Area */}
                       <div className="space-y-1">
@@ -2731,7 +2946,9 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                         type="submit"
                         className={`w-full ${currentButtonClass} text-white font-black text-xs py-3 rounded-xl cursor-pointer border-b-2 transition`}
                       >
-                        KAYDET &amp; ŞANTİYEYE GÖNDER
+                        {activeTab === 'mici_stabilize'
+                          ? 'KAYDET &amp; YÖNETİCİYE GÖNDER'
+                          : 'KAYDET &amp; ŞANTİYEYE GÖNDER'}
                       </button>
                     </form>
                   </div>
@@ -2739,11 +2956,50 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                   {/* Tarihli Tanker Hareketleri Listesi */}
                   <div className="lg:col-span-2 bg-white p-5 border border-slate-200 rounded-3xl space-y-4 shadow-sm">
                     <span className="font-display font-black text-xs text-amber-500 uppercase tracking-widest block border-b border-slate-200 pb-2">
-                      🚧 TARİHLİ {currentLabel.toUpperCase()} HAREKET LİSTESİ
+                      {activeTab === 'mici_stabilize'
+                        ? '📋 KAPI IRSALİYE KAYIT LİSTESİ (ARAMA)'
+                        : `🚧 TARİHLİ ${currentLabel.toUpperCase()} HAREKET LİSTESİ`}
                     </span>
+
+                    {activeTab === 'mici_stabilize' && (
+                      <div className="relative">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          value={micirArama}
+                          onChange={(e) => setMicirArama(e.target.value)}
+                          placeholder="İrsaliye no, plaka, tonaj veya tarih ile ara..."
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold"
+                        />
+                      </div>
+                    )}
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
-                      {historyList.map((item) => (
+                      {(activeTab === 'mici_stabilize'
+                        ? (() => {
+                            const kw = micirArama.trim().toLowerCase();
+                            const base = kw
+                              ? micirTumKayitlar.filter((item) => {
+                                  const blob = [
+                                    item.plaka,
+                                    item.firma,
+                                    item.irsaliyeNo,
+                                    item.miktar,
+                                    item.tonaj,
+                                    item.malzemeTipi,
+                                    item.islemTarihi,
+                                    item.aciklama,
+                                    item.onayDurumu,
+                                  ]
+                                    .join(' ')
+                                    .toLowerCase();
+                                  return blob.includes(kw);
+                                })
+                              : historyList;
+                            return base;
+                          })()
+                        : historyList
+                      ).map((item) => (
                         <div key={item.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-4.5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
                           
                           <div>
@@ -2761,15 +3017,46 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                                   </button>
                                 )}
                                 <span className={`text-[8px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wider ${currentBg}`}>
-                                  {currentLabel}
+                                  {activeTab === 'mici_stabilize'
+                                    ? malzemeTipiLabel(item.malzemeTipi)
+                                    : currentLabel}
                                 </span>
                               </div>
                             </div>
 
                             <div className="space-y-1 text-[11px] text-slate-500 font-semibold mt-2.5">
-                              <p>🏢 Tedarikçi / Firma: <span className="text-slate-800 font-bold">{item.firma}</span></p>
-                              <p>👤 Sürücü: <span className="text-slate-800 font-bold">{item.surucuAdi || 'Belirtilmedi'}</span></p>
-                              <p>⚖️ Miktar / Açıklama: <span className="text-amber-500 font-bold">{item.miktar ? `${item.miktar} m³ / Lt` : '—'} ({item.aciklama || 'Belirtilmedi'})</span></p>
+                              {activeTab === 'mici_stabilize' ? (
+                                <>
+                                  <p>📄 İrsaliye No: <span className="text-slate-800 font-bold font-mono">{item.irsaliyeNo || '—'}</span></p>
+                                  <p>🏢 Cari: <span className="text-slate-800 font-bold">{item.firma || ENTO_MADEN_UNVAN}</span></p>
+                                  <p>⚖️ Tonaj: <span className="text-emerald-700 font-bold">{item.tonaj ?? item.miktar ?? '—'} ton</span></p>
+                                  <p>📅 Tarih: <span className="text-slate-800 font-bold">{item.islemTarihi || '—'}</span></p>
+                                  <p>
+                                    Onay:{' '}
+                                    <span
+                                      className={`font-black ${
+                                        item.onayDurumu === 'ONAYLANDI'
+                                          ? 'text-emerald-600'
+                                          : item.onayDurumu === 'REDDEDILDI'
+                                            ? 'text-rose-600'
+                                            : 'text-amber-600'
+                                      }`}
+                                    >
+                                      {item.onayDurumu === 'ONAYLANDI'
+                                        ? 'Onaylandı → irsaliye + cari'
+                                        : item.onayDurumu === 'REDDEDILDI'
+                                          ? 'Reddedildi'
+                                          : 'Yönetici onayında'}
+                                    </span>
+                                  </p>
+                                </>
+                              ) : (
+                                <>
+                                  <p>🏢 Tedarikçi / Firma: <span className="text-slate-800 font-bold">{item.firma}</span></p>
+                                  <p>👤 Sürücü: <span className="text-slate-800 font-bold">{item.surucuAdi || 'Belirtilmedi'}</span></p>
+                                  <p>⚖️ Miktar / Açıklama: <span className="text-amber-500 font-bold">{item.miktar ? `${item.miktar} m³ / Lt` : '—'} ({item.aciklama || 'Belirtilmedi'})</span></p>
+                                </>
+                              )}
                               <p className="text-[9px] text-slate-500 pt-1">Giriş Saati: {new Date(item.girisZamani).toLocaleString('tr-TR')}</p>
                               {item.cikisZamani && (
                                 <p className="text-[9px] text-rose-500">Çıkış Saati: {new Date(item.cikisZamani).toLocaleString('tr-TR')}</p>
@@ -2822,9 +3109,30 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                         </div>
                       ))}
 
-                      {historyList.length === 0 && (
+                      {((activeTab === 'mici_stabilize' && micirArama.trim()
+                        ? micirTumKayitlar.filter((item) => {
+                            const kw = micirArama.trim().toLowerCase();
+                            const blob = [
+                              item.plaka,
+                              item.firma,
+                              item.irsaliyeNo,
+                              item.miktar,
+                              item.tonaj,
+                              item.malzemeTipi,
+                              item.islemTarihi,
+                              item.aciklama,
+                              item.onayDurumu,
+                            ]
+                              .join(' ')
+                              .toLowerCase();
+                            return blob.includes(kw);
+                          })
+                        : historyList
+                      ).length === 0) && (
                         <div className="col-span-2 bg-slate-900/40 p-10 rounded-2xl border border-slate-200 text-center text-slate-500 italic text-xs">
-                          Seçilen tarihte şantiyeye giriş yapmış {currentLabel.toLowerCase()} kaydı bulunmuyor.
+                          {activeTab === 'mici_stabilize' && micirArama.trim()
+                            ? 'Aramayla eşleşen kapı irsaliye kaydı bulunamadı.'
+                            : `Seçilen tarihte şantiyeye giriş yapmış ${currentLabel.toLowerCase()} kaydı bulunmuyor.`}
                         </div>
                       )}
                     </div>
