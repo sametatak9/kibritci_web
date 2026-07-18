@@ -9,7 +9,7 @@ import {
 import { Personel, AylikYoklamaMap, YoklamaDurum, SahaFaaliyeti as SahaFaaliyetiType, SahaFaaliyetTipi } from '../types/erp';
 import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
-import { buildPersonelListForMonth, getYoklamaDay, isDayActiveForPersonel, isTaseronPersonel, setYoklamaDay, isKampciTesisatciMermerci } from '../lib/yoklamaUtils';
+import { buildPersonelListForMonth, getYoklamaDay, isDayActiveForPersonel, isTaseronPersonel, isIdariPersonel, setYoklamaDay, isKampciTesisatciMermerci } from '../lib/yoklamaUtils';
 import { buildFormenGunlukOzet } from '../lib/gunlukAkisUtils';
 import { buildWhatsAppUrl, isLegacySahaRecord } from '../lib/mobilOnayUtils';
 import {
@@ -220,7 +220,7 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
 
   const monthPersonelList = buildPersonelListForMonth(personeller, yoklamalar, year, month);
   const activeStaff = monthPersonelList.filter((p) => {
-    if (isTaseronPersonel(p)) return false;
+    if (isTaseronPersonel(p) || isIdariPersonel(p)) return false;
     // Kampçı, Tesisatçı ve Mermerci personeller Kampçı ekranında listelenecektir.
     if (isKampciTesisatciMermerci(p.gorev)) return false;
     return isDayActiveForPersonel(p, year, month, day, yoklamalar[p.id] as any);
@@ -2437,7 +2437,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
                     <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                       <div className="flex items-center space-x-2 text-slate-950">
                         <Users size={14} className="text-amber-500" />
-                        <span className="font-bold text-[10px] uppercase tracking-wider">ŞANTİYE PERSONEL LİSTESİ ({personeller.filter(p => (p.durum === true || String(p.durum).toLowerCase() === 'true') && !isTaseronPersonel(p)).length})</span>
+                        <span className="font-bold text-[10px] uppercase tracking-wider">ŞANTİYE PERSONEL LİSTESİ ({personeller.filter(p => (p.durum === true || String(p.durum).toLowerCase() === 'true') && !isTaseronPersonel(p) && !isIdariPersonel(p)).length})</span>
                       </div>
                       
                       {/* Search Personnel */}
@@ -2455,7 +2455,7 @@ _Lütfen bu personelin sigorta giriş işlemlerini başlatınız._`}
 
                     <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                       {personeller
-                        .filter(p => (p.durum === true || String(p.durum).toLowerCase() === 'true') && !isTaseronPersonel(p))
+                        .filter(p => (p.durum === true || String(p.durum).toLowerCase() === 'true') && !isTaseronPersonel(p) && !isIdariPersonel(p))
                         .filter(p => {
                           const q = personelSearchKeyword.toLowerCase().trim();
                           if (!q) return true;

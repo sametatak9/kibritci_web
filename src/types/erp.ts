@@ -26,6 +26,8 @@ export interface Personel {
   sigortaEvrakUrl?: string;
   firmaTipi?: 'ANA_FIRMA' | 'TASERON';
   firmaAdi?: string;
+  /** SAHA: puantaj/yoklama; IDARI: yoklama alınmaz, izin/tutanak/araç tahsis vb. evraklarda görünür */
+  personelGrubu?: 'SAHA' | 'IDARI';
 }
 
 export type YoklamaDurum = 'Geldi' | 'Yok' | 'İzinli' | 'Raporlu' | 'Pazar' | 'Tatil' | 'Girilmedi';

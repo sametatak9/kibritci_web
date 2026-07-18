@@ -238,6 +238,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     durum: true,
     firmaTipi: 'ANA_FIRMA',
     firmaAdi: 'Kibritçi İnşaat',
+    personelGrubu: 'SAHA',
   };
 
   const [formData, setFormData] = useState<Omit<Personel, 'id'> | Personel>(emptyForm);
@@ -1130,11 +1131,38 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                 <select
                   name="departman"
                   value={formData.departman}
-                  onChange={handleInputChange}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setFormData((prev) => ({
+                      ...prev,
+                      departman: v,
+                      personelGrubu: v === 'İDARİ' ? 'IDARI' : prev.personelGrubu === 'IDARI' ? 'SAHA' : prev.personelGrubu || 'SAHA',
+                    }));
+                  }}
                   className="w-full text-xs border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50"
                 >
                   <option value="Şantiye">Şantiye</option>
                   <option value="Ofis">Ofis</option>
+                  <option value="İDARİ">İdari (yoklama alınmaz)</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Personel Grubu</label>
+                <select
+                  name="personelGrubu"
+                  value={(formData as Personel).personelGrubu || (formData.departman === 'İDARİ' ? 'IDARI' : 'SAHA')}
+                  onChange={(e) => {
+                    const next = e.target.value as 'SAHA' | 'IDARI';
+                    setFormData((prev) => ({
+                      ...prev,
+                      personelGrubu: next,
+                      departman: next === 'IDARI' ? 'İDARİ' : prev.departman === 'İDARİ' ? 'Şantiye' : prev.departman,
+                    }));
+                  }}
+                  className="w-full text-xs border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50"
+                >
+                  <option value="SAHA">Saha — yoklama / puantaj</option>
+                  <option value="IDARI">İdari — yoklama yok (izin/tutanak/araç)</option>
                 </select>
               </div>
               <div>
@@ -1437,6 +1465,11 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                         {p.firmaTipi === 'TASERON' && (
                           <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-100 px-2 py-0.5 rounded-full font-bold">
                             {p.firmaAdi || 'Taşeron'}
+                          </span>
+                        )}
+                        {(p.personelGrubu === 'IDARI' || p.departman === 'İDARİ') && (
+                          <span className="text-[10px] bg-sky-50 text-sky-800 border border-sky-100 px-2 py-0.5 rounded-full font-bold">
+                            İdari · Yoklama yok
                           </span>
                         )}
                       </h4>
