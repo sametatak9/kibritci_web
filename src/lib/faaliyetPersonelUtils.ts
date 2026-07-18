@@ -1,5 +1,6 @@
 import { AylikYoklamaMap, Personel, SahaFaaliyeti, YoklamaDurum } from '../types/erp';
 import { normalizeDateKey } from './dateKeyUtils';
+import { getFaaliyetFotolar } from './sahaFaaliyetUtils';
 import { findPersonelByName, getYoklamaDay, normalizeTurkishName } from './yoklamaUtils';
 
 export function personMatchesFaaliyet(p: Personel, f: SahaFaaliyeti): boolean {
@@ -146,4 +147,88 @@ export function formatFaaliyetTarihLabel(tarih?: string): string {
     year: 'numeric',
     weekday: 'short',
   });
+}
+
+/** Faaliyetteki ekip listesini okunur isimlere çevirir */
+export function resolveFaaliyetEkip(
+  f: SahaFaaliyeti,
+  personeller: Personel[]
+): Array<{ id?: string; adSoyad: string; mesaiSaati?: number }> {
+  const entries = f.aktifPersonelListesi || [];
+  const out: Array<{ id?: string; adSoyad: string; mesaiSaati?: number }> = [];
+  const seen = new Set<string>();
+
+  for (const entry of entries) {
+    const raw = String(entry || '').trim();
+    if (!raw) continue;
+    const byId = personeller.find((p) => p.id === raw);
+    const byName = byId || findPersonelByName(personeller, raw);
+    const adSoyad = byName
+      ? `${byName.ad} ${byName.soyad}`.trim()
+      : raw;
+    const key = normalizeTurkishName(adSoyad);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const mesaiKey = byName?.id || raw;
+    const mesaiRaw = f.personelMesaiSaatleri?.[mesaiKey];
+    out.push({
+      id: byName?.id,
+      adSoyad,
+      mesaiSaati:
+        mesaiRaw != null && Number.isFinite(Number(mesaiRaw))
+          ? Number(mesaiRaw)
+          : undefined,
+    });
+  }
+
+  if (out.length === 0 && f.personelId) {
+    const p = personeller.find((x) => x.id === f.personelId);
+    if (p) {
+      out.push({
+        id: p.id,
+        adSoyad: `${p.ad} ${p.soyad}`.trim(),
+        mesaiSaati: f.personelMesaiSaatleri?.[p.id],
+      });
+    }
+  }
+
+  return out.sort((a, b) => a.adSoyad.localeCompare(b.adSoyad, 'tr'));
+}
+
+export function countPersonFaaliyetFotolar(
+  person: Personel,
+  sahaFaaliyetleri: SahaFaaliyeti[],
+  year: number,
+  month: number
+): number {
+  return getPersonFaaliyetleriInPeriod(person, sahaFaaliyetleri, year, month).reduce(
+    (sum, f) => sum + getFaaliyetFotolar(f).length,
+    0
+  );
+}
+
+export function buildPeriodFaaliyetOzeti(
+  sahaFaaliyetleri: SahaFaaliyeti[],
+  personeller: Personel[],
+  year: number,
+  month: number
+): {
+  personelSayisi: number;
+  faaliyetSayisi: number;
+  fotoSayisi: number;
+  parselSayisi: number;
+  mesaiFaaliyetSayisi: number;
+} {
+  const period = filterFaaliyetlerByPeriod(sahaFaaliyetleri, year, month);
+  const parseller = new Set(
+    period.map((f) => String(f.parsel || '').trim()).filter(Boolean)
+  );
+  return {
+    personelSayisi: buildFaaliyetPersoneller(sahaFaaliyetleri, personeller, year, month)
+      .length,
+    faaliyetSayisi: period.length,
+    fotoSayisi: period.reduce((n, f) => n + getFaaliyetFotolar(f).length, 0),
+    parselSayisi: parseller.size,
+    mesaiFaaliyetSayisi: period.filter((f) => f.faaliyetTipi === 'MESAI_SAHA').length,
+  };
 }
