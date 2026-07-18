@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  FileText, Plus, Trash2, CheckCircle2, AlertTriangle, Eye, Printer, Download, Search, Edit3, Landmark, UserCheck, ShieldAlert, BadgeInfo
+import {
+  FileText, Trash2, Eye, Printer, Search, Edit3, Landmark,
 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { CorporateReportLayout } from './CorporateReportLayout';
@@ -43,7 +43,6 @@ interface PersonelIzinScreenProps {
 
 export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({ 
   personeller, 
-  currentUser, 
   hazirTutanaklar = [], 
   setHazirTutanaklar,
   cariKartlar = [],
@@ -68,6 +67,8 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIzinForPdf, setSelectedIzinForPdf] = useState<IzinFormu | null>(null);
+  const [editingIzinId, setEditingIzinId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   // Auto-calculate difference in days
   useEffect(() => {
@@ -84,7 +85,43 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({
     }
   }, [baslangicTarihi, bitisTarihi]);
 
-  const isYonetici = currentUser?.email === 'sametatak9@gmail.com' || currentUser?.email === 'santiye@kibritci.com';
+  const resetForm = () => {
+    setEditingIzinId(null);
+    setSelectedPersonelId('');
+    setIsManualPersonnel(false);
+    setManualNameInput('');
+    setManualUnvanInput('');
+    setIzinTipi('YILLIK_IZIN');
+    setAciklama('');
+    setBaslangicTarihi('');
+    setBitisTarihi('');
+    setToplamGun(1);
+  };
+
+  const startEditIzin = (item: IzinFormu) => {
+    setEditingIzinId(item.id);
+    setIzinTipi(item.izinTipi);
+    setBaslangicTarihi(item.baslangicTarihi || '');
+    setBitisTarihi(item.bitisTarihi || '');
+    setToplamGun(item.toplamGun || 1);
+    setAciklama(item.aciklama || '');
+
+    const inKadro = personeller.some((p) => p.id === item.personelId);
+    if (inKadro) {
+      setIsManualPersonnel(false);
+      setSelectedPersonelId(item.personelId);
+      setManualNameInput('');
+      setManualUnvanInput('');
+    } else {
+      setIsManualPersonnel(true);
+      setSelectedPersonelId('');
+      setManualNameInput(item.personelIsim || '');
+      setManualUnvanInput(item.unvan || '');
+    }
+
+    setActiveTab('izin');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   // Fetch from Firebase
   useEffect(() => {
@@ -145,16 +182,21 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({
 
   const handleSaveIzinFormu = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     if (!isManualPersonnel && !selectedPersonelId) {
-      alert("Lütfen izne çıkacak personeli seçin!");
+      alert('Lütfen izne çıkacak personeli seçin!');
       return;
     }
     if (isManualPersonnel && !manualNameInput.trim()) {
-      alert("Lütfen personel adını girin!");
+      alert('Lütfen personel adını girin!');
       return;
     }
     if (!baslangicTarihi || !bitisTarihi) {
-      alert("Lütfen izin başlangıç ve bitiş tarihlerini girin!");
+      alert('Lütfen izin başlangıç ve bitiş tarihlerini girin!');
+      return;
+    }
+    if (new Date(bitisTarihi) < new Date(baslangicTarihi)) {
+      alert('Bitiş tarihi başlangıçtan önce olamaz.');
       return;
     }
 
@@ -163,89 +205,86 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({
     let pUnvan = '';
 
     if (isManualPersonnel) {
-      pId = `manual_${Date.now()}`;
+      const existing = editingIzinId
+        ? izinFormlari.find((x) => x.id === editingIzinId)
+        : undefined;
+      pId = existing?.personelId?.startsWith('manual_')
+        ? existing.personelId
+        : `manual_${Date.now()}`;
       pName = manualNameInput.trim();
       pUnvan = manualUnvanInput.trim() || 'Serbest Giriş Kadrosu';
     } else {
-      const matchedPers = personeller.find(p => p.id === selectedPersonelId);
-      if (!matchedPers) return;
+      const matchedPers = personeller.find((p) => p.id === selectedPersonelId);
+      if (!matchedPers) {
+        alert('Seçilen personel bulunamadı. Listeyi yenileyip tekrar deneyin.');
+        return;
+      }
       pName = `${matchedPers.ad} ${matchedPers.soyad}`;
       pUnvan = matchedPers.gorev;
     }
 
     const todayStr = new Date().toISOString().split('T')[0];
-    const newIzin: IzinFormu = {
-      id: `iz_${Date.now()}`,
-      tarih: todayStr,
+    const existing = editingIzinId
+      ? izinFormlari.find((x) => x.id === editingIzinId)
+      : undefined;
+
+    // Dijital e-imza alanları bilinçli yazılmaz; setDoc (merge yok) eski stamp'i siler
+    const payload: IzinFormu = {
+      id: editingIzinId || `iz_${Date.now()}`,
+      tarih: existing?.tarih || todayStr,
       personelId: pId,
       personelIsim: pName,
       unvan: pUnvan,
       izinTipi,
       baslangicTarihi,
       bitisTarihi,
-      toplamGun,
-      aciklama,
-      onayDurumu: 'ONAY BEKLİYOR'
+      toplamGun: Number(toplamGun) > 0 ? Number(toplamGun) : 1,
+      aciklama: aciklama.trim(),
+      onayDurumu: 'ONAY BEKLİYOR',
     };
 
+    setSaving(true);
     try {
-      await setDoc(doc(db, 'personelIzinFormlari', newIzin.id), newIzin);
-      setIzinFormlari(prev => [newIzin, ...prev]);
-      alert("Personel İzin Talep Formu başarıyla oluşturuldu.");
-      
-      // Reset form variables
-      setSelectedPersonelId('');
-      setManualNameInput('');
-      setManualUnvanInput('');
-      setAciklama('');
-      setBaslangicTarihi('');
-      setBitisTarihi('');
-      setToplamGun(1);
+      await setDoc(doc(db, 'personelIzinFormlari', payload.id), payload);
+      setIzinFormlari((prev) => {
+        const idx = prev.findIndex((x) => x.id === payload.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = payload;
+          return next;
+        }
+        return [payload, ...prev];
+      });
+      if (selectedIzinForPdf?.id === payload.id) {
+        setSelectedIzinForPdf(payload);
+      }
+      alert(
+        editingIzinId
+          ? 'İzin formu güncellendi ve kaydedildi.'
+          : 'Personel İzin Talep Formu başarıyla oluşturuldu.'
+      );
+      resetForm();
     } catch (err) {
-      console.error(err);
-      alert("Kaydetme işlemi sırasında hata oluştu.");
+      console.error('İzin kaydetme hatası:', err);
+      alert(
+        'Kaydetme işlemi sırasında hata oluştu. İnternet bağlantınızı kontrol edip tekrar deneyin.'
+      );
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleDeleteIzinFormu = async (id: string) => {
-    if (!window.confirm("Bu izin formunu sistemden kalıcı olarak silmek istediğinize emin misiniz?")) return;
+    if (!window.confirm('Bu izin formunu sistemden kalıcı olarak silmek istediğinize emin misiniz?')) return;
     try {
       await deleteDoc(doc(db, 'personelIzinFormlari', id));
-      setIzinFormlari(prev => prev.filter(x => x.id !== id));
-      alert("İzin talep formu başarıyla silindi.");
+      setIzinFormlari((prev) => prev.filter((x) => x.id !== id));
+      if (editingIzinId === id) resetForm();
+      if (selectedIzinForPdf?.id === id) setSelectedIzinForPdf(null);
+      alert('İzin talep formu başarıyla silindi.');
     } catch (err) {
       console.error(err);
-      alert("Silme işlemi başarısız.");
-    }
-  };
-
-  const handleApproveIzin = async (id: string, durum: 'ONAYLANDI' | 'REDDEDİLDİ') => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const managerTitle = currentUser?.email === 'sametatak9@gmail.com' ? 'PROJE MÜDÜRÜ' : 'ŞANTİYE MERKEZ YÖNETİCİSİ';
-    
-    try {
-      const updatedList = izinFormlari.map(item => {
-        if (item.id === id) {
-          return {
-            ...item,
-            onayDurumu: durum,
-            onaylayanYonetici: currentUser?.email,
-            onayTarihi: todayStr,
-            onayStamp: `🟢 ONAYLANDI - ${managerTitle} [E-İMZA: ${todayStr}]`
-          };
-        }
-        return item;
-      });
-      
-      const updatedItem = updatedList.find(x => x.id === id);
-      if (updatedItem) {
-        await setDoc(doc(db, 'personelIzinFormlari', id), updatedItem);
-      }
-      setIzinFormlari(updatedList);
-      alert(`İzin talebi rütbesel olarak ${durum === 'ONAYLANDI' ? 'onaylandı.' : 'reddedildi.'}`);
-    } catch (err) {
-      console.error(err);
-      alert("Onay işlemi güncellenemedi.");
+      alert('Silme işlemi başarısız.');
     }
   };
 
@@ -301,11 +340,26 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({
         
         {/* Left Side: Create form card */}
         <div className="w-full lg:w-[410px] bg-white border border-[#e2e8f0] rounded-2xl p-5 flex flex-col overflow-y-auto shrink-0 shadow-sm">
-          <div className="border-b pb-3 mb-4">
-            <h3 className="font-display font-black text-xs text-slate-800 uppercase tracking-widest flex items-center gap-1.5 focus:outline-none">
-              <span>✍️ Yeni İzin Formu Aç</span>
-            </h3>
-            <p className="text-[9px] text-slate-400 mt-0.5 uppercase font-mono">Resmi şantiye onaylı izin talebi</p>
+          <div className="border-b pb-3 mb-4 flex items-start justify-between gap-2">
+            <div>
+              <h3 className="font-display font-black text-xs text-slate-800 uppercase tracking-widest flex items-center gap-1.5 focus:outline-none">
+                <span>{editingIzinId ? '✏️ İzin Formunu Düzenle' : '✍️ Yeni İzin Formu Aç'}</span>
+              </h3>
+              <p className="text-[9px] text-slate-400 mt-0.5 uppercase font-mono">
+                {editingIzinId
+                  ? 'Değişiklikleri kaydedin — onay yalnızca Şantiye Şefi ıslak imza ile'
+                  : 'Resmi şantiye şefi ıslak imza ile onaylanır'}
+              </p>
+            </div>
+            {editingIzinId && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="text-[10px] font-bold text-slate-500 hover:text-slate-800 underline shrink-0"
+              >
+                Vazgeç
+              </button>
+            )}
           </div>
 
           <form onSubmit={handleSaveIzinFormu} className="space-y-4 text-xs">
@@ -431,11 +485,18 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({
               />
             </div>
 
-            <button 
+            <button
               type="submit"
-              className="w-full bg-[#10b981] hover:bg-[#059669] text-white font-extrabold text-xs py-3 rounded-xl shadow-md cursor-pointer transition flex items-center justify-center space-x-1"
+              disabled={saving}
+              className="w-full bg-[#10b981] hover:bg-[#059669] disabled:opacity-60 disabled:cursor-not-allowed text-white font-extrabold text-xs py-3 rounded-xl shadow-md cursor-pointer transition flex items-center justify-center space-x-1"
             >
-              <span>+ İzin Talep Dilekçesi Kaydet</span>
+              <span>
+                {saving
+                  ? 'Kaydediliyor...'
+                  : editingIzinId
+                    ? '✓ Değişiklikleri Kaydet / Güncelle'
+                    : '+ İzin Talep Dilekçesi Kaydet'}
+              </span>
             </button>
           </form>
         </div>
@@ -478,8 +539,11 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({
                         item.onayDurumu === 'ONAYLANDI' ? 'bg-emerald-100 text-emerald-800' :
                         item.onayDurumu === 'REDDEDİLDİ' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
                       }`}>
-                        {item.onayDurumu === 'ONAYLANDI' ? '✓ Yönetici Onaylı' :
-                         item.onayDurumu === 'REDDEDİLDİ' ? '✖ Reddedildi' : '⌛ Onay Bekliyor'}
+                        {item.onayDurumu === 'ONAYLANDI'
+                          ? '✓ Şantiye Şefi Onaylı (Islak)'
+                          : item.onayDurumu === 'REDDEDİLDİ'
+                            ? '✖ Reddedildi'
+                            : '⌛ Şantiye Şefi Islak İmza Bekliyor'}
                       </span>
                       <span className="text-[9px] text-[#10b981] font-mono font-bold uppercase tracking-wider bg-emerald-50 border border-emerald-150 rounded px-1.5 mt-0.5">{item.izinTipi.replace('_', ' ')}</span>
                     </div>
@@ -502,18 +566,20 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({
                     </div>
 
                     <p className="text-slate-650 leading-relaxed italic bg-emerald-50/20 p-2.5 rounded border border-emerald-500/10 text-[11px] block text-slate-600">
-                      <strong>İzin Gerekçesi / Adres:</strong> {item.aciklama || "Belirtilmedi"}
+                      <strong>İzin Gerekçesi / Adres:</strong> {item.aciklama || 'Belirtilmedi'}
                     </p>
-
-                    {item.onayStamp && (
-                      <p className="text-[10px] text-emerald-700 font-mono font-bold bg-emerald-50/50 p-2 border border-emerald-200 rounded">
-                        ✒️ {item.onayStamp}
-                      </p>
-                    )}
                   </div>
 
-                  <div className="flex gap-2.5 border-t pt-3.5 mt-3 justify-end text-[10px]">
-                    <button 
+                  <div className="flex flex-wrap gap-2 border-t pt-3.5 mt-3 justify-end text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => startEditIzin(item)}
+                      className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold py-1.5 px-3 rounded-lg flex items-center space-x-1 cursor-pointer"
+                    >
+                      <Edit3 size={12} />
+                      <span>Düzenle / Güncelle</span>
+                    </button>
+                    <button
                       type="button"
                       onClick={() => setSelectedIzinForPdf(item)}
                       className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-1.5 px-3 rounded-lg flex items-center space-x-1 cursor-pointer"
@@ -521,31 +587,11 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({
                       <Eye size={12} />
                       <span>PDF Formu Gör / Yazdır</span>
                     </button>
-
-                    {/* Manager Decision controls */}
-                    {isYonetici && item.onayDurumu === 'ONAY BEKLİYOR' && (
-                      <div className="flex gap-1.5">
-                        <button 
-                          type="button"
-                          onClick={() => handleApproveIzin(item.id, 'ONAYLANDI')}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-black py-1.5 px-3 rounded-lg flex items-center space-x-1 cursor-pointer"
-                        >
-                          <span>✓ İzni Onayla &amp; İmzala</span>
-                        </button>
-                        <button 
-                          type="button"
-                          onClick={() => handleApproveIzin(item.id, 'REDDEDİLDİ')}
-                          className="bg-rose-600 hover:bg-rose-700 text-white font-black py-1.5 px-3 rounded-lg flex items-center space-x-1 cursor-pointer"
-                        >
-                          <span>✖ Reddet</span>
-                        </button>
-                      </div>
-                    )}
-
-                    <button 
+                    <button
                       type="button"
                       onClick={() => handleDeleteIzinFormu(item.id)}
                       className="text-red-800 bg-red-50 hover:bg-red-100 py-1 px-2 rounded cursor-pointer"
+                      title="Sil"
                     >
                       <Trash2 size={11} />
                     </button>
@@ -621,7 +667,7 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({
                   </table>
                 </div>
 
-                {/* Sub signatures lines */}
+                {/* Sub signatures — yalnızca ıslak imza; dijital e-imza yok */}
                 <div className="grid grid-cols-2 gap-8 pt-8 border-t text-xs">
                   <div className="text-center space-y-4">
                     <p className="font-bold text-slate-500 border-b pb-1 uppercase">İzin Talep Eden Personel</p>
@@ -631,18 +677,9 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({
                   </div>
                   <div className="text-center space-y-4">
                     <p className="font-bold text-slate-500 border-b pb-1 uppercase">Şantiye Şefi Onay Makamı</p>
-                    {selectedIzinForPdf.onayStamp ? (
-                      <div className="inline-block bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold p-2.5 rounded text-[10px] font-mono leading-relaxed">
-                        ✓ DİJİTAL GÜVENLİK KODU E-İMZA AKTİF<br/>
-                        {selectedIzinForPdf.onayStamp}
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <p className="text-rose-600 font-bold pt-6">⌛ YÖNETİCİ ISLAK / DİJİTAL ONAYI BEKLENİYOR</p>
-                        <div className="h-0.5 bg-slate-200 w-32 mx-auto"></div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">ŞANTİYE ŞEFİ</span>
-                      </div>
-                    )}
+                    <p className="text-slate-400 pt-6">Soyadı, Adı ve İmzası için Islak Alan</p>
+                    <div className="h-0.5 bg-slate-200 w-32 mx-auto mt-2"></div>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">ŞANTİYE ŞEFİ</span>
                   </div>
                 </div>
 
