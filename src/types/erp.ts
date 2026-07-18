@@ -98,13 +98,16 @@ export interface Irsaliye {
   karsilastirmaRaporu?: string;
   kalemler: IrsaliyeItem[];
   eImzalar?: string[];
-  /** Kampçı vidanjör fişi irsaliye niteliğinde */
-  kaynak?: 'VIDANJOR_FIS' | 'YILDIRIM_TANKER_FIS' | string;
+  /** Kampçı vidanjör / kapı mıcır-stabilize fişi irsaliye niteliğinde */
+  kaynak?: 'VIDANJOR_FIS' | 'YILDIRIM_TANKER_FIS' | 'MICIR_STABILIZE_FIS' | string;
   plaka?: string;
   cekimAdedi?: number;
   fisNo?: string;
   vidanjorFisId?: string;
   yildirimTankerFisId?: string;
+  micirFisId?: string;
+  tonaj?: number;
+  malzemeTipi?: 'MICIR' | 'STABILIZE' | string;
   icmeSuyuAdet?: number;
   sanayiSuyuAdet?: number;
   cariKartId?: string;
@@ -125,6 +128,29 @@ export interface VidanjorFis {
   cariKartId?: string;
   irsaliyeId?: string;
   /** Güvenlik sekmesi o günün gelen evrak listesindeki kayıt id */
+  guvenlikEvrakId?: string;
+  kapıLogId?: string;
+  kaydeden?: string;
+  durum?: 'YONETICI_ONAYINDA' | 'ONAYLANDI' | 'REDDEDILDI';
+  onaylayanYonetici?: string;
+  onayTarihi?: string;
+  redNedeni?: string;
+  olusturulma: string;
+  guncellenme?: string;
+}
+
+/** Güvenlik kapı — Mıcır & Stabilize irsaliye teslimi (yönetici onayından sonra irsaliye + cari) */
+export interface MicirStabilizeFis {
+  id: string;
+  tarih: string;
+  irsaliyeNo: string;
+  plaka: string;
+  tonaj: number;
+  malzemeTipi: 'MICIR' | 'STABILIZE';
+  fisGorselUrl?: string;
+  firmaUnvan: string;
+  cariKartId?: string;
+  irsaliyeId?: string;
   guvenlikEvrakId?: string;
   kapıLogId?: string;
   kaydeden?: string;
