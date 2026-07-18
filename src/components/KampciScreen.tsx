@@ -352,6 +352,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   // 📦 3. DEPO SAYIMI (WAREHOUSE AUDIT) STATE
   // ─────────────────────────────────────────────────────────────
   const [searchRoomQuery, setSearchRoomQuery] = useState('');
+  const [mesaiPersonelSearch, setMesaiPersonelSearch] = useState('');
   const [depoSavimlari, setDepoSayimlari] = useState<any[]>([]);
   const [loadingSayim, setLoadingSayim] = useState(false);
   const [sayimNotlar, setSayimNotlar] = useState('');
@@ -1052,8 +1053,50 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
     if (isPasif) return false;
     const nameStr = `${p.ad || ''} ${p.soyad || ''}`.toLowerCase();
     const queryStr = searchPersonelQuery.toLowerCase();
-    return nameStr.includes(queryStr) || (p.gorev || '').toLowerCase().includes(queryStr);
+    return (
+      nameStr.includes(queryStr) ||
+      (p.gorev || '').toLowerCase().includes(queryStr) ||
+      (p.tcNo || '').toLowerCase().includes(queryStr) ||
+      (p.firmaAdi || '').toLowerCase().includes(queryStr)
+    );
   });
+
+  const mesaiPersonelListesi = useMemo(() => {
+    const base = personeller.filter(
+      (p) =>
+        isTaseronPersonel(p) ||
+        kampKayitlari.some((k) => k.personelId === p.id && k.durum === 'AKTIF')
+    );
+    const q = mesaiPersonelSearch.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter((p) => {
+      const name = `${p.ad || ''} ${p.soyad || ''}`.toLowerCase();
+      return (
+        name.includes(q) ||
+        (p.gorev || '').toLowerCase().includes(q) ||
+        (p.tcNo || '').includes(q) ||
+        (p.firmaAdi || '').toLowerCase().includes(q)
+      );
+    });
+  }, [personeller, kampKayitlari, mesaiPersonelSearch]);
+
+  const filteredRoomsWithOccupants = useMemo(() => {
+    const q = searchRoomQuery.trim().toLowerCase();
+    return kampOdalari.filter((room) => {
+      if (!q) return true;
+      const roomHit =
+        (room.yerleskeAdi || '').toLowerCase().includes(q) ||
+        (room.kogusNo || '').toLowerCase().includes(q) ||
+        (room.odaNo || '').toLowerCase().includes(q);
+      if (roomHit) return true;
+      return kampKayitlari.some(
+        (k) =>
+          (k.odaId === room.id || k.roomId === room.id) &&
+          k.durum === 'AKTIF' &&
+          (k.personelIsim || '').toLowerCase().includes(q)
+      );
+    });
+  }, [kampOdalari, kampKayitlari, searchRoomQuery]);
 
   const renderPlacementPersonForm = () => (
     <>
@@ -1087,12 +1130,12 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
         {placementType === 'DB' ? (
           <div className="space-y-3 animate-in fade-in duration-100">
             <div className="space-y-1.5">
-              <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Personel Filtrele / Ara</label>
+                  <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Personel Filtrele / Ara</label>
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-3 text-slate-500" />
                 <input
                   type="text"
-                  placeholder="Personel adı veya görevi..."
+                  placeholder="Ad, TC, görev veya firma ara..."
                   value={searchPersonelQuery}
                   onChange={(e) => setSearchPersonelQuery(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 pl-9 pr-3 py-2.5 rounded-xl outline-none"
@@ -1500,10 +1543,10 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                 <Search size={12} className="absolute left-2.5 top-2.5 text-slate-500" />
                 <input
                   type="text"
-                  placeholder="Blok veya oda ara..."
+                  placeholder="Oda veya personel ara..."
                   value={searchRoomQuery}
                   onChange={(e) => setSearchRoomQuery(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 text-[10px] text-slate-800 pl-7 pr-2.5 py-1.5 rounded-lg outline-none w-44"
+                  className="bg-slate-50 border border-slate-200 text-[10px] text-slate-800 pl-7 pr-2.5 py-1.5 rounded-lg outline-none w-52"
                 />
               </div>
               <button
@@ -1516,17 +1559,14 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {kampOdalari.filter(room => {
-                const q = searchRoomQuery.toLowerCase();
-                return (
-                  (room.yerleskeAdi || '').toLowerCase().includes(q) ||
-                  (room.kogusNo || '').toLowerCase().includes(q) ||
-                  (room.odaNo || '').toLowerCase().includes(q)
-                );
-              }).map(room => {
+              {filteredRoomsWithOccupants.map(room => {
+                const q = searchRoomQuery.trim().toLowerCase();
                 const occupants = kampKayitlari.filter(
                   k => (k.odaId === room.id || k.roomId === room.id) && k.durum === 'AKTIF'
                 );
+                const highlightedOccupants = q
+                  ? occupants.filter((o) => (o.personelIsim || '').toLowerCase().includes(q))
+                  : [];
 
                 return (
                   <div key={room.id} className="bg-slate-50 border border-slate-200 p-4 rounded-xl flex flex-col justify-between space-y-3">
@@ -1558,10 +1598,21 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                             <p className="text-[10px] text-slate-500 italic">Odada kalan kimse bulunmuyor.</p>
                           ) : (
                             <div className="space-y-1">
-                              {occupants.map(occ => (
-                                <div key={occ.id} className="flex justify-between items-center bg-white p-1.5 rounded-lg border border-slate-850">
+                              {occupants.map(occ => {
+                                const nameHit =
+                                  q.length > 0 &&
+                                  (occ.personelIsim || '').toLowerCase().includes(q);
+                                return (
+                                <div
+                                  key={occ.id}
+                                  className={`flex justify-between items-center p-1.5 rounded-lg border ${
+                                    nameHit
+                                      ? 'bg-amber-50 border-amber-300'
+                                      : 'bg-white border-slate-200'
+                                  }`}
+                                >
                                   <div className="flex items-center space-x-1.5">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-slate-500"></div>
+                                    <div className={`w-1.5 h-1.5 rounded-full ${nameHit ? 'bg-amber-500' : 'bg-slate-500'}`}></div>
                                     <span className="text-[10px] font-bold text-slate-700">{occ.personelIsim}</span>
                                   </div>
                                   <button
@@ -1572,7 +1623,13 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                                     Çıkış Yap
                                   </button>
                                 </div>
-                              ))}
+                              );
+                              })}
+                              {highlightedOccupants.length > 0 && (
+                                <p className="text-[8px] font-bold text-amber-700 pt-0.5">
+                                  {highlightedOccupants.length} eşleşen personel
+                                </p>
+                              )}
                             </div>
                           )}
                         </div>
@@ -1984,12 +2041,26 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                 <div className="space-y-1.5 bg-amber-50/40 border border-amber-200 p-3 rounded-xl">
                   <label className="text-[9px] font-extrabold text-amber-800 uppercase tracking-wider block">İlgili Personeller & Mesai Saati *</label>
                   <p className="text-[8px] text-amber-700/70 leading-tight mb-2">Taşeron ve kamp personelleri listelenmektedir. Yalnızca mesaiye kalanların saatini artırın.</p>
+                  <div className="relative mb-2">
+                    <Search size={12} className="absolute left-2.5 top-2.5 text-amber-700/60" />
+                    <input
+                      type="text"
+                      value={mesaiPersonelSearch}
+                      onChange={(e) => setMesaiPersonelSearch(e.target.value)}
+                      placeholder="Personel adı, TC, görev veya firma ara..."
+                      className="w-full bg-white border border-amber-200 text-[10px] text-slate-800 pl-7 pr-2.5 py-2 rounded-lg outline-none focus:border-amber-400"
+                    />
+                  </div>
                   
                   <div className="max-h-48 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                    {personeller.filter(p => isTaseronPersonel(p) || kampKayitlari.some(k => k.personelId === p.id && k.durum === 'AKTIF')).length === 0 ? (
-                      <div className="text-[9px] text-slate-400 italic p-2 text-center">İlgili personel bulunamadı.</div>
+                    {mesaiPersonelListesi.length === 0 ? (
+                      <div className="text-[9px] text-slate-400 italic p-2 text-center">
+                        {mesaiPersonelSearch.trim()
+                          ? 'Aramaya uygun personel yok.'
+                          : 'İlgili personel bulunamadı.'}
+                      </div>
                     ) : (
-                      personeller.filter(p => isTaseronPersonel(p) || kampKayitlari.some(k => k.personelId === p.id && k.durum === 'AKTIF')).map(p => {
+                      mesaiPersonelListesi.map(p => {
                         const hrs = personelMesaiSaatleri[p.id] || 0;
                         return (
                           <div key={p.id} className={`flex items-center justify-between gap-2 border rounded-lg px-2 py-1.5 transition-colors ${hrs > 0 ? 'bg-amber-100 border-amber-300' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
@@ -2019,6 +2090,11 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                       })
                     )}
                   </div>
+                  {mesaiPersonelSearch.trim() && (
+                    <p className="text-[8px] font-bold text-amber-800 pt-1">
+                      {mesaiPersonelListesi.length} personel listeleniyor
+                    </p>
+                  )}
                 </div>
               )}
 
