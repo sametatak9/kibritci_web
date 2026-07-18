@@ -15,6 +15,7 @@ import { AdminPanelScreen, Kullanici } from './components/AdminPanelScreen';
 import { DashboardScreen } from './components/DashboardScreen';
 import { PersonelScreen } from './components/PersonelScreen';
 import { YoklamaScreen } from './components/YoklamaScreen';
+import { FaaliyetPersonelScreen } from './components/FaaliyetPersonelScreen';
 import { MaasScreen } from './components/MaasScreen';
 import { PersonelIzinScreen } from './components/PersonelIzinScreen';
 import { SatinAlmaScreen } from './components/SatinAlmaScreen';
@@ -2546,6 +2547,15 @@ export default function App() {
                   setYoklamalar={setYoklamalarWithSync}
                   saveYoklamalarNow={saveYoklamalarNow}
                   addNotification={addNotification}
+                  sahaFaaliyetleri={sahaFaaliyetleri}
+                  onOpenFaaliyetPersonel={() => handleTabNavigation('faaliyet_personel')}
+                />
+              )}
+
+              {activeTab === "faaliyet_personel" && (
+                <FaaliyetPersonelScreen
+                  personeller={personeller}
+                  yoklamalar={yoklamalar}
                   sahaFaaliyetleri={sahaFaaliyetleri}
                 />
               )}

@@ -3,6 +3,10 @@ import { Calendar, Trash2, ShieldAlert, CheckCircle, FileText, ChevronRight, Ref
 import { Personel, AylikYoklamaMap, YoklamaDurum, SahaFaaliyeti } from '../types/erp';
 import { normalizeDateKey } from '../lib/dateKeyUtils';
 import { formatMesaiFaaliyetLabel, getFaaliyetFotolar, isMesaiSahaFaaliyet } from '../lib/sahaFaaliyetUtils';
+import {
+  buildFaaliyetPersoneller,
+  getPersonFaaliyetleriInPeriod,
+} from '../lib/faaliyetPersonelUtils';
 import { CorporateReportLayout } from './CorporateReportLayout';
 import { loadKibritciLogoDataUrl } from '../lib/kibritciBrand';
 import { buildPersonelListForMonth, findPersonelByName, getYoklamaDay, isDayActiveForPersonel, isPersonelVisibleInMonth, normalizeTurkishName, setYoklamaDay } from '../lib/yoklamaUtils';
@@ -31,6 +35,7 @@ interface YoklamaScreenProps {
   ) => Promise<unknown>;
   addNotification?: (mesaj: string) => void;
   sahaFaaliyetleri?: SahaFaaliyeti[];
+  onOpenFaaliyetPersonel?: () => void;
 }
 
 export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({ 
@@ -40,13 +45,13 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   setYoklamalar,
   saveYoklamalarNow,
   addNotification,
-  sahaFaaliyetleri = []
+  sahaFaaliyetleri = [],
+  onOpenFaaliyetPersonel,
 }) => {
   const MAX_MESAI_SAATI = 14;
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [searchTerm, setSearchTerm] = useState("");
-  const [personelListTab, setPersonelListTab] = useState<'TUM' | 'FAALIYET'>('TUM');
   const [isEditMode, setIsEditMode] = useState(false);
   
   // Custom Overtime state variables
@@ -84,21 +89,6 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   const [bireyselYear, setBireyselYear] = useState(selectedYear);
 
   const [sahaPreviewPerson, setSahaPreviewPerson] = useState<Personel | null>(null);
-
-  const personMatchesFaaliyet = (p: Personel, f: SahaFaaliyeti): boolean => {
-    const list = f.aktifPersonelListesi || [];
-    if (list.some((entry) => String(entry).trim() === p.id)) return true;
-    const fullName = normalizeTurkishName(`${p.ad} ${p.soyad}`);
-    if (list.some((entry) => normalizeTurkishName(String(entry).trim()) === fullName)) return true;
-    return f.personelId === p.id;
-  };
-
-  const isFaaliyetInSelectedPeriod = (f: SahaFaaliyeti): boolean => {
-    const dk = normalizeDateKey(f.tarih);
-    if (!dk) return false;
-    const [y, m] = dk.split('-').map(Number);
-    return y === selectedYear && m === selectedMonth;
-  };
 
   const handlePersonDoubleClick = (p: Personel) => {
     setSahaPreviewPerson(p);
@@ -476,57 +466,20 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     [personeller, draftYoklamalar, selectedYear, selectedMonth]
   );
 
-  const selectedPeriodFaaliyetleri = useMemo(
-    () => sahaFaaliyetleri.filter(isFaaliyetInSelectedPeriod),
-    [sahaFaaliyetleri, selectedYear, selectedMonth]
+  const faaliyetPersonelCount = useMemo(
+    () => buildFaaliyetPersoneller(sahaFaaliyetleri, personeller, selectedYear, selectedMonth).length,
+    [sahaFaaliyetleri, personeller, selectedYear, selectedMonth]
   );
-
-  const faaliyetPersoneller = useMemo(() => {
-    const matched = new Map<string, Personel>();
-    const addPerson = (p: Personel | undefined | null) => {
-      if (p?.id) matched.set(p.id, p);
-    };
-
-    for (const f of selectedPeriodFaaliyetleri) {
-      for (const entry of f.aktifPersonelListesi || []) {
-        const raw = String(entry).trim();
-        if (!raw) continue;
-        const byId = personeller.find((p) => p.id === raw);
-        if (byId) {
-          addPerson(byId);
-          continue;
-        }
-        addPerson(findPersonelByName(personeller, raw));
-      }
-      addPerson(personeller.find((p) => p.id === f.personelId));
-    }
-
-    const byName = new Map<string, Personel>();
-    const score = (p: Personel) => {
-      let s = 0;
-      if ((p.tcNo || '').trim()) s += 100;
-      if (!p.id.startsWith('PRS-LEGACY')) s += 50;
-      if (p.durum === true || String(p.durum).toLowerCase() === 'true') s += 10;
-      return s;
-    };
-    for (const p of matched.values()) {
-      const key = normalizeTurkishName(`${p.ad} ${p.soyad}`);
-      const prev = byName.get(key);
-      if (!prev || score(p) > score(prev)) byName.set(key, p);
-    }
-    return Array.from(byName.values()).sort((a, b) =>
-      `${a.ad} ${a.soyad}`.localeCompare(`${b.ad} ${b.soyad}`, 'tr')
-    );
-  }, [selectedPeriodFaaliyetleri, personeller]);
-
-  const faaliyetPersonelCount = faaliyetPersoneller.length;
 
   const sahaPreviewFaaliyetleri = useMemo(() => {
     if (!sahaPreviewPerson) return [] as SahaFaaliyeti[];
-    return selectedPeriodFaaliyetleri
-      .filter((f) => personMatchesFaaliyet(sahaPreviewPerson, f))
-      .sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || ''), 'tr'));
-  }, [sahaPreviewPerson, selectedPeriodFaaliyetleri]);
+    return getPersonFaaliyetleriInPeriod(
+      sahaPreviewPerson,
+      sahaFaaliyetleri,
+      selectedYear,
+      selectedMonth
+    );
+  }, [sahaPreviewPerson, sahaFaaliyetleri, selectedYear, selectedMonth]);
 
   const isEmployeeVisibleInMonth = (p: Personel) =>
     isPersonelVisibleInMonth(p, selectedYear, selectedMonth, draftYoklamalar[p.id]);
@@ -632,8 +585,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
   const filteredPersonel = useMemo(() => {
     const term = searchTerm.toLowerCase();
-    const sourceList = personelListTab === 'FAALIYET' ? faaliyetPersoneller : monthPersoneller;
-    const base = sourceList.filter((p) => {
+    const base = monthPersoneller.filter((p) => {
       const fullName = `${p.ad} ${p.soyad}`.toLowerCase();
       return fullName.includes(term) || p.tcNo.includes(term) || (p.gorev || '').toLowerCase().includes(term);
     });
@@ -655,7 +607,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       }
     }
     return Array.from(byName.values());
-  }, [monthPersoneller, faaliyetPersoneller, searchTerm, personelListTab]);
+  }, [monthPersoneller, searchTerm]);
 
   const handleExportExcelTables = async (emptyMode: boolean = false) => {
     const { Workbook } = await import('exceljs');
@@ -1618,37 +1570,22 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       {/* Main Grid Card View */}
       <div className="flex-1 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
 
-        {/* Personel list tabs */}
-        <div className="px-4 pt-3 pb-0 border-b border-slate-100 bg-white flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setPersonelListTab('TUM')}
-            className={`text-[11px] font-bold px-3.5 py-1.5 rounded-t-lg border-b-2 transition cursor-pointer ${
-              personelListTab === 'TUM'
-                ? 'border-slate-900 text-slate-900 bg-slate-50'
-                : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-            }`}
-          >
+        {/* Personel list header */}
+        <div className="px-4 pt-3 pb-2 border-b border-slate-100 bg-white flex flex-wrap items-center justify-between gap-2">
+          <div className="text-[11px] font-bold text-slate-800">
             Tüm Personel
-            <span className="ml-1.5 text-[9px] font-extrabold opacity-70">({monthPersoneller.length})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setPersonelListTab('FAALIYET')}
-            className={`text-[11px] font-bold px-3.5 py-1.5 rounded-t-lg border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
-              personelListTab === 'FAALIYET'
-                ? 'border-amber-500 text-amber-800 bg-amber-50'
-                : 'border-transparent text-slate-500 hover:text-amber-700 hover:bg-amber-50/50'
-            }`}
-          >
-            <Camera className="w-3 h-3" />
-            Faaliyeti Olan Personeller
-            <span className="text-[9px] font-extrabold opacity-70">({faaliyetPersonelCount})</span>
-          </button>
-          {personelListTab === 'FAALIYET' && (
-            <span className="text-[10px] text-amber-700 font-medium ml-1">
-              {new Date(selectedYear, selectedMonth - 1, 1).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' })} dönemi saha kaydı olan personel
-            </span>
+            <span className="ml-1.5 text-[9px] font-extrabold text-slate-500">({monthPersoneller.length})</span>
+          </div>
+          {onOpenFaaliyetPersonel && (
+            <button
+              type="button"
+              onClick={onOpenFaaliyetPersonel}
+              className="text-[11px] font-bold px-3 py-1.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 transition cursor-pointer flex items-center gap-1.5"
+            >
+              <Camera className="w-3 h-3" />
+              Faaliyeti Olan Personeller sekmesi
+              <span className="text-[9px] font-extrabold opacity-70">({faaliyetPersonelCount})</span>
+            </button>
           )}
         </div>
         
@@ -1721,9 +1658,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                   {filteredPersonel.length === 0 ? (
                     <tr>
                       <td colSpan={daysInMonth + 3} className="px-6 py-10 text-center text-slate-500">
-                        {personelListTab === 'FAALIYET'
-                          ? 'Bu dönemde saha faaliyet kaydı olan personel bulunamadı.'
-                          : 'Arama kriterine uygun personel bulunamadı.'}
+                        Arama kriterine uygun personel bulunamadı.
                       </td>
                     </tr>
                   ) : filteredPersonel.map((p) => {
