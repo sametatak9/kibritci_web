@@ -7,7 +7,6 @@ import { Irsaliye, IrsaliyeItem, SatinAlmaTalebi, CariKart, StokKart, Fatura, Ev
 import { compressImage } from '../lib/imageCompress';
 import { fetchApiJson } from '../lib/apiClient';
 import { fileToAiPayload } from '../lib/aiFileUpload';
-import { BagliEvraklarListesi } from './BagliEvraklarListesi';
 import { EvrakTabBilgi } from './EvrakTabBilgi';
 import { warnIfDuplicateStok } from '../lib/duplicateNameUtils';
 import { kibritciLogoHtml } from '../lib/kibritciBrand';
@@ -27,7 +26,6 @@ interface IrsaliyeGirisScreenProps {
   setStokKartlar?: React.Dispatch<React.SetStateAction<StokKart[]>>;
   currentUser?: any;
   addNotification?: (mesaj: string) => void;
-  onNavigateToBaglama?: (prefill?: { saId?: string; irIds?: string[]; faturaId?: string; anchor?: 'satin_alma' | 'irsaliye' | 'fatura' }) => void;
 }
 
 export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
@@ -44,9 +42,7 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
   setStokKartlar,
   currentUser,
   addNotification,
-  onNavigateToBaglama
 }) => {
-  const [activeTab, setActiveTab] = useState<'giris' | 'bagli'>('giris');
 
   // Form states
   const [irNo, setIrNo] = useState("");
@@ -299,8 +295,7 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
     setIrProducts([]);
     setIrAttachmentUrl(null);
     setIrSignedAttachmentUrl(null);
-    setActiveTab('giris');
-    alert("İrsaliye kaydedildi. Bağlama için «Bağlama» sekmesini kullanın.");
+    alert("İrsaliye kaydedildi.");
   };
 
   const handlePreviewIrsaliyePdf = (ir: Irsaliye) => {
@@ -458,35 +453,18 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
             🚛 Şantiye İrsaliye, Makbuz ve Fiş Giriş Paneli
           </h2>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => {
-              setActiveTab('giris');
-              setEditingIrId(null);
-            }}
-            className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'giris' ? 'bg-[#10b981] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
-          >
-            1 · İrsaliye Giriş (Manuel / AI)
-          </button>
-          <button
-            onClick={() => onNavigateToBaglama?.({ anchor: 'irsaliye' })}
-            className="px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200"
-          >
-            → Evrak Bağlama Merkezi
-          </button>
-          <button
-            onClick={() => setActiveTab('bagli')}
-            className={`px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer ${activeTab === 'bagli' ? 'bg-[#10b981] text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
-          >
-            2 · Bağlı Evraklar
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setEditingIrId(null)}
+          className="px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer bg-[#10b981] text-white shadow-sm"
+        >
+          İrsaliye Giriş (Manuel / AI)
+        </button>
       </div>
 
-      {activeTab === 'giris' && <EvrakTabBilgi tab="irsaliye-giris" />}
+      <EvrakTabBilgi tab="irsaliye-giris" />
 
-      {activeTab === 'giris' && (
-        <div className="flex flex-col lg:flex-row gap-6">
+      <div className="flex flex-col lg:flex-row gap-6">
           {/* Creator Drawer Form */}
           <div className="w-full lg:w-[440px] bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
             
@@ -552,7 +530,7 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
               </div>
 
               <p className="text-[10px] text-emerald-700 font-medium bg-emerald-50 border border-emerald-100 rounded-xl p-2.5">
-                PO ve fatura bağlama «Evrak Bağlama Merkezi» sekmesinde yapılır. YZ analiz için «YZ Karşılaştır» menüsünü kullanın.
+                İrsaliye kalemlerini girin; belgeyi AI ile okutabilirsiniz.
               </p>
 
               {/* Add items */}
@@ -661,7 +639,6 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                   setIrAttachmentUrl(null);
                   setIrSignedAttachmentUrl(null);
                   setEditingIrId(null);
-                  setActiveTab('giris');
                 }}
                 className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl text-center cursor-pointer transition text-xs"
               >
@@ -761,29 +738,6 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
             </div>
           </div>
         </div>
-      )}
-
-      {activeTab === 'bagli' && (
-        <BagliEvraklarListesi
-          mode="irsaliye"
-          accent="emerald"
-          faturalar={faturalar}
-          irsaliyeler={irsaliyeler}
-          satinAlmaTalepleri={satinAlmaTalepleri}
-          evrakBaglantiGruplari={evrakBaglantiGruplari}
-          setFaturalar={setFaturalar}
-          setIrsaliyeler={setIrsaliyeler}
-          onEditBinding={(g) => {
-            onNavigateToBaglama?.({
-              saId: g.saId,
-              irIds: g.irsaliyeIds,
-              faturaId: g.faturaId,
-              anchor: 'irsaliye',
-            });
-          }}
-        />
-      )}
-
 
       {/* ➕ CARİ SUGGEST MODAL */}
       {showCariSuggest && (

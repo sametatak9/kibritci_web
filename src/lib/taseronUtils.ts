@@ -44,7 +44,10 @@ export function firmaEslesir(a: string, b: string): boolean {
   if (foldFirma(left) === foldFirma(right)) return true;
   const sa = stripFirmaSuffix(left);
   const sb = stripFirmaSuffix(right);
-  return sa.length >= 4 && sb.length >= 4 && sa === sb;
+  if (sa.length < 4 || sb.length < 4) return false;
+  if (sa === sb) return true;
+  // "Demirkaan" ↔ "Demirkaan İnşaat Ltd. Şti." gibi kısmi eşleşme
+  return sa.includes(sb) || sb.includes(sa);
 }
 
 export function faaliyetlerForTaseron(
