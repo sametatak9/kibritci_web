@@ -942,6 +942,8 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   });
 
   const pendingWaybills = irsaliyeler.filter(doc => {
+    // Eski vidanjör irsaliyeleri özel panelden yönetilir
+    if (doc.kaynak === 'VIDANJOR_FIS') return false;
     const isPending = doc.onayDurumu === 'ONAY BEKLİYOR' || doc.onayDurumu === 'FARK VAR — YÖNETİCİ BİLDİRİLDİ';
     if (!isPending) return false;
     const targets = (doc as any).onayGonderilenYoneticiMailleri;
