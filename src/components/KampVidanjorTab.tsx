@@ -108,7 +108,13 @@ export const KampVidanjorTab: React.FC<KampVidanjorTabProps> = ({
     try {
       const id = editingId || `vfis_${Date.now()}`;
       const existing = editingId ? fisler.find((f) => f.id === editingId) : null;
+      if (existing?.durum === 'ONAYLANDI') {
+        showStatus?.('error', 'Onaylanmış fiş kampçı tarafından değiştirilemez.');
+        setSaving(false);
+        return;
+      }
       const guvenlikEvrakId = existing?.guvenlikEvrakId || `EVR-VID-${id}`;
+      const irsaliyeId = existing?.irsaliyeId || `IR-VID-${id}`;
       const fis: VidanjorFis = {
         id,
         tarih: islemTarihi,
@@ -118,45 +124,18 @@ export const KampVidanjorTab: React.FC<KampVidanjorTabProps> = ({
         fisGorselUrl: fisGorselUrl || existing?.fisGorselUrl || '',
         firmaUnvan,
         cariKartId: sekerCari?.id,
-        irsaliyeId: existing?.irsaliyeId || `IR-VID-${id}`,
+        irsaliyeId,
         guvenlikEvrakId,
         kaydeden: currentUser?.email || 'kampci',
+        durum: 'YONETICI_ONAYINDA',
         olusturulma: existing?.olusturulma || new Date().toISOString(),
         guncellenme: new Date().toISOString(),
       };
 
+      // 1) Kampçı kaydı — yönetici onayına düşer (irsaliye/cari henüz oluşmaz)
       await setDoc(doc(db, 'vidanjorFisleri', id), fis);
 
-      // İrsaliye niteliğinde yansıt
-      const irsaliyeId = fis.irsaliyeId!;
-      await setDoc(
-        doc(db, 'irsaliyeler', irsaliyeId),
-        {
-          id: irsaliyeId,
-          irsaliyeId,
-          irsaliyeNo: fis.fisNo,
-          firma: firmaUnvan,
-          tarih: fis.tarih,
-          onayDurumu: 'ONAY BEKLİYOR',
-          fisEvrakUrl: fis.fisGorselUrl || '',
-          kaynak: 'VIDANJOR_FIS',
-          plaka: fis.plaka,
-          cekimAdedi: fis.cekimAdedi,
-          fisNo: fis.fisNo,
-          vidanjorFisId: id,
-          kalemler: [
-            {
-              id: `k_${id}`,
-              urunAdi: 'Vidanjör Çekim',
-              miktar: fis.cekimAdedi,
-              birim: 'ADET',
-            },
-          ],
-        },
-        { merge: true }
-      );
-
-      // Güvenlik sekmesi — o günün yüklenen evrak listesine düşür
+      // 2) Onay kuyruğu için bekleyen evrak kaydı (yönetici düzeltip onaylar)
       await setDoc(
         doc(db, 'guvenlikGelenEvraklar', guvenlikEvrakId),
         {
@@ -170,12 +149,22 @@ export const KampVidanjorTab: React.FC<KampVidanjorTabProps> = ({
           fileName: `vidanjor_${fis.fisNo}.jpg`,
           fileType: 'image/jpeg',
           durum: 'BEKLEMEDE',
-          aciklama: `Kampçı vidanjör fişi · Plaka ${fis.plaka} · ${fis.cekimAdedi} çekim`,
+          aciklama: `Kampçı vidanjör fişi · Plaka ${fis.plaka} · ${fis.cekimAdedi} çekim — yönetici onayı bekliyor`,
           kaydeden: currentUser?.email || 'kampci',
           kaynak: 'VIDANJOR_FIS',
           vidanjorFisId: id,
+          irsaliyeId,
+          cariKartId: sekerCari?.id || null,
           plaka: fis.plaka,
           cekimAdedi: fis.cekimAdedi,
+          kalemler: [
+            {
+              id: `k_${id}`,
+              urunAdi: 'Vidanjör Çekim',
+              miktar: fis.cekimAdedi,
+              birim: 'ADET',
+            },
+          ],
           aiStatus: 'SKIPPED',
         },
         { merge: true }
@@ -183,14 +172,21 @@ export const KampVidanjorTab: React.FC<KampVidanjorTabProps> = ({
 
       if (addNotification) {
         await addNotification(
-          `Vidanjör fişi ${editingId ? 'güncellendi' : 'kaydedildi'}: ${fis.fisNo} · ${fis.plaka} · ${fis.cekimAdedi} çekim (${firmaUnvan})`
+          `Vidanjör fişi yönetici onayına gönderildi: ${fis.fisNo} · ${fis.plaka} · ${fis.cekimAdedi} çekim`,
+          {
+            tip: 'VIDANJOR_FIS_ONAY',
+            hedefRol: 'YÖNETİCİ',
+            vidanjorFisId: id,
+            guvenlikEvrakId,
+            irsaliyeId,
+          }
         );
       }
       showStatus?.(
         'success',
         editingId
-          ? 'Fiş güncellendi; güvenlik evrak listesine yansıdı.'
-          : 'Fiş kaydedildi; güvenlik / cari / irsaliye listesine eklendi.'
+          ? 'Fiş güncellendi ve yönetici onayına yeniden gönderildi.'
+          : 'Fiş yönetici onayına gönderildi. Onaylanınca irsaliye + cari kaydı oluşur.'
       );
       resetForm();
     } catch (err: any) {
@@ -202,6 +198,10 @@ export const KampVidanjorTab: React.FC<KampVidanjorTabProps> = ({
   };
 
   const handleEdit = (f: VidanjorFis) => {
+    if (f.durum === 'ONAYLANDI') {
+      showStatus?.('error', 'Onaylanmış fiş düzenlenemez.');
+      return;
+    }
     setEditingId(f.id);
     setIslemTarihi(f.tarih);
     setFisNo(f.fisNo);
@@ -211,16 +211,13 @@ export const KampVidanjorTab: React.FC<KampVidanjorTabProps> = ({
   };
 
   const handleSil = async (f: VidanjorFis) => {
+    if (f.durum === 'ONAYLANDI') {
+      showStatus?.('error', 'Onaylanmış fiş silinemez. Yönetici ile iletişime geçin.');
+      return;
+    }
     if (!window.confirm(`${f.fisNo} nolu vidanjör fişi silinsin mi?`)) return;
     try {
       await deleteDoc(doc(db, 'vidanjorFisleri', f.id));
-      if (f.irsaliyeId) {
-        try {
-          await deleteDoc(doc(db, 'irsaliyeler', f.irsaliyeId));
-        } catch {
-          /* irsaliye yoksa geç */
-        }
-      }
       const evrakId = f.guvenlikEvrakId || `EVR-VID-${f.id}`;
       try {
         await deleteDoc(doc(db, 'guvenlikGelenEvraklar', evrakId));
@@ -234,6 +231,20 @@ export const KampVidanjorTab: React.FC<KampVidanjorTabProps> = ({
     }
   };
 
+  const durumBadge = (durum?: VidanjorFis['durum']) => {
+    if (durum === 'ONAYLANDI')
+      return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+    if (durum === 'REDDEDILDI')
+      return 'bg-rose-100 text-rose-800 border-rose-200';
+    return 'bg-amber-100 text-amber-800 border-amber-200';
+  };
+
+  const durumLabel = (durum?: VidanjorFis['durum']) => {
+    if (durum === 'ONAYLANDI') return 'Onaylandı';
+    if (durum === 'REDDEDILDI') return 'Reddedildi';
+    return 'Yönetici onayı';
+  };
+
   return (
     <div className="space-y-4">
       <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 shadow-sm">
@@ -245,8 +256,11 @@ export const KampVidanjorTab: React.FC<KampVidanjorTabProps> = ({
             <p className="text-[10px] text-slate-500 mt-0.5">
               Cari: <strong>{firmaUnvan}</strong>
               {!sekerCari && (
-                <span className="text-rose-600"> — cari kart bulunamadı, yine de bu unvanla kaydedilir</span>
+                <span className="text-amber-700"> — cari yoksa yönetici onayında otomatik oluşturulur</span>
               )}
+              <span className="block mt-0.5 text-slate-400">
+                Kayıt yöneticiye gider; onaylanınca irsaliye + cari altına işlenir.
+              </span>
             </p>
           </div>
           <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600">
@@ -319,7 +333,7 @@ export const KampVidanjorTab: React.FC<KampVidanjorTabProps> = ({
               className="flex-1 min-w-[140px] bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[10px] py-3 rounded-xl flex items-center justify-center gap-1.5 disabled:opacity-60"
             >
               {saving ? <RefreshCw size={13} className="animate-spin" /> : <Check size={13} />}
-              {editingId ? 'GÜNCELLE' : 'KAYDET'}
+              {editingId ? 'GÜNCELLE & ONAYA GÖNDER' : 'YÖNETİCİYE GÖNDER'}
             </button>
             {editingId && (
               <button
@@ -361,25 +375,34 @@ export const KampVidanjorTab: React.FC<KampVidanjorTabProps> = ({
                     <p className="text-[9px] text-slate-500">
                       Çekim: <strong>{f.cekimAdedi}</strong> · {f.firmaUnvan}
                     </p>
+                    <span
+                      className={`inline-block mt-1 text-[8px] font-black uppercase px-1.5 py-0.5 rounded border ${durumBadge(f.durum)}`}
+                    >
+                      {durumLabel(f.durum)}
+                    </span>
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleEdit(f)}
-                    className="p-1.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200"
-                    title="Düzenle"
-                  >
-                    <Pencil size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSil(f)}
-                    className="p-1.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200"
-                    title="Sil"
-                  >
-                    <Trash2 size={12} />
-                  </button>
+                  {f.durum !== 'ONAYLANDI' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleEdit(f)}
+                        className="p-1.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200"
+                        title="Düzenle"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSil(f)}
+                        className="p-1.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200"
+                        title="Sil"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}

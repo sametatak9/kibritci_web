@@ -84,7 +84,14 @@ export interface Irsaliye {
   faturaNo?: string;
   firma: string;
   tarih: string;
-  onayDurumu: 'ONAY BEKLİYOR' | '1. ONAY TAMAMLANDI' | '2. ONAY TAMAMLANDI' | 'FARK VAR — YÖNETİCİ BİLDİRİLDİ';
+  onayDurumu:
+    | 'ONAY BEKLİYOR'
+    | '1. ONAY TAMAMLANDI'
+    | '2. ONAY TAMAMLANDI'
+    | 'FARK VAR — YÖNETİCİ BİLDİRİLDİ'
+    | 'ONAYLANDI'
+    | 'DİJİTAL ONAYLANDI'
+    | string;
   imzaliEvrakUrl?: string;
   imzaliEvrakUyumsuz?: boolean;
   fisEvrakUrl?: string;
@@ -100,9 +107,13 @@ export interface Irsaliye {
   yildirimTankerFisId?: string;
   icmeSuyuAdet?: number;
   sanayiSuyuAdet?: number;
+  cariKartId?: string;
+  guvenlikEvrakId?: string;
+  onaylayanYonetici?: string;
+  onayTarihi?: string;
 }
 
-/** Kampçı — Şeker Vidanjör çekim fişi (irsaliye niteliğinde) */
+/** Kampçı — Şeker Vidanjör çekim fişi (yönetici onayından sonra irsaliye + cari) */
 export interface VidanjorFis {
   id: string;
   tarih: string;
@@ -117,6 +128,10 @@ export interface VidanjorFis {
   guvenlikEvrakId?: string;
   kapıLogId?: string;
   kaydeden?: string;
+  durum?: 'YONETICI_ONAYINDA' | 'ONAYLANDI' | 'REDDEDILDI';
+  onaylayanYonetici?: string;
+  onayTarihi?: string;
+  redNedeni?: string;
   olusturulma: string;
   guncellenme?: string;
 }

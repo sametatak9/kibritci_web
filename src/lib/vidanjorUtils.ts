@@ -92,7 +92,9 @@ export function compareCekimFatura(
   ay: number,
   cariUnvan = SEKER_VIDANJOR_UNVAN
 ): CekimEslesmeSonuc {
-  const monthFis = filterFislerByMonth(fisler, yil, ay);
+  const monthFis = filterFislerByMonth(fisler, yil, ay).filter(
+    (f) => !f.durum || f.durum === 'ONAYLANDI'
+  );
   const monthFat = filterFaturalarByCariMonth(faturalar, cariUnvan, yil, ay);
   const fisToplam = sumCekimAdedi(monthFis);
   const faturaToplam = monthFat.reduce((s, f) => s + faturaCekimAdedi(f), 0);
