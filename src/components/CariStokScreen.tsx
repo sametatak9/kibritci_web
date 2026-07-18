@@ -1,19 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Building2, Package, Plus, Search, Trash2, Pencil, Download,
-  ClipboardList, X, RefreshCw, FileText, Truck, Receipt, Home, User
+  ClipboardList, X, RefreshCw, FileText, Truck, Receipt, Home, User, Users
 } from 'lucide-react';
 import { collection, getDocs } from 'firebase/firestore';
-import { CariKart, StokKart } from '../types/erp';
+import { CariKart, Personel, StokKart } from '../types/erp';
 import { db } from '../lib/firebase';
 import { warnIfDuplicateCari, warnIfDuplicateStok } from '../lib/duplicateNameUtils';
 import { exportHistoryReport } from '../lib/reportExport';
+import { firmaEslesir, personelForCariKart } from '../lib/taseronUtils';
+import { displayPersonelGorev, isPersonelActiveOnDate } from '../lib/guvenlikHelpers';
+import { todayDateKey } from '../lib/dateKeyUtils';
 
 interface CariStokScreenProps {
   cariKartlar: CariKart[];
   setCariKartlar: React.Dispatch<React.SetStateAction<CariKart[]>>;
   stokKartlar: StokKart[];
   setStokKartlar: React.Dispatch<React.SetStateAction<StokKart[]>>;
+  personeller?: Personel[];
 }
 
 type HistoryLog = {
@@ -33,6 +37,8 @@ const TYPE_ICON: Record<string, React.ReactNode> = {
   'FATURA': <Receipt size={14} />,
   'LOJMAN KONAKLAMA': <Home size={14} />,
   'PERSONEL ZİMMET': <User size={14} />,
+  'PERSONEL': <Users size={14} />,
+  'TAŞERON PERSONEL': <Users size={14} />,
 };
 
 export const CariStokScreen: React.FC<CariStokScreenProps> = ({
@@ -40,6 +46,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
   setCariKartlar,
   stokKartlar,
   setStokKartlar,
+  personeller = [],
 }) => {
   const [csTab, setCsTab] = useState<'cari' | 'stok'>('cari');
   const [cariSearchQuery, setCariSearchQuery] = useState('');
@@ -103,6 +110,17 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
     [stokKartlar, selectedStokId]
   );
 
+  const bagliPersoneller = useMemo(() => {
+    if (!selectedCari) return [];
+    return personelForCariKart(personeller, selectedCari);
+  }, [personeller, selectedCari]);
+
+  const bugun = todayDateKey();
+  const bagliPersonelAktifSayisi = useMemo(
+    () => bagliPersoneller.filter((p) => isPersonelActiveOnDate(p, bugun)).length,
+    [bagliPersoneller, bugun]
+  );
+
   useEffect(() => {
     if (csTab === 'cari' && !selectedCariId && filteredCariKartlar[0]) {
       setSelectedCariId(filteredCariKartlar[0].id);
@@ -131,7 +149,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
         const purchasesSnap = await getDocs(collection(db, 'satinAlmaTalepleri'));
         purchasesSnap.forEach((docSnap) => {
           const data = docSnap.data();
-          if (data.cariFirma?.toLowerCase() === name.toLowerCase()) {
+          if (firmaEslesir(String(data.cariFirma || ''), name)) {
             logs.push({
               id: docSnap.id,
               type: 'SATIN ALMA',
@@ -146,8 +164,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
         const waybillsSnap = await getDocs(collection(db, 'irsaliyeler'));
         waybillsSnap.forEach((docSnap) => {
           const data = docSnap.data();
-          const firmaMatch =
-            String(data.firma || '').toLowerCase() === name.toLowerCase();
+          const firmaMatch = firmaEslesir(String(data.firma || ''), name);
           const cariIdMatch = Boolean(data.cariKartId && data.cariKartId === id);
           if (firmaMatch || cariIdMatch) {
             logs.push({
@@ -166,7 +183,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
         const invoicesSnap = await getDocs(collection(db, 'faturalar'));
         invoicesSnap.forEach((docSnap) => {
           const data = docSnap.data();
-          if (data.cariUnvan?.toLowerCase() === name.toLowerCase()) {
+          if (firmaEslesir(String(data.cariUnvan || ''), name)) {
             logs.push({
               id: docSnap.id,
               type: 'FATURA',
@@ -181,7 +198,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
         const staysSnap = await getDocs(collection(db, 'kampKayitlari'));
         staysSnap.forEach((docSnap) => {
           const data = docSnap.data();
-          if (data.calistigiFirma?.toLowerCase() === name.toLowerCase()) {
+          if (firmaEslesir(String(data.calistigiFirma || ''), name)) {
             logs.push({
               id: docSnap.id,
               type: 'LOJMAN KONAKLAMA',
@@ -191,6 +208,26 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
               badgeColor: 'bg-teal-100 text-teal-800',
             });
           }
+        });
+
+        // Personel kaydı / güncelleme geçmişi (PersonelScreen → cariIslemGecmisi)
+        const cariIslemSnap = await getDocs(collection(db, 'cariIslemGecmisi'));
+        cariIslemSnap.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (data.cariKartId !== id) return;
+          const baslik = String(data.islemBaslik || '').toLocaleLowerCase('tr-TR');
+          const detay = String(data.islemDetay || '').toLocaleLowerCase('tr-TR');
+          const isPersonelIslem = baslik.includes('personel') || detay.includes('personel');
+          if (!isPersonelIslem && data.islemTipi !== 'DIGER') return;
+          if (!isPersonelIslem) return;
+          logs.push({
+            id: docSnap.id,
+            type: 'TAŞERON PERSONEL',
+            title: data.islemBaslik || 'Taşeron Personel',
+            desc: data.islemDetay || '',
+            date: data.tarih || '',
+            badgeColor: 'bg-indigo-100 text-indigo-800',
+          });
         });
       } else {
         const purchasesSnap = await getDocs(collection(db, 'satinAlmaTalepleri'));
@@ -654,6 +691,80 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
                     {selectedCari.adres || selectedCari.notlar || '—'}
                   </p>
                 </div>
+              </div>
+
+              {/* Bağlı personeller — firmaAdi ↔ cari unvan eşleşmesi (Yurt Mekanik vb.) */}
+              <div className="border border-indigo-100 rounded-2xl overflow-hidden bg-indigo-50/40">
+                <div className="px-4 py-3 border-b border-indigo-100 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-[11px] font-black uppercase tracking-wider text-indigo-900 flex items-center gap-1.5">
+                      <Users size={13} /> Bu cariye bağlı personeller
+                    </h3>
+                    <p className="text-[10px] text-indigo-800/70 mt-0.5">
+                      Personel kartındaki firma adı bu cari unvanıyla eşleşenler. Aktif:{' '}
+                      {bagliPersonelAktifSayisi}/{bagliPersoneller.length}
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-black bg-white text-indigo-800 border border-indigo-200 px-2.5 py-1 rounded-full">
+                    {bagliPersoneller.length} kişi
+                  </span>
+                </div>
+                {bagliPersoneller.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-[11px] text-slate-500 space-y-1">
+                    <p>Bu firmaya bağlı personel bulunamadı.</p>
+                    <p className="text-[10px] text-slate-400">
+                      Personel Kayıt’ta firma tipi Taşeron seçilip <strong>{selectedCari.unvan}</strong>{' '}
+                      atanmalı (büyük/küçük harf farkı sorun olmaz).
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto max-h-[280px]">
+                    <table className="w-full text-left text-[11px]">
+                      <thead className="bg-white/80 text-slate-500 uppercase text-[9px] font-bold sticky top-0">
+                        <tr>
+                          <th className="px-3 py-2">Ad Soyad</th>
+                          <th className="px-3 py-2">Görev</th>
+                          <th className="px-3 py-2">Firma (kayıt)</th>
+                          <th className="px-3 py-2">Telefon</th>
+                          <th className="px-3 py-2 text-center">Durum</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bagliPersoneller.map((p) => {
+                          const aktif = isPersonelActiveOnDate(p, bugun);
+                          return (
+                            <tr
+                              key={p.id}
+                              className={`border-t border-indigo-100/80 ${
+                                aktif ? 'bg-white/70' : 'bg-slate-50/80 opacity-70'
+                              }`}
+                            >
+                              <td className="px-3 py-2 font-bold text-slate-900 whitespace-nowrap">
+                                {p.ad} {p.soyad}
+                              </td>
+                              <td className="px-3 py-2 text-slate-700">{displayPersonelGorev(p)}</td>
+                              <td className="px-3 py-2 text-slate-600">{p.firmaAdi || '—'}</td>
+                              <td className="px-3 py-2 text-slate-600 whitespace-nowrap">
+                                {p.telefonNo || '—'}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <span
+                                  className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${
+                                    aktif
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-slate-200 text-slate-600'
+                                  }`}
+                                >
+                                  {aktif ? 'Aktif' : 'Pasif'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}

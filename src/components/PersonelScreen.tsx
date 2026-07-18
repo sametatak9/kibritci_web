@@ -332,7 +332,11 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     setSelectedPersonel(corrected);
     setFormData(corrected);
     if (p.firmaTipi === 'TASERON') {
-      const match = taseronCariList.find((c) => c.unvan === p.firmaAdi);
+      const match = taseronCariList.find(
+        (c) =>
+          c.unvan === p.firmaAdi ||
+          normalizeCardName(c.unvan) === normalizeCardName(p.firmaAdi || '')
+      );
       if (match) {
         setTaseronKaynak(match.id);
         setManuelTaseronAdi('');
