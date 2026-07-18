@@ -2634,7 +2634,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           </div>
 
           {kampMainView === 'faaliyet' ? (
-            <KampFaaliyetTakipTab />
+            <KampFaaliyetTakipTab
+              currentUser={auth.currentUser || undefined}
+              personeller={personeller}
+            />
           ) : kampMainView === 'personel' ? (
             <div className="bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm flex-1">
               <div className="bg-[#2563EB] text-slate-100 p-4 shrink-0 flex justify-between items-center">

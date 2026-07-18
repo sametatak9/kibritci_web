@@ -1,5 +1,6 @@
 import { KampKaydi, KampOdasi } from '../types/erp';
 import { saveDocument } from './firebase';
+import { normalizeTurkishName } from './yoklamaUtils';
 
 export interface AssignKampResidentInput {
   roomId: string;
@@ -9,6 +10,16 @@ export interface AssignKampResidentInput {
   firmaTipi?: 'ANA_FIRMA' | 'TASERON';
   kampOdalari: KampOdasi[];
   kampKayitlari: KampKaydi[];
+}
+
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function roomDurumFromCount(count: number, kapasite: number): KampOdasi['durum'] {
+  if (count <= 0) return 'BOŞ';
+  if (count >= kapasite) return 'DOLU';
+  return 'KISMEN DOLU';
 }
 
 export async function assignKampResident(
@@ -64,7 +75,8 @@ export async function assignKampResident(
 export async function evictKampResident(
   reg: KampKaydi,
   kampOdalari: KampOdasi[],
-  kampKayitlari: KampKaydi[]
+  kampKayitlari: KampKaydi[],
+  cikisTarihi?: string
 ): Promise<void> {
   const roomId = reg.odaId || reg.roomId;
   const targetRoom = kampOdalari.find((r) => r.id === roomId);
@@ -72,7 +84,7 @@ export async function evictKampResident(
   const updatedReg: KampKaydi = {
     ...reg,
     durum: 'PASIF',
-    cikisTarihi: new Date().toISOString().slice(0, 10),
+    cikisTarihi: cikisTarihi || todayIsoDate(),
   };
   await saveDocument('kampKayitlari', updatedReg);
 
@@ -85,10 +97,76 @@ export async function evictKampResident(
       k.id !== reg.id
   );
 
-  let durum: KampOdasi['durum'] = remaining.length === 0 ? 'BOŞ' : 'KISMEN DOLU';
-  if (remaining.length >= targetRoom.kapasite) durum = 'DOLU';
+  await saveDocument('kampOdalari', {
+    ...targetRoom,
+    durum: roomDurumFromCount(remaining.length, targetRoom.kapasite),
+  });
+}
 
-  await saveDocument('kampOdalari', { ...targetRoom, durum });
+/**
+ * İşten çıkarılan / pasife alınan personelin tüm aktif kamp oda kayıtlarını tahliye eder.
+ * Oda doluluk durumunu yeniden hesaplar.
+ */
+export async function evictActiveKampResidentsForPersonel(options: {
+  personelId?: string;
+  personelIsim?: string;
+  cikisTarihi?: string;
+  kampOdalari: KampOdasi[];
+  kampKayitlari: KampKaydi[];
+}): Promise<{ evictedCount: number; affectedRoomIds: string[] }> {
+  const cikisTarihi = options.cikisTarihi || todayIsoDate();
+  const nameKey = normalizeTurkishName(options.personelIsim || '');
+
+  const activeMatches = options.kampKayitlari.filter((k) => {
+    if (k.durum !== 'AKTIF') return false;
+    if (options.personelId && k.personelId && k.personelId === options.personelId) return true;
+    if (nameKey && normalizeTurkishName(k.personelIsim || '') === nameKey) return true;
+    return false;
+  });
+
+  if (activeMatches.length === 0) {
+    return { evictedCount: 0, affectedRoomIds: [] };
+  }
+
+  let kayitlar = [...options.kampKayitlari];
+  let odalar = [...options.kampOdalari];
+  const affectedRoomIds = new Set<string>();
+
+  for (const reg of activeMatches) {
+    const updatedReg: KampKaydi = {
+      ...reg,
+      durum: 'PASIF',
+      cikisTarihi,
+    };
+    await saveDocument('kampKayitlari', updatedReg);
+    kayitlar = kayitlar.map((k) => (k.id === reg.id ? updatedReg : k));
+    const roomId = reg.odaId || reg.roomId;
+    if (roomId) affectedRoomIds.add(roomId);
+  }
+
+  for (const roomId of affectedRoomIds) {
+    const room = odalar.find((r) => r.id === roomId);
+    if (!room) continue;
+    const remaining = kayitlar.filter(
+      (k) => (k.odaId === roomId || k.roomId === roomId) && k.durum === 'AKTIF'
+    );
+    const updatedRoom: KampOdasi = {
+      ...room,
+      durum: roomDurumFromCount(remaining.length, room.kapasite),
+    };
+    await saveDocument('kampOdalari', updatedRoom);
+    odalar = odalar.map((r) => (r.id === roomId ? updatedRoom : r));
+  }
+
+  return { evictedCount: activeMatches.length, affectedRoomIds: Array.from(affectedRoomIds) };
+}
+
+export function isPersonelAktifDurum(durum: unknown): boolean {
+  if (durum === true) return true;
+  if (durum === false || durum == null) return false;
+  const s = String(durum).trim().toLocaleLowerCase('tr-TR');
+  if (!s || s === 'false' || s === 'pasif' || s === '0') return false;
+  return s === 'true' || s === 'aktif' || s === '1';
 }
 
 /** Elle girilen taşeron / misafir için personel kartı oluşturma önerisi */

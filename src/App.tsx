@@ -84,6 +84,10 @@ import {
   personelNameKey,
 } from './lib/guvenlikHelpers';
 import { loadKampStateSnapshot, ensureYapıFromOdalari } from './lib/kampYapisi';
+import {
+  evictActiveKampResidentsForPersonel,
+  isPersonelAktifDurum,
+} from './lib/kampPlacementUtils';
 import { probeGeminiApi } from './lib/apiClient';
 import {
   hasSubstantialYoklamaData,
@@ -1278,29 +1282,57 @@ export default function App() {
 
   const handlePersonelDeleted = (deleted: Personel[]) => {
     if (!deleted.length) return;
-    const deletedIds = new Set(deleted.map((p) => p.id));
     deleted.forEach((p) => {
       personelAutoCreateBlocklistRef.current.add(personelNameKey(p));
-    });
-
-    setKampKayitlari((prev) => {
-      let changed = false;
-      const next = prev.map((k) => {
-        const nameMatch = deleted.some(
-          (p) => personelNameKey(p) === k.personelIsim.trim().toLocaleLowerCase('tr-TR')
-        );
-        const idMatch = Boolean(k.personelId && deletedIds.has(k.personelId));
-        if (nameMatch || idMatch) {
-          changed = true;
-          const updated = { ...k, personelId: '', durum: 'PASIF' as const };
-          void saveDocument('kampKayitlari', updated);
-          return updated;
+      void evictActiveKampResidentsForPersonel({
+        personelId: p.id,
+        personelIsim: `${p.ad || ''} ${p.soyad || ''}`.trim(),
+        cikisTarihi: p.istenCikisTarihi || new Date().toISOString().slice(0, 10),
+        kampOdalari,
+        kampKayitlari,
+      }).then((result) => {
+        if (result.evictedCount > 0) {
+          addNotification?.(
+            `${p.ad} ${p.soyad} silindi — kamptan ${result.evictedCount} oda kaydı tahliye edildi.`
+          );
         }
-        return k;
       });
-      return changed ? next : prev;
     });
   };
+
+  // İşten çıkış / pasife alma → aktif kamp oda kaydı otomatik tahliye
+  const prevPersonellerForKampRef = useRef<Personel[] | null>(null);
+  const kampTahliyeInFlightRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const prev = prevPersonellerForKampRef.current;
+    prevPersonellerForKampRef.current = personeller;
+    if (!prev || prev.length === 0) return;
+
+    for (const p of personeller) {
+      const old = prev.find((x) => x.id === p.id);
+      if (!old) continue;
+      if (!isPersonelAktifDurum(old.durum) || isPersonelAktifDurum(p.durum)) continue;
+      if (kampTahliyeInFlightRef.current.has(p.id)) continue;
+      kampTahliyeInFlightRef.current.add(p.id);
+      void evictActiveKampResidentsForPersonel({
+        personelId: p.id,
+        personelIsim: `${p.ad || ''} ${p.soyad || ''}`.trim(),
+        cikisTarihi: p.istenCikisTarihi || new Date().toISOString().slice(0, 10),
+        kampOdalari,
+        kampKayitlari,
+      })
+        .then((result) => {
+          if (result.evictedCount > 0) {
+            addNotification?.(
+              `${p.ad} ${p.soyad} işten çıkarıldı — kamptaki odasından otomatik tahliye edildi (${result.evictedCount} kayıt).`
+            );
+          }
+        })
+        .finally(() => {
+          kampTahliyeInFlightRef.current.delete(p.id);
+        });
+    }
+  }, [personeller, kampOdalari, kampKayitlari]);
 
   const setPersonellerWithSync = (updater: Personel[] | ((p: Personel[]) => Personel[])) => {
     setPersoneller(prev => {
