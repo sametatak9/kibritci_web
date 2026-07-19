@@ -42,8 +42,11 @@ import {
 import { normalizeDateKey, todayDateKey, formatDateLabelTr } from '../lib/dateKeyUtils';
 import {
   ENTO_MADEN_UNVAN,
+  formatMicirMiktarLabel,
+  kgToTon,
   malzemeTipiLabel,
   MicirMalzemeTipi,
+  resolveMicirKiloKg,
 } from '../lib/micirUtils';
 import { buildMicirKalemler } from '../lib/micirOnayUtils';
 
@@ -158,6 +161,8 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   const [stAciklama, setStAciklama] = useState('');
   const [stIrsaliyeNo, setStIrsaliyeNo] = useState('');
   const [stMalzemeTipi, setStMalzemeTipi] = useState<MicirMalzemeTipi>('MICIR');
+  /** Mıcır/stabilize irsaliye kilosu (kg) — tonaj = kg/1000 */
+  const [stKiloKg, setStKiloKg] = useState('');
   const [tankerFotoUrl, setTankerFotoUrl] = useState('');
   const [tankerFileName, setTankerFileName] = useState('');
   const [micirArama, setMicirArama] = useState('');
@@ -558,6 +563,54 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             : 'guvenlikZiyaretciLoglari';
 
     await setDoc(doc(db, collectionName, record.id), patch, { merge: true });
+
+    // Mıcır/stabilize düzenlemesi → fiş + gelen evrak senkron
+    if (kind === 'tanker' && record.tip === 'MICIR_STABILIZE' && record.micirFisId) {
+      const kiloKg = resolveMicirKiloKg({
+        kiloKg: patch.kiloKg != null ? Number(patch.kiloKg) : record.kiloKg,
+        tonaj: patch.tonaj != null ? Number(patch.tonaj) : record.tonaj,
+      });
+      const tonaj = kiloKg > 0 ? kgToTon(kiloKg) : Number(patch.tonaj || record.tonaj) || 0;
+      const irsaliyeNo = String(patch.irsaliyeNo || record.irsaliyeNo || '').trim().toUpperCase();
+      const tarih = String(patch.islemTarihi || record.islemTarihi || '').slice(0, 10);
+      const plaka = String(patch.plaka || record.plaka || '').trim().toUpperCase();
+      const malzemeTipi =
+        String(patch.malzemeTipi || record.malzemeTipi || 'MICIR') === 'STABILIZE' ? 'STABILIZE' : 'MICIR';
+
+      await setDoc(
+        doc(db, 'micirStabilizeFisleri', record.micirFisId),
+        {
+          tarih,
+          irsaliyeNo,
+          plaka,
+          tonaj,
+          kiloKg,
+          malzemeTipi,
+          firmaUnvan: ENTO_MADEN_UNVAN,
+          guncellenme: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+
+      if (record.guvenlikEvrakId) {
+        await setDoc(
+          doc(db, 'guvenlikGelenEvraklar', record.guvenlikEvrakId),
+          {
+            evrakNo: irsaliyeNo,
+            tarih,
+            plaka,
+            tonaj,
+            kiloKg,
+            malzemeTipi,
+            firma: ENTO_MADEN_UNVAN,
+            aciklama: `Kapı ${malzemeTipiLabel(malzemeTipi)} irsaliye teslimi · Plaka ${plaka} · ${formatMicirMiktarLabel(tonaj, kiloKg)}`,
+            kalemler: buildMicirKalemler(record.micirFisId, tonaj, malzemeTipi, kiloKg),
+          },
+          { merge: true }
+        );
+      }
+    }
+
     showStatus('success', 'Kayıt güncellendi.');
     setEditingKayit(null);
   };
@@ -565,7 +618,36 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   const handleDeleteTankerLog = async (id: string) => {
     if (!window.confirm('Bu tanker / kamyon kaydı silinsin mi?')) return;
     try {
+      const matched = [
+        ...iceridekiMiciStabilize,
+        ...miciStabilizeGecmisLoglar,
+        ...iceridekiSuTankerleri,
+        ...suTankeriGecmisLoglar,
+        ...iceridekiVidanjorler,
+        ...vidanjorGecmisLoglar,
+        ...iceridekiPetrolTankerleri,
+        ...petrolTankeriGecmisLoglar,
+      ].find((x) => x.id === id);
+
       await deleteDoc(doc(db, 'guvenlikTankerLoglari', id));
+
+      if (matched?.tip === 'MICIR_STABILIZE') {
+        if (matched.micirFisId) {
+          try {
+            await deleteDoc(doc(db, 'micirStabilizeFisleri', matched.micirFisId));
+          } catch (_) {
+            /* yoksa geç */
+          }
+        }
+        if (matched.guvenlikEvrakId) {
+          try {
+            await deleteDoc(doc(db, 'guvenlikGelenEvraklar', matched.guvenlikEvrakId));
+          } catch (_) {
+            /* yoksa geç */
+          }
+        }
+      }
+
       setSelectedSuTankeriLogIds((prev) => prev.filter((x) => x !== id));
       showStatus('success', 'Tanker kaydı silindi.');
     } catch (e) {
@@ -1146,19 +1228,30 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
     const isMicir = currentTip === 'MICIR_STABILIZE';
     const firma = isMicir ? ENTO_MADEN_UNVAN : stFirma.trim();
-    const tonajNum = Number(String(stMiktar).replace(',', '.'));
+    const kiloKgNum = Number(String(stKiloKg || stMiktar).replace(',', '.'));
+    const tonajNum = isMicir
+      ? kgToTon(kiloKgNum)
+      : Number(String(stMiktar).replace(',', '.'));
 
     if (!stPlaka.trim() || !firma) {
       alert('Lütfen plaka ve firmasını girin!');
       return;
     }
     if (isMicir) {
-      if (!stIrsaliyeNo.trim()) {
-        alert('İrsaliye no zorunludur.');
+      if (!islemTarihi) {
+        alert('İrsaliye tarihi zorunludur.');
         return;
       }
-      if (!Number.isFinite(tonajNum) || tonajNum <= 0) {
-        alert('Tonaj zorunludur (örn: 25).');
+      if (!stIrsaliyeNo.trim()) {
+        alert('İrsaliye no zorunludur — evrak üzerindeki numarayı tam girin.');
+        return;
+      }
+      if (!Number.isFinite(kiloKgNum) || kiloKgNum <= 0) {
+        alert('Kilo zorunludur — irsaliyedeki ağırlığı kilogram olarak tam girin (örn: 25500).');
+        return;
+      }
+      if (!tankerFotoUrl) {
+        alert('İrsaliye fotoğrafı / belgesi zorunludur.');
         return;
       }
     }
@@ -1170,6 +1263,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       const irsaliyeId = isMicir ? `IR-MIC-${micirFisId}` : null;
       const malzeme = stMalzemeTipi === 'STABILIZE' ? 'STABILIZE' : 'MICIR';
       const malzemeAdi = malzemeTipiLabel(malzeme);
+      const miktarLabel = isMicir ? formatMicirMiktarLabel(tonajNum, kiloKgNum) : '';
 
       const logData: Record<string, unknown> = {
         id: logId,
@@ -1177,9 +1271,9 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         plaka: stPlaka.toUpperCase().trim(),
         firma,
         surucuAdi: stSurucu.trim(),
-        miktar: isMicir ? String(tonajNum) : stMiktar.trim() || 'Belirtilmedi',
+        miktar: isMicir ? miktarLabel : stMiktar.trim() || 'Belirtilmedi',
         aciklama: isMicir
-          ? `${malzemeAdi} irsaliye teslimi · ${stIrsaliyeNo.trim().toUpperCase()}${stAciklama.trim() ? ` · ${stAciklama.trim()}` : ''}`
+          ? `${malzemeAdi} irsaliye · ${stIrsaliyeNo.trim().toUpperCase()} · ${miktarLabel}${stAciklama.trim() ? ` · ${stAciklama.trim()}` : ''}`
           : stAciklama.trim(),
         fotoUrl: tankerFotoUrl || null,
         fileName: tankerFileName || null,
@@ -1193,6 +1287,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       if (isMicir && micirFisId) {
         logData.irsaliyeNo = stIrsaliyeNo.trim().toUpperCase();
         logData.tonaj = tonajNum;
+        logData.kiloKg = kiloKgNum;
         logData.malzemeTipi = malzeme;
         logData.micirFisId = micirFisId;
         logData.guvenlikEvrakId = guvenlikEvrakId;
@@ -1202,7 +1297,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
       await setDoc(doc(db, 'guvenlikTankerLoglari', logId), logData);
 
-      // Mıcır/Stabilize = kapı irsaliye teslimi → yönetici onayına düşer (irsaliye/cari henüz oluşmaz)
+      // Mıcır/Stabilize = ENTO MADEN kapı irsaliyesi → yönetici onayı sonrası irsaliye + cari
       if (isMicir && micirFisId && guvenlikEvrakId && irsaliyeId) {
         const fis: MicirStabilizeFis = {
           id: micirFisId,
@@ -1210,6 +1305,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
           irsaliyeNo: stIrsaliyeNo.trim().toUpperCase(),
           plaka: stPlaka.toUpperCase().trim(),
           tonaj: tonajNum,
+          kiloKg: kiloKgNum,
           malzemeTipi: malzeme,
           fisGorselUrl: tankerFotoUrl || '',
           firmaUnvan: ENTO_MADEN_UNVAN,
@@ -1235,7 +1331,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             fileName: `micir_${fis.irsaliyeNo}.jpg`,
             fileType: 'image/jpeg',
             durum: 'BEKLEMEDE',
-            aciklama: `Kapı ${malzemeAdi} irsaliye teslimi · Plaka ${fis.plaka} · ${fis.tonaj} ton — yönetici onayı bekliyor`,
+            aciklama: `ENTO MADEN ${malzemeAdi} irsaliyesi · Plaka ${fis.plaka} · ${miktarLabel} — yönetici onayı bekliyor`,
             kaydeden: currentUser?.email || 'guvenlik_gate',
             kaynak: 'MICIR_STABILIZE_FIS',
             micirFisId,
@@ -1243,8 +1339,9 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             irsaliyeId,
             plaka: fis.plaka,
             tonaj: fis.tonaj,
+            kiloKg: fis.kiloKg,
             malzemeTipi: fis.malzemeTipi,
-            kalemler: buildMicirKalemler(micirFisId, fis.tonaj, malzeme),
+            kalemler: buildMicirKalemler(micirFisId, fis.tonaj, malzeme, fis.kiloKg),
             aiStatus: 'SKIPPED',
           },
           { merge: true }
@@ -1276,7 +1373,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
           );
         } else if (isMicir) {
           await addNotification(
-            `Mıcır/Stabilize kapı irsaliyesi yönetici onayına gönderildi: ${stIrsaliyeNo.trim().toUpperCase()} · ${stPlaka.toUpperCase().trim()} · ${tonajNum} ton`,
+            `ENTO MADEN ${malzemeAdi} irsaliyesi onay bekliyor: ${stIrsaliyeNo.trim().toUpperCase()} · ${stPlaka.toUpperCase().trim()} · ${miktarLabel}`,
             {
               tip: 'MICIR_FIS_ONAY',
               hedefRol: 'YÖNETİCİ',
@@ -1286,6 +1383,8 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               kapıLogId: logId,
               plaka: stPlaka.toUpperCase().trim(),
               firma: ENTO_MADEN_UNVAN,
+              kiloKg: kiloKgNum,
+              tonaj: tonajNum,
             }
           );
         } else {
@@ -1296,6 +1395,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       setStFirma(isMicir ? ENTO_MADEN_UNVAN : '');
       setStSurucu('');
       setStMiktar('');
+      setStKiloKg('');
       setStAciklama('');
       setStIrsaliyeNo('');
       setStMalzemeTipi('MICIR');
@@ -1304,7 +1404,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       showStatus(
         'success',
         isMicir
-          ? 'Kapı irsaliye kaydı listelendi ve yönetici onayına gönderildi.'
+          ? `${ENTO_MADEN_UNVAN} irsaliye kaydı oluşturuldu — yönetici onayına gönderildi.`
           : `${currentLabel} giriş kaydı yapıldı!`
       );
     } catch (err) {
@@ -2736,9 +2836,11 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                 <div className={`${currentTextClass} border rounded-2xl p-4 text-xs font-semibold`}>
                   {activeTab === 'mici_stabilize' ? (
                     <>
-                      Bu sekme <strong>irsaliyenin kapıdan teslim alınışı</strong>dır. Tonaj, plaka, irsaliye no
-                      ve tarih kaydedilir; alta listelenir. Yönetici onaylayınca irsaliye +{' '}
-                      <strong>{ENTO_MADEN_UNVAN}</strong> cari kartına kayıt oluşur.
+                      <strong>{ENTO_MADEN_UNVAN} irsaliye üretimi burada yapılır.</strong> Kapıdan
+                      gelen her mıcır / stabilize evrakı bir irsaliyedir. <strong>Kilo</strong>,{' '}
+                      <strong>tarih</strong> ve <strong>irsaliye no</strong> eksiksiz girilir; yönetici
+                      onayından sonra <strong>İrsaliyeler</strong> ve{' '}
+                      <strong>{ENTO_MADEN_UNVAN}</strong> cari kartının altına kaydedilir.
                     </>
                   ) : (
                     <>
@@ -2755,11 +2857,12 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                     <span className="font-display font-black text-xs text-slate-805 uppercase tracking-widest block border-b border-slate-200 pb-2">
                       {currentIcon}{' '}
                       {activeTab === 'mici_stabilize'
-                        ? 'KAPI IRSALİYE TESLİM KAYDI'
+                        ? `${ENTO_MADEN_UNVAN.toUpperCase()} İRSALİYE KAYDI`
                         : `YENİ ${currentLabel.toUpperCase()} GİRİŞ KAYDI`}
                     </span>
 
                     <form onSubmit={handleTankerGiris} className="space-y-3.5 text-xs text-slate-700">
+                      {activeTab !== 'mici_stabilize' && (
                       <div className="space-y-1">
                         <label className="text-[9px] font-bold text-slate-500 uppercase">Plaka *</label>
                         <input
@@ -2771,11 +2874,12 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                           className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold font-mono text-xs uppercase"
                         />
                       </div>
+                      )}
 
                       {activeTab === 'mici_stabilize' ? (
                         <>
                           <div className="space-y-1">
-                            <label className="text-[9px] font-bold text-slate-500 uppercase">Cari / Firma</label>
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Cari Firma</label>
                             <input
                               type="text"
                               readOnly
@@ -2784,14 +2888,35 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                             />
                           </div>
                           <div className="space-y-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">İrsaliye Tarihi *</label>
+                            <input
+                              type="date"
+                              required
+                              value={islemTarihi}
+                              onChange={(e) => setIslemTarihi(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold text-xs"
+                            />
+                          </div>
+                          <div className="space-y-1">
                             <label className="text-[9px] font-bold text-slate-500 uppercase">İrsaliye No *</label>
                             <input
                               type="text"
                               required
-                              placeholder="Örn: IRS-2026-001"
+                              placeholder="Evraktaki irsaliye numarası"
                               value={stIrsaliyeNo}
                               onChange={(e) => setStIrsaliyeNo(e.target.value)}
                               className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold text-xs uppercase"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Plaka *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="Örn: 34 XYZ 456"
+                              value={stPlaka}
+                              onChange={(e) => setStPlaka(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold font-mono text-xs uppercase"
                             />
                           </div>
                           <div className="space-y-1">
@@ -2806,17 +2931,28 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                             </select>
                           </div>
                           <div className="space-y-1">
-                            <label className="text-[9px] font-bold text-slate-500 uppercase">Tonaj *</label>
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Kilo (kg) *</label>
                             <input
                               type="number"
                               required
-                              min={0.01}
-                              step={0.01}
-                              placeholder="Örn: 25"
-                              value={stMiktar}
-                              onChange={(e) => setStMiktar(e.target.value)}
+                              min={1}
+                              step={1}
+                              placeholder="Örn: 25500"
+                              value={stKiloKg}
+                              onChange={(e) => {
+                                setStKiloKg(e.target.value);
+                                setStMiktar(e.target.value);
+                              }}
                               className="w-full bg-slate-50 border border-slate-200 text-slate-800 p-2.5 rounded-xl font-bold text-xs"
                             />
+                            {Number(stKiloKg) > 0 && (
+                              <p className="text-[10px] text-emerald-700 font-semibold">
+                                = {kgToTon(Number(stKiloKg)).toLocaleString('tr-TR')} ton
+                              </p>
+                            )}
+                            <p className="text-[9px] text-slate-400">
+                              İrsaliyedeki ağırlığı kilogram olarak tam girin.
+                            </p>
                           </div>
                           <div className="space-y-1">
                             <label className="text-[9px] font-bold text-slate-500 uppercase">Sürücü (opsiyonel)</label>
@@ -2890,7 +3026,9 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
                       {/* Document Upload Area */}
                       <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-slate-500 uppercase">Fotoğraf / Belge Yükle</label>
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">
+                          {activeTab === 'mici_stabilize' ? 'İrsaliye Fotoğrafı / Belge *' : 'Fotoğraf / Belge Yükle'}
+                        </label>
                         {tankerFotoUrl ? (
                           <div className="relative border border-slate-200 rounded-2xl p-2 bg-slate-50 flex items-center justify-between">
                             <span className="text-[10px] text-slate-600 font-bold font-mono truncate max-w-[180px]">
@@ -2947,7 +3085,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                         className={`w-full ${currentButtonClass} text-white font-black text-xs py-3 rounded-xl cursor-pointer border-b-2 transition`}
                       >
                         {activeTab === 'mici_stabilize'
-                          ? 'KAYDET &amp; YÖNETİCİYE GÖNDER'
+                          ? 'İRSALİYEYİ KAYDET &amp; ONAYA GÖNDER'
                           : 'KAYDET &amp; ŞANTİYEYE GÖNDER'}
                       </button>
                     </form>
@@ -2955,10 +3093,10 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
                   {/* Tarihli Tanker Hareketleri Listesi */}
                   <div className="lg:col-span-2 bg-white p-5 border border-slate-200 rounded-3xl space-y-4 shadow-sm">
-                    <span className="font-display font-black text-xs text-amber-500 uppercase tracking-widest block border-b border-slate-200 pb-2">
+                    <span className="font-display font-black text-xs text-amber-700 uppercase tracking-widest block border-b border-slate-200 pb-2">
                       {activeTab === 'mici_stabilize'
-                        ? '📋 KAPI IRSALİYE KAYIT LİSTESİ (ARAMA)'
-                        : `🚧 TARİHLİ ${currentLabel.toUpperCase()} HAREKET LİSTESİ`}
+                        ? `${ENTO_MADEN_UNVAN.toUpperCase()} İRSALİYE LİSTESİ`
+                        : `TARİHLİ ${currentLabel.toUpperCase()} HAREKET LİSTESİ`}
                     </span>
 
                     {activeTab === 'mici_stabilize' && (
@@ -2968,7 +3106,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                           type="text"
                           value={micirArama}
                           onChange={(e) => setMicirArama(e.target.value)}
-                          placeholder="İrsaliye no, plaka, tonaj veya tarih ile ara..."
+                          placeholder="İrsaliye no, plaka, kilo veya tarih ile ara..."
                           className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold"
                         />
                       </div>
@@ -3003,14 +3141,14 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                         <div key={item.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-4.5 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
                           
                           <div>
-                            <div className="flex justify-between items-center border-b border-slate-950 pb-1.5">
-                              <span className="font-mono text-xs font-black text-white bg-white px-2 py-0.5 border border-slate-200 rounded">{item.plaka}</span>
+                            <div className="flex justify-between items-center border-b border-slate-200 pb-1.5">
+                              <span className="font-mono text-xs font-black text-slate-800 bg-white px-2 py-0.5 border border-slate-200 rounded">{item.plaka}</span>
                               <div className="flex items-center space-x-1">
                                 {item.fotoUrl && (
                                   <button
                                     type="button"
                                     onClick={() => openBase64InNewTab(item.fotoUrl, item.fileName || 'Belge')}
-                                    className="text-indigo-600 hover:text-indigo-500 p-1 hover:bg-indigo-50/20 rounded transition cursor-pointer bg-transparent border-0"
+                                    className="text-emerald-700 hover:text-emerald-800 p-1 hover:bg-emerald-50 rounded transition cursor-pointer bg-transparent border-0"
                                     title="Belgeyi Görüntüle"
                                   >
                                     <FileText size={12} />
@@ -3027,10 +3165,15 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                             <div className="space-y-1 text-[11px] text-slate-500 font-semibold mt-2.5">
                               {activeTab === 'mici_stabilize' ? (
                                 <>
-                                  <p>📄 İrsaliye No: <span className="text-slate-800 font-bold font-mono">{item.irsaliyeNo || '—'}</span></p>
-                                  <p>🏢 Cari: <span className="text-slate-800 font-bold">{item.firma || ENTO_MADEN_UNVAN}</span></p>
-                                  <p>⚖️ Tonaj: <span className="text-emerald-700 font-bold">{item.tonaj ?? item.miktar ?? '—'} ton</span></p>
-                                  <p>📅 Tarih: <span className="text-slate-800 font-bold">{item.islemTarihi || '—'}</span></p>
+                                  <p>İrsaliye No: <span className="text-slate-800 font-bold font-mono">{item.irsaliyeNo || '—'}</span></p>
+                                  <p>Cari: <span className="text-slate-800 font-bold">{item.firma || ENTO_MADEN_UNVAN}</span></p>
+                                  <p>
+                                    Miktar:{' '}
+                                    <span className="text-emerald-700 font-bold">
+                                      {formatMicirMiktarLabel(item.tonaj, item.kiloKg)}
+                                    </span>
+                                  </p>
+                                  <p>Tarih: <span className="text-slate-800 font-bold">{item.islemTarihi || '—'}</span></p>
                                   <p>
                                     Onay:{' '}
                                     <span
@@ -3043,7 +3186,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                                       }`}
                                     >
                                       {item.onayDurumu === 'ONAYLANDI'
-                                        ? 'Onaylandı → irsaliye + cari'
+                                        ? `Onaylandı → ${ENTO_MADEN_UNVAN} cari`
                                         : item.onayDurumu === 'REDDEDILDI'
                                           ? 'Reddedildi'
                                           : 'Yönetici onayında'}

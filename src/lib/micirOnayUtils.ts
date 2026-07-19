@@ -3,9 +3,13 @@ import { saveDocument } from './firebase';
 import {
   ENTO_MADEN_UNVAN,
   findEntoMadenCari,
+  formatMicirMiktarLabel,
   isEntoMadenFirma,
+  kgToTon,
   malzemeTipiLabel,
   MicirMalzemeTipi,
+  resolveMicirKiloKg,
+  tonToKg,
 } from './micirUtils';
 
 export type MicirFisOnayDurum = 'YONETICI_ONAYINDA' | 'ONAYLANDI' | 'REDDEDILDI';
@@ -15,6 +19,7 @@ export type MicirFisCorrection = {
   irsaliyeNo: string;
   plaka: string;
   tonaj: number;
+  kiloKg?: number;
   malzemeTipi: MicirMalzemeTipi;
   fisGorselUrl?: string;
   firmaUnvan: string;
@@ -28,14 +33,18 @@ export function isMicirFisPending(f?: Pick<MicirStabilizeFis, 'durum'> | null): 
 export function buildMicirKalemler(
   fisId: string,
   tonaj: number,
-  malzemeTipi: MicirMalzemeTipi
+  malzemeTipi: MicirMalzemeTipi,
+  kiloKg?: number
 ) {
+  const kg = resolveMicirKiloKg({ tonaj, kiloKg });
+  const ton = kg > 0 ? kgToTon(kg) : tonaj;
   return [
     {
       id: `k_${fisId}`,
       urunAdi: malzemeTipiLabel(malzemeTipi),
-      miktar: tonaj,
+      miktar: ton,
       birim: 'TON' as const,
+      kiloKg: kg || tonToKg(ton),
     },
   ];
 }
@@ -98,17 +107,35 @@ export async function approveMicirFis(options: {
     firmaUnvan = cari.unvan || ENTO_MADEN_UNVAN;
   }
 
+  const kiloKg = resolveMicirKiloKg({
+    tonaj: correction.tonaj,
+    kiloKg: correction.kiloKg,
+  });
+  const tonaj = kiloKg > 0 ? kgToTon(kiloKg) : correction.tonaj;
+
+  if (!correction.tarih?.trim()) {
+    throw new Error('İrsaliye tarihi zorunludur.');
+  }
+  if (!correction.irsaliyeNo?.trim()) {
+    throw new Error('İrsaliye no zorunludur.');
+  }
+  if (!kiloKg || kiloKg <= 0 || !tonaj || tonaj <= 0) {
+    throw new Error('Kilo / tonaj zorunludur.');
+  }
+
   const irsaliyeId = fis.irsaliyeId || `IR-MIC-${fis.id}`;
   const guvenlikEvrakId = fis.guvenlikEvrakId || `EVR-MIC-${fis.id}`;
-  const kalemler = buildMicirKalemler(fis.id, correction.tonaj, correction.malzemeTipi);
+  const kalemler = buildMicirKalemler(fis.id, tonaj, correction.malzemeTipi, kiloKg);
   const malzemeAdi = malzemeTipiLabel(correction.malzemeTipi);
+  const miktarLabel = formatMicirMiktarLabel(tonaj, kiloKg);
 
   const updatedFis: MicirStabilizeFis = {
     ...fis,
     tarih: correction.tarih,
     irsaliyeNo: correction.irsaliyeNo.trim().toUpperCase(),
     plaka: correction.plaka.trim().toUpperCase(),
-    tonaj: correction.tonaj,
+    tonaj,
+    kiloKg,
     malzemeTipi: correction.malzemeTipi,
     fisGorselUrl: correction.fisGorselUrl || fis.fisGorselUrl || '',
     firmaUnvan,
@@ -135,6 +162,7 @@ export async function approveMicirFis(options: {
     fisNo: updatedFis.irsaliyeNo,
     micirFisId: fis.id,
     tonaj: updatedFis.tonaj,
+    kiloKg: updatedFis.kiloKg,
     malzemeTipi: updatedFis.malzemeTipi,
     guvenlikEvrakId,
     kalemler,
@@ -147,8 +175,8 @@ export async function approveMicirFis(options: {
     cariKartId: cariKartId!,
     islemTipi: 'IRSALIYE',
     islemId: irsaliyeId,
-    islemBaslik: `${malzemeAdi} İrsaliyesi (Kapı)`,
-    islemDetay: `${updatedFis.irsaliyeNo} · ${updatedFis.plaka} · ${updatedFis.tonaj} ton ${malzemeAdi}`,
+    islemBaslik: `${malzemeAdi} İrsaliyesi · ${firmaUnvan}`,
+    islemDetay: `${updatedFis.irsaliyeNo} · ${updatedFis.plaka} · ${miktarLabel} · ${malzemeAdi}`,
     tarih: updatedFis.tarih,
     belgeNo: updatedFis.irsaliyeNo,
   };
@@ -166,13 +194,14 @@ export async function approveMicirFis(options: {
     fileName: `micir_${updatedFis.irsaliyeNo}.jpg`,
     fileType: 'image/jpeg',
     durum: 'ONAYLANDI',
-    aciklama: `Kapı ${malzemeAdi} irsaliyesi onaylandı · Plaka ${updatedFis.plaka} · ${updatedFis.tonaj} ton`,
+    aciklama: `Kapı ${malzemeAdi} irsaliyesi onaylandı · Plaka ${updatedFis.plaka} · ${miktarLabel}`,
     kaynak: 'MICIR_STABILIZE_FIS',
     micirFisId: fis.id,
     irsaliyeId,
     cariKartId,
     plaka: updatedFis.plaka,
     tonaj: updatedFis.tonaj,
+    kiloKg: updatedFis.kiloKg,
     malzemeTipi: updatedFis.malzemeTipi,
     kalemler,
     onaylayanYonetici: onaylayan,
@@ -221,7 +250,7 @@ export async function rejectMicirFis(options: {
   await saveDocument('micirStabilizeFisleri', updated);
   await saveDocument('guvenlikGelenEvraklar', {
     id: guvenlikEvrakId,
-    durum: 'REDDEDİLDİ',
+    durum: 'REDDEDILDI',
     onaylayanYonetici: options.onaylayan,
     onayTarihi: now,
     redNedeni: options.redNedeni || '',

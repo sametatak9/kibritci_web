@@ -32,3 +32,35 @@ export function malzemeTipiLabel(tip?: MicirMalzemeTipi | string | null): string
   if (tip === 'STABILIZE') return 'Stabilize';
   return 'Mıcır';
 }
+
+/** Ton ↔ kg (kapı irsaliyesinde kilo tam girilir, stokta ton da tutulur) */
+export function tonToKg(tonaj: number): number {
+  if (!Number.isFinite(tonaj)) return 0;
+  return Math.round(tonaj * 1000 * 100) / 100;
+}
+
+export function kgToTon(kiloKg: number): number {
+  if (!Number.isFinite(kiloKg) || kiloKg <= 0) return 0;
+  return Math.round((kiloKg / 1000) * 1000) / 1000;
+}
+
+/** Kayıttan gösterilecek kg — yoksa tonajdan üretir */
+export function resolveMicirKiloKg(input?: {
+  kiloKg?: number | null;
+  tonaj?: number | null;
+} | null): number {
+  if (input?.kiloKg != null && Number.isFinite(Number(input.kiloKg)) && Number(input.kiloKg) > 0) {
+    return Number(input.kiloKg);
+  }
+  if (input?.tonaj != null && Number.isFinite(Number(input.tonaj)) && Number(input.tonaj) > 0) {
+    return tonToKg(Number(input.tonaj));
+  }
+  return 0;
+}
+
+export function formatMicirMiktarLabel(tonaj?: number | null, kiloKg?: number | null): string {
+  const kg = resolveMicirKiloKg({ tonaj, kiloKg });
+  const ton = kg > 0 ? kgToTon(kg) : Number(tonaj) || 0;
+  if (!kg && !ton) return '—';
+  return `${kg.toLocaleString('tr-TR')} kg (${ton.toLocaleString('tr-TR')} ton)`;
+}
