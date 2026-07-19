@@ -1,7 +1,9 @@
 import React, { useMemo } from 'react';
-import { TrendingUp, ShoppingCart, Wallet, Users, ChevronRight } from 'lucide-react';
+import { TrendingUp, ShoppingCart, Wallet, Users, ChevronRight, FileDown } from 'lucide-react';
 import { Personel, SatinAlmaTalebi, KasaHareketi, AylikYoklamaMap } from '../types/erp';
 import { todayDateKey } from '../lib/dateKeyUtils';
+import { wrapCorporateReportHtml } from '../lib/corporateReportHtml';
+import { openHtmlReportWindow } from '../lib/reportEmail';
 
 type Props = {
   personeller: Personel[];
@@ -104,12 +106,69 @@ export const DashboardWeekSummary: React.FC<Props> = ({
     return {
       saWeek: saWeek.length,
       saPending,
+      kasaGiris,
+      kasaCikis,
       kasaNet: kasaGiris - kasaCikis,
       geldi,
       yok,
       activePersonel,
     };
   }, [satinAlmaTalepleri, kasaHareketleri, yoklamalar, personeller, weekKeys, today]);
+
+  const handleWeekPdf = () => {
+    const netLabel = `${Math.round(stats.kasaNet).toLocaleString('tr-TR')} ₺`;
+    const body = `
+      <div class="space-y-4">
+        <div>
+          <h1 class="text-xl font-black uppercase tracking-wide text-slate-900">Haftalık Özet Raporu</h1>
+          <p class="text-xs text-slate-500 mt-1">Son 7 gün · Bitiş: ${today} · Aktif personel: ${stats.activePersonel}</p>
+        </div>
+        <table class="w-full text-sm border border-slate-200" style="border-collapse:collapse">
+          <thead>
+            <tr class="bg-slate-50 text-left text-[11px] uppercase tracking-wider text-slate-500">
+              <th class="p-2 border border-slate-200">Kalem</th>
+              <th class="p-2 border border-slate-200">Değer</th>
+              <th class="p-2 border border-slate-200">Not</th>
+            </tr>
+          </thead>
+          <tbody class="text-slate-800">
+            <tr>
+              <td class="p-2 border border-slate-200 font-semibold">Satın alma (7g)</td>
+              <td class="p-2 border border-slate-200 tabular-nums">${stats.saWeek}</td>
+              <td class="p-2 border border-slate-200">${stats.saPending > 0 ? `${stats.saPending} onayda` : 'Bekleyen yok'}</td>
+            </tr>
+            <tr>
+              <td class="p-2 border border-slate-200 font-semibold">Kasa giriş</td>
+              <td class="p-2 border border-slate-200 tabular-nums">${Math.round(stats.kasaGiris).toLocaleString('tr-TR')} ₺</td>
+              <td class="p-2 border border-slate-200">—</td>
+            </tr>
+            <tr>
+              <td class="p-2 border border-slate-200 font-semibold">Kasa çıkış</td>
+              <td class="p-2 border border-slate-200 tabular-nums">${Math.round(stats.kasaCikis).toLocaleString('tr-TR')} ₺</td>
+              <td class="p-2 border border-slate-200">—</td>
+            </tr>
+            <tr>
+              <td class="p-2 border border-slate-200 font-semibold">Kasa net</td>
+              <td class="p-2 border border-slate-200 tabular-nums font-bold">${netLabel}</td>
+              <td class="p-2 border border-slate-200">Giriş − çıkış</td>
+            </tr>
+            <tr>
+              <td class="p-2 border border-slate-200 font-semibold">Yoklama geldi</td>
+              <td class="p-2 border border-slate-200 tabular-nums">${stats.geldi}</td>
+              <td class="p-2 border border-slate-200">${stats.yok > 0 ? `${stats.yok} yok` : 'Yok kaydı yok'}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    `;
+    const html = wrapCorporateReportHtml(body, {
+      docCode: `HAFTALIK-${today}`,
+      orientation: 'portrait',
+      title: `Kibritçi — Haftalık Özet ${today}`,
+      autoPrint: false,
+    });
+    openHtmlReportWindow(html, `Haftalık Özet ${today}`);
+  };
 
   const cards = [
     {
@@ -152,13 +211,22 @@ export const DashboardWeekSummary: React.FC<Props> = ({
             <p className="text-[11px] text-slate-500 mt-1">Son 7 günün kısa özeti</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => onNavigate('onay_islemleri')}
-          className="text-[11px] font-bold text-[#0F6C5C] inline-flex items-center gap-1 hover:underline cursor-pointer"
-        >
-          Onaylara bak <ChevronRight size={13} />
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleWeekPdf}
+            className="text-[11px] font-bold text-slate-600 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer"
+          >
+            <FileDown size={13} /> PDF Al
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('onay_islemleri')}
+            className="text-[11px] font-bold text-[#0F6C5C] inline-flex items-center gap-1 hover:underline cursor-pointer"
+          >
+            Onaylara bak <ChevronRight size={13} />
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">

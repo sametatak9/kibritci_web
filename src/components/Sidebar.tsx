@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Building2, Users, CalendarCheck2, CreditCard, ShoppingCart, Truck, KeySquare, FileText, Tent, Mail, ChartBar as BarChart3, BookOpen, Contact as Contact2, Package, LogOut, Moon, Sun, Wallet, Hop as Home, ShieldCheck, PenTool, MessageSquare, Smartphone, HardHat, Banknote, Images, Sparkles, Link2, ChevronDown, ChevronRight, Search, Pin, PinOff, Wrench, Gem, Camera } from 'lucide-react';
 import { getRoleAllowedTabs, normalizeYetki } from '../lib/yetkiUtils';
+import { readFavoriteTabs, writeFavoriteTabs } from '../lib/navPreferences';
 
 interface SidebarProps {
   activeTab: string;
@@ -31,19 +32,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const normalizedYetki = normalizeYetki(userYetki);
   const roleAllowedTabs = getRoleAllowedTabs(normalizedYetki);
   const [searchTerm, setSearchTerm] = useState('');
-  const [favorites, setFavorites] = useState<string[]>(() => {
-    try {
-      const raw = localStorage.getItem('kibritci_sidebar_favorites_v1');
-      if (raw) return JSON.parse(raw);
-    } catch {}
-    return [];
-  });
+  const [favorites, setFavorites] = useState<string[]>(() => readFavoriteTabs());
 
   useEffect(() => {
-    try {
-      localStorage.setItem('kibritci_sidebar_favorites_v1', JSON.stringify(favorites));
-    } catch {}
+    writeFavoriteTabs(favorites);
   }, [favorites]);
+
+  useEffect(() => {
+    const sync = () => setFavorites(readFavoriteTabs());
+    window.addEventListener('storage', sync);
+    return () => window.removeEventListener('storage', sync);
+  }, []);
 
   const menuItems = [
     {

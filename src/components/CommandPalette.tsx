@@ -1,9 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Search, ChevronRight, LayoutDashboard, Users, CreditCard, Tent, Truck,
-  Settings, Camera, ShieldCheck, FileText, Package, Wallet, ClipboardList, MessageSquare
+  Settings, Camera, ShieldCheck, FileText, Package, Wallet, ClipboardList, MessageSquare, Pin, PinOff, Clock
 } from 'lucide-react';
 import { EmptyState } from './EmptyState';
+import {
+  FAVORITES_STORAGE_KEY,
+  pushRecentTab,
+  readFavoriteTabs,
+  readRecentTabs,
+  toggleFavoriteTab,
+} from '../lib/navPreferences';
 
 interface CommandPaletteProps {
   onSelect: (route: string) => void;
@@ -14,6 +21,7 @@ const ROUTES = [
   { key: 'onay_islemleri', label: 'Onay Havuzu & İmzalar', icon: ShieldCheck },
   { key: 'guvenlik_ekrani', label: 'Güvenlik & Kapı Kontrol', icon: ShieldCheck },
   { key: 'personel', label: 'Personel Yönetimi', icon: Users },
+  { key: 'personel_kartlari', label: 'Personel Detay Kartları', icon: Users },
   { key: 'yoklama', label: 'Yoklama & Puantaj', icon: ClipboardList },
   { key: 'faaliyet_personel', label: 'Faaliyeti Olan Personeller', icon: Camera },
   { key: 'maas', label: 'Maaş Hesaplama', icon: CreditCard },
@@ -40,6 +48,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ onSelect }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
+  const [favorites, setFavorites] = useState<string[]>(() => readFavoriteTabs());
+  const [recents, setRecents] = useState<string[]>(() => readRecentTabs());
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -48,30 +58,50 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ onSelect }) => {
         e.preventDefault();
         setIsOpen((prev) => !prev);
       }
-      if (e.key === 'Escape' && isOpen) {
-        setIsOpen(false);
-      }
+      if (e.key === 'Escape' && isOpen) setIsOpen(false);
     };
     const openFromEvent = () => setIsOpen(true);
+    const syncFav = () => setFavorites(readFavoriteTabs());
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('kibritci-open-command-palette', openFromEvent as EventListener);
+    window.addEventListener('storage', syncFav);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('kibritci-open-command-palette', openFromEvent as EventListener);
+      window.removeEventListener('storage', syncFav);
     };
   }, [isOpen]);
 
   useEffect(() => {
-    if (isOpen && inputRef.current) {
-      inputRef.current.focus();
+    if (isOpen) {
+      setFavorites(readFavoriteTabs());
+      setRecents(readRecentTabs());
+      inputRef.current?.focus();
       setActiveIndex(0);
+    } else {
+      setQuery('');
     }
-    if (!isOpen) setQuery('');
   }, [isOpen]);
 
-  const filtered = ROUTES.filter((r) =>
-    r.label.toLocaleLowerCase('tr-TR').includes(query.toLocaleLowerCase('tr-TR'))
-  );
+  const filtered = useMemo(() => {
+    const kw = query.toLocaleLowerCase('tr-TR').trim();
+    let list = ROUTES.filter((r) => r.label.toLocaleLowerCase('tr-TR').includes(kw));
+    // Favoriler üste
+    list = [...list].sort((a, b) => {
+      const af = favorites.includes(a.key) ? 0 : 1;
+      const bf = favorites.includes(b.key) ? 0 : 1;
+      if (af !== bf) return af - bf;
+      return a.label.localeCompare(b.label, 'tr');
+    });
+    return list;
+  }, [query, favorites]);
+
+  const recentRoutes = useMemo(() => {
+    if (query.trim()) return [];
+    return recents
+      .map((key) => ROUTES.find((r) => r.key === key))
+      .filter(Boolean) as typeof ROUTES;
+  }, [recents, query]);
 
   useEffect(() => {
     setActiveIndex(0);
@@ -80,6 +110,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ onSelect }) => {
   if (!isOpen) return null;
 
   const handleSelect = (key: string) => {
+    pushRecentTab(key);
+    setRecents(readRecentTabs());
     onSelect(key);
     setIsOpen(false);
     setQuery('');
@@ -112,7 +144,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ onSelect }) => {
             ref={inputRef}
             type="text"
             className="flex-1 bg-transparent border-none outline-none text-slate-800 placeholder-slate-400 font-medium text-sm"
-            placeholder="Modül ara… (ör. onay, güvenlik, personel)"
+            placeholder="Modül ara… favoriler üstte görünür"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onInputKeyDown}
@@ -122,45 +154,88 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ onSelect }) => {
           </kbd>
         </div>
 
-        <div className="max-h-80 overflow-y-auto p-2">
+        <div className="max-h-96 overflow-y-auto p-2">
+          {!query.trim() && recentRoutes.length > 0 && (
+            <div className="mb-2">
+              <p className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                <Clock size={10} /> Son gezilenler
+              </p>
+              <div className="flex flex-wrap gap-1.5 px-1 pb-2">
+                {recentRoutes.map((r) => (
+                  <button
+                    key={`recent-${r.key}`}
+                    type="button"
+                    onClick={() => handleSelect(r.key)}
+                    className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 hover:border-[#B9DBD2] cursor-pointer"
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {filtered.length === 0 ? (
             <EmptyState
               icon={Search}
               title="Sonuç bulunamadı"
-              description="Farklı bir kelime deneyin veya Ctrl+K ile menüyü kapatın."
+              description="Farklı bir kelime deneyin."
               className="border-0 bg-transparent py-8"
             />
           ) : (
             filtered.map((route, i) => {
               const Icon = route.icon;
               const active = i === activeIndex;
+              const isFav = favorites.includes(route.key);
               return (
-                <button
+                <div
                   key={route.key}
-                  type="button"
-                  onClick={() => handleSelect(route.key)}
+                  className={`flex items-center gap-1 rounded-xl ${active ? 'bg-[#E3F2EE]' : 'hover:bg-slate-50'}`}
                   onMouseEnter={() => setActiveIndex(i)}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition cursor-pointer group text-left ${
-                    active ? 'bg-[#E3F2EE]' : 'hover:bg-slate-50'
-                  }`}
                 >
-                  <div className="flex items-center gap-3 text-slate-700">
-                    <div
-                      className={`w-8 h-8 rounded-lg flex items-center justify-center border ${
-                        active
-                          ? 'bg-white border-[#B9DBD2] text-[#0F6C5C]'
-                          : 'bg-slate-100 border-transparent text-slate-500'
-                      }`}
-                    >
-                      <Icon size={15} />
+                  <button
+                    type="button"
+                    onClick={() => handleSelect(route.key)}
+                    className="flex-1 flex items-center justify-between px-3.5 py-2.5 cursor-pointer group text-left min-w-0"
+                  >
+                    <div className="flex items-center gap-3 text-slate-700 min-w-0">
+                      <div
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center border shrink-0 ${
+                          active
+                            ? 'bg-white border-[#B9DBD2] text-[#0F6C5C]'
+                            : 'bg-slate-100 border-transparent text-slate-500'
+                        }`}
+                      >
+                        <Icon size={15} />
+                      </div>
+                      <span className="font-medium text-[13px] truncate">{route.label}</span>
+                      {isFav && (
+                        <span className="text-[9px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded shrink-0">
+                          Favori
+                        </span>
+                      )}
                     </div>
-                    <span className="font-medium text-[13px]">{route.label}</span>
-                  </div>
-                  <ChevronRight
-                    size={15}
-                    className={active ? 'text-[#0F6C5C]' : 'text-slate-300'}
-                  />
-                </button>
+                    <ChevronRight size={15} className={active ? 'text-[#0F6C5C]' : 'text-slate-300'} />
+                  </button>
+                  <button
+                    type="button"
+                    title={isFav ? 'Favoriden çıkar' : 'Favoriye ekle'}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const next = toggleFavoriteTab(route.key);
+                      setFavorites(next);
+                      // Sidebar aynı key'i dinlesin diye storage event tetikle
+                      window.dispatchEvent(
+                        new StorageEvent('storage', { key: FAVORITES_STORAGE_KEY })
+                      );
+                    }}
+                    className={`p-2 mr-1 rounded-lg cursor-pointer shrink-0 ${
+                      isFav ? 'text-amber-500' : 'text-slate-300 hover:text-amber-500'
+                    }`}
+                  >
+                    {isFav ? <PinOff size={14} /> : <Pin size={14} />}
+                  </button>
+                </div>
               );
             })
           )}
