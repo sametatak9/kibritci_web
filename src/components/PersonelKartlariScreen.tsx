@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { Personel, AylikYoklamaMap, AracBakim, KampKaydi, KampOdasi, HazirTutanak, KasaHareketi, SahaFaaliyeti } from '../types/erp';
 import { getYoklamaDay, iterateMonthYoklama, isDayActiveForPersonel, asYoklamaGunMap, parseYoklamaDateKey } from '../lib/yoklamaUtils';
+import { PersonelIdCard } from './PersonelIdCard';
 
 interface PersonelKartlariScreenProps {
   personeller: Personel[];
@@ -367,6 +368,9 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Kimlik kartı — mevcut profil kartının altına ek */}
+            <PersonelIdCard personel={selectedPersonnel} />
 
             {/* Financial Card Info */}
             {(() => {
