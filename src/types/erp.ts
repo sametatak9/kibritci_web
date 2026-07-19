@@ -109,6 +109,7 @@ export interface Irsaliye {
   yildirimTankerFisId?: string;
   micirFisId?: string;
   tonaj?: number;
+  kiloKg?: number;
   malzemeTipi?: 'MICIR' | 'STABILIZE' | string;
   icmeSuyuAdet?: number;
   sanayiSuyuAdet?: number;
@@ -147,7 +148,10 @@ export interface MicirStabilizeFis {
   tarih: string;
   irsaliyeNo: string;
   plaka: string;
+  /** Ton cinsinden miktar (kiloKg / 1000) */
   tonaj: number;
+  /** İrsaliyedeki kilo — kapıda tam girilir */
+  kiloKg?: number;
   malzemeTipi: 'MICIR' | 'STABILIZE';
   fisGorselUrl?: string;
   firmaUnvan: string;

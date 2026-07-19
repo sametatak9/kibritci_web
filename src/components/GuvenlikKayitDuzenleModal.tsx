@@ -75,11 +75,21 @@ export const GuvenlikKayitDuzenleModal: React.FC<Props> = ({
         islemTarihi: record.islemTarihi || String(record.girisZamani || '').slice(0, 10),
       });
     } else if (kind === 'tanker') {
+      const isMicir = record.tip === 'MICIR_STABILIZE';
+      const kiloFromRecord =
+        record.kiloKg != null && Number(record.kiloKg) > 0
+          ? String(record.kiloKg)
+          : record.tonaj != null && Number(record.tonaj) > 0
+            ? String(Math.round(Number(record.tonaj) * 1000))
+            : '';
       setForm({
         plaka: record.plaka || '',
-        firma: record.firma || '',
+        firma: isMicir ? 'Ento Maden' : record.firma || '',
         surucuAdi: record.surucuAdi || '',
         miktar: record.miktar || '',
+        irsaliyeNo: record.irsaliyeNo || '',
+        kiloKg: kiloFromRecord,
+        malzemeTipi: record.malzemeTipi === 'STABILIZE' ? 'STABILIZE' : 'MICIR',
         aciklama: record.aciklama || '',
         durum: record.durum || 'İÇERİDE',
         girisZamani: toDatetimeLocalValue(record.girisZamani),
@@ -147,6 +157,17 @@ export const GuvenlikKayitDuzenleModal: React.FC<Props> = ({
         if (kind === 'arac') {
           patch.aracTipi = form.aracTipi.trim();
           patch.yukDurumu = form.yukDurumu;
+        } else if (record.tip === 'MICIR_STABILIZE') {
+          const kiloKg = Number(String(form.kiloKg || '').replace(',', '.'));
+          if (!form.irsaliyeNo?.trim()) throw new Error('İrsaliye no zorunlu.');
+          if (!Number.isFinite(kiloKg) || kiloKg <= 0) throw new Error('Kilo zorunlu.');
+          const tonaj = Math.round((kiloKg / 1000) * 1000) / 1000;
+          patch.firma = 'Ento Maden';
+          patch.irsaliyeNo = form.irsaliyeNo.trim().toUpperCase();
+          patch.kiloKg = kiloKg;
+          patch.tonaj = tonaj;
+          patch.malzemeTipi = form.malzemeTipi === 'STABILIZE' ? 'STABILIZE' : 'MICIR';
+          patch.miktar = `${kiloKg.toLocaleString('tr-TR')} kg (${tonaj.toLocaleString('tr-TR')} ton)`;
         } else {
           patch.miktar = form.miktar.trim() || 'Belirtilmedi';
         }
@@ -272,6 +293,44 @@ export const GuvenlikKayitDuzenleModal: React.FC<Props> = ({
                     </select>
                   </Field>
                 </div>
+              ) : record.tip === 'MICIR_STABILIZE' ? (
+                <>
+                  <Field label="İrsaliye No *">
+                    <input
+                      required
+                      value={form.irsaliyeNo || ''}
+                      onChange={(e) => set('irsaliyeNo', e.target.value)}
+                      className={`${inputClass} font-mono uppercase`}
+                    />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Kilo (kg) *">
+                      <input
+                        required
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={form.kiloKg || ''}
+                        onChange={(e) => set('kiloKg', e.target.value)}
+                        className={inputClass}
+                        placeholder="örn. 25500"
+                      />
+                    </Field>
+                    <Field label="Malzeme">
+                      <select
+                        value={form.malzemeTipi || 'MICIR'}
+                        onChange={(e) => set('malzemeTipi', e.target.value)}
+                        className={inputClass}
+                      >
+                        <option value="MICIR">Mıcır</option>
+                        <option value="STABILIZE">Stabilize</option>
+                      </select>
+                    </Field>
+                  </div>
+                  <p className="text-[10px] text-emerald-700 font-semibold">
+                    Cari: Ento Maden — bu kayıt bir kapı irsaliyesidir.
+                  </p>
+                </>
               ) : (
                 <Field label="Miktar / Çekim">
                   <input
