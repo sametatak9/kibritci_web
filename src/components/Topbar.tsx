@@ -293,19 +293,19 @@ export const Topbar: React.FC<TopbarProps> = ({
                       key={notif.id}
                       className={`p-2.5 rounded-xl border flex flex-col space-y-0.5 transition duration-150 ${
                         notif.okundu 
-                          ? 'bg-slate-950/40 border-slate-850/60 text-slate-550' 
-                          : 'bg-amber-500/5 border-amber-500/20 text-slate-200'
+                          ? 'bg-slate-50 border-slate-200 text-slate-600' 
+                          : 'bg-amber-50 border-amber-200 text-slate-800'
                       }`}
                     >
                       <div className="flex items-start justify-between">
-                        <span className={`text-[9px] font-extrabold font-mono truncate max-w-[130px] uppercase ${notif.okundu ? 'text-slate-550' : 'text-amber-400'}`}>
+                        <span className={`text-[9px] font-extrabold font-mono truncate max-w-[130px] uppercase ${notif.okundu ? 'text-slate-500' : 'text-amber-700'}`}>
                           {notif.kullanici?.split('@')[0]}
                         </span>
                         <span className="text-[8px] text-slate-500 font-mono shrink-0 flex items-center space-x-0.5">
                           <span>{formatNotifTime(notif.tarih)}</span>
                         </span>
                       </div>
-                      <p className="text-[11px] font-medium leading-relaxed break-words">{notif.mesaj}</p>
+                      <p className="text-[11px] font-medium leading-relaxed break-words text-slate-700">{notif.mesaj}</p>
                     </div>
                   ))
                 )}

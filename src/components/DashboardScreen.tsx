@@ -10,6 +10,7 @@ import { KibritciLogo } from './KibritciLogo';
 import { getKibritciLogoUrl } from '../lib/kibritciBrand';
 import { listOdemeEngelleri } from '../lib/personelOdemeUtils';
 import { DashboardTodaySummary } from './DashboardTodaySummary';
+import { DashboardWeekSummary } from './DashboardWeekSummary';
 
 interface DashboardScreenProps {
   personeller: Personel[];
@@ -251,6 +252,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         personeller={personeller}
         satinAlmaTalepleri={satinAlmaTalepleri}
         bildirimler={bildirimler}
+        onNavigate={onNavigate}
+      />
+
+      <DashboardWeekSummary
+        personeller={personeller}
+        satinAlmaTalepleri={satinAlmaTalepleri}
+        kasaHareketleri={kasaHareketleri}
+        yoklamalar={yoklamalar}
         onNavigate={onNavigate}
       />
 

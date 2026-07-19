@@ -13,6 +13,7 @@ import { displayPersonelGorev, isPersonelActiveOnDate } from '../lib/guvenlikHel
 import { todayDateKey } from '../lib/dateKeyUtils';
 import { EvrakDetayModal, EvrakDetayPayload } from './EvrakDetayModal';
 import { openBase64InNewTab } from '../lib/fileViewerUtils';
+import { CariTimeline } from './CariTimeline';
 
 interface CariStokScreenProps {
   cariKartlar: CariKart[];
@@ -930,6 +931,30 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
                   </div>
                 )}
               </div>
+
+              <CariTimeline
+                cariUnvan={selectedCari.unvan}
+                items={historyList
+                  .filter(
+                    (h) =>
+                      h.type === 'İRSALİYE' ||
+                      h.type === 'İRSALİYE GİRİŞİ' ||
+                      h.type === 'FATURA'
+                  )
+                  .map((h) => ({
+                    id: h.id,
+                    type: h.type,
+                    title: h.title,
+                    desc: h.desc,
+                    date: h.date,
+                  }))}
+                onOpenAll={() => {
+                  setHistoryFilter('ALL');
+                  document
+                    .getElementById('cari-stok-history-panel')
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+              />
             </div>
           )}
 
@@ -973,7 +998,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
           )}
 
           {(selectedCari || selectedStok) && (
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div id="cari-stok-history-panel" className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
               <div className="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
