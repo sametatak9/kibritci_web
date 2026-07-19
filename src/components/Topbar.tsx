@@ -235,6 +235,15 @@ export const Topbar: React.FC<TopbarProps> = ({
             </button>
           )}
 
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('kibritci-open-command-palette'))}
+            className="text-slate-500 hover:text-slate-800 transition relative cursor-pointer p-1 rounded-lg hover:bg-slate-100"
+            title="Hızlı menü (Ctrl+K)"
+          >
+            <Search size={15} />
+          </button>
+
           {/* Bildirim Lambası (Must remain exactly as is) */}
           <button 
             onClick={() => setShowDropdown(!showDropdown)}
@@ -272,9 +281,11 @@ export const Topbar: React.FC<TopbarProps> = ({
               {/* Scrollable list */}
               <div className="flex-grow overflow-y-auto space-y-1.5 max-h-64 pr-1 scrollbar-thin">
                 {bildirimler.length === 0 ? (
-                  <div className="text-center py-8 space-y-1.5">
-                    <span className="text-xl block">📭</span>
-                    <p className="text-[10px] text-slate-500 font-semibold">Henüz güncel bir aktivite bulunmuyor.</p>
+                  <div className="text-center py-6 px-2">
+                    <p className="text-[11px] font-bold text-slate-700">Bildirim yok</p>
+                    <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                      Yeni onay veya kapı kaydı gelince burada görünür.
+                    </p>
                   </div>
                 ) : (
                   bildirimler.map((notif) => (
