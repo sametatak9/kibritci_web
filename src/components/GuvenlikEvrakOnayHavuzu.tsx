@@ -191,25 +191,30 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
         <option value="Metre" />
         <option value="Rulo" />
       </datalist>
-      <div className="border bg-white p-4 rounded-2xl border-slate-200 shadow-sm flex justify-between items-center text-xs">
+      <div className="border bg-white/90 p-4 rounded-2xl border-[#D5DEE3] flex flex-col sm:flex-row sm:justify-between sm:items-end gap-3 text-xs">
         <div className="space-y-1">
-          <span className="text-emerald-700 font-bold block text-[11px] tracking-widest uppercase">Güvenlik Kapısı Evrak Onay Havuzu</span>
-          <p className="text-slate-500 leading-relaxed text-[11px]">
-            Kapıdan yüklenen fatura, irsaliye, makbuz ve genel evrakları önizleyin; Yapay Zeka veya manuel form ile onaylayıp arşivleyin.
+          <h2
+            className="text-xl font-extrabold tracking-tight text-[#15252B]"
+            style={{ fontFamily: '"Barlow Condensed", sans-serif' }}
+          >
+            Güvenlik Belgeleri
+          </h2>
+          <p className="text-[#5B6B73] leading-relaxed text-[12px]">
+            Kapıdan gelen evrakları önizleyin; yapay zeka veya manuel form ile onaylayıp arşivleyin.
           </p>
         </div>
-        <div className="hidden sm:flex items-center gap-2 text-[10px] font-bold text-slate-500">
-          <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-1 rounded-lg">{pendingGateDocs.length} kapı</span>
-          <span className="bg-amber-50 text-amber-800 border border-amber-100 px-2 py-1 rounded-lg">{pendingWaybills.length} irsaliye</span>
-          <span className="bg-violet-50 text-violet-700 border border-violet-100 px-2 py-1 rounded-lg">{pendingInvoices.length} fatura</span>
+        <div className="flex items-center gap-2 text-[10px] font-bold flex-wrap">
+          <span className="bg-[#E3F2EE] text-[#0F6C5C] border border-[#B9DBD2] px-2 py-1 rounded-lg">{pendingGateDocs.length} kapı</span>
+          <span className="bg-[#FFF6EB] text-[#9A5B12] border border-[#F0D9B5] px-2 py-1 rounded-lg">{pendingWaybills.length} irsaliye</span>
+          <span className="bg-[#F3F6F7] text-[#3D4F56] border border-[#D5DEE3] px-2 py-1 rounded-lg">{pendingInvoices.length} fatura</span>
         </div>
       </div>
 
       {/* 1. GÜVENLİK KAPISINDAN GELEN EVRAKLAR */}
       <div className="space-y-3">
-        <h3 className="font-display font-black text-xs text-slate-600 tracking-wider flex items-center space-x-2 uppercase">
-          <FileText size={14} className="text-indigo-500" />
-          <span>Güvenlik Kapısı Girişleri ({pendingGateDocs.length})</span>
+        <h3 className="font-semibold text-xs text-[#3D4F56] tracking-wide flex items-center space-x-2 uppercase">
+          <FileText size={14} className="text-[#0F6C5C]" />
+          <span>Kapı girişleri ({pendingGateDocs.length})</span>
         </h3>
 
         {pendingGateDocs.length === 0 ? (
@@ -226,12 +231,12 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
               const imagePreview = isImageUrl(previewUrl);
               const pdfPreview = isPdfUrl(previewUrl, docItem.fileName);
               return (
-              <div key={docItem.id} className="bg-white border border-slate-200 rounded-2xl flex flex-col hover:border-emerald-300 hover:shadow-md transition shadow-sm overflow-hidden">
+              <div key={docItem.id} className="bg-white border border-[#D5DEE3] rounded-2xl flex flex-col hover:border-[#0F6C5C]/45 transition-all duration-200 overflow-hidden">
                 {/* Evrak önizleme */}
                 <button
                   type="button"
                   onClick={() => previewUrl && openCardPreview(previewUrl, docItem.fileName)}
-                  className="relative w-full h-40 bg-slate-100 border-b border-slate-200 flex items-center justify-center overflow-hidden group cursor-zoom-in"
+                  className="relative w-full h-44 bg-[#F3F6F7] border-b border-[#E8EEF0] flex items-center justify-center overflow-hidden group cursor-zoom-in"
                   title={previewUrl ? 'Önizlemeyi büyüt' : 'Önizleme yok'}
                   disabled={!previewUrl}
                 >
@@ -321,7 +326,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                     )}
                     <button
                       onClick={() => handleOpenGateDocApproval(docItem)}
-                      className="flex-grow bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] py-2 px-3 rounded-lg transition tracking-wider uppercase flex items-center justify-center space-x-1"
+                      className="flex-grow bg-[#0F6C5C] hover:bg-[#0C584B] text-white font-extrabold text-[10px] py-2 px-3 rounded-xl transition tracking-wider uppercase flex items-center justify-center space-x-1"
                     >
                       <Sparkles size={12} />
                       <span>Onayla &amp; İşle</span>
@@ -541,9 +546,12 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                 {/* Header */}
                 <div className="flex justify-between items-start border-b border-slate-200 pb-3 mb-4">
                   <div>
-                    <h2 className="font-display font-black text-sm uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
+                    <h2
+                      className="font-extrabold text-lg tracking-tight text-[#0F6C5C] flex items-center gap-1.5"
+                      style={{ fontFamily: '"Barlow Condensed", sans-serif' }}
+                    >
                       <Sparkles size={16} />
-                      <span>Evrak İşleme Sihirbazı</span>
+                      <span>Evrak İşleme</span>
                     </h2>
                     <p className="text-[10px] text-slate-500 font-medium mt-0.5">
                       Kapı Kayıt Ref: <span className="font-mono text-slate-700">{activeGateDoc.id}</span>
