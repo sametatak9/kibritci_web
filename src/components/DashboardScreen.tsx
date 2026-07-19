@@ -9,6 +9,7 @@ import { Personel, KasaHareketi, SatinAlmaTalebi, AracBakim, AylikYoklamaMap, Ka
 import { KibritciLogo } from './KibritciLogo';
 import { getKibritciLogoUrl } from '../lib/kibritciBrand';
 import { listOdemeEngelleri } from '../lib/personelOdemeUtils';
+import { DashboardTodaySummary } from './DashboardTodaySummary';
 
 interface DashboardScreenProps {
   personeller: Personel[];
@@ -244,6 +245,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Bugün özeti — mevcut panellerin üstüne ek, onları değiştirmez */}
+      <DashboardTodaySummary
+        personeller={personeller}
+        satinAlmaTalepleri={satinAlmaTalepleri}
+        bildirimler={bildirimler}
+        onNavigate={onNavigate}
+      />
 
       {/* KPI Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

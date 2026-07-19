@@ -6,6 +6,7 @@ import { KeyboardNavProvider } from './components/KeyboardNavProvider';
 import { ConfettiProvider } from './components/ConfettiProvider';
 import { EasterEggProvider } from './components/EasterEggProvider';
 import { CommandPalette } from './components/CommandPalette';
+import { StatusStrip } from './components/StatusStrip';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { CircleAlert as AlertCircle, RefreshCw } from 'lucide-react';
@@ -2142,7 +2143,7 @@ export default function App() {
       <ConfettiProvider />
       <EasterEggProvider />
       <ToastProvider />
-      <CommandPalette onSelect={(tab) => setActiveTab(tab as any)} />
+      {/* CommandPalette ana kabukta mount edilir — burada çift dinleyici olmasın */}
     </div>
   );
 
@@ -2505,6 +2506,15 @@ export default function App() {
               localStorage.setItem('kibritci_mobile_direct', 'false');
             }}
             onProfileClick={() => setIsProfileModalOpen(true)}
+          />
+        )}
+
+        {!hideSidebarAndTopbar && (
+          <StatusStrip
+            satinAlmaTalepleri={satinAlmaTalepleri}
+            bildirimler={bildirimler}
+            dbStatus={dbStatus}
+            onNavigate={handleTabNavigation}
           />
         )}
 
@@ -3256,6 +3266,11 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Masaüstü hızlı menü — mevcut sekmeleri bozmadan ek navigasyon */}
+      {!hideSidebarAndTopbar && (
+        <CommandPalette onSelect={(tab) => handleTabNavigation(tab)} />
       )}
     </div>
   );
