@@ -10,6 +10,7 @@ import { StatusStrip } from './components/StatusStrip';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { CircleAlert as AlertCircle, RefreshCw } from 'lucide-react';
+import { pushRecentTab } from './lib/navPreferences';
 
 // Core Screens
 import { AdminPanelScreen, Kullanici } from './components/AdminPanelScreen';
@@ -1940,6 +1941,11 @@ export default function App() {
   const handleTabNavigation = (targetTab: string) => {
     try {
       persistLastTab(targetTab);
+    } catch {
+      /* no-op */
+    }
+    try {
+      pushRecentTab(targetTab);
     } catch {
       /* no-op */
     }

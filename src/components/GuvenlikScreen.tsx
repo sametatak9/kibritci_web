@@ -2,8 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ShieldAlert, FileText, Users, Truck, UserCheck, Search, PlusCircle, Trash2, 
   Check, X, FileUp, Camera, Printer, Clock, AlertTriangle, Key, Download, ArrowRight, RefreshCw, Barcode,
-  Archive, Calendar, Lock, ClipboardList, MessageCircle, Droplets, Fuel
+  Archive, Calendar, Lock, ClipboardList, MessageCircle, Droplets, Fuel, Images
 } from 'lucide-react';
+import EvrakDuvariPanel, { type EvrakDuvariItem } from './EvrakDuvariPanel';
 import { Personel, Irsaliye, IrsaliyeItem, Fatura, MicirStabilizeFis } from '../types/erp';
 import { db } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
@@ -67,7 +68,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   isStandalone = false,
   addNotification
 }) => {
-  const [activeTab, setActiveTab] = useState<'irsaliye' | 'personel' | 'arac' | 'su_tankeri' | 'vidanjor' | 'petrol_tankeri' | 'mici_stabilize' | 'ziyaretci' | 'nobet_arsivi' | 'akvizyon_yoklama'>('irsaliye');
+  const [activeTab, setActiveTab] = useState<'irsaliye' | 'personel' | 'arac' | 'su_tankeri' | 'vidanjor' | 'petrol_tankeri' | 'mici_stabilize' | 'ziyaretci' | 'nobet_arsivi' | 'akvizyon_yoklama' | 'evrak_galerisi'>('irsaliye');
   const [viewMode, setViewMode] = useState<'web' | 'mobile'>('web');
   const [selectedPersonelLogIds, setSelectedPersonelLogIds] = useState<string[]>([]);
   const [selectedAracLogIds, setSelectedAracLogIds] = useState<string[]>([]);
@@ -1557,6 +1558,71 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     () => gelenEvraklar.filter((e) => normalizeDateKey(e.tarih) === normalizeDateKey(islemTarihi)),
     [gelenEvraklar, islemTarihi]
   );
+
+  const evrakDuvariItems = useMemo((): EvrakDuvariItem[] => {
+    const items: EvrakDuvariItem[] = [];
+    (gelenEvraklar || []).forEach((e) => {
+      const src = e.fotoUrl || e.fisGorselUrl || '';
+      if (!src) return;
+      items.push({
+        id: `evrak-${e.id}`,
+        src,
+        title: e.evrakNo || e.fileName || e.evrakTuru || 'Evrak',
+        meta: [e.firma, e.evrakTuru, e.durum].filter(Boolean).join(' · '),
+        kategori: e.evrakTuru || 'EVRAK',
+        tarih: e.tarih || e.islemTarihi || '',
+      });
+    });
+    const tankerBuckets: Array<{ list: any[]; kategori: string }> = [
+      { list: tumSuTankeriLoglar, kategori: 'SU TANKERİ' },
+      { list: tumVidanjorLoglar, kategori: 'VİDANJÖR' },
+      { list: tumPetrolTankeriLoglar, kategori: 'PETROL TANKERİ' },
+      { list: tumMiciStabilizeLoglar, kategori: 'MICIR/STABILIZE' },
+    ];
+    tankerBuckets.forEach(({ list, kategori }) => {
+      (list || []).forEach((t) => {
+        const src = t.fotoUrl || t.fisGorselUrl || '';
+        if (!src) return;
+        items.push({
+          id: `tanker-${kategori}-${t.id}`,
+          src,
+          title: t.plaka || t.irsaliyeNo || kategori,
+          meta: [t.firma, t.malzeme, t.miktarKg ? `${t.miktarKg} kg` : null, t.kiloKg ? `${t.kiloKg} kg` : null]
+            .filter(Boolean)
+            .join(' · '),
+          kategori,
+          tarih: t.islemTarihi || t.tarih || (t.girisZamani || '').slice(0, 10),
+        });
+      });
+    });
+    (micirTumKayitlar || []).forEach((m) => {
+      const src = m.fotoUrl || m.fisGorselUrl || '';
+      if (!src) return;
+      if (items.some((i) => i.id === `tanker-MICIR/STABILIZE-${m.id}`)) return;
+      items.push({
+        id: `micir-${m.id}`,
+        src,
+        title: m.plaka || m.irsaliyeNo || 'Mıcır irsaliye',
+        meta: [
+          m.firma || ENTO_MADEN_UNVAN,
+          malzemeTipiLabel(m.malzemeTipi),
+          formatMicirMiktarLabel(m.tonaj, m.kiloKg ?? resolveMicirKiloKg(m)),
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        kategori: 'MICIR/STABILIZE',
+        tarih: m.islemTarihi || m.tarih || '',
+      });
+    });
+    return items.sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || '')));
+  }, [
+    gelenEvraklar,
+    tumSuTankeriLoglar,
+    tumVidanjorLoglar,
+    tumPetrolTankeriLoglar,
+    tumMiciStabilizeLoglar,
+    micirTumKayitlar,
+  ]);
   const seciliGunNobetArsivleri = useMemo(
     () => nobetArsivleri.filter((a) => normalizeDateKey(a.tarih) === normalizeDateKey(islemTarihi)),
     [nobetArsivleri, islemTarihi]
@@ -1846,6 +1912,21 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'akvizyon_yoklama' ? 'bg-amber-600 text-slate-950 shadow-md shadow-amber-500/15' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <span className="flex items-center space-x-2"><ClipboardList size={13} /> <span>10. Akvizyon Yoklama</span></span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('evrak_galerisi')}
+              className={`flex-1 lg:flex-none flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition cursor-pointer min-w-[120px] ${activeTab === 'evrak_galerisi' ? 'bg-[#0F6C5C] text-white shadow-md shadow-teal-700/15' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+              <span className="flex items-center space-x-2">
+                <Images size={13} /> <span>11. Evrak Duvarı</span>
+                {evrakDuvariItems.length > 0 && (
+                  <span className="text-[9px] font-mono bg-teal-500/15 text-teal-700 rounded-full px-1.5 py-0.5 ml-1 hidden lg:inline">
+                    {evrakDuvariItems.length}
+                  </span>
+                )}
+              </span>
             </button>
           </div>
 
@@ -4072,6 +4153,12 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
               </div>
 
+            </div>
+          )}
+
+          {activeTab === 'evrak_galerisi' && (
+            <div className="animate-in fade-in duration-150">
+              <EvrakDuvariPanel items={evrakDuvariItems} />
             </div>
           )}
         </div>
