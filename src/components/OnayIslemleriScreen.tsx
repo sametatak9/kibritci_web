@@ -1024,6 +1024,44 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
     pendingVidanjorGateCount +
     pendingMicirGateCount;
 
+  const guvenlikCount =
+    pendingWaybills.length + pendingInvoices.length + pendingMicirGateCount + pendingGateDocs.length;
+  const kampciCount =
+    pendingKampSayimlar.length + pendingKampFaaliyetler.length + pendingVidanjorGateCount;
+
+  type OnayTab =
+    | 'satin_alma'
+    | 'guvenlik_belgeleri'
+    | 'kampci_belgeleri'
+    | 'formen_belgeleri'
+    | 'gunluk_loglar'
+    | 'sofor_talepleri'
+    | 'depocu_talepleri'
+    | 'gecmis'
+    | 'imzalar'
+    | 'anahtarci_tutanaklari';
+
+  const onayNavTabs: Array<{
+    id: OnayTab;
+    label: string;
+    shortLabel: string;
+    count?: number;
+    icon: React.ComponentType<{ size?: number; className?: string }>;
+  }> = [
+    { id: 'satin_alma', label: 'Satın Alma', shortLabel: 'Satın Alma', count: pendingRequests.length, icon: ShoppingCart },
+    { id: 'guvenlik_belgeleri', label: 'Güvenlik Belgeleri', shortLabel: 'Güvenlik', count: guvenlikCount, icon: Truck },
+    { id: 'kampci_belgeleri', label: 'Kampçı Belgeleri', shortLabel: 'Kampçı', count: kampciCount, icon: Package },
+    { id: 'formen_belgeleri', label: 'Formen Belgeleri', shortLabel: 'Formen', count: pendingPersonelCount, icon: UserCheck },
+    { id: 'gunluk_loglar', label: 'Günlük Loglar', shortLabel: 'Loglar', count: pendingGunlukAkis.length, icon: FileText },
+    { id: 'sofor_talepleri', label: 'Şoför Talepleri', shortLabel: 'Şoför', count: pendingSoforCount, icon: Truck },
+    { id: 'depocu_talepleri', label: 'Depocu Talepleri', shortLabel: 'Depo', count: pendingDepocuCount, icon: Package },
+    { id: 'anahtarci_tutanaklari', label: 'Anahtarcı Tutanakları', shortLabel: 'Anahtar', count: anahtarciTutanaklari.length, icon: FileText },
+    { id: 'gecmis', label: 'Geçmiş Onaylar', shortLabel: 'Geçmiş', icon: CheckCircle },
+    { id: 'imzalar', label: 'İmza & Kaşe', shortLabel: 'İmza', icon: PenTool },
+  ];
+
+  const activeTabMeta = onayNavTabs.find((t) => t.id === activeTab);
+
   // Gecmis onaylar list (approved or updated documents)
   const approvedRequests = satinAlmaTalepleri.filter(doc => doc.onayDurumu.includes('TAMAMLANDI') || doc.onayDurumu === 'ONAYLANDI' || doc.onayDurumu === 'DİJİTAL ONAYLANDI');
   const approvedWaybills = irsaliyeler.filter(doc => doc.onayDurumu.includes('TAMAMLANDI') || doc.onayDurumu === 'ONAYLANDI' || doc.onayDurumu === 'DİJİTAL ONAYLANDI');
@@ -1455,240 +1493,193 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   };
 
   return (
-    <div className="flex-1 overflow-hidden flex flex-col bg-slate-50 select-none text-slate-800">
-      
-      {/* Upper header */}
-      <div className="bg-white p-5 px-6 border-b border-slate-200 flex justify-between items-center shrink-0">
-        <div className="flex items-center space-x-3.5">
-          <div className="w-10 h-10 bg-gradient-to-tr from-slate-100 to-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/10">
-            <ShieldCheck size={20} className="stroke-[2.5]" />
-          </div>
-          <div>
-            <h1 className="text-sm font-black text-slate-900 tracking-widest uppercase">✍️ ONAY MERKEZİ &amp; DİJİTAL İMZALAR</h1>
-            <p className="text-[10px] text-slate-500 font-mono uppercase tracking-wider">Güvenli ve Benzersiz Kullanıcı Dijital E-İmza Altyapısı</p>
-          </div>
-        </div>
-
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-2 px-4 flex items-center space-x-4">
-          <div className="text-right">
-            <span className="text-[9px] text-slate-405 font-bold uppercase tracking-wider block">Aktif Kullanıcı</span>
-            <strong className="text-[11px] text-slate-800 font-bold">{currentUser?.name || currentUser?.displayName || currentUser?.email || 'Bilinmeyen Kullanıcı'}</strong>
-          </div>
-          <div className="h-6 w-px bg-slate-200" />
-          <div>
-            <span className="text-[9px] text-slate-405 font-bold uppercase tracking-wider block">Kullanıcı Rolü</span>
-            <span className="bg-slate-100 text-slate-800 text-[9px] font-mono font-black py-0.5 px-2 rounded-lg uppercase tracking-widest block mt-0.5">
-              {currentUser?.email === 'sametatak9@gmail.com' ? '👑 PROJE MÜDÜRÜ / YÖNETİCİ' : '👥 ŞANTİYE YETKİLİSİ'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-        
-        {/* Left selector menu */}
-        <div className="w-full lg:w-72 bg-slate-50 border-b lg:border-b-0 lg:border-r border-slate-200 flex flex-col p-4 space-y-4 shrink-0 overflow-y-auto max-h-[45vh] lg:max-h-full">
-          
-          {/* Quick Counter Block */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3.5 shadow-sm hidden lg:block">
-            <div className="flex justify-between items-center text-xs font-bold text-slate-700">
-              <span className="text-slate-450 uppercase text-[9px] tracking-wider">Gelen Onay Bekleyenler</span>
-              <span className="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-[10px] font-mono font-bold">{totalPendingCount}</span>
-            </div>
-            
-            <div className="space-y-2 text-[11px] text-slate-600 font-semibold">
-              <div className="flex justify-between p-1.5 bg-slate-50 rounded border border-slate-250/60">
-                <span className="flex items-center space-x-1.5"><ShoppingCart size={11} className="text-amber-500" /> <span>Satın Alma</span></span>
-                <span className="font-mono text-slate-800 text-[10px] font-bold">{pendingRequests.length}</span>
-              </div>
-              <div className="flex justify-between p-1.5 bg-slate-50 rounded border border-slate-250/60">
-                <span className="flex items-center space-x-1.5"><Truck size={11} className="text-emerald-500" /> <span>İrsaliyeler</span></span>
-                <span className="font-mono text-slate-800 text-[10px] font-bold">{pendingWaybills.length}</span>
-              </div>
-              <div className="flex justify-between p-1.5 bg-slate-50 rounded border border-slate-250/60">
-                <span className="flex items-center space-x-1.5"><CreditCard size={11} className="text-purple-500" /> <span>Faturalar</span></span>
-                <span className="font-mono text-slate-800 text-[10px] font-bold">{pendingInvoices.length}</span>
-              </div>
-              <div className="flex justify-between p-1.5 bg-slate-50 rounded border border-slate-250/60">
-                <span className="flex items-center space-x-1.5"><UserCheck size={11} className="text-slate-600" /> <span>Saha Giriş Talebi</span></span>
-                <span className="font-mono text-slate-800 text-[10px] font-bold">{pendingPersonelCount}</span>
-              </div>
-              <div className="flex justify-between p-1.5 bg-slate-50 rounded border border-slate-250/60">
-                <span className="flex items-center space-x-1.5"><Package size={11} className="text-slate-600" /> <span>Kamp Depo Sayımı</span></span>
-                <span className="font-mono text-slate-800 text-[10px] font-bold">{pendingKampSayimlar.length}</span>
-              </div>
-              <div className="flex justify-between p-1.5 bg-slate-50 rounded border border-slate-250/60">
-                <span className="flex items-center space-x-1.5"><Tent size={11} className="text-amber-400" /> <span>Kamp Faaliyetleri</span></span>
-                <span className="font-mono text-slate-800 text-[10px] font-bold">{pendingKampFaaliyetler.length}</span>
-              </div>
-              <div className="flex justify-between p-1.5 bg-slate-50 rounded border border-slate-250/60">
-                <span className="flex items-center space-x-1.5"><Truck size={11} className="text-sky-500" /> <span>Şöför Talepleri</span></span>
-                <span className="font-mono text-slate-800 text-[10px] font-bold">{pendingSoforCount}</span>
-              </div>
-              <div className="flex justify-between p-1.5 bg-slate-50 rounded border border-slate-250/60">
-                <span className="flex items-center space-x-1.5"><Package size={11} className="text-indigo-500" /> <span>Depocu Talepleri</span></span>
-                <span className="font-mono text-slate-800 text-[10px] font-bold">{pendingDepocuCount}</span>
-              </div>
+    <div
+      className="flex-1 overflow-hidden flex flex-col select-none onay-havuzu-shell"
+      style={{
+        fontFamily: '"IBM Plex Sans", "Segoe UI", sans-serif',
+        color: '#15252B',
+        background:
+          'radial-gradient(1200px 420px at 0% -10%, rgba(15,108,92,0.10), transparent 55%), radial-gradient(900px 380px at 100% 0%, rgba(196,122,42,0.08), transparent 50%), linear-gradient(180deg, #F3F6F7 0%, #E8EEF0 100%)',
+      }}
+    >
+      {/* Brand header */}
+      <header className="shrink-0 border-b border-[#D5DEE3] bg-white/85 backdrop-blur-md">
+        <div className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+          <div className="flex items-end gap-3 min-w-0">
+            <KibritciLogo size="lg" className="h-12 sm:h-14 shrink-0" />
+            <div className="min-w-0 pb-0.5">
+              <p
+                className="text-[11px] font-semibold tracking-[0.18em] uppercase text-[#0F6C5C]"
+                style={{ fontFamily: '"Barlow Condensed", sans-serif' }}
+              >
+                Kibritçi İnşaat
+              </p>
+              <h1
+                className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#15252B] leading-none"
+                style={{ fontFamily: '"Barlow Condensed", sans-serif' }}
+              >
+                Onay Havuzu
+              </h1>
+              <p className="text-[11px] text-[#5B6B73] mt-1 truncate">
+                Bekleyen talepleri inceleyin, imzalayın ve arşivleyin
+              </p>
             </div>
           </div>
 
-          <div className="space-y-1 bg-white p-2 rounded-2xl border border-slate-200">
-            <span className="px-2.5 pt-1 text-[8px] font-bold text-slate-450 uppercase tracking-widest block mb-1.5">Görünüm Filtreleri</span>
-            
-            <button 
-              onClick={() => setActiveTab('satin_alma')}
-              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'satin_alma' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
-            >
-              <span className="flex items-center space-x-2"><ShoppingCart size={13} className={activeTab === 'satin_alma' ? 'text-white' : 'text-amber-500'} /> <span>Satın Alma Talepleri</span></span>
-              {pendingRequests.length > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'satin_alma' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'}`}>{pendingRequests.length}</span>}
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('guvenlik_belgeleri')}
-              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'guvenlik_belgeleri' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
-            >
-              <span className="flex items-center space-x-2"><Truck size={13} className={activeTab === 'guvenlik_belgeleri' ? 'text-white' : 'text-emerald-500'} /> <span>Güvenlik Belgeleri</span></span>
-              {(pendingWaybills.length + pendingInvoices.length + pendingMicirGateCount + pendingGateDocs.length) > 0 && (
-                <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'guvenlik_belgeleri' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
-                  {pendingWaybills.length + pendingInvoices.length + pendingMicirGateCount + pendingGateDocs.length}
-                </span>
-              )}
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('kampci_belgeleri')}
-              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'kampci_belgeleri' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
-            >
-              <span className="flex items-center space-x-2"><Package size={13} className={activeTab === 'kampci_belgeleri' ? 'text-white' : 'text-slate-600'} /> <span>Kampçı Belgeleri</span></span>
-              {(pendingKampSayimlar.length + pendingKampFaaliyetler.length + pendingVidanjorGateCount) > 0 && (
-                <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'kampci_belgeleri' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-800'}`}>
-                  {pendingKampSayimlar.length + pendingKampFaaliyetler.length + pendingVidanjorGateCount}
-                </span>
-              )}
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('formen_belgeleri')}
-              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'formen_belgeleri' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
-            >
-              <span className="flex items-center space-x-2"><UserCheck size={13} className={activeTab === 'formen_belgeleri' ? 'text-white' : 'text-sky-500'} /> <span>Formen Belgeleri</span></span>
-              {pendingPersonelCount > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'formen_belgeleri' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800'}`}>{pendingPersonelCount}</span>}
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('gunluk_loglar')}
-              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'gunluk_loglar' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
-            >
-              <span className="flex items-center space-x-2"><FileText size={13} className={activeTab === 'gunluk_loglar' ? 'text-white' : 'text-amber-500'} /> <span>Günlük Loglar</span></span>
-              {pendingGunlukAkis.length > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'gunluk_loglar' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'}`}>{pendingGunlukAkis.length}</span>}
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('sofor_talepleri')}
-              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'sofor_talepleri' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
-            >
-              <span className="flex items-center space-x-2"><Truck size={13} className={activeTab === 'sofor_talepleri' ? 'text-white' : 'text-sky-500'} /> <span>Şöför Talepleri</span></span>
-              {pendingSoforCount > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'sofor_talepleri' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800'}`}>{pendingSoforCount}</span>}
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('depocu_talepleri')}
-              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'depocu_talepleri' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
-            >
-              <span className="flex items-center space-x-2"><Package size={13} className={activeTab === 'depocu_talepleri' ? 'text-white' : 'text-indigo-500'} /> <span>Depocu Talepleri</span></span>
-              {pendingDepocuCount > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'depocu_talepleri' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-800'}`}>{pendingDepocuCount}</span>}
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('anahtarci_tutanaklari')}
-              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'anahtarci_tutanaklari' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
-            >
-              <span className="flex items-center space-x-2"><FileText size={13} className={activeTab === 'anahtarci_tutanaklari' ? 'text-white' : 'text-amber-500'} /> <span>Anahtarcı Tutanakları</span></span>
-              {anahtarciTutanaklari.length > 0 && <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.2 ${activeTab === 'anahtarci_tutanaklari' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'}`}>{anahtarciTutanaklari.length}</span>}
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('gecmis')}
-              className={`w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-lg font-bold transition ${activeTab === 'gecmis' ? 'bg-[#2563EB] text-white shadow-md shadow-slate-500/10' : 'text-slate-600 hover:bg-slate-100'}`}
-            >
-              <span className="flex items-center space-x-2"><CheckCircle size={13} /> <span>Geçmiş Onaylananlar</span></span>
-            </button>
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="rounded-xl border border-[#D5DEE3] bg-[#F7FAFA] px-3 py-2 text-right">
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-[#7A8A91] block">Bekleyen</span>
+              <strong
+                className="text-lg font-extrabold text-[#0F6C5C] leading-none tabular-nums"
+                style={{ fontFamily: '"Barlow Condensed", sans-serif' }}
+              >
+                {totalPendingCount}
+              </strong>
+            </div>
+            <div className="rounded-xl border border-[#D5DEE3] bg-white px-3 py-2 min-w-[140px]">
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-[#7A8A91] block">Onaylayan</span>
+              <strong className="text-[11px] font-semibold text-[#15252B] block truncate">
+                {currentUser?.name || currentUser?.displayName || currentUser?.email || 'Kullanıcı'}
+              </strong>
+              <span className="text-[10px] text-[#5B6B73]">
+                {currentUser?.email === 'sametatak9@gmail.com' ? 'Proje Müdürü' : 'Şantiye Yetkilisi'}
+              </span>
+            </div>
           </div>
-
         </div>
 
-        {/* Right workspace listing */}
-        <div className="flex-1 bg-slate-50 p-6 overflow-y-auto space-y-6">
-          
+        {/* Horizontal tabs */}
+        <nav className="px-3 sm:px-5 pb-3 overflow-x-auto">
+          <div className="flex items-stretch gap-1.5 min-w-max">
+            {onayNavTabs.map((tab) => {
+              const Icon = tab.icon;
+              const active = activeTab === tab.id;
+              const hasCount = typeof tab.count === 'number' && tab.count > 0;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`group relative flex items-center gap-2 px-3 py-2.5 rounded-xl text-[12px] font-semibold transition-all duration-200 border ${
+                    active
+                      ? 'bg-[#0F6C5C] text-white border-[#0F6C5C] shadow-[0_8px_20px_-12px_rgba(15,108,92,0.7)]'
+                      : 'bg-white/70 text-[#3D4F56] border-[#D5DEE3] hover:border-[#0F6C5C]/50 hover:bg-white'
+                  }`}
+                >
+                  <Icon size={14} className={active ? 'text-white' : 'text-[#0F6C5C]'} />
+                  <span className="hidden md:inline">{tab.label}</span>
+                  <span className="md:hidden">{tab.shortLabel}</span>
+                  {hasCount && (
+                    <span
+                      className={`tabular-nums text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                        active ? 'bg-white/20 text-white' : 'bg-[#E3F2EE] text-[#0F6C5C]'
+                      }`}
+                    >
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      </header>
+
+      {/* Workspace */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-5">
+          {activeTabMeta && activeTab !== 'guvenlik_belgeleri' && (
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <h2
+                  className="text-xl font-extrabold tracking-tight text-[#15252B]"
+                  style={{ fontFamily: '"Barlow Condensed", sans-serif' }}
+                >
+                  {activeTabMeta.label}
+                </h2>
+                <p className="text-[11px] text-[#5B6B73] mt-0.5">
+                  {typeof activeTabMeta.count === 'number'
+                    ? `${activeTabMeta.count} kayıt bu bölümde`
+                    : 'Onay geçmişi ve arşiv kayıtları'}
+                </p>
+              </div>
+              {typeof activeTabMeta.count === 'number' && activeTabMeta.count > 0 && (
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#0F6C5C] bg-[#E3F2EE] border border-[#B9DBD2] px-2.5 py-1 rounded-lg">
+                  İnceleme bekliyor
+                </span>
+              )}
+            </div>
+          )}
+
           {activeTab === 'satin_alma' && (
-            <div className="space-y-6">
-              <div className="border bg-white p-4.5 rounded-2xl border-slate-200 flex justify-between items-center text-xs">
-                <div className="space-y-1">
-                  <span className="text-amber-500 font-bold block text-[11px] tracking-widest uppercase">🛒 SATIN ALMA TALEPLERİ</span>
-                  <p className="text-slate-500 leading-relaxed text-[11px]">
-                    Sisteme düşen satın alma taleplerini inceleyerek dijital imzanızla onaylayabilir veya reddedebilirsiniz.
-                  </p>
-                </div>
+            <div className="space-y-5">
+              <div className="border bg-white/90 p-4 rounded-2xl border-[#D5DEE3]">
+                <p className="text-[#5B6B73] leading-relaxed text-[12px]">
+                  Satın alma taleplerini inceleyin; uygun olanları dijital imzanızla onaylayın.
+                </p>
               </div>
 
               {pendingRequests.length === 0 ? (
-                <div className="bg-white rounded-3xl p-15 text-center flex flex-col items-center justify-center space-y-4 border border-slate-200">
-                  <span className="text-4xl">🎉</span>
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-800">Onay bekleyen satın alma talebi bulunmuyor.</h3>
-                    <p className="text-xs text-slate-500 mt-1">Sistem tamamen güncel ve mutabıktır.</p>
-                  </div>
+                <div className="bg-white/90 rounded-2xl p-12 text-center border border-[#D5DEE3]">
+                  <h3 className="text-sm font-bold text-[#15252B]">Onay bekleyen satın alma talebi yok</h3>
+                  <p className="text-xs text-[#5B6B73] mt-1">Bu kuyruk güncel.</p>
                 </div>
               ) : (
-                <div className="space-y-6">
-                  {/* Satın Alma Talepleri Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {pendingRequests.map(doc => (
-                      <div key={doc.id} className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col justify-between hover:border-slate-300 transition space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {pendingRequests.map(doc => (
+                    <div
+                      key={doc.id}
+                      className="bg-white border border-[#D5DEE3] rounded-2xl flex flex-col justify-between hover:border-[#0F6C5C]/40 transition-all duration-200 overflow-hidden"
+                      style={{ boxShadow: '0 1px 0 rgba(21,37,43,0.04)' }}
+                    >
+                      <div className="h-1 bg-gradient-to-r from-[#0F6C5C] to-[#C47A2A]" />
+                      <div className="p-4 space-y-3 flex flex-col flex-1">
+                        <div className="flex justify-between items-start gap-2">
+                          <span className="font-mono bg-[#FFF6EB] border border-[#F0D9B5] text-[#9A5B12] text-[10px] font-bold px-2 py-0.5 rounded-md">
+                            {doc.saId || 'KOD YOK'}
+                          </span>
+                          <span className="text-[10px] text-[#7A8A91] font-mono font-semibold">{doc.tarih}</span>
+                        </div>
                         <div>
-                          <div className="flex justify-between items-start">
-                            <span className="font-mono bg-amber-500/10 border border-amber-500/20 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                              {doc.saId || 'KOD BELİRTİLMEDİ'}
-                            </span>
-                            <span className="text-[10px] text-slate-500 font-mono font-bold">{doc.tarih}</span>
-                          </div>
-                          <p className="text-xs text-slate-800 font-bold mt-2.5">Tedarikçi Firma: {doc.cariFirma}</p>
-                          <p className="text-[10.5px] text-slate-400 mt-1 italic">Talep Eden: {doc.talepEden}</p>
-                          {doc.aciklama && <p className="text-[10.5px] text-slate-500 mt-1 truncate">Notlar: {doc.aciklama}</p>}
-                          
-                          <div className="mt-2.5 pt-2 border-t border-slate-200">
-                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block mb-1">Talep Kalemleri</span>
-                            <div className="space-y-1 text-[10px] font-mono text-slate-400">
-                              {doc.kalemler?.slice(0, 3).map((k, idx) => (
-                                <div key={k.id || idx} className="flex justify-between">
-                                  <span className="truncate max-w-[150px]">{k.urunAdi}</span>
-                                  <span className="text-slate-800 font-bold">{k.miktar} {k.birim}</span>
-                                </div>
-                              ))}
-                              {doc.kalemler?.length > 3 && <div className="text-[9px] text-slate-500">+ {doc.kalemler.length - 3} kalem daha</div>}
-                            </div>
+                          <p className="text-[13px] text-[#15252B] font-semibold leading-snug">{doc.cariFirma}</p>
+                          <p className="text-[11px] text-[#5B6B73] mt-0.5">Talep eden: {doc.talepEden}</p>
+                          {doc.aciklama && (
+                            <p className="text-[11px] text-[#5B6B73] mt-1 line-clamp-2">{doc.aciklama}</p>
+                          )}
+                        </div>
+                        <div className="pt-2 border-t border-[#E8EEF0]">
+                          <span className="text-[9px] text-[#7A8A91] font-bold uppercase tracking-wider block mb-1">Kalemler</span>
+                          <div className="space-y-1 text-[11px] font-mono text-[#5B6B73]">
+                            {doc.kalemler?.slice(0, 3).map((k, idx) => (
+                              <div key={k.id || idx} className="flex justify-between gap-2">
+                                <span className="truncate">{k.urunAdi}</span>
+                                <span className="text-[#15252B] font-bold shrink-0">{k.miktar} {k.birim}</span>
+                              </div>
+                            ))}
+                            {doc.kalemler?.length > 3 && (
+                              <div className="text-[10px] text-[#7A8A91]">+ {doc.kalemler.length - 3} kalem daha</div>
+                            )}
                           </div>
                         </div>
-
-                        <div className="flex gap-2 pt-2.5 border-t border-slate-100">
-                          <button 
+                        <div className="flex gap-2 pt-1 mt-auto">
+                          <button
                             onClick={() => setActiveDocForDetail({ id: doc.id, type: 'request', data: doc })}
-                            className="flex-1 bg-slate-50 border border-slate-200 hover:bg-slate-100 hover:border-slate-300 text-slate-800 py-1.5 px-3 rounded-lg text-[10px] font-black tracking-wiest transition flex items-center justify-center space-x-1"
+                            className="flex-1 bg-[#F3F6F7] border border-[#D5DEE3] hover:bg-[#E8EEF0] text-[#15252B] py-2 px-3 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1"
                           >
-                            <Eye size={11} />
-                            <span>Detay İncele</span>
+                            <Eye size={12} />
+                            <span>Detay</span>
                           </button>
-                          <button 
+                          <button
                             onClick={() => handleApproveDocument('request', doc.id)}
-                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white py-1.5 px-3 rounded-lg text-[10px] font-black tracking-wiest transition flex items-center justify-center space-x-1"
+                            className="flex-1 bg-[#0F6C5C] hover:bg-[#0C584B] active:scale-[0.98] text-white py-2 px-3 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1"
                           >
-                            <Check size={11} />
-                            <span>İmzala &amp; Onayla</span>
+                            <Check size={12} />
+                            <span>Onayla</span>
                           </button>
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -2198,7 +2189,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                 {/* 📋 UNIFIED İŞLEM KAYITLARI AUDIT LOG */}
                 <div className="mt-8 bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 text-xs text-slate-600">
                   <div className="flex justify-between items-center border-b border-slate-200 pb-2">
-                    <span className="font-display font-black text-xs text-slate-800 uppercase tracking-widest block">📋 Tesis Onaylı İşlem Kayıtları (Audit Log)</span>
+                    <span className="font-display font-black text-xs text-slate-800 uppercase tracking-widest block">Tesis Onaylı İşlem Kayıtları</span>
                     <span className="bg-slate-800 text-slate-400 font-mono text-[9px] px-2 py-0.5 rounded">SİSTEM DENETİMİ</span>
                   </div>
                   <p className="text-[11px] text-slate-400">
@@ -2266,7 +2257,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           {activeTab === 'imzalar' && (
             <div className="space-y-6">
               <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
-                <span className="font-display font-black text-xs text-slate-800 uppercase tracking-widest block border-b pb-2">✒️ Yetkili Dijital İmza &amp; Kaşe Seçenekleri</span>
+                <span className="font-display font-black text-xs text-slate-800 uppercase tracking-widest block border-b pb-2">Yetkili Dijital İmza &amp; Kaşe</span>
                 <p className="text-xs text-slate-500 leading-relaxed">
                   Şirket yetkililerine atanan hazır e-imza kaşelerini aşağıdan görebilir, belge onaylarında basılmasını sağlayabilirsiniz:
                 </p>
@@ -2296,7 +2287,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           {activeTab === 'gunluk_loglar' && (
             <div className="space-y-6">
               <div className="border bg-white p-4.5 rounded-2xl border-slate-200 text-xs">
-                <span className="text-amber-700 font-bold block text-[11px] tracking-widest uppercase">📋 FORMEN & KAMPÇI GÜNLÜK AKIŞ RAPORLARI</span>
+                <span className="text-amber-700 font-bold block text-[11px] tracking-widest uppercase">Günlük Akış Raporları</span>
                 <p className="text-slate-400 mt-1 text-[11px]">
                   Saha formenleri ve kampçıların gün sonu gönderdiği özet raporlar. İdari İşler, Muhasebe, Şantiye Şefi, Proje Müdürü veya Kurucu onayı ile arşive alınır.
                 </p>
@@ -3304,7 +3295,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                         {/* Signature block with Kibritci Logo */}
                         <div className="border-t pt-4 flex justify-between items-center bg-slate-50/50 p-4 rounded-2xl border border-slate-100 font-sans">
                           <div className="flex items-center space-x-2 shrink-0">
-                            <KibritciLogo size={14} />
+                            <KibritciLogo size="sm" />
                             <span className="text-[10px] font-black text-slate-850 tracking-wide">KİBRİTÇİ İNŞAAT A.Ş.</span>
                           </div>
                           
@@ -3355,8 +3346,18 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-[600px] overflow-hidden shadow-2xl animate-in scale-in duration-200">
             
             <div className="bg-white p-4 flex justify-between items-center border-b border-slate-200">
-              <h4 className="font-display font-medium text-xs text-slate-800 uppercase tracking-wider">📋 Detaylı Belge İncelemesi</h4>
-              <button onClick={() => setActiveDocForDetail(null)} className="text-slate-500 hover:text-slate-900 font-bold cursor-pointer">✖ Kapat</button>
+              <h4
+                className="font-extrabold text-base tracking-tight text-[#15252B]"
+                style={{ fontFamily: '"Barlow Condensed", sans-serif' }}
+              >
+                Belge Detayı
+              </h4>
+              <button
+                onClick={() => setActiveDocForDetail(null)}
+                className="text-[#5B6B73] hover:text-[#15252B] font-semibold text-xs cursor-pointer px-2 py-1 rounded-lg hover:bg-[#F3F6F7]"
+              >
+                Kapat
+              </button>
             </div>
 
             <div className="p-6 space-y-4 text-xs text-slate-600 max-h-[70vh] overflow-y-auto">
