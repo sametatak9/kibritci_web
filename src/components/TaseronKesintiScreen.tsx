@@ -598,6 +598,34 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
       .reduce((s, t) => s + (t.cezaTutari || 0), 0);
   }, [hazirTutanaklar, selectedTaseron]);
 
+  const taseronOzet = useMemo(() => {
+    if (!selectedTaseron) return null;
+    const kampta = taseronPersonelListesi.filter((p) => {
+      const yer = formatPersonelKampYerlesim(p, kampKayitlari, kampOdalari);
+      return yer && !yer.includes('Kamp ataması yok') && yer !== '—';
+    }).length;
+    const enerjiTutar = mevcutEnerji ? enerjiToplamTutar(mevcutEnerji) : 0;
+    return {
+      personel: taseronPersonelListesi.length,
+      aktif: taseronPersonelAktifListe.length,
+      kampta,
+      bekleyenMakine: bekleyenMakineRaporlari.length,
+      log: taseronPersonelLoglari.length,
+      enerjiTutar,
+      ceza: cezaToplam,
+    };
+  }, [
+    selectedTaseron,
+    taseronPersonelListesi,
+    taseronPersonelAktifListe,
+    kampKayitlari,
+    kampOdalari,
+    bekleyenMakineRaporlari,
+    taseronPersonelLoglari,
+    mevcutEnerji,
+    cezaToplam,
+  ]);
+
   const SayacBlock = ({
     label,
     icon,
@@ -663,6 +691,36 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
           </select>
         </div>
       </div>
+
+      {taseronOzet && selectedTaseron && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+          {[
+            { label: 'Personel', value: `${taseronOzet.aktif}/${taseronOzet.personel}`, hint: 'Aktif / toplam' },
+            { label: 'Kamp', value: String(taseronOzet.kampta), hint: 'Yerleşik' },
+            { label: 'Bekleyen makine', value: String(taseronOzet.bekleyenMakine), hint: 'Ücret onayı' },
+            { label: 'Kapı logu', value: String(taseronOzet.log), hint: 'Seçili tarih aralığı' },
+            {
+              label: 'Enerji',
+              value: `${taseronOzet.enerjiTutar.toLocaleString('tr-TR')} ₺`,
+              hint: `${ayAdi(selectedAy)} ${selectedYil}`,
+            },
+            {
+              label: 'Ceza',
+              value: `${taseronOzet.ceza.toLocaleString('tr-TR')} ₺`,
+              hint: 'Tutanak toplamı',
+            },
+          ].map((item) => (
+            <div
+              key={item.label}
+              className="bg-white border border-slate-200 rounded-2xl px-3 py-2.5 shadow-sm"
+            >
+              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{item.label}</p>
+              <p className="text-sm font-black text-slate-900 mt-0.5 tabular-nums">{item.value}</p>
+              <p className="text-[9px] text-slate-400 mt-0.5">{item.hint}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {(

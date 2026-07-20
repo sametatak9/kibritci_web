@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
-import { Bell, Inbox, Search, Activity } from 'lucide-react';
+import { Bell, Inbox, Search, Activity, Clock } from 'lucide-react';
 import { SatinAlmaTalebi, Irsaliye, Fatura } from '../types/erp';
-import { countChromePendingOnay } from '../lib/onayInboxUtils';
+import { countChromePendingOnay, countStaleChromePendingOnay } from '../lib/onayInboxUtils';
 
 type Props = {
   satinAlmaTalepleri?: SatinAlmaTalebi[];
@@ -25,6 +25,10 @@ export const StatusStrip: React.FC<Props> = ({
 }) => {
   const pendingOnay = useMemo(
     () => countChromePendingOnay({ satinAlmaTalepleri, irsaliyeler, faturalar }),
+    [satinAlmaTalepleri, irsaliyeler, faturalar]
+  );
+  const staleOnay = useMemo(
+    () => countStaleChromePendingOnay({ satinAlmaTalepleri, irsaliyeler, faturalar }, 48),
     [satinAlmaTalepleri, irsaliyeler, faturalar]
   );
   const unread = useMemo(() => bildirimler.filter((n) => !n.okundu).length, [bildirimler]);
@@ -65,6 +69,18 @@ export const StatusStrip: React.FC<Props> = ({
         <Inbox size={11} />
         Onay inbox: {pendingOnay}
       </button>
+
+      {staleOnay > 0 && (
+        <button
+          type="button"
+          onClick={() => onNavigate('onay_islemleri')}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border font-semibold shrink-0 cursor-pointer transition bg-rose-50 border-rose-200 text-rose-800 hover:bg-rose-100"
+          title="48 saatten uzun süredir bekleyen onaylar"
+        >
+          <Clock size={11} />
+          Geciken onay: {staleOnay}
+        </button>
+      )}
 
       <button
         type="button"

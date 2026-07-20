@@ -1,5 +1,7 @@
 /** Chrome / StatusStrip için hafif bekleyen-onay sayımı (ACL değiştirmez). */
 
+import { isPendingOlderThanHours } from './acilOnayUtils';
+
 export function isSatinAlmaPending(onayDurumu?: string | null): boolean {
   const s = String(onayDurumu || '');
   return s === 'ONAY BEKLİYOR' || s === 'BEKLİYOR' || s.includes('BEKLİYOR');
@@ -16,9 +18,17 @@ export function isFaturaPending(durum?: string | null): boolean {
 }
 
 type ChromePendingInput = {
-  satinAlmaTalepleri?: Array<{ onayDurumu?: string | null }>;
-  irsaliyeler?: Array<{ onayDurumu?: string | null; kaynak?: string | null }>;
-  faturalar?: Array<{ durum?: string | null }>;
+  satinAlmaTalepleri?: Array<{
+    onayDurumu?: string | null;
+    tarih?: string | null;
+    gonderimTarihi?: string | null;
+  }>;
+  irsaliyeler?: Array<{
+    onayDurumu?: string | null;
+    kaynak?: string | null;
+    tarih?: string | null;
+  }>;
+  faturalar?: Array<{ durum?: string | null; tarih?: string | null }>;
 };
 
 /** Ana kabukta gösterilen onay inbox sayısı (SA + irsaliye + fatura). */
@@ -31,6 +41,30 @@ export function countChromePendingOnay(input: ChromePendingInput): number {
       isIrsaliyePending(x.onayDurumu)
   ).length;
   const ft = (input.faturalar || []).filter((x) => isFaturaPending(x.durum)).length;
+  return sa + ir + ft;
+}
+
+/** 48 saatten uzun süredir bekleyen onay sayısı (hatırlatma çipi). */
+export function countStaleChromePendingOnay(
+  input: ChromePendingInput,
+  olderThanHours = 48
+): number {
+  const sa = (input.satinAlmaTalepleri || []).filter(
+    (x) =>
+      isSatinAlmaPending(x.onayDurumu) &&
+      isPendingOlderThanHours(x.gonderimTarihi || x.tarih, null, olderThanHours)
+  ).length;
+  const ir = (input.irsaliyeler || []).filter(
+    (x) =>
+      x.kaynak !== 'VIDANJOR_FIS' &&
+      x.kaynak !== 'MICIR_STABILIZE_FIS' &&
+      isIrsaliyePending(x.onayDurumu) &&
+      isPendingOlderThanHours(x.tarih, null, olderThanHours)
+  ).length;
+  const ft = (input.faturalar || []).filter(
+    (x) =>
+      isFaturaPending(x.durum) && isPendingOlderThanHours(x.tarih, null, olderThanHours)
+  ).length;
   return sa + ir + ft;
 }
 

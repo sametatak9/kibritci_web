@@ -19,6 +19,7 @@ import {
   resolveAkvizyonGorev,
 } from '../lib/guvenlikHelpers';
 import { CANONICAL_ANA_FIRMA_ADI } from '../lib/yoklamaUtils';
+import { getPersonelMissingDocs } from '../lib/personelMissingDocs';
 
 interface PersonelScreenProps {
   personeller: Personel[];
@@ -1488,14 +1489,18 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0">
-                      {p.fotograf_url ? (
-                        <p className="text-xl">🤵</p>
+                      {p.fotografUrl || (p as Personel & { fotograf_url?: string }).fotograf_url ? (
+                        <img
+                          src={p.fotografUrl || (p as Personel & { fotograf_url?: string }).fotograf_url}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
                       ) : (
                         <span className="text-xs font-bold text-slate-500">{p.ad[0]}{p.soyad[0]}</span>
                       )}
                     </div>
                     <div>
-                      <h4 className="font-semibold text-slate-900 flex items-center gap-2">
+                      <h4 className="font-semibold text-slate-900 flex items-center gap-2 flex-wrap">
                         {p.ad} {p.soyad}
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
                           is_aktif_status(p.durum) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
@@ -1517,6 +1522,18 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                             İdari · Yoklama yok
                           </span>
                         )}
+                        {(() => {
+                          const eksikler = getPersonelMissingDocs(p);
+                          if (eksikler.length === 0) return null;
+                          return (
+                            <span
+                              className="text-[10px] bg-rose-50 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-full font-bold"
+                              title={eksikler.join(', ')}
+                            >
+                              Eksik: {eksikler.length}
+                            </span>
+                          );
+                        })()}
                       </h4>
                       <p className="text-[10px] text-slate-400 font-medium">
                         TC: {p.tcNo} · Görev: <span className="text-slate-600 font-bold">{displayPersonelGorev(p)}</span>
