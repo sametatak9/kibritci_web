@@ -28,6 +28,84 @@ app.get('/api/auth/claims-status', (_req, res) => {
   res.json({ adminConfigured: isFirebaseAdminConfigured() });
 });
 
+const PUBLIC_SA_SHARE_COLLECTION = 'publicSatinAlmaPaylasimlari';
+
+function makePublicShareToken(): string {
+  return `po_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 14)}${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+}
+
+function buildPublicShareUrl(req: { protocol?: string; get?: (name: string) => string | undefined; headers: { host?: string } }, token: string): string {
+  const host = req.get?.('x-forwarded-host') || req.get?.('host') || req.headers.host || 'kibritci-erp.onrender.com';
+  const proto = (req.get?.('x-forwarded-proto') || req.protocol || 'https').split(',')[0].trim() || 'https';
+  return `${proto}://${host}/?view_po=${encodeURIComponent(token)}`;
+}
+
+/** Satın alma PO paylaşımı oluştur (e-posta indirme linki) */
+app.post('/api/public/satin-alma-share', async (req, res) => {
+  if (!isFirebaseAdminConfigured()) {
+    return res.status(503).json({ error: 'Firebase Admin yapılandırılmamış' });
+  }
+  try {
+    const idToken = await readBearerToken(req);
+    if (!idToken) return res.status(401).json({ error: 'Authorization Bearer token gerekli' });
+    const decoded = await verifyIdToken(idToken);
+    const shareIn = req.body?.share || req.body || {};
+    const saId = String(shareIn.saId || '').trim();
+    if (!saId) return res.status(400).json({ error: 'saId zorunlu' });
+
+    const token = makePublicShareToken();
+    const payload = {
+      kind: 'satin_alma_po',
+      saDocId: String(shareIn.saDocId || ''),
+      saId,
+      tarih: String(shareIn.tarih || ''),
+      talepEden: String(shareIn.talepEden || ''),
+      cariFirma: String(shareIn.cariFirma || ''),
+      aciklama: String(shareIn.aciklama || ''),
+      onayDurumu: String(shareIn.onayDurumu || ''),
+      kalemler: Array.isArray(shareIn.kalemler) ? shareIn.kalemler : [],
+      eImzalar: Array.isArray(shareIn.eImzalar) ? shareIn.eImzalar : [],
+      createdAt: String(shareIn.createdAt || new Date().toISOString()),
+      createdBy: decoded.email || shareIn.createdBy || null,
+    };
+
+    const admin = getFirebaseAdmin();
+    await admin.firestore().collection(PUBLIC_SA_SHARE_COLLECTION).doc(token).set(payload);
+    return res.json({
+      success: true,
+      token,
+      url: buildPublicShareUrl(req, token),
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Paylaşım oluşturulamadı';
+    return res.status(500).json({ error: message });
+  }
+});
+
+/** Herkese açık satın alma PO paylaşımı oku */
+app.get('/api/public/satin-alma-share/:token', async (req, res) => {
+  if (!isFirebaseAdminConfigured()) {
+    return res.status(503).json({ error: 'Firebase Admin yapılandırılmamış' });
+  }
+  try {
+    const token = String(req.params.token || '').trim();
+    if (!token || token.length < 8) {
+      return res.status(400).json({ error: 'Geçersiz paylaşım kodu' });
+    }
+    const admin = getFirebaseAdmin();
+    const snap = await admin.firestore().collection(PUBLIC_SA_SHARE_COLLECTION).doc(token).get();
+    if (!snap.exists) {
+      return res.status(404).json({ error: 'Paylaşım bulunamadı' });
+    }
+    return res.json({ id: snap.id, ...snap.data() });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Paylaşım okunamadı';
+    return res.status(500).json({ error: message });
+  }
+});
+
 app.post('/api/auth/founder-bootstrap', async (req, res) => {
   if (!isFirebaseAdminConfigured()) {
     return res.status(503).json({

@@ -9,6 +9,8 @@ export interface ReportEmailPayload {
   html?: string;
   fileName?: string;
   defaultTo?: string;
+  /** Alıcının tarayıcıda açıp indirebileceği kalıcı bağlantı */
+  downloadUrl?: string;
 }
 
 const MAX_MAILTO_BODY = 1800;
@@ -33,6 +35,7 @@ export function buildReportMailBody(options: {
   subject: string;
   body?: string;
   html?: string;
+  downloadUrl?: string;
 }): string {
   const base =
     (options.body || '').trim() ||
@@ -44,15 +47,30 @@ Kibritçi İnşaat ERP üzerinden hazırlanan rapor bilginize sunulmuştur.
 Konu: ${options.subject}
 
 `;
-  const outro = `
+  const linkBlock = options.downloadUrl
+    ? `
+
+Evrakı görüntülemek / indirmek için bağlantı:
+${options.downloadUrl}
+
+(Bağlantıyı tarayıcıda açıp «HTML İndir» veya «Yazdır / PDF» kullanabilirsiniz.)
+`
+    : '';
+  const outro = options.downloadUrl
+    ? `
+
+---
+Bu mesaj Kibritçi ERP rapor gönderimi ile açılmıştır.
+`
+    : `
 
 ---
 Bu mesaj Kibritçi ERP rapor gönderimi ile açılmıştır.
 HTML rapor dosyasını eke eklemek için «HTML İndir» ile bilgisayarınıza kaydedip mailinize ekleyebilirsiniz.
 `;
-  const combined = `${intro}${base}${outro}`;
+  const combined = `${intro}${base}${linkBlock}${outro}`;
   return combined.length > MAX_MAILTO_BODY
-    ? `${combined.slice(0, MAX_MAILTO_BODY)}\n\n… (rapor kısaltıldı; tam metin için HTML dosyasını ekleyin)`
+    ? `${combined.slice(0, MAX_MAILTO_BODY)}\n\n… (rapor kısaltıldı; tam metin için indirme bağlantısını kullanın)`
     : combined;
 }
 
@@ -203,8 +221,12 @@ export function openReportEmailComposer(payload: ReportEmailPayload): void {
     subject: subject0,
     body: payload.body,
     html: payload.html,
+    downloadUrl: payload.downloadUrl,
   });
   const fileName = payload.fileName || `Kibritci_Rapor_${Date.now()}.html`;
+  const downloadUrlHint = payload.downloadUrl
+    ? `Mesajda indirme bağlantısı yer alır: ${payload.downloadUrl}`
+    : 'HTML raporu eklemek için önce indirip mailinize ekleyebilirsiniz.';
 
   const overlay = document.createElement('div');
   overlay.id = 'kibritci-report-email-overlay';
@@ -229,7 +251,7 @@ export function openReportEmailComposer(payload: ReportEmailPayload): void {
         </div>
         <p class="hint">
           Bilgisayarınızdaki varsayılan posta uygulaması, Gmail veya Outlook açılır.
-          İstediğiniz kişiye gönderebilirsiniz. HTML raporu eklemek için önce indirip mailinize ekleyin.
+          İstediğiniz kişiye gönderebilirsiniz. ${downloadUrlHint}
         </p>
       </div>
       <div class="actions">
@@ -268,8 +290,8 @@ export function openReportEmailComposer(payload: ReportEmailPayload): void {
         (overlay.querySelector('#kibritci-mail-body') as HTMLTextAreaElement)?.value || body0;
       const provider = act as ReportMailProvider;
       if (provider === 'default' || provider === 'gmail' || provider === 'outlook') {
-        if (payload.html) {
-          // Kullanıcı eki kolay eklesin diye HTML'yi de indir
+        // Bağlantı yoksa yerel HTML indirerek eklemeyi kolaylaştır
+        if (payload.html && !payload.downloadUrl) {
           downloadReportHtmlFile(payload.html, fileName);
         }
         openMailCompose(provider, to, subject, body);

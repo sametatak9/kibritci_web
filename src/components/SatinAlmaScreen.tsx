@@ -9,8 +9,9 @@ import { confirmSignedUploadWithMismatchCheck } from '../lib/evrakOnayUtils';
 import { findNearDuplicateStokName, normalizeCardName } from '../lib/duplicateNameUtils';
 import { fetchApiJson } from '../lib/apiClient';
 import { normalizeDateKey } from '../lib/dateKeyUtils';
-import { wrapCorporateReportHtml } from '../lib/corporateReportHtml';
 import { openHtmlReportWindow, openReportEmailComposer } from '../lib/reportEmail';
+import { buildSatinAlmaReportHtml } from '../lib/satinAlmaReportHtml';
+import { createSatinAlmaPublicShare } from '../lib/satinAlmaPublicShare';
 
 interface SatinAlmaScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
@@ -48,6 +49,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
   const [saAttachmentUrl, setSaAttachmentUrl] = useState<string | null>(null);
   const [saSearchKeyword, setSaSearchKeyword] = useState("");
   const [talepTab, setTalepTab] = useState<'MEVCUT' | 'ARSIV'>('MEVCUT');
+  const [emailSendingId, setEmailSendingId] = useState<string | null>(null);
   const [talepTarihFiltre, setTalepTarihFiltre] = useState('');
   const legacyDocInputRef = useRef<HTMLInputElement | null>(null);
   const [legacyImportLoading, setLegacyImportLoading] = useState(false);
@@ -749,55 +751,14 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     }
   };
 
-  const buildSatinAlmaReportHtml = (sa: SatinAlmaTalebi) => {
-    const poExtraCss = `
-      .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:25px}
-      .info-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px;font-size:11px}
-      .info-card h4{margin:0 0 8px;color:#1e3a8a;border-bottom:1px solid #cbd5e1;padding-bottom:4px;font-size:12px}
-      .items-table{width:100%;border-collapse:collapse;margin-top:10px}
-      .items-table th{background-color:#1e3a8a;color:#fff;padding:10px;text-align:left;font-size:11px}
-      .items-table td{border-bottom:1px solid #e2e8f0;padding:10px;font-size:11px}
-      .signatures-title{margin-top:30px;font-size:11px;font-weight:bold;color:#1e3a8a;border-bottom:2px dashed #cbd5e1;padding-bottom:5px}
-      .signatures-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:15px}
-      .sig-col{border:1px solid #e2e8f0;border-radius:8px;padding:10px;text-align:center;font-size:10px;min-height:90px}
-      .sig-title{font-weight:bold;color:#475569;display:block;margin-bottom:8px}
-      .sig-status{font-weight:800;color:#10b981;font-size:8px}
-      .e-imza-bar{margin-top:20px;font-size:9px;color:#059669;font-weight:bold;background:#ecfdf5;border:1px solid #a7f3d0;padding:8px;border-radius:8px}
-    `;
-    const innerBody = `
-          <h2 style="margin:0 0 4px;font-size:18px;color:#0f172a">SATIN ALMA SİPARİŞİ / PO FORMU</h2>
-          <div class="info-grid">
-            <div class="info-card"><h4>📋 SİPARİŞ BİLGİLERİ</h4><p><strong>Belge Tarihi:</strong> ${sa.tarih}</p><p><strong>Onay Durumu:</strong> ${sa.onayDurumu}</p><p><strong>Talep Eden:</strong> ${sa.talepEden || '-'}</p></div>
-            <div class="info-card"><h4>🏗️ TEDARİKÇİ / ŞANTİYE</h4><p><strong>Firma:</strong> ${sa.cariFirma}</p><p><strong>Açıklama/Not:</strong> ${sa.aciklama || 'Belirtilmemiş'}</p></div>
-          </div>
-          <table class="items-table"><thead><tr><th>Malzeme / Ürün Adı</th><th>Sipariş Miktarı</th><th>Marka / Üretici</th><th>Kullanılacak Yer</th></tr></thead><tbody>
-              ${sa.kalemler.map(x => `<tr><td>${x.urunAdi}</td><td>${x.miktar} ${x.birim}</td><td>${x.marka || 'Belirtilmemiş'}</td><td>${x.kullanilacakYer || 'Genel Şantiye'}</td></tr>`).join('')}
-          </tbody></table>
-          <div class="signatures-title">🖋️ ONAY VE İMZA KANALLARI</div>
-          <div class="signatures-grid">
-            <div class="sig-col"><span class="sig-title">Talep Eden</span><span style="color:#94a3b8;font-style:italic;">İmza Bekleniyor</span></div>
-            <div class="sig-col"><span class="sig-title">Muhasebe</span><span style="color:#94a3b8;font-style:italic;">İmza Yetkisi</span></div>
-            <div class="sig-col"><span class="sig-title">Satın Alma Md.</span><span style="color:#94a3b8;font-style:italic;">İmza Yetkisi</span></div>
-            <div class="sig-col"><span class="sig-title">Şantiye Şefi</span><span class="${sa.onayDurumu === 'ONAYLANDI' ? 'sig-status' : ''}" style="${sa.onayDurumu !== 'ONAYLANDI' ? 'color:#94a3b8' : ''}">${sa.onayDurumu === 'ONAYLANDI' ? '✓ ONAYLANDI' : 'İmza Bekleniyor'}</span></div>
-            <div class="sig-col"><span class="sig-title">Proje Müdürü</span><span class="${sa.onayDurumu === 'ONAYLANDI' ? 'sig-status' : ''}" style="${sa.onayDurumu !== 'ONAYLANDI' ? 'color:#94a3b8' : ''}">${sa.onayDurumu === 'ONAYLANDI' ? '✓ ONAYLANDI' : 'İmza Bekleniyor'}</span></div>
-          </div>
-          ${sa.eImzalar && sa.eImzalar.length > 0 ? `<div class="e-imza-bar">🛡️ DİJİTAL E-İMZA KANIT ZİNCİRİ:<br/>${sa.eImzalar.map(im => `• ${im}`).join('<br/>')}</div>` : ''}
-    `;
-    return wrapCorporateReportHtml(innerBody, {
-      docCode: `BELGE NO: ${sa.saId}`,
-      orientation: 'portrait',
-      title: `Kibritçi İnşaat - PO: ${sa.saId}`,
-      extraCss: poExtraCss,
-      autoPrint: false,
-    });
-  };
-
   const handlePreviewPdf = (sa: SatinAlmaTalebi) => {
     const htmlContent = buildSatinAlmaReportHtml(sa);
     openHtmlReportWindow(htmlContent, `Satın Alma ${sa.saId}`);
   };
 
-  const handleEmailTalep = (sa: SatinAlmaTalebi) => {
+  const handleEmailTalep = async (sa: SatinAlmaTalebi) => {
+    if (emailSendingId) return;
+    setEmailSendingId(sa.id);
     const html = buildSatinAlmaReportHtml(sa);
     const kalemOzet = (sa.kalemler || [])
       .slice(0, 8)
@@ -805,6 +766,23 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
       .join('\n');
     const more =
       (sa.kalemler || []).length > 8 ? `\n… +${sa.kalemler.length - 8} kalem daha` : '';
+
+    let downloadUrl = '';
+    try {
+      const share = await createSatinAlmaPublicShare({
+        sa,
+        createdBy: currentUser?.email || currentUser?.eposta || '',
+      });
+      downloadUrl = share.url;
+    } catch (err) {
+      console.error(err);
+      alert(
+        'Evrak indirme bağlantısı oluşturulamadı. Yine de e-posta açılacak; HTML dosyasını elle ekleyebilirsiniz.'
+      );
+    } finally {
+      setEmailSendingId(null);
+    }
+
     openReportEmailComposer({
       subject: `Satın Alma Talebi ${sa.saId} — ${sa.cariFirma || 'Kibritçi'}`,
       body: `Satın alma sipariş talebi bilginize sunulmuştur.
@@ -817,12 +795,11 @@ Durum: ${sa.onayDurumu}
 Açıklama: ${sa.aciklama || '-'}
 
 Kalemler:
-${kalemOzet || '—'}${more}
-
-Tam PO formu HTML ek olarak indirilir; mailinize ekleyebilirsiniz.`,
+${kalemOzet || '—'}${more}`,
       html,
       fileName: `SatinAlma_${String(sa.saId).replace(/[^\w.\-]+/g, '_')}.html`,
       defaultTo: '',
+      downloadUrl: downloadUrl || undefined,
     });
   };
 
@@ -1130,12 +1107,13 @@ Tam PO formu HTML ek olarak indirilir; mailinize ekleyebilirsiniz.`,
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleEmailTalep(sa)}
-                      className="bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer"
-                      title="Bir veya birden fazla kişiye e-posta ile gönder"
+                      onClick={() => void handleEmailTalep(sa)}
+                      disabled={emailSendingId === sa.id}
+                      className="bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer disabled:opacity-60"
+                      title="Bir veya birden fazla kişiye e-posta ile gönder (indirme linki dahil)"
                     >
                       <Send size={13} />
-                      E-posta ile Gönder
+                      {emailSendingId === sa.id ? 'Link hazırlanıyor…' : 'E-posta ile Gönder'}
                     </button>
 
                     {!isLocked ? (
