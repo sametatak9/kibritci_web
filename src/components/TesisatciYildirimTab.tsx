@@ -38,6 +38,7 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
   const [fisNo, setFisNo] = useState('');
   const [icmeSuyuAdet, setIcmeSuyuAdet] = useState('');
   const [sanayiSuyuAdet, setSanayiSuyuAdet] = useState('');
+  const [damacaAdet, setDamacaAdet] = useState('');
   const [fisGorselUrl, setFisGorselUrl] = useState('');
   const [saving, setSaving] = useState(false);
   const [fisler, setFisler] = useState<YildirimTankerFis[]>([]);
@@ -76,6 +77,7 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
     setFisNo('');
     setIcmeSuyuAdet('');
     setSanayiSuyuAdet('');
+    setDamacaAdet('');
     setFisGorselUrl('');
     setEditingId(null);
   };
@@ -102,18 +104,26 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
 
   const handleKaydet = async (e: React.FormEvent) => {
     e.preventDefault();
-    const icme = Number(icmeSuyuAdet);
-    const sanayi = Number(sanayiSuyuAdet);
+    const icme = Number(icmeSuyuAdet || 0);
+    const sanayi = Number(sanayiSuyuAdet || 0);
+    const damaca = Number(damacaAdet || 0);
     if (!fisNo.trim()) {
       showStatus?.('error', 'Fiş no zorunlu.');
       return;
     }
-    if (!Number.isFinite(icme) || icme < 0 || !Number.isFinite(sanayi) || sanayi < 0) {
-      showStatus?.('error', 'İçme ve sanayi suyu adetleri geçerli sayı olmalı.');
+    if (
+      !Number.isFinite(icme) ||
+      icme < 0 ||
+      !Number.isFinite(sanayi) ||
+      sanayi < 0 ||
+      !Number.isFinite(damaca) ||
+      damaca < 0
+    ) {
+      showStatus?.('error', 'İçme, sanayi ve damaca adetleri geçerli sayı olmalı.');
       return;
     }
-    if (icme + sanayi <= 0) {
-      showStatus?.('error', 'En az bir su adedi girin.');
+    if (icme + sanayi + damaca <= 0) {
+      showStatus?.('error', 'En az bir kalem (içme / sanayi / damaca) girin.');
       return;
     }
     if (!fisGorselUrl && !editingId) {
@@ -132,6 +142,7 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
         fisNo: fisNo.trim().toUpperCase(),
         icmeSuyuAdet: icme,
         sanayiSuyuAdet: sanayi,
+        damacaAdet: damaca,
         fisGorselUrl: fisGorselUrl || existing?.fisGorselUrl || '',
         firmaUnvan,
         cariKartId: yildirimCari?.id,
@@ -159,6 +170,7 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
           fisNo: fis.fisNo,
           icmeSuyuAdet: fis.icmeSuyuAdet,
           sanayiSuyuAdet: fis.sanayiSuyuAdet,
+          damacaAdet: fis.damacaAdet || 0,
           yildirimTankerFisId: id,
           kalemler: [
             {
@@ -171,6 +183,12 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
               id: `k_sanayi_${id}`,
               urunAdi: 'Sanayi Suyu Tanker',
               miktar: fis.sanayiSuyuAdet,
+              birim: 'ADET',
+            },
+            {
+              id: `k_damaca_${id}`,
+              urunAdi: 'Damaca',
+              miktar: fis.damacaAdet || 0,
               birim: 'ADET',
             },
           ].filter((k) => Number(k.miktar) > 0),
@@ -191,12 +209,13 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
           fileName: `yildirim_${fis.fisNo}.jpg`,
           fileType: 'image/jpeg',
           durum: 'BEKLEMEDE',
-          aciklama: `Tesisatçı Yıldırım Tanker fişi · İçme ${fis.icmeSuyuAdet} · Sanayi ${fis.sanayiSuyuAdet}`,
+          aciklama: `Tesisatçı Yıldırım Tanker fişi · İçme ${fis.icmeSuyuAdet} · Sanayi ${fis.sanayiSuyuAdet} · Damaca ${fis.damacaAdet || 0}`,
           kaydeden: currentUser?.email || 'tesisatci',
           kaynak: 'YILDIRIM_TANKER_FIS',
           yildirimTankerFisId: id,
           icmeSuyuAdet: fis.icmeSuyuAdet,
           sanayiSuyuAdet: fis.sanayiSuyuAdet,
+          damacaAdet: fis.damacaAdet || 0,
           aiStatus: 'SKIPPED',
         },
         { merge: true }
@@ -204,7 +223,7 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
 
       if (addNotification) {
         await addNotification(
-          `Yıldırım Tanker fişi ${editingId ? 'güncellendi' : 'kaydedildi'}: ${fis.fisNo} · içme ${fis.icmeSuyuAdet} · sanayi ${fis.sanayiSuyuAdet}`
+          `Yıldırım Tanker fişi ${editingId ? 'güncellendi' : 'kaydedildi'}: ${fis.fisNo} · içme ${fis.icmeSuyuAdet} · sanayi ${fis.sanayiSuyuAdet} · damaca ${fis.damacaAdet || 0}`
         );
       }
       showStatus?.(
@@ -228,6 +247,7 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
     setFisNo(f.fisNo);
     setIcmeSuyuAdet(String(f.icmeSuyuAdet));
     setSanayiSuyuAdet(String(f.sanayiSuyuAdet));
+    setDamacaAdet(String(f.damacaAdet ?? 0));
     setFisGorselUrl(f.fisGorselUrl || '');
   };
 
@@ -257,17 +277,31 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
 
   const handleRaporIndir = () => {
     const rows = [
-      ['Tarih', 'Fiş No', 'İçme Suyu', 'Sanayi Suyu', 'Toplam', 'Firma', 'Kaydeden'],
+      ['Tarih', 'Fiş No', 'İçme Suyu', 'Sanayi Suyu', 'Damaca', 'Toplam', 'Firma', 'Kaydeden'],
       ...aylikFisler.map((f) => [
         f.tarih,
         f.fisNo,
         String(f.icmeSuyuAdet),
         String(f.sanayiSuyuAdet),
-        String((Number(f.icmeSuyuAdet) || 0) + (Number(f.sanayiSuyuAdet) || 0)),
+        String(f.damacaAdet || 0),
+        String(
+          (Number(f.icmeSuyuAdet) || 0) +
+            (Number(f.sanayiSuyuAdet) || 0) +
+            (Number(f.damacaAdet) || 0)
+        ),
         f.firmaUnvan,
         f.kaydeden || '',
       ]),
-      ['', 'TOPLAM', String(aylikToplam.icme), String(aylikToplam.sanayi), String(aylikToplam.toplam), '', ''],
+      [
+        '',
+        'TOPLAM',
+        String(aylikToplam.icme),
+        String(aylikToplam.sanayi),
+        String(aylikToplam.damaca),
+        String(aylikToplam.toplam),
+        '',
+        '',
+      ],
     ];
     downloadCsv(rows, `yildirim_tanker_${raporYil}_${String(raporAy).padStart(2, '0')}.csv`);
     showStatus?.('success', 'Aylık rapor indirildi.');
@@ -324,9 +358,8 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
             </label>
           </div>
           <div className="space-y-1">
-            <label className="text-[9px] font-black text-slate-500 uppercase">Tanker İçme Suyu Adet *</label>
+            <label className="text-[9px] font-black text-slate-500 uppercase">Tanker İçme Suyu Adet</label>
             <input
-              required
               type="number"
               min={0}
               step={1}
@@ -337,14 +370,25 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
             />
           </div>
           <div className="space-y-1">
-            <label className="text-[9px] font-black text-slate-500 uppercase">Tanker Sanayi Suyu Adet *</label>
+            <label className="text-[9px] font-black text-slate-500 uppercase">Tanker Sanayi Suyu Adet</label>
             <input
-              required
               type="number"
               min={0}
               step={1}
               value={sanayiSuyuAdet}
               onChange={(e) => setSanayiSuyuAdet(e.target.value)}
+              placeholder="0"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold"
+            />
+          </div>
+          <div className="space-y-1 sm:col-span-2">
+            <label className="text-[9px] font-black text-slate-500 uppercase">Damaca Adet</label>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={damacaAdet}
+              onChange={(e) => setDamacaAdet(e.target.value)}
               placeholder="0"
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold"
             />
@@ -404,7 +448,8 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
                   <div className="min-w-0">
                     <p className="font-bold text-slate-800 truncate">{f.fisNo}</p>
                     <p className="text-[9px] text-slate-500">
-                      İçme: <strong>{f.icmeSuyuAdet}</strong> · Sanayi: <strong>{f.sanayiSuyuAdet}</strong>
+                      İçme: <strong>{f.icmeSuyuAdet}</strong> · Sanayi: <strong>{f.sanayiSuyuAdet}</strong> ·
+                      Damaca: <strong>{f.damacaAdet || 0}</strong>
                     </p>
                   </div>
                 </div>
@@ -469,7 +514,7 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-[11px]">
           <div className="bg-slate-50 border rounded-xl p-2">
             <span className="text-[9px] text-slate-500 block uppercase">İçme</span>
             <strong className="text-slate-900 text-sm">{aylikToplam.icme}</strong>
@@ -477,6 +522,10 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
           <div className="bg-slate-50 border rounded-xl p-2">
             <span className="text-[9px] text-slate-500 block uppercase">Sanayi</span>
             <strong className="text-slate-900 text-sm">{aylikToplam.sanayi}</strong>
+          </div>
+          <div className="bg-slate-50 border rounded-xl p-2">
+            <span className="text-[9px] text-slate-500 block uppercase">Damaca</span>
+            <strong className="text-slate-900 text-sm">{aylikToplam.damaca}</strong>
           </div>
           <div className="bg-slate-50 border rounded-xl p-2">
             <span className="text-[9px] text-slate-500 block uppercase">Fiş adedi</span>
@@ -492,6 +541,7 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
                 <span className="font-bold text-slate-800 truncate">{f.fisNo}</span>
                 <span>İ:{f.icmeSuyuAdet}</span>
                 <span>S:{f.sanayiSuyuAdet}</span>
+                <span>D:{f.damacaAdet || 0}</span>
               </div>
             ))}
         </div>

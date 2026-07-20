@@ -48,15 +48,30 @@ export function filterYildirimFislerByMonth(
 export function sumYildirimSular(fisler: YildirimTankerFis[]): {
   icme: number;
   sanayi: number;
+  damaca: number;
   toplam: number;
 } {
   let icme = 0;
   let sanayi = 0;
+  let damaca = 0;
   for (const f of fisler || []) {
     icme += Number(f.icmeSuyuAdet) || 0;
     sanayi += Number(f.sanayiSuyuAdet) || 0;
+    damaca += Number(f.damacaAdet) || 0;
   }
-  return { icme, sanayi, toplam: icme + sanayi };
+  return { icme, sanayi, damaca, toplam: icme + sanayi + damaca };
+}
+
+export function enerjiTuruLabel(turu: string): string {
+  if (turu === 'ELEKTRIK') return 'Elektrik';
+  if (turu === 'SU') return 'Su';
+  if (turu === 'DOGALGAZ') return 'Doğalgaz';
+  return turu;
+}
+
+export function enerjiTuruBirim(turu: string): string {
+  if (turu === 'ELEKTRIK') return 'kWh';
+  return 'm³';
 }
 
 export function filterFaturalarByCariMonth(
