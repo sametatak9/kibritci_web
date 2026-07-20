@@ -19,6 +19,7 @@ import {
 import { wrapCorporateReportHtml } from '../lib/corporateReportHtml';
 import { fetchApiJson } from '../lib/apiClient';
 import { GuvenlikEvrakOnayHavuzu } from './GuvenlikEvrakOnayHavuzu';
+import { ImzaOnizlemeStrip } from './ImzaOnizlemeStrip';
 import { VidanjorFisOnayPanel } from './VidanjorFisOnayPanel';
 import { MicirFisOnayPanel } from './MicirFisOnayPanel';
 import { KibritciLogo } from './KibritciLogo';
@@ -1661,6 +1662,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                             )}
                           </div>
                         </div>
+                        <ImzaOnizlemeStrip doc={doc} pendingSignatureText={signatureText} />
                         <div className="flex gap-2 pt-1 mt-auto">
                           <button
                             onClick={() => setActiveDocForDetail({ id: doc.id, type: 'request', data: doc })}
@@ -1699,6 +1701,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
               pendingGateDocs={pendingGateDocs}
               pendingWaybills={pendingWaybills}
               pendingInvoices={pendingInvoices}
+              signatureText={signatureText}
               setActiveDocForDetail={setActiveDocForDetail}
               handleApproveDocument={handleApproveDocument}
               handleRejectGateDoc={handleRejectGateDoc}

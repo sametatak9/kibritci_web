@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { Truck, CreditCard, Eye, Check, X, Sparkles, ExternalLink, FileText, Download, ZoomIn, Loader2 } from 'lucide-react';
 import { openBase64InNewTab } from '../lib/fileViewerUtils';
+import { ImzaOnizlemeStrip } from './ImzaOnizlemeStrip';
 
 interface GuvenlikEvrakOnayHavuzuProps {
   pendingGateDocs: any[];
   pendingWaybills: any[];
   pendingInvoices: any[];
+  signatureText?: string;
   setActiveDocForDetail: (val: any) => void;
   handleApproveDocument: (type: 'waybill' | 'invoice', id: string) => void;
   handleRejectGateDoc: (id: string) => void;
@@ -77,6 +79,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
   pendingGateDocs,
   pendingWaybills,
   pendingInvoices,
+  signatureText,
   setActiveDocForDetail,
   handleApproveDocument,
   handleRejectGateDoc,
@@ -311,6 +314,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                         <span>Yapay Zeka evrakı okuyor...</span>
                       </div>
                     )}
+                    <ImzaOnizlemeStrip doc={docItem} pendingSignatureText={signatureText} />
                   </div>
 
                   <div className="flex gap-2 pt-2 border-t border-slate-100 mt-auto">
@@ -383,6 +387,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                             {doc.kalemler?.length > 3 && <div className="text-[9px] text-slate-500">+ {doc.kalemler.length - 3} kalem daha</div>}
                           </div>
                         </div>
+                        <ImzaOnizlemeStrip doc={doc} pendingSignatureText={signatureText} className="mt-2" />
                       </div>
 
                       <div className="flex gap-2 pt-2.5 border-t border-slate-100">
@@ -432,6 +437,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                           <span className="text-slate-500 font-bold">Toplam Tutar:</span>
                           <span className="text-purple-700 font-black font-mono">₺{doc.genelToplam?.toLocaleString()}</span>
                         </div>
+                        <ImzaOnizlemeStrip doc={doc} pendingSignatureText={signatureText} className="mt-2" />
                       </div>
 
                       <div className="flex gap-2 pt-2.5 border-t border-slate-100">

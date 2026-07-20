@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Bell, CheckCircle, Clock, Smartphone, User, Shield, Activity, TrendingUp } from 'lucide-react';
+import { Search, Bell, CheckCircle, Clock, Smartphone, User, Shield, Activity, TrendingUp, Inbox } from 'lucide-react';
 import { KibritciLogo } from './KibritciLogo';
 
 interface TopbarProps {
@@ -12,6 +12,8 @@ interface TopbarProps {
   onClearNotifications?: () => void;
   onToggleMobileMode?: () => void;
   onProfileClick?: () => void;
+  pendingOnayCount?: number;
+  onOpenOnayInbox?: () => void;
 }
 
 export const Topbar: React.FC<TopbarProps> = ({ 
@@ -23,7 +25,9 @@ export const Topbar: React.FC<TopbarProps> = ({
   bildirimler = [],
   onClearNotifications,
   onToggleMobileMode,
-  onProfileClick
+  onProfileClick,
+  pendingOnayCount = 0,
+  onOpenOnayInbox,
 }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showDropdown, setShowDropdown] = useState(false);
@@ -232,6 +236,29 @@ export const Topbar: React.FC<TopbarProps> = ({
             >
               <Smartphone size={14} className="text-slate-500" />
               <span className="hidden sm:inline text-slate-600">Mobil Görünüm</span>
+            </button>
+          )}
+
+          {onOpenOnayInbox && (
+            <button
+              type="button"
+              onClick={onOpenOnayInbox}
+              className={`relative cursor-pointer p-1 rounded-lg transition flex items-center gap-1 ${
+                pendingOnayCount > 0
+                  ? 'text-amber-700 hover:bg-amber-50'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+              }`}
+              title="Onay inbox"
+            >
+              <Inbox size={15} />
+              <span className="hidden md:inline text-[10px] font-extrabold">
+                Onay{pendingOnayCount > 0 ? `: ${pendingOnayCount}` : ''}
+              </span>
+              {pendingOnayCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 md:hidden bg-amber-500 border-2 border-white text-slate-950 font-black text-[8px] rounded-full min-w-4 h-4 px-0.5 flex items-center justify-center">
+                  {pendingOnayCount > 99 ? '99+' : pendingOnayCount}
+                </span>
+              )}
             </button>
           )}
 

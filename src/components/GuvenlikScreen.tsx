@@ -1808,6 +1808,38 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         </div>
       )}
 
+      {/* Mobil kapı kısayolları — büyük dokunma hedefleri */}
+      {(isStandalone || viewMode === 'mobile') && (
+        <div className="shrink-0 px-3 pt-3 pb-1 bg-slate-50 border-b border-slate-200">
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { key: 'irsaliye' as const, label: 'Evrak', icon: FileText, tone: 'bg-amber-500 text-slate-950' },
+              { key: 'arac' as const, label: 'Araç', icon: Truck, tone: 'bg-sky-600 text-white' },
+              { key: 'mici_stabilize' as const, label: 'Mıcır', icon: Truck, tone: 'bg-emerald-600 text-white' },
+              { key: 'evrak_galerisi' as const, label: 'Evrak Duvarı', icon: Images, tone: 'bg-[#0F6C5C] text-white' },
+            ].map((item) => {
+              const Icon = item.icon;
+              const active = activeTab === item.key;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setActiveTab(item.key)}
+                  className={`min-h-[52px] rounded-2xl px-3 py-3 flex items-center justify-center gap-2 font-black text-xs uppercase tracking-wide border transition active:scale-[0.98] cursor-pointer ${
+                    active
+                      ? `${item.tone} border-transparent shadow-md`
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <Icon size={16} />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Layout Grid */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
         
