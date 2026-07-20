@@ -25,7 +25,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var import_express = __toESM(require("express"));
 
 // src/server/registerApiRoutes.ts
-var import_genai2 = require("@google/genai");
+var import_genai3 = require("@google/genai");
 
 // src/server/gemini.ts
 var import_genai = require("@google/genai");
@@ -34,6 +34,22 @@ function resolveGeminiApiKey() {
   const raw = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!raw) return void 0;
   return raw.trim().replace(/^['"]|['"]$/g, "");
+}
+function getAllGeminiApiKeys() {
+  const keys = [];
+  const raw1 = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (raw1) {
+    const split = raw1.split(/[,|]/).map((k) => k.trim().replace(/^['"]|['"]$/g, "")).filter(Boolean);
+    keys.push(...split);
+  }
+  for (let i = 2; i <= 5; i++) {
+    const raw = process.env[`GEMINI_API_KEY_${i}`];
+    if (raw) {
+      const k = raw.trim().replace(/^['"]|['"]$/g, "");
+      if (k && !keys.includes(k)) keys.push(k);
+    }
+  }
+  return keys;
 }
 function detectGeminiKeyFormat(key) {
   if (!key) return "missing";
@@ -121,10 +137,11 @@ async function testGeminiConnection() {
     const ai = getGeminiClient();
     let lastError = null;
     const modelsToTest = [
-      "gemini-2.0-flash",
       "gemini-flash-lite-latest",
       "gemini-flash-latest",
-      "gemini-1.5-flash"
+      "gemini-2.0-flash-lite",
+      "gemini-1.5-flash-latest",
+      "gemini-2.0-flash"
     ];
     for (const model of modelsToTest) {
       try {
@@ -149,28 +166,42 @@ async function testGeminiConnection() {
 }
 
 // src/server/geminiGenerate.ts
+var import_genai2 = require("@google/genai");
 var IS_VERCEL = Boolean(process.env.VERCEL);
 var GEMINI_MODEL_FALLBACK = [
-  "gemini-2.0-flash",
   "gemini-flash-lite-latest",
   "gemini-flash-latest",
-  "gemini-1.5-flash"
+  "gemini-2.0-flash-lite",
+  "gemini-1.5-flash-latest",
+  "gemini-2.0-flash"
 ];
-var MODELS = GEMINI_MODEL_FALLBACK;
-var MAX_RETRIES_PER_MODEL = IS_VERCEL ? 1 : 2;
-var RETRY_DELAY_MS = IS_VERCEL ? 350 : 1200;
 var ATTEMPT_TIMEOUT_MS = IS_VERCEL ? 9e3 : 45e3;
-function isTemporaryGeminiError(err) {
+var modelQuotaBlacklist = /* @__PURE__ */ new Map();
+function isModelBlacklisted(model, apiKey) {
+  const key = `${apiKey.slice(0, 10)}_${model}`;
+  const until = modelQuotaBlacklist.get(key);
+  if (!until) return false;
+  if (Date.now() > until) {
+    modelQuotaBlacklist.delete(key);
+    return false;
+  }
+  return true;
+}
+function blacklistModel(model, apiKey) {
+  const key = `${apiKey.slice(0, 10)}_${model}`;
+  modelQuotaBlacklist.set(key, Date.now() + 5 * 60 * 1e3);
+}
+function isQuotaOrExhaustedError(err) {
   const msg = err instanceof Error ? err.message : String(err);
   const status = err?.status;
-  return status === 503 || status === 429 || /503|429|UNAVAILABLE|high demand|Resource exhausted/i.test(msg);
+  return status === 429 || /429|RESOURCE_EXHAUSTED|quota exceeded|exceeded your current quota|limit: 0|prepayment credits/i.test(msg);
 }
 function withTimeout(promise, ms, label) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
       () => reject(
         new Error(
-          `${label} ${Math.round(ms / 1e3)} sn i\xE7inde tamamlanamad\u0131. Vercel Hobby planda limit ~10 sn; Pro plan veya daha k\xFC\xE7\xFCk dosya deneyin.`
+          `${label} ${Math.round(ms / 1e3)} sn i\xE7inde yan\u0131t vermedi. Sunucu zaman a\u015F\u0131m\u0131n\u0131 \xF6nlemek i\xE7in i\u015Flem durduruldu.`
         )
       ),
       ms
@@ -188,13 +219,19 @@ function withTimeout(promise, ms, label) {
   });
 }
 async function generateGeminiWithFallback(options) {
-  const ai = getGeminiClient();
-  const label = options.label || "Gemini iste\u011Fi";
+  const keys = getAllGeminiApiKeys();
+  if (keys.length === 0) {
+    throw new Error(
+      "GEMINI_API_KEY ortam de\u011Fi\u015Fkeni tan\u0131ml\u0131 de\u011Fil. L\xFCtfen .env.local veya Render/Vercel ortam de\u011Fi\u015Fkenlerine ekleyin."
+    );
+  }
+  const label = options.label || "Yapay zeka analizi";
   let lastError = null;
-  for (const model of MODELS) {
-    for (let attempt = 0; attempt <= MAX_RETRIES_PER_MODEL; attempt++) {
-      if (attempt > 0) {
-        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
+  for (const apiKey of keys) {
+    const ai = new import_genai2.GoogleGenAI({ apiKey });
+    for (const model of GEMINI_MODEL_FALLBACK) {
+      if (isModelBlacklisted(model, apiKey)) {
+        continue;
       }
       try {
         const response = await withTimeout(
@@ -210,12 +247,12 @@ async function generateGeminiWithFallback(options) {
         if (text) {
           return { text, model };
         }
-        throw new Error("Gemini bo\u015F yan\u0131t d\xF6nd\xFCrd\xFC");
+        throw new Error("Yapay zeka bo\u015F yan\u0131t d\xF6nd\xFCrd\xFC");
       } catch (err) {
         lastError = err;
-        const canRetry = attempt < MAX_RETRIES_PER_MODEL && isTemporaryGeminiError(err);
-        if (!canRetry && !isTemporaryGeminiError(err)) {
-          break;
+        console.warn(`[Gemini Fallback] '${model}' denenirken hata olu\u015Ftu:`, err?.message || err);
+        if (isQuotaOrExhaustedError(err)) {
+          blacklistModel(model, apiKey);
         }
       }
     }
@@ -792,18 +829,18 @@ Please extract:
 Provide the output strictly conforming to the response schema.
 `;
       const responseSchema = {
-        type: import_genai2.Type.OBJECT,
+        type: import_genai3.Type.OBJECT,
         properties: {
-          tarih: { type: import_genai2.Type.STRING, description: "YYYY-MM-DD format\u0131nda yoklama tarihi" },
+          tarih: { type: import_genai3.Type.STRING, description: "YYYY-MM-DD format\u0131nda yoklama tarihi" },
           yoklamaKayitlari: {
-            type: import_genai2.Type.ARRAY,
+            type: import_genai3.Type.ARRAY,
             items: {
-              type: import_genai2.Type.OBJECT,
+              type: import_genai3.Type.OBJECT,
               properties: {
-                adSoyad: { type: import_genai2.Type.STRING },
-                gorev: { type: import_genai2.Type.STRING },
-                durum: { type: import_genai2.Type.STRING, description: "'Geldi', 'Yok', '\u0130zinli', 'Raporlu', 'Pazar', 'Tatil'" },
-                mesaiSaati: { type: import_genai2.Type.NUMBER }
+                adSoyad: { type: import_genai3.Type.STRING },
+                gorev: { type: import_genai3.Type.STRING },
+                durum: { type: import_genai3.Type.STRING, description: "'Geldi', 'Yok', '\u0130zinli', 'Raporlu', 'Pazar', 'Tatil'" },
+                mesaiSaati: { type: import_genai3.Type.NUMBER }
               },
               required: ["adSoyad", "durum"]
             }
@@ -860,21 +897,21 @@ Extract:
 Be precise with Turkish names (\u0130, \u015E, \u011E, \xDC, \xD6, \xC7). Each excelId is a distinct person even if names are similar.
 `;
       const responseSchema = {
-        type: import_genai2.Type.OBJECT,
+        type: import_genai3.Type.OBJECT,
         properties: {
-          yil: { type: import_genai2.Type.NUMBER },
-          ay: { type: import_genai2.Type.NUMBER },
+          yil: { type: import_genai3.Type.NUMBER },
+          ay: { type: import_genai3.Type.NUMBER },
           personelKayitlari: {
-            type: import_genai2.Type.ARRAY,
+            type: import_genai3.Type.ARRAY,
             items: {
-              type: import_genai2.Type.OBJECT,
+              type: import_genai3.Type.OBJECT,
               properties: {
-                excelId: { type: import_genai2.Type.NUMBER },
-                adSoyad: { type: import_genai2.Type.STRING },
-                gorev: { type: import_genai2.Type.STRING },
-                calismaGunleri: { type: import_genai2.Type.ARRAY, items: { type: import_genai2.Type.NUMBER } },
-                mesaiGunleri: { type: import_genai2.Type.OBJECT, additionalProperties: { type: import_genai2.Type.NUMBER } },
-                istenCikisTarihi: { type: import_genai2.Type.STRING }
+                excelId: { type: import_genai3.Type.NUMBER },
+                adSoyad: { type: import_genai3.Type.STRING },
+                gorev: { type: import_genai3.Type.STRING },
+                calismaGunleri: { type: import_genai3.Type.ARRAY, items: { type: import_genai3.Type.NUMBER } },
+                mesaiGunleri: { type: import_genai3.Type.OBJECT, additionalProperties: { type: import_genai3.Type.NUMBER } },
+                istenCikisTarihi: { type: import_genai3.Type.STRING }
               },
               required: ["excelId", "adSoyad", "calismaGunleri"]
             }
@@ -942,21 +979,21 @@ If it is a DEKONT (Payment/Transfer Receipt):
 Provide the output strictly conforming to the response schema.
 `;
       const sgkResponseSchema = {
-        type: import_genai2.Type.OBJECT,
+        type: import_genai3.Type.OBJECT,
         properties: {
-          tcNo: { type: import_genai2.Type.STRING, description: "11-digit Turkish TC Identification Number or receiver's TC" },
-          ad: { type: import_genai2.Type.STRING, description: "First name" },
-          soyad: { type: import_genai2.Type.STRING, description: "Last name" },
-          babaAdi: { type: import_genai2.Type.STRING, description: "Father's name" },
-          dogumTarihi: { type: import_genai2.Type.STRING, description: "Birthdate in YYYY-MM-DD format" },
-          iseGirisTarihi: { type: import_genai2.Type.STRING, description: "Employment start date or transfer date in YYYY-MM-DD format" },
-          cinsiyet: { type: import_genai2.Type.STRING, description: "Gender: 'Erkek' or 'Kad\u0131n'" },
-          adres: { type: import_genai2.Type.STRING, description: "Full residential address" },
-          il: { type: import_genai2.Type.STRING, description: "Residence province" },
-          ilce: { type: import_genai2.Type.STRING, description: "Residence district" },
-          gorev: { type: import_genai2.Type.STRING, description: "Role: '\u0130\u015E\xC7\u0130', 'FORMEN', 'USTA', 'M\u0130MAR', 'M\xDCHEND\u0130S', '\u015EEF', 'G\xDCVENL\u0130K', or 'DEPOCU'" },
-          ibanNo: { type: import_genai2.Type.STRING, description: "Al\u0131c\u0131 IBAN number starting with TR" },
-          bankaAdi: { type: import_genai2.Type.STRING, description: "Al\u0131c\u0131 Bank name" }
+          tcNo: { type: import_genai3.Type.STRING, description: "11-digit Turkish TC Identification Number or receiver's TC" },
+          ad: { type: import_genai3.Type.STRING, description: "First name" },
+          soyad: { type: import_genai3.Type.STRING, description: "Last name" },
+          babaAdi: { type: import_genai3.Type.STRING, description: "Father's name" },
+          dogumTarihi: { type: import_genai3.Type.STRING, description: "Birthdate in YYYY-MM-DD format" },
+          iseGirisTarihi: { type: import_genai3.Type.STRING, description: "Employment start date or transfer date in YYYY-MM-DD format" },
+          cinsiyet: { type: import_genai3.Type.STRING, description: "Gender: 'Erkek' or 'Kad\u0131n'" },
+          adres: { type: import_genai3.Type.STRING, description: "Full residential address" },
+          il: { type: import_genai3.Type.STRING, description: "Residence province" },
+          ilce: { type: import_genai3.Type.STRING, description: "Residence district" },
+          gorev: { type: import_genai3.Type.STRING, description: "Role: '\u0130\u015E\xC7\u0130', 'FORMEN', 'USTA', 'M\u0130MAR', 'M\xDCHEND\u0130S', '\u015EEF', 'G\xDCVENL\u0130K', or 'DEPOCU'" },
+          ibanNo: { type: import_genai3.Type.STRING, description: "Al\u0131c\u0131 IBAN number starting with TR" },
+          bankaAdi: { type: import_genai3.Type.STRING, description: "Al\u0131c\u0131 Bank name" }
         },
         required: ["ad", "soyad"]
       };
@@ -1014,19 +1051,19 @@ Rules:
 Output strictly as JSON per schema.
 `;
       const kimlikSchema = {
-        type: import_genai2.Type.OBJECT,
+        type: import_genai3.Type.OBJECT,
         properties: {
-          tcNo: { type: import_genai2.Type.STRING },
-          ad: { type: import_genai2.Type.STRING },
-          soyad: { type: import_genai2.Type.STRING },
-          babaAdi: { type: import_genai2.Type.STRING },
-          dogumTarihi: { type: import_genai2.Type.STRING },
-          cinsiyet: { type: import_genai2.Type.STRING },
-          seriNo: { type: import_genai2.Type.STRING },
-          kimlikGecerli: { type: import_genai2.Type.BOOLEAN },
-          kimlikTipi: { type: import_genai2.Type.STRING },
-          eksikAlanlar: { type: import_genai2.Type.ARRAY, items: { type: import_genai2.Type.STRING } },
-          uyari: { type: import_genai2.Type.STRING }
+          tcNo: { type: import_genai3.Type.STRING },
+          ad: { type: import_genai3.Type.STRING },
+          soyad: { type: import_genai3.Type.STRING },
+          babaAdi: { type: import_genai3.Type.STRING },
+          dogumTarihi: { type: import_genai3.Type.STRING },
+          cinsiyet: { type: import_genai3.Type.STRING },
+          seriNo: { type: import_genai3.Type.STRING },
+          kimlikGecerli: { type: import_genai3.Type.BOOLEAN },
+          kimlikTipi: { type: import_genai3.Type.STRING },
+          eksikAlanlar: { type: import_genai3.Type.ARRAY, items: { type: import_genai3.Type.STRING } },
+          uyari: { type: import_genai3.Type.STRING }
         },
         required: ["kimlikGecerli", "eksikAlanlar"]
       };
@@ -1058,19 +1095,19 @@ Output strictly as JSON per schema.
         }
       };
       const responseSchema = {
-        type: import_genai2.Type.OBJECT,
+        type: import_genai3.Type.OBJECT,
         properties: {
-          irsaliyeNo: { type: import_genai2.Type.STRING },
-          tarih: { type: import_genai2.Type.STRING },
-          firma: { type: import_genai2.Type.STRING },
+          irsaliyeNo: { type: import_genai3.Type.STRING },
+          tarih: { type: import_genai3.Type.STRING },
+          firma: { type: import_genai3.Type.STRING },
           kalemler: {
-            type: import_genai2.Type.ARRAY,
+            type: import_genai3.Type.ARRAY,
             items: {
-              type: import_genai2.Type.OBJECT,
+              type: import_genai3.Type.OBJECT,
               properties: {
-                urunAdi: { type: import_genai2.Type.STRING },
-                miktar: { type: import_genai2.Type.NUMBER },
-                birim: { type: import_genai2.Type.STRING }
+                urunAdi: { type: import_genai3.Type.STRING },
+                miktar: { type: import_genai3.Type.NUMBER },
+                birim: { type: import_genai3.Type.STRING }
               },
               required: ["urunAdi", "miktar", "birim"]
             }
@@ -1110,29 +1147,29 @@ Output strictly as JSON per schema.
         }
       };
       const responseSchema = {
-        type: import_genai2.Type.OBJECT,
+        type: import_genai3.Type.OBJECT,
         properties: {
-          faturaNo: { type: import_genai2.Type.STRING },
-          tarih: { type: import_genai2.Type.STRING },
-          firma: { type: import_genai2.Type.STRING },
+          faturaNo: { type: import_genai3.Type.STRING },
+          tarih: { type: import_genai3.Type.STRING },
+          firma: { type: import_genai3.Type.STRING },
           kalemler: {
-            type: import_genai2.Type.ARRAY,
+            type: import_genai3.Type.ARRAY,
             items: {
-              type: import_genai2.Type.OBJECT,
+              type: import_genai3.Type.OBJECT,
               properties: {
-                urunAdi: { type: import_genai2.Type.STRING },
-                miktar: { type: import_genai2.Type.NUMBER },
-                birim: { type: import_genai2.Type.STRING },
-                birimFiyat: { type: import_genai2.Type.NUMBER },
-                kdvOran: { type: import_genai2.Type.NUMBER },
-                toplam: { type: import_genai2.Type.NUMBER }
+                urunAdi: { type: import_genai3.Type.STRING },
+                miktar: { type: import_genai3.Type.NUMBER },
+                birim: { type: import_genai3.Type.STRING },
+                birimFiyat: { type: import_genai3.Type.NUMBER },
+                kdvOran: { type: import_genai3.Type.NUMBER },
+                toplam: { type: import_genai3.Type.NUMBER }
               },
               required: ["urunAdi", "miktar", "birim", "birimFiyat", "kdvOran", "toplam"]
             }
           },
-          toplamTutar: { type: import_genai2.Type.NUMBER },
-          kdvTutar: { type: import_genai2.Type.NUMBER },
-          genelToplam: { type: import_genai2.Type.NUMBER }
+          toplamTutar: { type: import_genai3.Type.NUMBER },
+          kdvTutar: { type: import_genai3.Type.NUMBER },
+          genelToplam: { type: import_genai3.Type.NUMBER }
         },
         required: ["faturaNo", "tarih", "firma", "kalemler", "toplamTutar", "kdvTutar", "genelToplam"]
       };
@@ -1162,15 +1199,15 @@ Output strictly as JSON per schema.
         return res.status(400).json({ error: "Missing fatura data in request body" });
       }
       const responseSchema = {
-        type: import_genai2.Type.OBJECT,
+        type: import_genai3.Type.OBJECT,
         properties: {
-          status: { type: import_genai2.Type.STRING, description: "Must be either 'SORUNSUZ ONAY' or 'SORUNLU'" },
+          status: { type: import_genai3.Type.STRING, description: "Must be either 'SORUNSUZ ONAY' or 'SORUNLU'" },
           discrepancies: {
-            type: import_genai2.Type.ARRAY,
-            items: { type: import_genai2.Type.STRING },
+            type: import_genai3.Type.ARRAY,
+            items: { type: import_genai3.Type.STRING },
             description: "List of found differences or discrepancies, empty if none"
           },
-          reportText: { type: import_genai2.Type.STRING, description: "A detailed Turkish summary comparing PO vs Waybills vs Invoice" }
+          reportText: { type: import_genai3.Type.STRING, description: "A detailed Turkish summary comparing PO vs Waybills vs Invoice" }
         },
         required: ["status", "discrepancies", "reportText"]
       };
@@ -1242,15 +1279,15 @@ Provide the response strictly conforming to the requested schema.
     try {
       const { saTalebi, irsaliyeler, fatura, kalemBaglantilari, analizOdak, ozelTalimat } = req.body;
       const responseSchema = {
-        type: import_genai2.Type.OBJECT,
+        type: import_genai3.Type.OBJECT,
         properties: {
-          status: { type: import_genai2.Type.STRING, description: "Must be either 'SORUNSUZ ONAY' or 'SORUNLU'" },
+          status: { type: import_genai3.Type.STRING, description: "Must be either 'SORUNSUZ ONAY' or 'SORUNLU'" },
           discrepancies: {
-            type: import_genai2.Type.ARRAY,
-            items: { type: import_genai2.Type.STRING },
+            type: import_genai3.Type.ARRAY,
+            items: { type: import_genai3.Type.STRING },
             description: "List of found differences or discrepancies, empty if none"
           },
-          reportText: { type: import_genai2.Type.STRING, description: "Detailed Turkish markdown analysis report" }
+          reportText: { type: import_genai3.Type.STRING, description: "Detailed Turkish markdown analysis report" }
         },
         required: ["status", "discrepancies", "reportText"]
       };
@@ -1347,25 +1384,25 @@ Tutanak i\xE7eri\u011Fini resmi, a\u011F\u0131rba\u015Fl\u0131 ve \u015Fantiye m
       let userPrompt = "";
       if (docType === "fatura") {
         responseSchema = {
-          type: import_genai2.Type.OBJECT,
+          type: import_genai3.Type.OBJECT,
           properties: {
-            faturaNo: { type: import_genai2.Type.STRING },
-            tarih: { type: import_genai2.Type.STRING, description: "YYYY-MM-DD format\u0131nda tarih" },
-            cariUnvan: { type: import_genai2.Type.STRING, description: "Faturay\u0131 kesen / satan sat\u0131c\u0131 firma ad\u0131 (cari \xFCnvan)" },
-            toplamTutar: { type: import_genai2.Type.NUMBER, description: "Toplam matrah tutar\u0131 (KDV hari\xE7)" },
-            kdvTutar: { type: import_genai2.Type.NUMBER, description: "Toplam hesaplanan KDV tutar\u0131" },
-            genelToplam: { type: import_genai2.Type.NUMBER, description: "\xD6denecek genel toplam tutar (KDV dahil)" },
+            faturaNo: { type: import_genai3.Type.STRING },
+            tarih: { type: import_genai3.Type.STRING, description: "YYYY-MM-DD format\u0131nda tarih" },
+            cariUnvan: { type: import_genai3.Type.STRING, description: "Faturay\u0131 kesen / satan sat\u0131c\u0131 firma ad\u0131 (cari \xFCnvan)" },
+            toplamTutar: { type: import_genai3.Type.NUMBER, description: "Toplam matrah tutar\u0131 (KDV hari\xE7)" },
+            kdvTutar: { type: import_genai3.Type.NUMBER, description: "Toplam hesaplanan KDV tutar\u0131" },
+            genelToplam: { type: import_genai3.Type.NUMBER, description: "\xD6denecek genel toplam tutar (KDV dahil)" },
             kalemler: {
-              type: import_genai2.Type.ARRAY,
+              type: import_genai3.Type.ARRAY,
               items: {
-                type: import_genai2.Type.OBJECT,
+                type: import_genai3.Type.OBJECT,
                 properties: {
-                  urunAdi: { type: import_genai2.Type.STRING, description: "\xDCr\xFCn veya hizmet ad\u0131" },
-                  miktar: { type: import_genai2.Type.NUMBER, description: "Miktar" },
-                  birim: { type: import_genai2.Type.STRING, description: "Birim (ADET, KG, TON, M3 vb.)" },
-                  birimFiyat: { type: import_genai2.Type.NUMBER, description: "Birim fiyat\u0131" },
-                  kdvOran: { type: import_genai2.Type.NUMBER, description: "KDV oran\u0131 y\xFCzde olarak (\xF6rn: 20)" },
-                  toplam: { type: import_genai2.Type.NUMBER, description: "Kalem toplam\u0131" }
+                  urunAdi: { type: import_genai3.Type.STRING, description: "\xDCr\xFCn veya hizmet ad\u0131" },
+                  miktar: { type: import_genai3.Type.NUMBER, description: "Miktar" },
+                  birim: { type: import_genai3.Type.STRING, description: "Birim (ADET, KG, TON, M3 vb.)" },
+                  birimFiyat: { type: import_genai3.Type.NUMBER, description: "Birim fiyat\u0131" },
+                  kdvOran: { type: import_genai3.Type.NUMBER, description: "KDV oran\u0131 y\xFCzde olarak (\xF6rn: 20)" },
+                  toplam: { type: import_genai3.Type.NUMBER, description: "Kalem toplam\u0131" }
                 },
                 required: ["urunAdi", "miktar", "birim", "birimFiyat", "kdvOran", "toplam"]
               }
@@ -1376,19 +1413,19 @@ Tutanak i\xE7eri\u011Fini resmi, a\u011F\u0131rba\u015Fl\u0131 ve \u015Fantiye m
         userPrompt = "L\xFCtfen ekteki faturay\u0131 (invoice) analiz et. Fatura numaras\u0131n\u0131, tarihini (YYYY-MM-DD format\u0131nda), faturay\u0131 kesen firma \xFCnvan\u0131n\u0131, toplam matrah\u0131, KDV tutar\u0131n\u0131, genel toplam\u0131 ve kalem listesini (urunAdi, miktar, birim, birimFiyat, kdvOran, toplam) \xE7\u0131kar.";
       } else if (docType === "irsaliye") {
         responseSchema = {
-          type: import_genai2.Type.OBJECT,
+          type: import_genai3.Type.OBJECT,
           properties: {
-            irsaliyeNo: { type: import_genai2.Type.STRING },
-            tarih: { type: import_genai2.Type.STRING, description: "YYYY-MM-DD format\u0131nda tarih" },
-            firma: { type: import_genai2.Type.STRING, description: "Sevk eden / g\xF6nderen firma ad\u0131" },
+            irsaliyeNo: { type: import_genai3.Type.STRING },
+            tarih: { type: import_genai3.Type.STRING, description: "YYYY-MM-DD format\u0131nda tarih" },
+            firma: { type: import_genai3.Type.STRING, description: "Sevk eden / g\xF6nderen firma ad\u0131" },
             kalemler: {
-              type: import_genai2.Type.ARRAY,
+              type: import_genai3.Type.ARRAY,
               items: {
-                type: import_genai2.Type.OBJECT,
+                type: import_genai3.Type.OBJECT,
                 properties: {
-                  urunAdi: { type: import_genai2.Type.STRING, description: "Malzeme ad\u0131" },
-                  miktar: { type: import_genai2.Type.NUMBER, description: "Miktar" },
-                  birim: { type: import_genai2.Type.STRING, description: "Birim (ADET, KG, TON vb.)" }
+                  urunAdi: { type: import_genai3.Type.STRING, description: "Malzeme ad\u0131" },
+                  miktar: { type: import_genai3.Type.NUMBER, description: "Miktar" },
+                  birim: { type: import_genai3.Type.STRING, description: "Birim (ADET, KG, TON vb.)" }
                 },
                 required: ["urunAdi", "miktar", "birim"]
               }
@@ -1399,48 +1436,48 @@ Tutanak i\xE7eri\u011Fini resmi, a\u011F\u0131rba\u015Fl\u0131 ve \u015Fantiye m
         userPrompt = "L\xFCtfen ekteki irsaliyeyi (waybill / sevk irsaliyesi) analiz et. \u0130rsaliye numaras\u0131n\u0131, tarihini (YYYY-MM-DD format\u0131nda), sevk eden firma \xFCnvan\u0131n\u0131 ve sevk edilen malzeme listesini (urunAdi, miktar, birim) \xE7\u0131kar.";
       } else if (docType === "makbuz") {
         responseSchema = {
-          type: import_genai2.Type.OBJECT,
+          type: import_genai3.Type.OBJECT,
           properties: {
-            referansId: { type: import_genai2.Type.STRING, description: "Makbuz numaras\u0131, i\u015Flem no veya dekont referans no" },
-            tarih: { type: import_genai2.Type.STRING, description: "YYYY-MM-DD format\u0131nda i\u015Flem tarihi" },
-            aciklama: { type: import_genai2.Type.STRING, description: "\xD6deme a\xE7\u0131klamas\u0131 veya makbuz i\xE7eri\u011Fi" },
-            tutar: { type: import_genai2.Type.NUMBER, description: "\xD6denen / tahsil edilen toplam tutar" },
-            firma: { type: import_genai2.Type.STRING, description: "\xD6demeyi yapan ya da alan muhatap firma/ki\u015Fi ad\u0131" },
-            hareketTipi: { type: import_genai2.Type.STRING, description: "\u0130\u015Flem tipine g\xF6re '\xC7IKI\u015E' (\xF6deme yap\u0131ld\u0131ysa) veya 'G\u0130R\u0130\u015E' (tahsilat/para al\u0131nd\u0131ysa)" }
+            referansId: { type: import_genai3.Type.STRING, description: "Makbuz numaras\u0131, i\u015Flem no veya dekont referans no" },
+            tarih: { type: import_genai3.Type.STRING, description: "YYYY-MM-DD format\u0131nda i\u015Flem tarihi" },
+            aciklama: { type: import_genai3.Type.STRING, description: "\xD6deme a\xE7\u0131klamas\u0131 veya makbuz i\xE7eri\u011Fi" },
+            tutar: { type: import_genai3.Type.NUMBER, description: "\xD6denen / tahsil edilen toplam tutar" },
+            firma: { type: import_genai3.Type.STRING, description: "\xD6demeyi yapan ya da alan muhatap firma/ki\u015Fi ad\u0131" },
+            hareketTipi: { type: import_genai3.Type.STRING, description: "\u0130\u015Flem tipine g\xF6re '\xC7IKI\u015E' (\xF6deme yap\u0131ld\u0131ysa) veya 'G\u0130R\u0130\u015E' (tahsilat/para al\u0131nd\u0131ysa)" }
           },
           required: ["referansId", "tarih", "aciklama", "tutar", "firma", "hareketTipi"]
         };
         userPrompt = "L\xFCtfen ekteki makbuzu, tediye fi\u015Fini, gider makbuzunu veya banka dekontunu analiz et. Referans numaras\u0131n\u0131/makbuz no, tarihini (YYYY-MM-DD), a\xE7\u0131klamas\u0131n\u0131, \xF6denen/al\u0131nan net tutar\u0131, muhatap firma veya ki\u015Fi ad\u0131n\u0131 ve para \xE7\u0131k\u0131\u015F\u0131 ise '\xC7IKI\u015E', para giri\u015Fi ise 'G\u0130R\u0130\u015E' olacak \u015Fekilde hareketTipi alan\u0131n\u0131 \xE7\u0131kar.";
       } else if (docType === "hakedis") {
         responseSchema = {
-          type: import_genai2.Type.OBJECT,
+          type: import_genai3.Type.OBJECT,
           properties: {
-            faturaNo: { type: import_genai2.Type.STRING, description: "Hakedi\u015F kapa\u011F\u0131 no, fatura no veya hakedi\u015F no" },
-            donem: { type: import_genai2.Type.STRING, description: "Hangi d\xF6neme ait oldu\u011Fu (\xF6rn: Haziran 2026, Hakedi\u015F No: 3 vb.)" },
-            tarih: { type: import_genai2.Type.STRING, description: "YYYY-MM-DD format\u0131nda hakedi\u015F onay veya d\xFCzenleme tarihi" },
-            cariUnvan: { type: import_genai2.Type.STRING, description: "Hakedi\u015F sahibi y\xFCklenici / ta\u015Feron / ana firma ad\u0131" },
-            toplamTutar: { type: import_genai2.Type.NUMBER, description: "KDV hari\xE7 hakedi\u015F tutar\u0131 (ara toplam)" },
-            kdvTutar: { type: import_genai2.Type.NUMBER, description: "Hakedi\u015F KDV tutar\u0131" },
-            genelToplam: { type: import_genai2.Type.NUMBER, description: "KDV dahil \xF6denecek hakedi\u015F toplam tutar\u0131" },
-            aciklama: { type: import_genai2.Type.STRING, description: "Hakedi\u015F a\xE7\u0131klamas\u0131, yap\u0131lan i\u015Fler vb. detaylar" }
+            faturaNo: { type: import_genai3.Type.STRING, description: "Hakedi\u015F kapa\u011F\u0131 no, fatura no veya hakedi\u015F no" },
+            donem: { type: import_genai3.Type.STRING, description: "Hangi d\xF6neme ait oldu\u011Fu (\xF6rn: Haziran 2026, Hakedi\u015F No: 3 vb.)" },
+            tarih: { type: import_genai3.Type.STRING, description: "YYYY-MM-DD format\u0131nda hakedi\u015F onay veya d\xFCzenleme tarihi" },
+            cariUnvan: { type: import_genai3.Type.STRING, description: "Hakedi\u015F sahibi y\xFCklenici / ta\u015Feron / ana firma ad\u0131" },
+            toplamTutar: { type: import_genai3.Type.NUMBER, description: "KDV hari\xE7 hakedi\u015F tutar\u0131 (ara toplam)" },
+            kdvTutar: { type: import_genai3.Type.NUMBER, description: "Hakedi\u015F KDV tutar\u0131" },
+            genelToplam: { type: import_genai3.Type.NUMBER, description: "KDV dahil \xF6denecek hakedi\u015F toplam tutar\u0131" },
+            aciklama: { type: import_genai3.Type.STRING, description: "Hakedi\u015F a\xE7\u0131klamas\u0131, yap\u0131lan i\u015Fler vb. detaylar" }
           },
           required: ["faturaNo", "donem", "tarih", "cariUnvan", "toplamTutar", "kdvTutar", "genelToplam", "aciklama"]
         };
         userPrompt = "L\xFCtfen ekteki hakedi\u015F belgesini, hakedi\u015F kapa\u011F\u0131n\u0131 veya hakedi\u015F raporunu analiz et. Hakedi\u015F/fatura numaras\u0131n\u0131, d\xF6nemini (donem), tarihini (YYYY-MM-DD), y\xFCklenici/ta\u015Feron firma \xFCnvan\u0131n\u0131, KDV hari\xE7 toplam\u0131 (toplamTutar), KDV tutar\u0131n\u0131, genel toplam\u0131 ve k\u0131sa i\u015F a\xE7\u0131klamas\u0131n\u0131 \xE7\u0131kar.";
       } else if (docType === "yoklama") {
         responseSchema = {
-          type: import_genai2.Type.OBJECT,
+          type: import_genai3.Type.OBJECT,
           properties: {
-            tarih: { type: import_genai2.Type.STRING, description: "\u0130lgili ay, d\xF6nem veya tarih (\xF6rn: Haziran 2026 veya 2026-06-15)" },
+            tarih: { type: import_genai3.Type.STRING, description: "\u0130lgili ay, d\xF6nem veya tarih (\xF6rn: Haziran 2026 veya 2026-06-15)" },
             yoklamaKayitlari: {
-              type: import_genai2.Type.ARRAY,
+              type: import_genai3.Type.ARRAY,
               items: {
-                type: import_genai2.Type.OBJECT,
+                type: import_genai3.Type.OBJECT,
                 properties: {
-                  adSoyad: { type: import_genai2.Type.STRING, description: "Personel ad\u0131 soyad\u0131 (\xF6rn: 'Ahmet Y\u0131lmaz')" },
-                  durum: { type: import_genai2.Type.STRING, description: "'Geldi', 'Yok', '\u0130zinli', 'Raporlu', 'Pazar', 'Tatil' durumlar\u0131ndan biri" },
-                  gunNo: { type: import_genai2.Type.NUMBER, description: "Hangi g\xFCn oldu\u011Fu (1-31 aras\u0131 tamsay\u0131, \xF6rn: 15. g\xFCn ise 15)" },
-                  mesaiSaati: { type: import_genai2.Type.NUMBER, description: "Varsa fazla mesai saati" }
+                  adSoyad: { type: import_genai3.Type.STRING, description: "Personel ad\u0131 soyad\u0131 (\xF6rn: 'Ahmet Y\u0131lmaz')" },
+                  durum: { type: import_genai3.Type.STRING, description: "'Geldi', 'Yok', '\u0130zinli', 'Raporlu', 'Pazar', 'Tatil' durumlar\u0131ndan biri" },
+                  gunNo: { type: import_genai3.Type.NUMBER, description: "Hangi g\xFCn oldu\u011Fu (1-31 aras\u0131 tamsay\u0131, \xF6rn: 15. g\xFCn ise 15)" },
+                  mesaiSaati: { type: import_genai3.Type.NUMBER, description: "Varsa fazla mesai saati" }
                 },
                 required: ["adSoyad", "durum"]
               }
@@ -1451,16 +1488,16 @@ Tutanak i\xE7eri\u011Fini resmi, a\u011F\u0131rba\u015Fl\u0131 ve \u015Fantiye m
         userPrompt = "L\xFCtfen ekteki personel yoklama listesini, puantaj tablosunu veya \u015Fantiye yoklama tutana\u011F\u0131n\u0131 analiz et. \u0130lgili ay\u0131 veya tarihi tespit et, listedeki t\xFCm personellerin isimlerini ve yoklama/puantaj durumlar\u0131n\u0131 ('Geldi', 'Yok', '\u0130zinli', 'Raporlu', 'Pazar', 'Tatil') yoklamaKayitlari dizisinde \xE7\u0131kar.";
       } else if (docType === "saha_faaliyet") {
         responseSchema = {
-          type: import_genai2.Type.OBJECT,
+          type: import_genai3.Type.OBJECT,
           properties: {
-            tarih: { type: import_genai2.Type.STRING, description: "YYYY-MM-DD format\u0131nda rapor tarihi" },
-            isNiteligi: { type: import_genai2.Type.STRING, description: "\u0130\u015Fin niteli\u011Fi, t\xFCr\xFC (\xF6rn: 'Beton D\xF6k\xFCm\xFC', 'Kal\u0131p \xC7ak\u0131m\u0131', 'Hafriyat ve Kaz\u0131')" },
-            parsel: { type: import_genai2.Type.STRING, description: "Parsel no (\xF6rn: 'Parsel A' veya 'Parsel 3')" },
-            blok: { type: import_genai2.Type.STRING, description: "Blok no (\xF6rn: 'Blok 1' veya 'Blok B')" },
-            aciklama: { type: import_genai2.Type.STRING, description: "G\xFCnl\xFCk \u015Fantiyede yap\u0131lan faaliyet a\xE7\u0131klamalar\u0131 ve detaylar\u0131" },
+            tarih: { type: import_genai3.Type.STRING, description: "YYYY-MM-DD format\u0131nda rapor tarihi" },
+            isNiteligi: { type: import_genai3.Type.STRING, description: "\u0130\u015Fin niteli\u011Fi, t\xFCr\xFC (\xF6rn: 'Beton D\xF6k\xFCm\xFC', 'Kal\u0131p \xC7ak\u0131m\u0131', 'Hafriyat ve Kaz\u0131')" },
+            parsel: { type: import_genai3.Type.STRING, description: "Parsel no (\xF6rn: 'Parsel A' veya 'Parsel 3')" },
+            blok: { type: import_genai3.Type.STRING, description: "Blok no (\xF6rn: 'Blok 1' veya 'Blok B')" },
+            aciklama: { type: import_genai3.Type.STRING, description: "G\xFCnl\xFCk \u015Fantiyede yap\u0131lan faaliyet a\xE7\u0131klamalar\u0131 ve detaylar\u0131" },
             aktifPersonelListesi: {
-              type: import_genai2.Type.ARRAY,
-              items: { type: import_genai2.Type.STRING },
+              type: import_genai3.Type.ARRAY,
+              items: { type: import_genai3.Type.STRING },
               description: "\u015Eantiye sahas\u0131nda aktif g\xF6rev alan personellerin isim listesi"
             }
           },
@@ -1469,79 +1506,79 @@ Tutanak i\xE7eri\u011Fini resmi, a\u011F\u0131rba\u015Fl\u0131 ve \u015Fantiye m
         userPrompt = "L\xFCtfen ekteki G\xFCnl\xFCk Saha Faaliyet Raporunu veya \u015Fantiye g\xFCnl\xFCk faaliyet logunu analiz et. Rapor tarihini (YYYY-MM-DD), yap\u0131lan i\u015Flerin niteli\u011Fini (isNiteligi), parsel ve blok bilgilerini, g\xFCnl\xFCk \xF6zet faaliyet detaylar\u0131n\u0131 ve sahada \xE7al\u0131\u015Fan aktif personellerin isim listesini \xE7\u0131kar.";
       } else if (docType === "auto") {
         responseSchema = {
-          type: import_genai2.Type.OBJECT,
+          type: import_genai3.Type.OBJECT,
           properties: {
-            detectedType: { type: import_genai2.Type.STRING, description: "Tespit edilen d\xF6k\xFCman t\xFCr\xFC: 'fatura', 'irsaliye', 'makbuz', 'hakedis', 'yoklama', or 'saha_faaliyet'" },
-            faturaNo: { type: import_genai2.Type.STRING },
-            irsaliyeNo: { type: import_genai2.Type.STRING },
-            referansId: { type: import_genai2.Type.STRING },
-            tarih: { type: import_genai2.Type.STRING, description: "YYYY-MM-DD format\u0131nda tarih" },
-            donem: { type: import_genai2.Type.STRING, description: "D\xF6nem (\xF6rn: Haziran 2026)" },
-            firma: { type: import_genai2.Type.STRING, description: "Firma / \u015Eah\u0131s / Al\u0131c\u0131 / Sat\u0131c\u0131 / Cari ad\u0131" },
-            cariUnvan: { type: import_genai2.Type.STRING, description: "Cari \xFCnvan veya firma \xFCnvan\u0131" },
-            toplamTutar: { type: import_genai2.Type.NUMBER },
-            kdvTutar: { type: import_genai2.Type.NUMBER },
-            genelToplam: { type: import_genai2.Type.NUMBER },
-            tutar: { type: import_genai2.Type.NUMBER },
-            aciklama: { type: import_genai2.Type.STRING },
-            hareketTipi: { type: import_genai2.Type.STRING, description: "'G\u0130R\u0130\u015E' veya '\xC7IKI\u015E'" },
+            detectedType: { type: import_genai3.Type.STRING, description: "Tespit edilen d\xF6k\xFCman t\xFCr\xFC: 'fatura', 'irsaliye', 'makbuz', 'hakedis', 'yoklama', or 'saha_faaliyet'" },
+            faturaNo: { type: import_genai3.Type.STRING },
+            irsaliyeNo: { type: import_genai3.Type.STRING },
+            referansId: { type: import_genai3.Type.STRING },
+            tarih: { type: import_genai3.Type.STRING, description: "YYYY-MM-DD format\u0131nda tarih" },
+            donem: { type: import_genai3.Type.STRING, description: "D\xF6nem (\xF6rn: Haziran 2026)" },
+            firma: { type: import_genai3.Type.STRING, description: "Firma / \u015Eah\u0131s / Al\u0131c\u0131 / Sat\u0131c\u0131 / Cari ad\u0131" },
+            cariUnvan: { type: import_genai3.Type.STRING, description: "Cari \xFCnvan veya firma \xFCnvan\u0131" },
+            toplamTutar: { type: import_genai3.Type.NUMBER },
+            kdvTutar: { type: import_genai3.Type.NUMBER },
+            genelToplam: { type: import_genai3.Type.NUMBER },
+            tutar: { type: import_genai3.Type.NUMBER },
+            aciklama: { type: import_genai3.Type.STRING },
+            hareketTipi: { type: import_genai3.Type.STRING, description: "'G\u0130R\u0130\u015E' veya '\xC7IKI\u015E'" },
             kalemler: {
-              type: import_genai2.Type.ARRAY,
+              type: import_genai3.Type.ARRAY,
               items: {
-                type: import_genai2.Type.OBJECT,
+                type: import_genai3.Type.OBJECT,
                 properties: {
-                  urunAdi: { type: import_genai2.Type.STRING },
-                  miktar: { type: import_genai2.Type.NUMBER },
-                  birim: { type: import_genai2.Type.STRING },
-                  birimFiyat: { type: import_genai2.Type.NUMBER },
-                  kdvOran: { type: import_genai2.Type.NUMBER },
-                  toplam: { type: import_genai2.Type.NUMBER }
+                  urunAdi: { type: import_genai3.Type.STRING },
+                  miktar: { type: import_genai3.Type.NUMBER },
+                  birim: { type: import_genai3.Type.STRING },
+                  birimFiyat: { type: import_genai3.Type.NUMBER },
+                  kdvOran: { type: import_genai3.Type.NUMBER },
+                  toplam: { type: import_genai3.Type.NUMBER }
                 }
               }
             },
             yoklamaKayitlari: {
-              type: import_genai2.Type.ARRAY,
+              type: import_genai3.Type.ARRAY,
               items: {
-                type: import_genai2.Type.OBJECT,
+                type: import_genai3.Type.OBJECT,
                 properties: {
-                  adSoyad: { type: import_genai2.Type.STRING, description: "Personel ad\u0131 soyad\u0131 (\xF6rn: 'Ahmet Y\u0131lmaz')" },
-                  durum: { type: import_genai2.Type.STRING, description: "'Geldi', 'Yok', '\u0130zinli', 'Raporlu', 'Pazar', 'Tatil' durumlar\u0131ndan biri" },
-                  gunNo: { type: import_genai2.Type.NUMBER, description: "Ay\u0131n hangi g\xFCn\xFC oldu\u011Fu (1-31 aras\u0131 say\u0131, \xF6rn: 15)" },
-                  mesaiSaati: { type: import_genai2.Type.NUMBER, description: "Fazla mesai saati" }
+                  adSoyad: { type: import_genai3.Type.STRING, description: "Personel ad\u0131 soyad\u0131 (\xF6rn: 'Ahmet Y\u0131lmaz')" },
+                  durum: { type: import_genai3.Type.STRING, description: "'Geldi', 'Yok', '\u0130zinli', 'Raporlu', 'Pazar', 'Tatil' durumlar\u0131ndan biri" },
+                  gunNo: { type: import_genai3.Type.NUMBER, description: "Ay\u0131n hangi g\xFCn\xFC oldu\u011Fu (1-31 aras\u0131 say\u0131, \xF6rn: 15)" },
+                  mesaiSaati: { type: import_genai3.Type.NUMBER, description: "Fazla mesai saati" }
                 },
                 required: ["adSoyad", "durum"]
               }
             },
-            isNiteligi: { type: import_genai2.Type.STRING, description: "\u0130\u015Fin niteli\u011Fi (\xF6rn: 'Beton D\xF6k\xFCm\xFC')" },
-            parsel: { type: import_genai2.Type.STRING, description: "\u015Eantiye parseli (\xF6rn: 'Parsel A')" },
-            blok: { type: import_genai2.Type.STRING, description: "\u015Eantiye blok bilgisi (\xF6rn: 'Blok 1')" },
+            isNiteligi: { type: import_genai3.Type.STRING, description: "\u0130\u015Fin niteli\u011Fi (\xF6rn: 'Beton D\xF6k\xFCm\xFC')" },
+            parsel: { type: import_genai3.Type.STRING, description: "\u015Eantiye parseli (\xF6rn: 'Parsel A')" },
+            blok: { type: import_genai3.Type.STRING, description: "\u015Eantiye blok bilgisi (\xF6rn: 'Blok 1')" },
             aktifPersonelListesi: {
-              type: import_genai2.Type.ARRAY,
-              items: { type: import_genai2.Type.STRING },
+              type: import_genai3.Type.ARRAY,
+              items: { type: import_genai3.Type.STRING },
               description: "Sahada g\xF6rev alan personellerin isimleri"
             },
             records: {
-              type: import_genai2.Type.ARRAY,
+              type: import_genai3.Type.ARRAY,
               description: "Ayn\u0131 belgede birden fazla sat\u0131n alma kayd\u0131 varsa, her bir talep i\xE7in ayr\u0131 kay\u0131t dizisi",
               items: {
-                type: import_genai2.Type.OBJECT,
+                type: import_genai3.Type.OBJECT,
                 properties: {
-                  tarih: { type: import_genai2.Type.STRING, description: "YYYY-MM-DD format\u0131nda tarih" },
-                  firma: { type: import_genai2.Type.STRING, description: "Tedarik\xE7i / cari firma" },
-                  cariUnvan: { type: import_genai2.Type.STRING, description: "Firma \xFCnvan\u0131" },
-                  aciklama: { type: import_genai2.Type.STRING, description: "Talep a\xE7\u0131klamas\u0131 veya not" },
-                  onayDurumu: { type: import_genai2.Type.STRING, description: "ONAYLANDI veya B\u0130L\u0130NM\u0130YOR" },
+                  tarih: { type: import_genai3.Type.STRING, description: "YYYY-MM-DD format\u0131nda tarih" },
+                  firma: { type: import_genai3.Type.STRING, description: "Tedarik\xE7i / cari firma" },
+                  cariUnvan: { type: import_genai3.Type.STRING, description: "Firma \xFCnvan\u0131" },
+                  aciklama: { type: import_genai3.Type.STRING, description: "Talep a\xE7\u0131klamas\u0131 veya not" },
+                  onayDurumu: { type: import_genai3.Type.STRING, description: "ONAYLANDI veya B\u0130L\u0130NM\u0130YOR" },
                   kalemler: {
-                    type: import_genai2.Type.ARRAY,
+                    type: import_genai3.Type.ARRAY,
                     items: {
-                      type: import_genai2.Type.OBJECT,
+                      type: import_genai3.Type.OBJECT,
                       properties: {
-                        urunAdi: { type: import_genai2.Type.STRING },
-                        miktar: { type: import_genai2.Type.NUMBER },
-                        birim: { type: import_genai2.Type.STRING },
-                        birimFiyat: { type: import_genai2.Type.NUMBER },
-                        kdvOran: { type: import_genai2.Type.NUMBER },
-                        toplam: { type: import_genai2.Type.NUMBER }
+                        urunAdi: { type: import_genai3.Type.STRING },
+                        miktar: { type: import_genai3.Type.NUMBER },
+                        birim: { type: import_genai3.Type.STRING },
+                        birimFiyat: { type: import_genai3.Type.NUMBER },
+                        kdvOran: { type: import_genai3.Type.NUMBER },
+                        toplam: { type: import_genai3.Type.NUMBER }
                       }
                     }
                   }

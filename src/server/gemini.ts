@@ -11,6 +11,24 @@ export function resolveGeminiApiKey(): string | undefined {
   return raw.trim().replace(/^['"]|['"]$/g, '');
 }
 
+/** Birden fazla anahtar desteği (virgülle ayrılmış veya GEMINI_API_KEY_2, _3 vb.) */
+export function getAllGeminiApiKeys(): string[] {
+  const keys: string[] = [];
+  const raw1 = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (raw1) {
+    const split = raw1.split(/[,|]/).map((k) => k.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
+    keys.push(...split);
+  }
+  for (let i = 2; i <= 5; i++) {
+    const raw = process.env[`GEMINI_API_KEY_${i}`];
+    if (raw) {
+      const k = raw.trim().replace(/^['"]|['"]$/g, '');
+      if (k && !keys.includes(k)) keys.push(k);
+    }
+  }
+  return keys;
+}
+
 export function detectGeminiKeyFormat(key?: string): GeminiKeyFormat {
   if (!key) return 'missing';
   if (key.startsWith('AQ.')) return 'auth';
@@ -132,10 +150,11 @@ export async function testGeminiConnection(): Promise<{
     let lastError: unknown = null;
 
     const modelsToTest = [
-      'gemini-2.0-flash',
       'gemini-flash-lite-latest',
       'gemini-flash-latest',
-      'gemini-1.5-flash'
+      'gemini-2.0-flash-lite',
+      'gemini-1.5-flash-latest',
+      'gemini-2.0-flash',
     ];
     for (const model of modelsToTest) {
       try {

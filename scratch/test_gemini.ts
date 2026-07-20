@@ -17,11 +17,10 @@ async function main() {
 
   if (result.ok) {
     console.log('✓ BAŞARILI — Model yanıtı:', result.modelResponse);
-    process.exit(0);
+    return;
   }
 
   console.error('✗ BAŞARISIZ\n', result.error);
-  process.exit(1);
 }
 
 main();
