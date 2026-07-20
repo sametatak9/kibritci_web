@@ -144,6 +144,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   // 🚛 3. ARAÇ GİRİŞ-ÇIKIŞ STATE & LISTS
   // ─────────────────────────────────────────────────────────────
   const [plaka, setPlaka] = useState('');
+  const [hizliPlakaQ, setHizliPlakaQ] = useState('');
   const [aracTipi, setAracTipi] = useState('Hazır Beton Mikseri');
   const [aracFirma, setAracFirma] = useState('');
   const [yukDurumu, setYukDurumu] = useState('Dolu');
@@ -1632,6 +1633,34 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   const bugunkuAracLoglar = seciliGunAracLoglar;
   const bugunkuSuTankeriLoglar = seciliGunSuTankeriLoglar;
 
+  const plakaQueryNorm = hizliPlakaQ.trim().toLocaleUpperCase('tr-TR');
+  const filtreliIceridekiAraclar = useMemo(() => {
+    if (!plakaQueryNorm) return iceridekiAraclar;
+    return iceridekiAraclar.filter((a) =>
+      String(a.plaka || '')
+        .toLocaleUpperCase('tr-TR')
+        .includes(plakaQueryNorm)
+    );
+  }, [iceridekiAraclar, plakaQueryNorm]);
+  const filtreliBugunkuAracLoglar = useMemo(() => {
+    if (!plakaQueryNorm) return bugunkuAracLoglar;
+    return bugunkuAracLoglar.filter((a) =>
+      String(a.plaka || '')
+        .toLocaleUpperCase('tr-TR')
+        .includes(plakaQueryNorm)
+    );
+  }, [bugunkuAracLoglar, plakaQueryNorm]);
+  const hizliPlakaEslesen = useMemo(() => {
+    if (!plakaQueryNorm) return [];
+    return [...iceridekiAraclar, ...aracGecmisLoglar]
+      .filter((a) =>
+        String(a.plaka || '')
+          .toLocaleUpperCase('tr-TR')
+          .includes(plakaQueryNorm)
+      )
+      .slice(0, 6);
+  }, [iceridekiAraclar, aracGecmisLoglar, plakaQueryNorm]);
+
   const togglePersonelLogSelect = (id: string) => {
     setSelectedPersonelLogIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
@@ -1808,9 +1837,9 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         </div>
       )}
 
-      {/* Mobil kapı kısayolları — büyük dokunma hedefleri */}
+      {/* Mobil kapı kısayolları + hızlı plaka — büyük dokunma hedefleri */}
       {(isStandalone || viewMode === 'mobile') && (
-        <div className="shrink-0 px-3 pt-3 pb-1 bg-slate-50 border-b border-slate-200">
+        <div className="shrink-0 px-3 pt-3 pb-2 bg-slate-50 border-b border-slate-200 space-y-2">
           <div className="grid grid-cols-2 gap-2">
             {[
               { key: 'irsaliye' as const, label: 'Evrak', icon: FileText, tone: 'bg-amber-500 text-slate-950' },
@@ -1837,6 +1866,38 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               );
             })}
           </div>
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              value={hizliPlakaQ}
+              onChange={(e) => setHizliPlakaQ(e.target.value.toLocaleUpperCase('tr-TR'))}
+              placeholder="Hızlı plaka ara…"
+              className="w-full min-h-[44px] bg-white border border-slate-200 rounded-xl pl-9 pr-3 text-xs font-mono font-bold tracking-wider"
+              inputMode="text"
+              autoCapitalize="characters"
+            />
+          </div>
+          {plakaQueryNorm && (
+            <div className="space-y-1">
+              {hizliPlakaEslesen.length === 0 ? (
+                <p className="text-[10px] text-slate-500 px-1">Eşleşen plaka yok</p>
+              ) : (
+                hizliPlakaEslesen.map((a) => (
+                  <button
+                    key={`hizli-${a.id}`}
+                    type="button"
+                    onClick={() => setActiveTab('arac')}
+                    className="w-full text-left bg-white border border-slate-200 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2 cursor-pointer hover:border-sky-300"
+                  >
+                    <span className="font-mono font-black text-xs text-slate-900">{a.plaka}</span>
+                    <span className="text-[10px] text-slate-500 truncate">
+                      {a.durum === 'İÇERİDE' ? 'İçeride' : 'Çıkmış'} · {a.firma || a.aracTipi || '—'}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -2742,7 +2803,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                   <span className="font-display font-black text-xs text-amber-500 uppercase tracking-widest block border-b border-slate-200 pb-2">🚧 AKTİF OLARAK ŞANTİYE İÇİNDEKİ ARAÇLAR</span>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
-                    {iceridekiAraclar.map((item) => (
+                    {filtreliIceridekiAraclar.map((item) => (
                       <div key={item.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-4.5 space-y-3.5 relative overflow-hidden">
                         
                         <div className="flex justify-between items-center border-b border-slate-950 pb-1.5">
@@ -2777,9 +2838,11 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                       </div>
                     ))}
 
-                    {iceridekiAraclar.length === 0 && (
+                    {filtreliIceridekiAraclar.length === 0 && (
                       <div className="col-span-2 bg-slate-900/40 p-10 rounded-2xl border border-slate-200 text-center text-slate-500 italic text-xs">
-                        Şantiyede aktif olarak bulunan hiçbir iş makinesi veya tedarikçi araç kaydı bulunmuyor.
+                        {plakaQueryNorm
+                          ? 'Plaka filtresine uyan içeride araç yok.'
+                          : 'Şantiyede aktif olarak bulunan hiçbir iş makinesi veya tedarikçi araç kaydı bulunmuyor.'}
                       </div>
                     )}
                   </div>
@@ -2803,7 +2866,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                 </div>
 
                 <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
-                  {bugunkuAracLoglar.map((log) => {
+                  {filtreliBugunkuAracLoglar.map((log) => {
                     const checked = selectedAracLogIds.includes(log.id);
                     return (
                       <div key={log.id} className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex justify-between items-center text-[11px] gap-2">
