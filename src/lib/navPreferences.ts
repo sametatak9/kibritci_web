@@ -18,6 +18,7 @@ export function readFavoriteTabs(): string[] {
 export function writeFavoriteTabs(keys: string[]) {
   try {
     localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(keys));
+    window.dispatchEvent(new CustomEvent('kibritci-favorites-changed'));
   } catch {
     /* ignore */
   }

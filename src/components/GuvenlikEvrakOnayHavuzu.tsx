@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Truck, CreditCard, Eye, Check, X, Sparkles, ExternalLink, FileText, Download, ZoomIn, Loader2 } from 'lucide-react';
 import { openBase64InNewTab } from '../lib/fileViewerUtils';
 import { ImzaOnizlemeStrip } from './ImzaOnizlemeStrip';
+import { AcilOnayBadge } from './AcilOnayBadge';
 
 interface GuvenlikEvrakOnayHavuzuProps {
   pendingGateDocs: any[];
@@ -281,7 +282,10 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                       }`}>
                         {docItem.evrakTuru || 'EVRAK'}
                       </span>
-                      <span className="text-[9px] text-slate-500 font-mono shrink-0">{docItem.tarih}{docItem.saat ? ` · ${docItem.saat}` : ''}</span>
+                      <span className="flex items-center gap-1.5 shrink-0">
+                        <AcilOnayBadge tarih={docItem.tarih} saat={docItem.saat} />
+                        <span className="text-[9px] text-slate-500 font-mono">{docItem.tarih}{docItem.saat ? ` · ${docItem.saat}` : ''}</span>
+                      </span>
                     </div>
 
                     <div className="text-xs text-slate-800 font-bold mt-2 truncate" title={docItem.fileName}>
@@ -370,7 +374,10 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                           <span className="font-mono bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-md">
                             {doc.irsaliyeNo}
                           </span>
-                          <span className="text-[10px] text-slate-500 font-mono font-bold">{doc.tarih}</span>
+                          <span className="flex items-center gap-1.5">
+                            <AcilOnayBadge tarih={doc.tarih} />
+                            <span className="text-[10px] text-slate-500 font-mono font-bold">{doc.tarih}</span>
+                          </span>
                         </div>
                         <p className="text-xs text-slate-800 font-bold mt-2.5">Firma: {doc.firma}</p>
                         <p className="text-[10.5px] text-slate-500 mt-1">İlişkili Sipariş No: {doc.saId || 'Doğrudan Sevkiyat'}</p>
@@ -428,7 +435,10 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                           <span className="font-mono bg-purple-50 border border-purple-200 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded-md">
                             {doc.faturaNo}
                           </span>
-                          <span className="text-[10px] text-slate-500 font-mono font-bold">{doc.tarih}</span>
+                          <span className="flex items-center gap-1.5">
+                            <AcilOnayBadge tarih={doc.tarih} />
+                            <span className="text-[10px] text-slate-500 font-mono font-bold">{doc.tarih}</span>
+                          </span>
                         </div>
                         <p className="text-xs text-slate-800 font-bold mt-2.5">Cari Unvan: {doc.cariUnvan}</p>
                         <p className="text-[10.5px] text-slate-500 mt-1">Eşleşen İrsaliyeler: {doc.bagliIrsaliyeler?.join(', ') || 'Manuel Bağsız'}</p>

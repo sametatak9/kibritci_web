@@ -9,8 +9,9 @@ import { Personel, KasaHareketi, SatinAlmaTalebi, AracBakim, AylikYoklamaMap, Ka
 import { KibritciLogo } from './KibritciLogo';
 import { getKibritciLogoUrl } from '../lib/kibritciBrand';
 import { listOdemeEngelleri } from '../lib/personelOdemeUtils';
-import { DashboardTodaySummary } from './DashboardTodaySummary';
-import { DashboardWeekSummary } from './DashboardWeekSummary';
+import { DashboardPeriodSummary } from './DashboardPeriodSummary';
+import { DashboardFavoriteTabsStrip } from './DashboardFavoriteTabsStrip';
+import { DashboardSonIslemlerFeed } from './DashboardSonIslemlerFeed';
 
 interface DashboardScreenProps {
   personeller: Personel[];
@@ -247,19 +248,22 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         </div>
       </div>
 
-      {/* Bugün özeti — mevcut panellerin üstüne ek, onları değiştirmez */}
-      <DashboardTodaySummary
-        personeller={personeller}
-        satinAlmaTalepleri={satinAlmaTalepleri}
-        bildirimler={bildirimler}
-        onNavigate={onNavigate}
-      />
+      {/* Favori kısayollar + dönem özeti + son işlemler — mevcut panellere ek */}
+      <DashboardFavoriteTabsStrip onNavigate={onNavigate} />
 
-      <DashboardWeekSummary
+      <DashboardPeriodSummary
         personeller={personeller}
         satinAlmaTalepleri={satinAlmaTalepleri}
         kasaHareketleri={kasaHareketleri}
         yoklamalar={yoklamalar}
+        bildirimler={bildirimler}
+        onNavigate={onNavigate}
+      />
+
+      <DashboardSonIslemlerFeed
+        kasaHareketleri={kasaHareketleri}
+        satinAlmaTalepleri={satinAlmaTalepleri}
+        bildirimler={bildirimler}
         onNavigate={onNavigate}
       />
 

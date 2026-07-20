@@ -20,6 +20,7 @@ import { wrapCorporateReportHtml } from '../lib/corporateReportHtml';
 import { fetchApiJson } from '../lib/apiClient';
 import { GuvenlikEvrakOnayHavuzu } from './GuvenlikEvrakOnayHavuzu';
 import { ImzaOnizlemeStrip } from './ImzaOnizlemeStrip';
+import { AcilOnayBadge } from './AcilOnayBadge';
 import { VidanjorFisOnayPanel } from './VidanjorFisOnayPanel';
 import { MicirFisOnayPanel } from './MicirFisOnayPanel';
 import { KibritciLogo } from './KibritciLogo';
@@ -1639,7 +1640,10 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                           <span className="font-mono bg-[#FFF6EB] border border-[#F0D9B5] text-[#9A5B12] text-[10px] font-bold px-2 py-0.5 rounded-md">
                             {doc.saId || 'KOD YOK'}
                           </span>
-                          <span className="text-[10px] text-[#7A8A91] font-mono font-semibold">{doc.tarih}</span>
+                          <span className="flex items-center gap-1.5">
+                            <AcilOnayBadge tarih={(doc as any).gonderimTarihi || doc.tarih} />
+                            <span className="text-[10px] text-[#7A8A91] font-mono font-semibold">{doc.tarih}</span>
+                          </span>
                         </div>
                         <div>
                           <p className="text-[13px] text-[#15252B] font-semibold leading-snug">{doc.cariFirma}</p>
