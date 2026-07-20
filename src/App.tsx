@@ -301,6 +301,8 @@ export default function App() {
   const claimsSyncedRef = useRef(false);
   const bootstrapDoneRef = useRef(false);
   const idariPersonelSeedRef = useRef(false);
+  const kuterPersonelSeedRef = useRef(false);
+  const kuterCariSeedRef = useRef(false);
   const kampRepairInFlightRef = useRef(false);
   const personelAutoCreateBlocklistRef = useRef(new Set<string>());
   const persistenceFailureRef = useRef<(collection: string, message: string) => void>((c, m) => {
@@ -677,8 +679,11 @@ export default function App() {
         // İdari kadro: yoklamaya girmez; izin/tutanak/araç tahsis vb. için DB'ye yüklenir
         const { mergeIdariIntoPersonelList } = await import('./data/idariPersonelSeed');
         const idariMerged = mergeIdariIntoPersonelList(personnelData);
-        setPersoneller(idariMerged.list);
-        if (idariMerged.toSave.length > 0) {
+        // Kuter taşeron personeli: TC ile mükerrersiz seed
+        const { mergeKuterIntoPersonelList, ensureKuterCari } = await import('./data/kuterPersonelSeed');
+        const kuterMerged = mergeKuterIntoPersonelList(idariMerged.list);
+        setPersoneller(kuterMerged.list);
+        if (idariMerged.toSave.length > 0 || kuterMerged.toSave.length > 0) {
           void (async () => {
             for (const p of idariMerged.toSave) {
               try {
@@ -687,11 +692,32 @@ export default function App() {
                 console.warn('İdari personel kaydı atlandı:', p.tcNo, e);
               }
             }
-            console.log(`İdari personel senkronu: ${idariMerged.toSave.length} kayıt`);
+            if (idariMerged.toSave.length > 0) {
+              console.log(`İdari personel senkronu: ${idariMerged.toSave.length} kayıt`);
+            }
+            for (const p of kuterMerged.toSave) {
+              try {
+                await saveDocument('personeller', p);
+              } catch (e) {
+                console.warn('Kuter personel kaydı atlandı:', p.tcNo, e);
+              }
+            }
+            if (kuterMerged.toSave.length > 0) {
+              console.log(`Kuter personel senkronu: ${kuterMerged.toSave.length} kayıt`);
+            }
           })();
         }
+        const kuterCari = ensureKuterCari(companyData as CariKart[]);
+        const companyDataWithKuter = kuterCari
+          ? [...(companyData as CariKart[]), kuterCari]
+          : (companyData as CariKart[]);
+        if (kuterCari) {
+          void saveDocument('cariKartlar', kuterCari).catch((e) =>
+            console.warn('Kuter cari kaydı atlandı:', e)
+          );
+        }
         setYoklamalar(attData);
-        if (hasSubstantialYoklamaData(attData) || idariMerged.list.length >= 20) {
+        if (hasSubstantialYoklamaData(attData) || kuterMerged.list.length >= 20) {
           markProductionLive();
         }
 
@@ -738,7 +764,7 @@ export default function App() {
         setSahaFaaliyetleri(reportData);
         setProgramliFaaliyetler(loadedProgramliFaaliyetler);
         setHazirTutanaklar(protocolData);
-        setCariKartlar(companyData);
+        setCariKartlar(companyDataWithKuter);
         setStokKartlar(stockData);
         setEpostaGonderimleri(emailLogData);
         setKullanicilar(loadedUsers);
@@ -922,6 +948,25 @@ export default function App() {
           })();
         });
       }
+
+      // Kuter taşeron personeli: TC ile mükerrersiz tamamla
+      if (!kuterPersonelSeedRef.current) {
+        kuterPersonelSeedRef.current = true;
+        void import('./data/kuterPersonelSeed').then(({ mergeKuterIntoPersonelList }) => {
+          const { toSave } = mergeKuterIntoPersonelList(list);
+          if (toSave.length === 0) return;
+          void (async () => {
+            for (const p of toSave) {
+              try {
+                await saveDocument('personeller', p);
+              } catch (e) {
+                console.warn('Kuter personel snapshot senkronu atlandı:', p.tcNo, e);
+              }
+            }
+            console.log(`Kuter personel snapshot senkronu: ${toSave.length} kayıt`);
+          })();
+        });
+      }
     });
 
     const unsubYoklamalar = onSnapshot(doc(db, 'yoklamalar', 'global_yoklama_map'), (snap) => {
@@ -1049,6 +1094,17 @@ export default function App() {
         list.push({ id: doc.id, ...doc.data() } as any);
       });
       setCariKartlar(list);
+
+      if (!kuterCariSeedRef.current) {
+        kuterCariSeedRef.current = true;
+        void import('./data/kuterPersonelSeed').then(({ ensureKuterCari }) => {
+          const cari = ensureKuterCari(list);
+          if (!cari) return;
+          void saveDocument('cariKartlar', cari).catch((e) =>
+            console.warn('Kuter cari snapshot senkronu atlandı:', e)
+          );
+        });
+      }
     });
 
     const unsubOperator = onSnapshot(collection(db, 'operatorFaaliyetleri'), (snapshot) => {
