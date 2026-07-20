@@ -30,6 +30,7 @@ import {
   updateKampOdasi,
 } from '../lib/kampYapisi';
 import { assignKampResident, evictKampResident, suggestPersonelKaydi } from '../lib/kampPlacementUtils';
+import { buildKampFirmaOzeti } from '../lib/kampFirmaOzet';
 import { exportKampYerlesimExcel } from '../lib/kampYerlesimExcelExport';
 import { generateKampPersonelPdfHtml } from '../lib/kampPersonelPdfExport';
 import { openKampKrokiPrintWindow, type KampKrokiPageFormat } from '../lib/kampKrokiPrintHtml';
@@ -450,6 +451,19 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
     });
     return Array.from(firms).sort();
   }, [kampKayitlari, personeller]);
+
+  /** Firma bazında aktif kadro + kampta kalan özeti */
+  const kampFirmaOzeti = useMemo(
+    () => buildKampFirmaOzeti(personeller, kampKayitlari),
+    [personeller, kampKayitlari]
+  );
+  const kampFirmaOzetToplam = useMemo(
+    () => ({
+      calisan: kampFirmaOzeti.reduce((s, r) => s + r.toplamCalisan, 0),
+      kampta: kampFirmaOzeti.reduce((s, r) => s + r.kampta, 0),
+    }),
+    [kampFirmaOzeti]
+  );
 
   const [selectedYerleske, setSelectedYerleske] = useState("");
   const [selectedKat, setSelectedKat] = useState("");
@@ -3051,36 +3065,56 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   </strong>
                 </div>
 
-                <div className="pt-2 border-t mt-2 pb-1">
-                  <span className="font-bold text-[10px] text-slate-500 uppercase block mb-1">Firma Özeti (Aktif Konaklama)</span>
-                  {(() => {
-                    const activeKampKayitlari = kampKayitlari.filter(k => k.durum === 'AKTIF');
-                    const countsByFirm = new Map();
-                    
-                    activeKampKayitlari.forEach(k => {
-                      const p = personeller.find(p => p.id === k.personelId);
-                      let firmaAdi = '';
-                      if (p) {
-                          firmaAdi = p.firmaTipi === 'TASERON' ? (p.firmaAdi?.trim() || 'Taşeron (Belirtilmemiş)') : 'KİBRİTÇİ İNŞAAT';
-                      } else {
-                          firmaAdi = k.calistigiFirma?.trim() || (k.firmaTipi === 'TASERON' ? 'Taşeron (Belirtilmemiş)' : 'KİBRİTÇİ İNŞAAT');
-                      }
-                      
-                      const current = countsByFirm.get(firmaAdi) || { personnel: 0, rooms: new Set() };
-                      current.personnel++;
-                      if (k.odaId || k.roomId) {
-                        current.rooms.add(k.odaId || k.roomId || '');
-                      }
-                      countsByFirm.set(firmaAdi, current);
-                    });
-                    
-                    return Array.from(countsByFirm.entries()).sort((a,b) => b[1].personnel - a[1].personnel).map(([firma, data]) => (
-                      <div key={firma} className="flex justify-between text-[10px] py-0.5 items-center">
-                        <span className="truncate w-36 font-semibold" title={firma}>{firma}</span>
-                        <strong className="text-slate-700 bg-slate-100 px-1.5 rounded">{data.personnel} Kişi ({data.rooms.size} Oda)</strong>
-                      </div>
-                    ));
-                  })()}
+                <div className="pt-2 border-t mt-2 pb-1 space-y-1.5">
+                  <span className="font-bold text-[10px] text-slate-500 uppercase block">
+                    Firma Özeti — Çalışan / Kampta
+                  </span>
+                  <p className="text-[9px] text-slate-400 leading-snug">
+                    Her firmanın aktif kadrosu ve o firmadan kampta kalan kişi sayısı.
+                  </p>
+                  <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-1 px-2 py-1 bg-slate-100 text-[8px] font-black uppercase tracking-wide text-slate-500">
+                      <span>Firma</span>
+                      <span className="text-right w-12">Çalışan</span>
+                      <span className="text-right w-12">Kampta</span>
+                      <span className="text-right w-10">Oda</span>
+                    </div>
+                    <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">
+                      {kampFirmaOzeti.length === 0 ? (
+                        <p className="px-2 py-2 text-[10px] text-slate-400">Firma kaydı yok.</p>
+                      ) : (
+                        kampFirmaOzeti.map((row) => (
+                          <div
+                            key={row.firma}
+                            className="grid grid-cols-[1fr_auto_auto_auto] gap-1 px-2 py-1.5 text-[10px] items-center"
+                          >
+                            <span className="truncate font-semibold text-slate-800" title={row.firma}>
+                              {row.firma}
+                            </span>
+                            <span className="text-right w-12 font-bold tabular-nums text-slate-700">
+                              {row.toplamCalisan}
+                            </span>
+                            <span className="text-right w-12 font-black tabular-nums text-emerald-700">
+                              {row.kampta}
+                            </span>
+                            <span className="text-right w-10 font-semibold tabular-nums text-slate-500">
+                              {row.odaSayisi}
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-1 px-2 py-1.5 bg-slate-50 border-t border-slate-200 text-[10px] font-black">
+                      <span className="text-slate-600">TOPLAM</span>
+                      <span className="text-right w-12 tabular-nums text-slate-800">
+                        {kampFirmaOzetToplam.calisan}
+                      </span>
+                      <span className="text-right w-12 tabular-nums text-emerald-800">
+                        {kampFirmaOzetToplam.kampta}
+                      </span>
+                      <span className="text-right w-10 text-slate-400">—</span>
+                    </div>
+                  </div>
                 </div>
                 <div className="pt-2 border-t mt-2 space-y-2">
                   <button
