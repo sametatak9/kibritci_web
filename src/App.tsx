@@ -126,6 +126,7 @@ import { PublicGirisKayitScreen } from './components/PublicGirisKayitScreen';
 import { PublicSatinAlmaShareScreen } from './components/PublicSatinAlmaShareScreen';
 import { fetchSatinAlmaPublicShare } from './lib/satinAlmaPublicShare';
 import { installReportEmailGlobalBridge } from './lib/reportEmail';
+import { CANONICAL_ANA_FIRMA_ADI, isKibritciCompany } from './lib/yoklamaUtils';
 
 installReportEmailGlobalBridge();
 
@@ -1425,54 +1426,70 @@ export default function App() {
     }
   }, [personeller]);
 
-  // Recovery: Auto-create missing personeller from active kampKayitlari & Uppercase all company names to prevent duplicate casings
+  // Ana firma adı birleştir: "Kibritçi İnşaat" / "KİBRİTÇİ İNŞAAT" → tek kanonik ad
+  useEffect(() => {
+    if (personeller.length === 0) return;
+    const needsPersonelFirmaFix = personeller.some((p) => {
+      if (p.firmaTipi === 'ANA_FIRMA' && p.firmaAdi !== CANONICAL_ANA_FIRMA_ADI) return true;
+      if (!p.firmaAdi) return false;
+      const upper = p.firmaAdi.trim().toLocaleUpperCase('tr-TR');
+      if (upper === 'ANA FİRMA' || upper === 'ANA FIRMA') return true;
+      if (isKibritciCompany(p.firmaAdi) && p.firmaAdi !== CANONICAL_ANA_FIRMA_ADI) return true;
+      return p.firmaAdi !== upper;
+    });
+    if (!needsPersonelFirmaFix) return;
+    setPersonellerWithSync((prev) =>
+      prev.map((p) => {
+        if (p.firmaTipi === 'ANA_FIRMA') {
+          return { ...p, firmaAdi: CANONICAL_ANA_FIRMA_ADI };
+        }
+        if (p.firmaAdi) {
+          const upper = p.firmaAdi.trim().toLocaleUpperCase('tr-TR');
+          if (upper === 'ANA FİRMA' || upper === 'ANA FIRMA' || isKibritciCompany(p.firmaAdi)) {
+            return { ...p, firmaTipi: 'ANA_FIRMA', firmaAdi: CANONICAL_ANA_FIRMA_ADI };
+          }
+          if (p.firmaAdi !== upper) {
+            return { ...p, firmaAdi: upper };
+          }
+        }
+        return p;
+      })
+    );
+  }, [personeller]);
+
+  // Recovery: Auto-create missing personeller from active kampKayitlari & Uppercase company names
   useEffect(() => {
     if (personeller.length > 0 && kampKayitlari.length > 0) {
-      // 1. Capitalize all company names in personeller & convert "ANA FİRMA"/"ANA FIRMA" to "KİBRİTÇİ İNŞAAT"
-      const needsPersonelFirmaFix = personeller.some(
-        (p) => {
-          const upper = (p.firmaAdi || '').trim().toLocaleUpperCase('tr-TR');
-          return p.firmaAdi && (p.firmaAdi !== upper || upper === 'ANA FİRMA' || upper === 'ANA FIRMA' || (p.firmaTipi === 'ANA_FIRMA' && p.firmaAdi !== 'KİBRİTÇİ İNŞAAT'));
-        }
-      );
-      if (needsPersonelFirmaFix) {
-        setPersonellerWithSync((prev) =>
-          prev.map((p) => {
-            if (p.firmaTipi === 'ANA_FIRMA') {
-              return { ...p, firmaAdi: 'KİBRİTÇİ İNŞAAT' };
-            }
-            if (p.firmaAdi) {
-              let upper = p.firmaAdi.trim().toLocaleUpperCase('tr-TR');
-              if (upper === 'ANA FİRMA' || upper === 'ANA FIRMA') {
-                return { ...p, firmaTipi: 'ANA_FIRMA', firmaAdi: 'KİBRİTÇİ İNŞAAT' };
-              }
-              if (p.firmaAdi !== upper) {
-                return { ...p, firmaAdi: upper };
-              }
-            }
-            return p;
-          })
-        );
-      }
-
       // 2. Capitalize all calistigiFirma in kampKayitlari, convert "ANA FİRMA"/"ANA FIRMA" to "KİBRİTÇİ İNŞAAT" & sync them
-      const needsKampFirmaFix = kampKayitlari.some(
-        (k) => {
-          const upper = (k.calistigiFirma || '').trim().toLocaleUpperCase('tr-TR');
-          return k.calistigiFirma && (k.calistigiFirma !== upper || upper === 'ANA FİRMA' || upper === 'ANA FIRMA' || (k.firmaTipi === 'ANA_FIRMA' && k.calistigiFirma !== 'KİBRİTÇİ İNŞAAT'));
+      const needsKampFirmaFix = kampKayitlari.some((k) => {
+        if (k.firmaTipi === 'ANA_FIRMA' && k.calistigiFirma !== CANONICAL_ANA_FIRMA_ADI) return true;
+        if (!k.calistigiFirma) return false;
+        const upper = k.calistigiFirma.trim().toLocaleUpperCase('tr-TR');
+        if (upper === 'ANA FİRMA' || upper === 'ANA FIRMA') return true;
+        if (isKibritciCompany(k.calistigiFirma) && k.calistigiFirma !== CANONICAL_ANA_FIRMA_ADI) {
+          return true;
         }
-      );
+        return k.calistigiFirma !== upper;
+      });
       if (needsKampFirmaFix) {
         const nextKayitlar = kampKayitlari.map((k) => {
           if (k.firmaTipi === 'ANA_FIRMA') {
-            const updated = { ...k, calistigiFirma: 'KİBRİTÇİ İNŞAAT' };
+            const updated = { ...k, calistigiFirma: CANONICAL_ANA_FIRMA_ADI };
             void saveDocument('kampKayitlari', updated);
             return updated;
           }
           if (k.calistigiFirma) {
-            let upper = k.calistigiFirma.trim().toLocaleUpperCase('tr-TR');
-            if (upper === 'ANA FİRMA' || upper === 'ANA FIRMA') {
-              const updated = { ...k, firmaTipi: 'ANA_FIRMA' as const, calistigiFirma: 'KİBRİTÇİ İNŞAAT' };
+            const upper = k.calistigiFirma.trim().toLocaleUpperCase('tr-TR');
+            if (
+              upper === 'ANA FİRMA' ||
+              upper === 'ANA FIRMA' ||
+              isKibritciCompany(k.calistigiFirma)
+            ) {
+              const updated = {
+                ...k,
+                firmaTipi: 'ANA_FIRMA' as const,
+                calistigiFirma: CANONICAL_ANA_FIRMA_ADI,
+              };
               void saveDocument('kampKayitlari', updated);
               return updated;
             }
@@ -1516,10 +1533,13 @@ export default function App() {
           const ad = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0];
           const soyad = parts.length > 1 ? parts[parts.length - 1] : '';
 
-          const isAnaFirma = k.firmaTipi === 'ANA_FIRMA' || 
-            (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'KİBRİTÇİ İNŞAAT') ||
-            (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'ANA FİRMA') ||
-            (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'ANA FIRMA');
+          const kampFirma = (k.calistigiFirma || '').trim();
+          const kampFirmaUpper = kampFirma.toLocaleUpperCase('tr-TR');
+          const isAnaFirma =
+            k.firmaTipi === 'ANA_FIRMA' ||
+            kampFirmaUpper === 'ANA FİRMA' ||
+            kampFirmaUpper === 'ANA FIRMA' ||
+            (Boolean(kampFirma) && isKibritciCompany(kampFirma));
 
           const newP: Personel = {
             id: k.personelId || `p_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -1545,7 +1565,9 @@ export default function App() {
             ibanNo: '',
             durum: true,
             firmaTipi: isAnaFirma ? 'ANA_FIRMA' : 'TASERON',
-            firmaAdi: isAnaFirma ? 'KİBRİTÇİ İNŞAAT' : (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') || 'TAŞERON'),
+            firmaAdi: isAnaFirma
+              ? CANONICAL_ANA_FIRMA_ADI
+              : kampFirmaUpper || 'TAŞERON',
           };
           toCreate.push(newP);
         }
