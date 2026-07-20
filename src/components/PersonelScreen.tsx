@@ -18,6 +18,7 @@ import {
   personelNameKey,
   resolveAkvizyonGorev,
 } from '../lib/guvenlikHelpers';
+import { CANONICAL_ANA_FIRMA_ADI } from '../lib/yoklamaUtils';
 
 interface PersonelScreenProps {
   personeller: Personel[];
@@ -241,7 +242,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     ibanNo: "TR",
     durum: true,
     firmaTipi: 'ANA_FIRMA',
-    firmaAdi: 'Kibritçi İnşaat',
+    firmaAdi: CANONICAL_ANA_FIRMA_ADI,
     personelGrubu: 'SAHA',
   };
 
@@ -270,8 +271,8 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
       setFormData((prev) => ({
         ...prev,
         firmaTipi: nextTip,
-        firmaAdi: nextTip === 'TASERON' ? '' : 'Kibritçi İnşaat',
-        gorev: nextTip === 'TASERON' ? prev.gorev : resolveAkvizyonGorev('Kibritçi İnşaat', prev.gorev),
+        firmaAdi: nextTip === 'TASERON' ? '' : CANONICAL_ANA_FIRMA_ADI,
+        gorev: nextTip === 'TASERON' ? prev.gorev : resolveAkvizyonGorev(CANONICAL_ANA_FIRMA_ADI, prev.gorev),
       }));
       setTaseronKaynak('');
       setManuelTaseronAdi('');
@@ -365,7 +366,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   const resolveFirmaFields = (): { firmaTipi: 'ANA_FIRMA' | 'TASERON'; firmaAdi: string } | null => {
     const firmaTipi = formData.firmaTipi === 'TASERON' ? 'TASERON' : 'ANA_FIRMA';
     if (firmaTipi === 'ANA_FIRMA') {
-      return { firmaTipi: 'ANA_FIRMA', firmaAdi: 'Kibritçi İnşaat' };
+      return { firmaTipi: 'ANA_FIRMA', firmaAdi: CANONICAL_ANA_FIRMA_ADI };
     }
 
     let firmaAdi = '';
@@ -643,7 +644,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
         const ad = (p.firmaAdi || 'Taşeron').trim();
         if (ad) map.set(ad, ad);
       } else {
-        map.set('ANA_FIRMA', 'Kibritçi İnşaat (Ana Firma)');
+        map.set('ANA_FIRMA', `${CANONICAL_ANA_FIRMA_ADI} (Ana Firma)`);
       }
     });
     return Array.from(map.entries()).sort((a, b) =>
@@ -750,7 +751,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
             <p><strong>Departman:</strong> ${historyPersonel.departman}</p>
             <p><strong>İşe Giriş:</strong> ${historyPersonel.iseGirisTarihi || '-'}</p>
             <p><strong>Durum:</strong> ${historyPersonel.durum ? 'Aktif' : 'Pasif'} ${historyPersonel.istenCikisTarihi ? '(Çıkış: ' + historyPersonel.istenCikisTarihi + ')' : ''}</p>
-            <p><strong>Firma:</strong> ${historyPersonel.firmaAdi || 'Kibritçi İnşaat'} ${historyPersonel.firmaTipi === 'TASERON' ? '(Taşeron)' : '(Ana Firma)'}</p>
+            <p><strong>Firma:</strong> ${historyPersonel.firmaAdi || CANONICAL_ANA_FIRMA_ADI} ${historyPersonel.firmaTipi === 'TASERON' ? '(Taşeron)' : '(Ana Firma)'}</p>
             <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;" />
             <p><em>Bu rapor personel kartı üzerinden otomatik oluşturulmuştur. İlişkili işlemler (izin, maaş, araç KM, kamp kaydı vb.) burada listelenecektir.</em></p>
           </div>
@@ -1128,7 +1129,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                   <input
                     type="text"
                     name="firmaAdi"
-                    value={formData.firmaAdi || 'Kibritçi İnşaat'}
+                    value={formData.firmaAdi || CANONICAL_ANA_FIRMA_ADI}
                     readOnly
                     className="w-full text-xs border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-100 text-slate-500"
                   />
@@ -1689,7 +1690,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               <p><strong>Departman:</strong> {historyPersonel.departman}</p>
               <p><strong>İşe Giriş:</strong> {historyPersonel.iseGirisTarihi || '-'}</p>
               <p><strong>Durum:</strong> {historyPersonel.durum ? 'Aktif' : 'Pasif'} {historyPersonel.istenCikisTarihi ? `(Çıkış: ${historyPersonel.istenCikisTarihi})` : ''}</p>
-              <p><strong>Firma:</strong> {historyPersonel.firmaAdi || 'Kibritçi İnşaat'} {historyPersonel.firmaTipi === 'TASERON' ? '(Taşeron)' : '(Ana Firma)'}</p>
+              <p><strong>Firma:</strong> {historyPersonel.firmaAdi || CANONICAL_ANA_FIRMA_ADI} {historyPersonel.firmaTipi === 'TASERON' ? '(Taşeron)' : '(Ana Firma)'}</p>
             </div>
 
             <div className="space-y-2">

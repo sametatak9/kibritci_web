@@ -2,7 +2,11 @@ import ExcelJS from 'exceljs';
 import { KampKaydi, KampOdasi, Personel } from '../types/erp';
 import { displayPersonelGorev } from './guvenlikHelpers';
 import { formatPersonelKampYerlesim } from './taseronUtils';
-import { isTaseronPersonel } from './yoklamaUtils';
+import {
+  CANONICAL_ANA_FIRMA_ADI,
+  canonicalizeAnaFirmaAdi,
+  isTaseronPersonel,
+} from './yoklamaUtils';
 
 export type PersonelExcelScope = 'taseron' | 'all';
 
@@ -16,9 +20,11 @@ function firmaTipiLabel(p: Personel): string {
 }
 
 function firmaAdiLabel(p: Personel): string {
-  const ad = String(p.firmaAdi || '').trim();
-  if (ad) return ad;
-  return isTaseronPersonel(p) ? '—' : 'Kibritçi İnşaat';
+  if (isTaseronPersonel(p)) {
+    const ad = String(p.firmaAdi || '').trim();
+    return ad || '—';
+  }
+  return canonicalizeAnaFirmaAdi(p.firmaAdi);
 }
 
 function sortByFirmaThenName(a: Personel, b: Personel): number {
@@ -83,8 +89,8 @@ export async function exportPersonelExcel(options: {
   const title = sheet.getCell(1, 1);
   title.value =
     scope === 'all'
-      ? 'Kibritçi İnşaat — Tüm Firmalar Personel Listesi (Ana Firma Dahil)'
-      : 'Kibritçi İnşaat — Tüm Taşeron Firma Personeli';
+      ? `${CANONICAL_ANA_FIRMA_ADI} — Tüm Firmalar Personel Listesi (Ana Firma Dahil)`
+      : `${CANONICAL_ANA_FIRMA_ADI} — Tüm Taşeron Firma Personeli`;
   title.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
   title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E4E78' } };
   title.alignment = { horizontal: 'center', vertical: 'middle' };

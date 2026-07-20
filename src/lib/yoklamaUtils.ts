@@ -307,9 +307,23 @@ function normalizeCompanyName(name: string): string {
     .trim();
 }
 
-function isKibritciCompany(name: string): boolean {
+/** Ana firma için tek resmi ünvan — Excel ve listelerde birleştirilir. */
+export const CANONICAL_ANA_FIRMA_ADI = 'KİBRİTÇİ İNŞAAT';
+
+export function isKibritciCompany(name: string): boolean {
   const n = normalizeCompanyName(name);
   return !n || n.includes('KIBRITCI');
+}
+
+/** "Kibritçi İnşaat" / "KİBRİTÇİ İNŞAAT" vb. → tek kanonik ad. */
+export function canonicalizeAnaFirmaAdi(name?: string | null): string {
+  const raw = String(name || '').trim();
+  if (!raw) return CANONICAL_ANA_FIRMA_ADI;
+  const upper = raw.toLocaleUpperCase('tr-TR');
+  if (upper === 'ANA FİRMA' || upper === 'ANA FIRMA' || isKibritciCompany(raw)) {
+    return CANONICAL_ANA_FIRMA_ADI;
+  }
+  return upper;
 }
 
 export function isTaseronPersonel(p?: Personel): boolean {
