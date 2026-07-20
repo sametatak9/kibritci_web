@@ -1,9 +1,12 @@
 import React, { useMemo } from 'react';
-import { Bell, ShieldCheck, Search, Activity } from 'lucide-react';
-import { SatinAlmaTalebi } from '../types/erp';
+import { Bell, Inbox, Search, Activity } from 'lucide-react';
+import { SatinAlmaTalebi, Irsaliye, Fatura } from '../types/erp';
+import { countChromePendingOnay } from '../lib/onayInboxUtils';
 
 type Props = {
   satinAlmaTalepleri?: SatinAlmaTalebi[];
+  irsaliyeler?: Irsaliye[];
+  faturalar?: Fatura[];
   bildirimler?: any[];
   dbStatus?: 'loading' | 'synced' | 'error' | 'offline';
   onNavigate: (tab: string) => void;
@@ -13,20 +16,16 @@ type Props = {
 /** Üst ince durum şeridi — salt okunur özet, mevcut akışı bozmaz. */
 export const StatusStrip: React.FC<Props> = ({
   satinAlmaTalepleri = [],
+  irsaliyeler = [],
+  faturalar = [],
   bildirimler = [],
   dbStatus = 'synced',
   onNavigate,
   onOpenCommandPalette,
 }) => {
   const pendingOnay = useMemo(
-    () =>
-      satinAlmaTalepleri.filter(
-        (sa) =>
-          sa.onayDurumu === 'ONAY BEKLİYOR' ||
-          sa.onayDurumu === 'BEKLİYOR' ||
-          String(sa.onayDurumu || '').includes('BEKLİYOR')
-      ).length,
-    [satinAlmaTalepleri]
+    () => countChromePendingOnay({ satinAlmaTalepleri, irsaliyeler, faturalar }),
+    [satinAlmaTalepleri, irsaliyeler, faturalar]
   );
   const unread = useMemo(() => bildirimler.filter((n) => !n.okundu).length, [bildirimler]);
 
@@ -61,9 +60,10 @@ export const StatusStrip: React.FC<Props> = ({
             ? 'bg-amber-50 border-amber-200 text-amber-900 hover:bg-amber-100'
             : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
         }`}
+        title="Onay havuzuna git"
       >
-        <ShieldCheck size={11} />
-        Onay: {pendingOnay}
+        <Inbox size={11} />
+        Onay inbox: {pendingOnay}
       </button>
 
       <button

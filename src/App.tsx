@@ -11,6 +11,7 @@ import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { CircleAlert as AlertCircle, RefreshCw } from 'lucide-react';
 import { pushRecentTab } from './lib/navPreferences';
+import { countChromePendingOnay } from './lib/onayInboxUtils';
 
 // Core Screens
 import { AdminPanelScreen, Kullanici } from './components/AdminPanelScreen';
@@ -2512,12 +2513,20 @@ export default function App() {
               localStorage.setItem('kibritci_mobile_direct', 'false');
             }}
             onProfileClick={() => setIsProfileModalOpen(true)}
+            pendingOnayCount={countChromePendingOnay({
+              satinAlmaTalepleri,
+              irsaliyeler,
+              faturalar,
+            })}
+            onOpenOnayInbox={() => handleTabNavigation('onay_islemleri')}
           />
         )}
 
         {!hideSidebarAndTopbar && (
           <StatusStrip
             satinAlmaTalepleri={satinAlmaTalepleri}
+            irsaliyeler={irsaliyeler}
+            faturalar={faturalar}
             bildirimler={bildirimler}
             dbStatus={dbStatus}
             onNavigate={handleTabNavigation}
