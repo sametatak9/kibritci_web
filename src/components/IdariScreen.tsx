@@ -3055,12 +3055,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   <strong className="text-slate-800">{kampOdalari.length} Oda</strong>
                 </div>
                 <div className="flex justify-between">
-                  <span>Kampta kalan (aktif):</span>
-                  <strong className="text-slate-800">{kampFirmaOzetToplam.kampta} Personel</strong>
-                </div>
-                <div className="flex justify-between">
-                  <span>Aktif kadro (tüm firmalar):</span>
-                  <strong className="text-slate-800">{kampFirmaOzetToplam.calisan} Personel</strong>
+                  <span>Toplam yerleşik:</span>
+                  <strong className="text-emerald-800 text-sm tabular-nums">
+                    {kampFirmaOzetToplam.kampta} Kişi
+                  </strong>
                 </div>
                 <div className="flex justify-between">
                   <span>Toplam Yatak Kapasitesi:</span>
@@ -3070,51 +3068,46 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                 </div>
 
                 <div className="pt-2 border-t mt-2 pb-1 space-y-1.5">
-                  <span className="font-bold text-[10px] text-slate-500 uppercase block">
-                    Firma Özeti — Çalışan / Kampta
+                  <span className="font-bold text-[10px] text-slate-800 uppercase block tracking-wide">
+                    Firma Bazlı Yerleşim
                   </span>
-                  <p className="text-[9px] text-slate-400 leading-snug">
-                    <strong>Çalışan</strong> = firmanın aktif personel kartı · <strong>Kampta</strong> = o firmadan şu an konaklayan · <strong>Oda</strong> = kullandığı oda.
+                  <p className="text-[9px] text-slate-500 leading-snug">
+                    Her firmanın kampta <strong>kaç kişi</strong> yerleşik olduğu (aktif konaklama).
                   </p>
-                  <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
-                    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-1 px-2 py-1 bg-slate-100 text-[8px] font-black uppercase tracking-wide text-slate-500">
+                  <div className="rounded-lg border border-emerald-200 bg-white overflow-hidden">
+                    <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-2.5 py-1.5 bg-emerald-50 text-[8px] font-black uppercase tracking-wide text-emerald-900">
                       <span>Firma</span>
-                      <span className="text-right w-12">Çalışan</span>
-                      <span className="text-right w-12">Kampta</span>
+                      <span className="text-right min-w-[4.5rem]">Yerleşim</span>
                       <span className="text-right w-10">Oda</span>
                     </div>
-                    <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">
-                      {kampFirmaOzeti.length === 0 ? (
-                        <p className="px-2 py-2 text-[10px] text-slate-400">Firma kaydı yok.</p>
+                    <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
+                      {kampFirmaOzeti.filter((r) => r.kampta > 0).length === 0 ? (
+                        <p className="px-2 py-2 text-[10px] text-slate-400">Aktif yerleşim yok.</p>
                       ) : (
-                        kampFirmaOzeti.map((row) => (
-                          <div
-                            key={row.firma}
-                            className="grid grid-cols-[1fr_auto_auto_auto] gap-1 px-2 py-1.5 text-[10px] items-center"
-                          >
-                            <span className="truncate font-semibold text-slate-800" title={row.firma}>
-                              {row.firma}
-                            </span>
-                            <span className="text-right w-12 font-bold tabular-nums text-slate-700">
-                              {row.toplamCalisan}
-                            </span>
-                            <span className="text-right w-12 font-black tabular-nums text-emerald-700">
-                              {row.kampta}
-                            </span>
-                            <span className="text-right w-10 font-semibold tabular-nums text-slate-500">
-                              {row.odaSayisi}
-                            </span>
-                          </div>
-                        ))
+                        kampFirmaOzeti
+                          .filter((r) => r.kampta > 0)
+                          .map((row) => (
+                            <div
+                              key={row.firma}
+                              className="grid grid-cols-[1fr_auto_auto] gap-2 px-2.5 py-2 text-[10px] items-center"
+                            >
+                              <span className="truncate font-bold text-slate-900" title={row.firma}>
+                                {row.firma}
+                              </span>
+                              <span className="text-right min-w-[4.5rem] font-black tabular-nums text-emerald-700 text-[12px]">
+                                {row.kampta} kişi
+                              </span>
+                              <span className="text-right w-10 font-semibold tabular-nums text-slate-500">
+                                {row.odaSayisi}
+                              </span>
+                            </div>
+                          ))
                       )}
                     </div>
-                    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-1 px-2 py-1.5 bg-slate-50 border-t border-slate-200 text-[10px] font-black">
-                      <span className="text-slate-600">TOPLAM</span>
-                      <span className="text-right w-12 tabular-nums text-slate-800">
-                        {kampFirmaOzetToplam.calisan}
-                      </span>
-                      <span className="text-right w-12 tabular-nums text-emerald-800">
-                        {kampFirmaOzetToplam.kampta}
+                    <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-2.5 py-2 bg-emerald-50 border-t border-emerald-200 text-[11px] font-black">
+                      <span className="text-emerald-950">TOPLAM YERLEŞİM</span>
+                      <span className="text-right min-w-[4.5rem] tabular-nums text-emerald-900 text-[13px]">
+                        {kampFirmaOzetToplam.kampta} kişi
                       </span>
                       <span className="text-right w-10 text-slate-400">—</span>
                     </div>
