@@ -44,6 +44,7 @@ import {
   isPersonelActiveOnDate,
   openWhatsAppText,
 } from '../lib/guvenlikHelpers';
+import { exportTaseronPersonelExcel } from '../lib/taseronPersonelExcelExport';
 
 type SubPage = 'makine' | 'enerji' | 'yemek' | 'personel' | 'personel_loglari' | 'arsiv';
 
@@ -792,9 +793,29 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
                     Personel kayıtlarında <strong>firmaTipi: TASERON</strong> ve eşleşen firma adı. Ana firma yoklama listesine dahil edilmezler. İşe giriş/çıkış tarihlerine göre aktif: {taseronPersonelAktifListe.length}/{taseronPersonelListesi.length}.
                   </p>
                 </div>
-                <span className="text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-100 px-3 py-1 rounded-full">
-                  {taseronPersonelListesi.length} personel
-                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void exportTaseronPersonelExcel({
+                        personeller,
+                        kampKayitlari,
+                        kampOdalari,
+                      })
+                        .then((count) => alert(`${count} taşeron personeli Excel olarak indirildi.`))
+                        .catch((err) =>
+                          alert(err instanceof Error ? err.message : 'Excel oluşturulamadı.')
+                        );
+                    }}
+                    className="flex items-center gap-1.5 text-[10px] font-bold px-3 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 cursor-pointer"
+                    title="Tüm taşeron firmaların personelini Excel olarak indir"
+                  >
+                    <Download size={12} /> Tüm Taşeron Excel
+                  </button>
+                  <span className="text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-100 px-3 py-1 rounded-full">
+                    {taseronPersonelListesi.length} personel
+                  </span>
+                </div>
               </div>
 
               {taseronPersonelListesi.length === 0 ? (
