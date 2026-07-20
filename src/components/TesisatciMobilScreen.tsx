@@ -25,6 +25,7 @@ interface TesisatciMobilScreenProps {
   cariKartlar?: CariKart[];
   faturalar?: Fatura[];
   kampYerleskeleri?: KampYerleske[];
+  setCariKartlar?: (updater: CariKart[] | ((prev: CariKart[]) => CariKart[])) => void;
   setCariIslemGecmisi?: React.Dispatch<React.SetStateAction<CariKartIslem[]>>;
   currentUser: any;
   onSignOut?: () => void;
@@ -50,6 +51,7 @@ export const TesisatciMobilScreen: React.FC<TesisatciMobilScreenProps> = ({
   cariKartlar = [],
   faturalar = [],
   kampYerleskeleri = [],
+  setCariKartlar,
   setCariIslemGecmisi,
   currentUser,
   onSignOut,
@@ -678,6 +680,8 @@ export const TesisatciMobilScreen: React.FC<TesisatciMobilScreenProps> = ({
       {activeSubTab === 'yildirim' && (
         <TesisatciYildirimTab
           cariKartlar={cariKartlar}
+          setCariKartlar={setCariKartlar}
+          setCariIslemGecmisi={setCariIslemGecmisi}
           faturalar={faturalar}
           currentUser={currentUser}
           addNotification={addNotification}

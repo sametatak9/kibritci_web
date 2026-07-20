@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, Clock, Eye, Save, Pencil, Trash2 } from 'lucide-react';
+import { Calendar, Clock, Eye, Save, Pencil, Trash2, History } from 'lucide-react';
 import { formatDateLabelTr, todayDateKey } from '../lib/dateKeyUtils';
 
 interface GuvenlikTabDateBarProps {
@@ -9,6 +9,8 @@ interface GuvenlikTabDateBarProps {
   logCount?: number;
   archivedCount?: number;
   onGoster?: () => void;
+  onGecmisGoster?: () => void;
+  gecmisAktif?: boolean;
   onKaydet?: () => void;
   onGuncelle?: () => void;
   onSil?: () => void;
@@ -26,6 +28,8 @@ export const GuvenlikTabDateBar: React.FC<GuvenlikTabDateBarProps> = ({
   logCount = 0,
   archivedCount = 0,
   onGoster,
+  onGecmisGoster,
+  gecmisAktif = false,
   onKaydet,
   onGuncelle,
   onSil,
@@ -90,6 +94,20 @@ export const GuvenlikTabDateBar: React.FC<GuvenlikTabDateBarProps> = ({
           >
             <Eye size={12} />
             Göster
+          </button>
+        )}
+        {onGecmisGoster && (
+          <button
+            type="button"
+            onClick={onGecmisGoster}
+            className={`inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide px-3 py-2 rounded-xl border cursor-pointer ${
+              gecmisAktif
+                ? 'bg-indigo-600 border-indigo-500 text-white hover:bg-indigo-700'
+                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            <History size={12} />
+            {gecmisAktif ? 'Geçmişi gizle' : 'Geçmiş kayıtları göster'}
           </button>
         )}
         {onKaydet && (
