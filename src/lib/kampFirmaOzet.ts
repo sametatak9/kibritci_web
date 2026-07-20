@@ -34,14 +34,15 @@ function resolvePersonelFirma(p: Personel): string {
 }
 
 function resolveKampFirma(k: KampKaydi, personeller: Personel[]): string {
+  // Personel kartı varsa çalışan kolonundaki firma ile aynı olsun
   const p = k.personelId ? personeller.find((x) => x.id === k.personelId) : undefined;
-  if (k.firmaTipi === 'ANA_FIRMA' || p?.firmaTipi === 'ANA_FIRMA') {
+  if (p) return resolvePersonelFirma(p);
+
+  if (k.firmaTipi === 'ANA_FIRMA' || isKibritciCompany(k.calistigiFirma || '')) {
     return CANONICAL_ANA_FIRMA_ADI;
   }
-  if (p && !isTaseronPersonel(p)) return CANONICAL_ANA_FIRMA_ADI;
   const fromKamp = k.calistigiFirma?.trim();
   if (fromKamp) return fromKamp;
-  if (p?.firmaAdi?.trim()) return p.firmaAdi.trim();
   return 'TAŞERON';
 }
 
