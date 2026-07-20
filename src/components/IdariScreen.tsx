@@ -3055,8 +3055,12 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                   <strong className="text-slate-800">{kampOdalari.length} Oda</strong>
                 </div>
                 <div className="flex justify-between">
-                  <span>Yerleşik Toplam Kadro:</span>
-                  <strong className="text-slate-800">{kampKayitlari.filter((k) => k.durum === 'AKTIF').length} Personel</strong>
+                  <span>Kampta kalan (aktif):</span>
+                  <strong className="text-slate-800">{kampFirmaOzetToplam.kampta} Personel</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span>Aktif kadro (tüm firmalar):</span>
+                  <strong className="text-slate-800">{kampFirmaOzetToplam.calisan} Personel</strong>
                 </div>
                 <div className="flex justify-between">
                   <span>Toplam Yatak Kapasitesi:</span>
@@ -3070,7 +3074,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     Firma Özeti — Çalışan / Kampta
                   </span>
                   <p className="text-[9px] text-slate-400 leading-snug">
-                    Her firmanın aktif kadrosu ve o firmadan kampta kalan kişi sayısı.
+                    <strong>Çalışan</strong> = firmanın aktif personel kartı · <strong>Kampta</strong> = o firmadan şu an konaklayan · <strong>Oda</strong> = kullandığı oda.
                   </p>
                   <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
                     <div className="grid grid-cols-[1fr_auto_auto_auto] gap-1 px-2 py-1 bg-slate-100 text-[8px] font-black uppercase tracking-wide text-slate-500">
