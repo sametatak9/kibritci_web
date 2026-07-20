@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Wrench, ClipboardList, Truck, Camera, CheckCircle, RefreshCw, X, AlertTriangle,
-  LogOut, Pencil, Trash2, Calendar
+  LogOut, Pencil, Trash2, Calendar, Gauge
 } from 'lucide-react';
 import { collection, deleteDoc, doc, onSnapshot, setDoc } from 'firebase/firestore';
 import {
-  AylikYoklamaMap, CariKart, Fatura, KampYerleske, Personel, TesisatciFaaliyet
+  AylikYoklamaMap, CariKart, CariKartIslem, Fatura, KampYerleske, Personel, TesisatciFaaliyet
 } from '../types/erp';
 import { db } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
@@ -15,6 +15,7 @@ import { isTesisatciGorev } from '../lib/yoklamaUtils';
 import { vibrateYildirimAlert } from '../lib/yildirimTankerUtils';
 import { KampGunlukYoklamaTab } from './KampGunlukYoklamaTab';
 import { TesisatciYildirimTab } from './TesisatciYildirimTab';
+import { TesisatciSayacKesintiTab } from './TesisatciSayacKesintiTab';
 
 interface TesisatciMobilScreenProps {
   personeller: Personel[];
@@ -24,6 +25,7 @@ interface TesisatciMobilScreenProps {
   cariKartlar?: CariKart[];
   faturalar?: Fatura[];
   kampYerleskeleri?: KampYerleske[];
+  setCariIslemGecmisi?: React.Dispatch<React.SetStateAction<CariKartIslem[]>>;
   currentUser: any;
   onSignOut?: () => void;
   isStandalone?: boolean;
@@ -48,12 +50,13 @@ export const TesisatciMobilScreen: React.FC<TesisatciMobilScreenProps> = ({
   cariKartlar = [],
   faturalar = [],
   kampYerleskeleri = [],
+  setCariIslemGecmisi,
   currentUser,
   onSignOut,
   isStandalone = false,
   addNotification,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'faaliyet' | 'yoklama' | 'yildirim'>('faaliyet');
+  const [activeSubTab, setActiveSubTab] = useState<'faaliyet' | 'yoklama' | 'yildirim' | 'sayac'>('faaliyet');
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const statusHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -387,6 +390,17 @@ export const TesisatciMobilScreen: React.FC<TesisatciMobilScreenProps> = ({
         >
           <Truck size={14} /> Yıldırım Tanker
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('sayac')}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2 border cursor-pointer ${
+            activeSubTab === 'sayac'
+              ? 'bg-violet-600 border-violet-500 text-white'
+              : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+          }`}
+        >
+          <Gauge size={14} /> Taşeron Sayaç Kesinti
+        </button>
       </div>
 
       {activeSubTab === 'faaliyet' && (
@@ -666,6 +680,16 @@ export const TesisatciMobilScreen: React.FC<TesisatciMobilScreenProps> = ({
           cariKartlar={cariKartlar}
           faturalar={faturalar}
           currentUser={currentUser}
+          addNotification={addNotification}
+          showStatus={showStatus}
+        />
+      )}
+
+      {activeSubTab === 'sayac' && (
+        <TesisatciSayacKesintiTab
+          cariKartlar={cariKartlar}
+          currentUser={currentUser}
+          setCariIslemGecmisi={setCariIslemGecmisi}
           addNotification={addNotification}
           showStatus={showStatus}
         />

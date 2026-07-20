@@ -2203,6 +2203,7 @@ export default function App() {
           cariKartlar={cariKartlar}
           faturalar={faturalar}
           kampYerleskeleri={kampYerleskeleri}
+          setCariIslemGecmisi={setCariIslemGecmisiWithSync}
           currentUser={currentUser}
           onSignOut={handleSignOut}
           isStandalone={true}
@@ -2340,6 +2341,7 @@ export default function App() {
           cariKartlar={cariKartlar}
           faturalar={faturalar}
           kampYerleskeleri={kampYerleskeleri}
+          setCariIslemGecmisi={setCariIslemGecmisiWithSync}
           currentUser={currentUser}
           onSignOut={handleSignOut}
           isStandalone={true}
@@ -2916,6 +2918,7 @@ export default function App() {
                     cariKartlar={cariKartlar}
                     faturalar={faturalar}
                     kampYerleskeleri={kampYerleskeleri}
+                    setCariIslemGecmisi={setCariIslemGecmisiWithSync}
                     currentUser={currentUser}
                     onSignOut={handleSignOut}
                     addNotification={addNotification}

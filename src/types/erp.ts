@@ -175,12 +175,36 @@ export interface YildirimTankerFis {
   fisNo: string;
   icmeSuyuAdet: number;
   sanayiSuyuAdet: number;
+  /** Damaca su kalemi (adet) */
+  damacaAdet?: number;
   fisGorselUrl?: string;
   firmaUnvan: string;
   cariKartId?: string;
   irsaliyeId?: string;
   guvenlikEvrakId?: string;
   kapıLogId?: string;
+  kaydeden?: string;
+  olusturulma: string;
+  guncellenme?: string;
+}
+
+export type TesisatciEnerjiTuru = 'ELEKTRIK' | 'SU' | 'DOGALGAZ';
+
+/** Tesisatçı mobil — taşeron sayaç kesintisi (Elektrik / Su / Doğalgaz) */
+export interface TesisatciSayacKesinti {
+  id: string;
+  tarih: string;
+  enerjiTuru: TesisatciEnerjiTuru;
+  taseronCariId: string;
+  taseronFirmaAdi: string;
+  ilkOlcum: number;
+  sonOlcum: number;
+  fark: number;
+  birimFiyat: number;
+  tutar: number;
+  ilkFotoUrl?: string;
+  sonFotoUrl?: string;
+  cariIslemId?: string;
   kaydeden?: string;
   olusturulma: string;
   guncellenme?: string;
