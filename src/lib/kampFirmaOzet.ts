@@ -1,6 +1,8 @@
 import { KampKaydi, Personel } from '../types/erp';
+import { wrapCorporateReportHtml } from './corporateReportHtml';
 import { isPersonelActiveOnDate } from './guvenlikHelpers';
 import { isPersonelAktifDurum } from './kampPlacementUtils';
+import { openHtmlReportWindow } from './reportEmail';
 import { firmaEslesir } from './taseronUtils';
 import {
   CANONICAL_ANA_FIRMA_ADI,
@@ -12,14 +14,15 @@ export type KampFirmaOzetRow = {
   firma: string;
   /** Aktif kadro (işten çıkmamış personel kartı) */
   toplamCalisan: number;
-  /** Aktif kamp konaklama */
+  /** Aktif kamp konaklama (kişi, mükerrersiz) */
   kampta: number;
   odaSayisi: number;
 };
 
 function normalizeFirmaKey(raw: string, existing: string[]): string {
   const trimmed = String(raw || '').trim();
-  if (!trimmed || isKibritciCompany(trimmed)) return CANONICAL_ANA_FIRMA_ADI;
+  if (!trimmed) return 'TAŞERON';
+  if (isKibritciCompany(trimmed)) return CANONICAL_ANA_FIRMA_ADI;
   const upper = trimmed.toLocaleUpperCase('tr-TR');
   if (upper === 'ANA FİRMA' || upper === 'ANA FIRMA') return CANONICAL_ANA_FIRMA_ADI;
   for (const key of existing) {
@@ -33,17 +36,32 @@ function resolvePersonelFirma(p: Personel): string {
   return p.firmaAdi?.trim() || 'TAŞERON';
 }
 
-function resolveKampFirma(k: KampKaydi, personeller: Personel[]): string {
-  // Personel kartı varsa çalışan kolonundaki firma ile aynı olsun
+/**
+ * Yerleşim firması: önce kamp kaydındaki firma (yerleşim anı),
+ * yoksa bağlı personel kartı. Boş string Kibritçi sayılmaz.
+ */
+export function resolveKampYerlesimFirma(k: KampKaydi, personeller: Personel[]): string {
+  if (k.firmaTipi === 'ANA_FIRMA') return CANONICAL_ANA_FIRMA_ADI;
+
+  const fromKamp = String(k.calistigiFirma || '').trim();
+  if (fromKamp) {
+    if (isKibritciCompany(fromKamp)) return CANONICAL_ANA_FIRMA_ADI;
+    return fromKamp;
+  }
+
   const p = k.personelId ? personeller.find((x) => x.id === k.personelId) : undefined;
   if (p) return resolvePersonelFirma(p);
 
-  if (k.firmaTipi === 'ANA_FIRMA' || isKibritciCompany(k.calistigiFirma || '')) {
-    return CANONICAL_ANA_FIRMA_ADI;
-  }
-  const fromKamp = k.calistigiFirma?.trim();
-  if (fromKamp) return fromKamp;
   return 'TAŞERON';
+}
+
+function residentDedupeKey(k: KampKaydi): string {
+  if (k.personelId) return `id:${k.personelId}`;
+  const name = String(k.personelIsim || '')
+    .trim()
+    .toLocaleLowerCase('tr-TR')
+    .replace(/\s+/g, ' ');
+  return name ? `name:${name}` : `row:${k.id}`;
 }
 
 /** Firma bazında: toplam çalışan + kampta kalan + oda sayısı. */
@@ -56,6 +74,7 @@ export function buildKampFirmaOzeti(
   const asOf = options?.asOfDate || new Date().toISOString().slice(0, 10);
   const map = new Map<string, KampFirmaOzetRow>();
   const roomsByFirm = new Map<string, Set<string>>();
+  const seenResidents = new Set<string>();
 
   const ensure = (raw: string): KampFirmaOzetRow => {
     const key = normalizeFirmaKey(raw, Array.from(map.keys()));
@@ -77,7 +96,11 @@ export function buildKampFirmaOzeti(
 
   for (const k of kampKayitlari) {
     if (k.durum !== 'AKTIF') continue;
-    const row = ensure(resolveKampFirma(k, personeller));
+    const dedupe = residentDedupeKey(k);
+    if (seenResidents.has(dedupe)) continue;
+    seenResidents.add(dedupe);
+
+    const row = ensure(resolveKampYerlesimFirma(k, personeller));
     row.kampta += 1;
     const rid = k.odaId || k.roomId;
     if (rid) {
@@ -93,5 +116,135 @@ export function buildKampFirmaOzeti(
 
   return Array.from(map.values())
     .filter((r) => r.toplamCalisan > 0 || r.kampta > 0)
-    .sort((a, b) => b.kampta - a.kampta || b.toplamCalisan - a.toplamCalisan || a.firma.localeCompare(b.firma, 'tr'));
+    .sort(
+      (a, b) =>
+        b.kampta - a.kampta ||
+        b.toplamCalisan - a.toplamCalisan ||
+        a.firma.localeCompare(b.firma, 'tr')
+    );
+}
+
+/** Ham aktif kamp kaydı vs mükerrersiz yerleşim — tutarlılık kontrolü. */
+export function auditKampYerlesimCounts(
+  personeller: Personel[],
+  kampKayitlari: KampKaydi[]
+): {
+  rawAktifKayit: number;
+  uniqueYerlesik: number;
+  firmaToplam: number;
+  duplicateSkipped: number;
+} {
+  const rawAktif = kampKayitlari.filter((k) => k.durum === 'AKTIF');
+  const seen = new Set<string>();
+  let unique = 0;
+  for (const k of rawAktif) {
+    const key = residentDedupeKey(k);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique += 1;
+  }
+  const rows = buildKampFirmaOzeti(personeller, kampKayitlari);
+  const firmaToplam = rows.reduce((s, r) => s + r.kampta, 0);
+  return {
+    rawAktifKayit: rawAktif.length,
+    uniqueYerlesik: unique,
+    firmaToplam,
+    duplicateSkipped: Math.max(0, rawAktif.length - unique),
+  };
+}
+
+export function buildKampFirmaYerlesimPrintHtml(
+  rows: KampFirmaOzetRow[],
+  options?: { odaToplam?: number; yatakToplam?: number }
+): string {
+  const yerlesimRows = rows.filter((r) => r.kampta > 0);
+  const toplamKisi = yerlesimRows.reduce((s, r) => s + r.kampta, 0);
+  const toplamOda = yerlesimRows.reduce((s, r) => s + r.odaSayisi, 0);
+  const stamp = new Date().toLocaleString('tr-TR');
+
+  const tableRows = yerlesimRows
+    .map(
+      (r, i) => `
+      <tr>
+        <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:center;color:#64748b">${i + 1}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;font-weight:700">${r.firma}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:800;color:#047857">${r.kampta}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:right;color:#475569">${r.odaSayisi}</td>
+      </tr>`
+    )
+    .join('');
+
+  const body = `
+    <h2 style="margin:0 0 6px;font-size:18px;color:#0f172a">FİRMA BAZLI KAMP YERLEŞİMİ</h2>
+    <p style="margin:0 0 16px;font-size:11px;color:#64748b">Aktif konaklama özeti · ${stamp}</p>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px">
+      <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:10px">
+        <div style="font-size:9px;font-weight:800;color:#047857;text-transform:uppercase">Toplam Yerleşik</div>
+        <div style="font-size:20px;font-weight:900;color:#065f46">${toplamKisi} kişi</div>
+      </div>
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px">
+        <div style="font-size:9px;font-weight:800;color:#64748b;text-transform:uppercase">Firma Sayısı</div>
+        <div style="font-size:20px;font-weight:900;color:#0f172a">${yerlesimRows.length}</div>
+      </div>
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px">
+        <div style="font-size:9px;font-weight:800;color:#64748b;text-transform:uppercase">Oda / Yatak</div>
+        <div style="font-size:14px;font-weight:800;color:#0f172a;margin-top:4px">
+          ${options?.odaToplam ?? '—'} oda · ${options?.yatakToplam ?? '—'} yatak
+        </div>
+        <div style="font-size:10px;color:#64748b;margin-top:2px">Firma odaları toplamı: ${toplamOda}</div>
+      </div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead>
+        <tr style="background:#065f46;color:#fff">
+          <th style="padding:9px 10px;text-align:center;width:40px">#</th>
+          <th style="padding:9px 10px;text-align:left">Firma</th>
+          <th style="padding:9px 10px;text-align:right">Yerleşim (kişi)</th>
+          <th style="padding:9px 10px;text-align:right">Oda</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${tableRows || `<tr><td colspan="4" style="padding:16px;text-align:center;color:#94a3b8">Aktif yerleşim yok</td></tr>`}
+      </tbody>
+      <tfoot>
+        <tr style="background:#ecfdf5;font-weight:900">
+          <td style="padding:10px"></td>
+          <td style="padding:10px">TOPLAM YERLEŞİM</td>
+          <td style="padding:10px;text-align:right;color:#065f46">${toplamKisi} kişi</td>
+          <td style="padding:10px;text-align:right">${toplamOda}</td>
+        </tr>
+      </tfoot>
+    </table>
+    <p style="margin-top:14px;font-size:9px;color:#94a3b8">
+      Not: Yalnızca durumu AKTİF konaklama kayıtları sayılır. Aynı kişi mükerrer kayıtta bir kez sayılır.
+    </p>
+  `;
+
+  return wrapCorporateReportHtml(body, {
+    docCode: 'KAMP-FIRMA-YERLESIM',
+    orientation: 'portrait',
+    title: 'Firma Bazlı Kamp Yerleşimi',
+    autoPrint: true,
+  });
+}
+
+export function printKampFirmaYerlesim(
+  personeller: Personel[],
+  kampKayitlari: KampKaydi[],
+  options?: { odaToplam?: number; yatakToplam?: number }
+): void {
+  const rows = buildKampFirmaOzeti(personeller, kampKayitlari);
+  const html = buildKampFirmaYerlesimPrintHtml(rows, options);
+  const win = openHtmlReportWindow(html, 'Firma Bazlı Kamp Yerleşimi');
+  if (!win) {
+    alert('Yazdırma penceresi açılamadı. Tarayıcı pop-up engelini kontrol edin.');
+    return;
+  }
+  setTimeout(() => {
+    try {
+      win.print();
+    } catch {
+      /* no-op */
+    }
+  }, 350);
 }

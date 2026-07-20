@@ -30,7 +30,11 @@ import {
   updateKampOdasi,
 } from '../lib/kampYapisi';
 import { assignKampResident, evictKampResident, suggestPersonelKaydi } from '../lib/kampPlacementUtils';
-import { buildKampFirmaOzeti } from '../lib/kampFirmaOzet';
+import {
+  auditKampYerlesimCounts,
+  buildKampFirmaOzeti,
+  printKampFirmaYerlesim,
+} from '../lib/kampFirmaOzet';
 import { exportKampYerlesimExcel } from '../lib/kampYerlesimExcelExport';
 import { generateKampPersonelPdfHtml } from '../lib/kampPersonelPdfExport';
 import { openKampKrokiPrintWindow, type KampKrokiPageFormat } from '../lib/kampKrokiPrintHtml';
@@ -463,6 +467,10 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
       kampta: kampFirmaOzeti.reduce((s, r) => s + r.kampta, 0),
     }),
     [kampFirmaOzeti]
+  );
+  const kampYerlesimAudit = useMemo(
+    () => auditKampYerlesimCounts(personeller, kampKayitlari),
+    [personeller, kampKayitlari]
   );
 
   const [selectedYerleske, setSelectedYerleske] = useState("");
@@ -3112,6 +3120,26 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                       <span className="text-right w-10 text-slate-400">—</span>
                     </div>
                   </div>
+                  {kampYerlesimAudit.duplicateSkipped > 0 && (
+                    <p className="text-[9px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1">
+                      {kampYerlesimAudit.duplicateSkipped} mükerrer aktif kayıt tek kişi sayıldı
+                      (ham {kampYerlesimAudit.rawAktifKayit} → {kampYerlesimAudit.uniqueYerlesik}).
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      printKampFirmaYerlesim(personeller, kampKayitlari, {
+                        odaToplam: kampOdalari.length,
+                        yatakToplam: kampOdalari.reduce((acc, current) => acc + current.kapasite, 0),
+                      })
+                    }
+                    disabled={kampFirmaOzetToplam.kampta === 0}
+                    className="w-full bg-slate-800 hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-2 px-3 rounded-lg cursor-pointer transition flex items-center justify-center gap-1.5"
+                  >
+                    <Printer size={14} />
+                    Firma Yerleşimini Yazdır
+                  </button>
                 </div>
                 <div className="pt-2 border-t mt-2 space-y-2">
                   <button
