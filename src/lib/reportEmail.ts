@@ -216,8 +216,8 @@ export function openReportEmailComposer(payload: ReportEmailPayload): void {
       </header>
       <div class="body">
         <div>
-          <label for="kibritci-mail-to">Alıcı (isteğe bağlı — birden fazla için virgül)</label>
-          <input id="kibritci-mail-to" type="email" multiple placeholder="ornek@firma.com" value="${(payload.defaultTo || '').replace(/"/g, '&quot;')}" />
+          <label for="kibritci-mail-to">Alıcılar (birden fazla: virgül veya noktalı virgül)</label>
+          <input id="kibritci-mail-to" type="text" autocomplete="email" placeholder="kisi1@firma.com, kisi2@firma.com" value="${(payload.defaultTo || '').replace(/"/g, '&quot;')}" />
         </div>
         <div>
           <label for="kibritci-mail-subject">Konu</label>

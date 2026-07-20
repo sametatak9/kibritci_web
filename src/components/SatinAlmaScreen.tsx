@@ -10,6 +10,7 @@ import { findNearDuplicateStokName, normalizeCardName } from '../lib/duplicateNa
 import { fetchApiJson } from '../lib/apiClient';
 import { normalizeDateKey } from '../lib/dateKeyUtils';
 import { wrapCorporateReportHtml } from '../lib/corporateReportHtml';
+import { openHtmlReportWindow, openReportEmailComposer } from '../lib/reportEmail';
 
 interface SatinAlmaScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
@@ -748,7 +749,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     }
   };
 
-  const handlePreviewPdf = (sa: SatinAlmaTalebi) => {
+  const buildSatinAlmaReportHtml = (sa: SatinAlmaTalebi) => {
     const poExtraCss = `
       .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:25px}
       .info-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px;font-size:11px}
@@ -766,8 +767,8 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     const innerBody = `
           <h2 style="margin:0 0 4px;font-size:18px;color:#0f172a">SATIN ALMA SİPARİŞİ / PO FORMU</h2>
           <div class="info-grid">
-            <div class="info-card"><h4>📋 SİPARİŞ BİLGİLERİ</h4><p><strong>Belge Tarihi:</strong> ${sa.tarih}</p><p><strong>Onay Durumu:</strong> ${sa.onayDurumu}</p></div>
-            <div class="info-card"><h4>🏗️ SİPARİŞ EDEN ŞANTİYE</h4><p><strong>Şantiye Ünvanı:</strong> ${sa.cariFirma}</p><p><strong>Açıklama/Not:</strong> ${sa.aciklama || 'Belirtilmemiş'}</p></div>
+            <div class="info-card"><h4>📋 SİPARİŞ BİLGİLERİ</h4><p><strong>Belge Tarihi:</strong> ${sa.tarih}</p><p><strong>Onay Durumu:</strong> ${sa.onayDurumu}</p><p><strong>Talep Eden:</strong> ${sa.talepEden || '-'}</p></div>
+            <div class="info-card"><h4>🏗️ TEDARİKÇİ / ŞANTİYE</h4><p><strong>Firma:</strong> ${sa.cariFirma}</p><p><strong>Açıklama/Not:</strong> ${sa.aciklama || 'Belirtilmemiş'}</p></div>
           </div>
           <table class="items-table"><thead><tr><th>Malzeme / Ürün Adı</th><th>Sipariş Miktarı</th><th>Marka / Üretici</th><th>Kullanılacak Yer</th></tr></thead><tbody>
               ${sa.kalemler.map(x => `<tr><td>${x.urunAdi}</td><td>${x.miktar} ${x.birim}</td><td>${x.marka || 'Belirtilmemiş'}</td><td>${x.kullanilacakYer || 'Genel Şantiye'}</td></tr>`).join('')}
@@ -782,16 +783,47 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
           </div>
           ${sa.eImzalar && sa.eImzalar.length > 0 ? `<div class="e-imza-bar">🛡️ DİJİTAL E-İMZA KANIT ZİNCİRİ:<br/>${sa.eImzalar.map(im => `• ${im}`).join('<br/>')}</div>` : ''}
     `;
-    const htmlContent = wrapCorporateReportHtml(innerBody, {
+    return wrapCorporateReportHtml(innerBody, {
       docCode: `BELGE NO: ${sa.saId}`,
       orientation: 'portrait',
       title: `Kibritçi İnşaat - PO: ${sa.saId}`,
       extraCss: poExtraCss,
+      autoPrint: false,
     });
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const win = window.open(url, '_blank');
-    if (win) win.print();
+  };
+
+  const handlePreviewPdf = (sa: SatinAlmaTalebi) => {
+    const htmlContent = buildSatinAlmaReportHtml(sa);
+    openHtmlReportWindow(htmlContent, `Satın Alma ${sa.saId}`);
+  };
+
+  const handleEmailTalep = (sa: SatinAlmaTalebi) => {
+    const html = buildSatinAlmaReportHtml(sa);
+    const kalemOzet = (sa.kalemler || [])
+      .slice(0, 8)
+      .map((k) => `• ${k.urunAdi}: ${k.miktar} ${k.birim}`)
+      .join('\n');
+    const more =
+      (sa.kalemler || []).length > 8 ? `\n… +${sa.kalemler.length - 8} kalem daha` : '';
+    openReportEmailComposer({
+      subject: `Satın Alma Talebi ${sa.saId} — ${sa.cariFirma || 'Kibritçi'}`,
+      body: `Satın alma sipariş talebi bilginize sunulmuştur.
+
+Belge No: ${sa.saId}
+Tarih: ${sa.tarih}
+Firma: ${sa.cariFirma}
+Talep Eden: ${sa.talepEden || '-'}
+Durum: ${sa.onayDurumu}
+Açıklama: ${sa.aciklama || '-'}
+
+Kalemler:
+${kalemOzet || '—'}${more}
+
+Tam PO formu HTML ek olarak indirilir; mailinize ekleyebilirsiniz.`,
+      html,
+      fileName: `SatinAlma_${String(sa.saId).replace(/[^\w.\-]+/g, '_')}.html`,
+      defaultTo: '',
+    });
   };
 
   const filteredTalepler = useMemo(() => {
@@ -1089,11 +1121,21 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
                       Excel İndir
                     </button>
                     <button
+                      type="button"
                       onClick={() => handlePreviewPdf(sa)}
                       className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer"
                     >
                       <Eye size={13} />
                       PDF Raporu Önizle
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleEmailTalep(sa)}
+                      className="bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer"
+                      title="Bir veya birden fazla kişiye e-posta ile gönder"
+                    >
+                      <Send size={13} />
+                      E-posta ile Gönder
                     </button>
 
                     {!isLocked ? (
