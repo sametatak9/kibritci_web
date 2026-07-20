@@ -44,7 +44,10 @@ import {
   isPersonelActiveOnDate,
   openWhatsAppText,
 } from '../lib/guvenlikHelpers';
-import { exportTaseronPersonelExcel } from '../lib/taseronPersonelExcelExport';
+import {
+  exportTaseronPersonelExcel,
+  exportTumFirmalarPersonelExcel,
+} from '../lib/taseronPersonelExcelExport';
 
 type SubPage = 'makine' | 'enerji' | 'yemek' | 'personel' | 'personel_loglari' | 'arsiv';
 
@@ -794,6 +797,26 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void exportTumFirmalarPersonelExcel({
+                        personeller,
+                        kampKayitlari,
+                        kampOdalari,
+                      })
+                        .then((count) =>
+                          alert(`${count} personel (tüm firmalar) Excel olarak indirildi.`)
+                        )
+                        .catch((err) =>
+                          alert(err instanceof Error ? err.message : 'Excel oluşturulamadı.')
+                        );
+                    }}
+                    className="flex items-center gap-1.5 text-[10px] font-bold px-3 py-2 bg-sky-700 text-white rounded-xl hover:bg-sky-800 cursor-pointer"
+                    title="Ana firma dahil tüm firmaların personelini Excel olarak indir"
+                  >
+                    <Download size={12} /> Tüm Firmalar Excel
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
