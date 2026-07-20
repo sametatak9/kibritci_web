@@ -7,6 +7,7 @@ import { exportPersonelRows } from '../lib/reportExport';
 import { saveDocument } from '../lib/firebase';
 import { kibritciLogoHtml } from '../lib/kibritciBrand';
 import { findNearDuplicateCariNames, normalizeCardName } from '../lib/duplicateNameUtils';
+import { exportTaseronPersonelExcel } from '../lib/taseronPersonelExcelExport';
 import {
   AKVIZYON_GOREV,
   displayPersonelGorev,
@@ -702,6 +703,18 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
       `Kibritci_Personel_${exportFilterLabel}${activeSuffix}_${Date.now()}`,
       exportFormat
     );
+  };
+
+  const handleExportAllTaseronExcel = async () => {
+    try {
+      const count = await exportTaseronPersonelExcel({
+        personeller,
+        onlyActive: showOnlyActive,
+      });
+      alert(`${count} taşeron personeli Excel olarak indirildi.`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Excel oluşturulamadı.');
+    }
   };
 
   const generateHistoryReport = () => {
@@ -1403,6 +1416,14 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               title={`Listedeki ${filteredPersonel.length} personeli dışa aktar`}
             >
               <Download size={12} /> Dışa Aktar ({filteredPersonel.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleExportAllTaseronExcel()}
+              className="flex items-center gap-1.5 text-[10px] font-bold px-3 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 cursor-pointer"
+              title="Tüm taşeron firma personelini Excel (.xlsx) olarak indir"
+            >
+              <Download size={12} /> Taşeron Excel
             </button>
             <div className="relative w-64">
             <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
