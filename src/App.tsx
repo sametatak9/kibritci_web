@@ -123,6 +123,8 @@ import { YetkiVermeScreen } from './components/YetkiVermeScreen';
 import { OperatorScreen } from './components/OperatorScreen';
 import { MaasOdeScreen } from './components/MaasOdeScreen';
 import { PublicGirisKayitScreen } from './components/PublicGirisKayitScreen';
+import { PublicSatinAlmaShareScreen } from './components/PublicSatinAlmaShareScreen';
+import { fetchSatinAlmaPublicShare } from './lib/satinAlmaPublicShare';
 import { installReportEmailGlobalBridge } from './lib/reportEmail';
 
 installReportEmailGlobalBridge();
@@ -284,6 +286,7 @@ export default function App() {
 
   // Public Personnel Boarding Document Viewer (WhatsApp link handler)
   const [publicViewGiris, setPublicViewGiris] = useState<any>(null);
+  const [publicViewPo, setPublicViewPo] = useState<any>(null);
   const [publicLoading, setPublicLoading] = useState<boolean>(false);
 
   // Error reporting state
@@ -382,6 +385,7 @@ export default function App() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const viewGirisId = urlParams.get('view_giris');
+    const viewPoToken = urlParams.get('view_po');
     if (viewGirisId) {
       setPublicLoading(true);
       void (async () => {
@@ -401,6 +405,23 @@ export default function App() {
           }
         } catch (err) {
           console.error(err);
+        } finally {
+          setPublicLoading(false);
+        }
+      })();
+    } else if (viewPoToken) {
+      setPublicLoading(true);
+      void (async () => {
+        try {
+          const share = await fetchSatinAlmaPublicShare(viewPoToken);
+          if (share) {
+            setPublicViewPo(share);
+          } else {
+            setPublicViewPo({ id: viewPoToken, _notFound: true });
+          }
+        } catch (err) {
+          console.error(err);
+          setPublicViewPo({ id: viewPoToken, _notFound: true });
         } finally {
           setPublicLoading(false);
         }
@@ -1963,7 +1984,14 @@ export default function App() {
     setPublicViewGiris(null);
   };
 
-  // Public WhatsApp giriş linki — oturum gerekmez
+  const closePublicPo = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('view_po');
+    window.history.replaceState({}, '', url.toString());
+    setPublicViewPo(null);
+  };
+
+  // Public WhatsApp giriş / satın alma evrak linki — oturum gerekmez
   if (publicLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-slate-100 font-sans p-6">
@@ -1977,6 +2005,12 @@ export default function App() {
   if (publicViewGiris) {
     return (
       <PublicGirisKayitScreen talep={publicViewGiris} onClose={closePublicGiris} />
+    );
+  }
+
+  if (publicViewPo) {
+    return (
+      <PublicSatinAlmaShareScreen share={publicViewPo} onClose={closePublicPo} />
     );
   }
 

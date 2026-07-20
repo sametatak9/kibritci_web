@@ -70,6 +70,13 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
+    // Satın alma e-posta indirme linki (token = doküman id)
+    match /publicSatinAlmaPaylasimlari/{docId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if canUseFinance() || isYonetici() || isFounderEmail();
+    }
+
     match /bekleyenUyelikler/{docId} {
       allow create: if isSignedIn();
       allow read, update, delete: if isYonetici() || legacyUnclaimedEmailUser() || isFounderEmail();
