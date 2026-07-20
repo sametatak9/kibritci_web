@@ -27,7 +27,6 @@ export function buildSatinAlmaReportHtml(
       .signatures-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:15px}
       .sig-col{border:1px solid #e2e8f0;border-radius:8px;padding:10px;text-align:center;font-size:10px;min-height:90px}
       .sig-title{font-weight:bold;color:#475569;display:block;margin-bottom:8px}
-      .sig-status{font-weight:800;color:#10b981;font-size:8px}
       .e-imza-bar{margin-top:20px;font-size:9px;color:#059669;font-weight:bold;background:#ecfdf5;border:1px solid #a7f3d0;padding:8px;border-radius:8px}
     `;
   const innerBody = `
@@ -42,10 +41,10 @@ export function buildSatinAlmaReportHtml(
           <div class="signatures-title">🖋️ ONAY VE İMZA KANALLARI</div>
           <div class="signatures-grid">
             <div class="sig-col"><span class="sig-title">Talep Eden</span><span style="color:#94a3b8;font-style:italic;">İmza Bekleniyor</span></div>
-            <div class="sig-col"><span class="sig-title">Muhasebe</span><span style="color:#94a3b8;font-style:italic;">İmza Yetkisi</span></div>
-            <div class="sig-col"><span class="sig-title">Satın Alma Md.</span><span style="color:#94a3b8;font-style:italic;">İmza Yetkisi</span></div>
-            <div class="sig-col"><span class="sig-title">Şantiye Şefi</span><span class="${sa.onayDurumu === 'ONAYLANDI' ? 'sig-status' : ''}" style="${sa.onayDurumu !== 'ONAYLANDI' ? 'color:#94a3b8' : ''}">${sa.onayDurumu === 'ONAYLANDI' ? '✓ ONAYLANDI' : 'İmza Bekleniyor'}</span></div>
-            <div class="sig-col"><span class="sig-title">Proje Müdürü</span><span class="${sa.onayDurumu === 'ONAYLANDI' ? 'sig-status' : ''}" style="${sa.onayDurumu !== 'ONAYLANDI' ? 'color:#94a3b8' : ''}">${sa.onayDurumu === 'ONAYLANDI' ? '✓ ONAYLANDI' : 'İmza Bekleniyor'}</span></div>
+            <div class="sig-col"><span class="sig-title">Muhasebe</span><span style="color:#94a3b8;font-style:italic;">İmza Bekleniyor</span></div>
+            <div class="sig-col"><span class="sig-title">Satın Alma Md.</span><span style="color:#94a3b8;font-style:italic;">İmza Bekleniyor</span></div>
+            <div class="sig-col"><span class="sig-title">Şantiye Şefi</span><span style="color:#94a3b8;font-style:italic;">İmza Bekleniyor</span></div>
+            <div class="sig-col"><span class="sig-title">Proje Müdürü</span><span style="color:#94a3b8;font-style:italic;">İmza Bekleniyor</span></div>
           </div>
           ${sa.eImzalar && sa.eImzalar.length > 0 ? `<div class="e-imza-bar">🛡️ DİJİTAL E-İMZA KANIT ZİNCİRİ:<br/>${sa.eImzalar.map((im) => `• ${im}`).join('<br/>')}</div>` : ''}
     `;
