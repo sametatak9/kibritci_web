@@ -12,6 +12,8 @@ import { listOdemeEngelleri } from '../lib/personelOdemeUtils';
 import { DashboardPeriodSummary } from './DashboardPeriodSummary';
 import { DashboardFavoriteTabsStrip } from './DashboardFavoriteTabsStrip';
 import { DashboardSonIslemlerFeed } from './DashboardSonIslemlerFeed';
+import { isPersonelActiveOnDate } from '../lib/guvenlikHelpers';
+import { isTaseronPersonel } from '../lib/yoklamaUtils';
 
 interface DashboardScreenProps {
   personeller: Personel[];
@@ -59,11 +61,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const occupiedBeds = kampKayitlari.filter(cr => cr.durum === 'AKTIF').length;
   const fillRatio = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
 
-  // Statistical numbers
+  // Aktif kadro: durum aktif + bugün itibarıyla işten çıkış tarihi geçmemiş (işten çıkanlar sayılmaz)
   const totalPersonel = personeller.length;
-  const activePersonelCount = personeller.filter(p => p.durum === true || String(p.durum) === 'true').length;
-  const anaFirmaActiveCount = personeller.filter(p => (p.durum === true || String(p.durum) === 'true') && p.firmaTipi !== 'TASERON').length;
-  const taseronActiveCount = personeller.filter(p => (p.durum === true || String(p.durum) === 'true') && p.firmaTipi === 'TASERON').length;
+  const bugun = new Date().toISOString().split('T')[0];
+  const isAktifKadro = (p: Personel) =>
+    (p.durum === true || String(p.durum) === 'true') && isPersonelActiveOnDate(p, bugun);
+  const aktifKadro = personeller.filter(isAktifKadro);
+  const activePersonelCount = aktifKadro.length;
+  const anaFirmaActiveCount = aktifKadro.filter((p) => !isTaseronPersonel(p)).length;
+  const taseronActiveCount = aktifKadro.filter((p) => isTaseronPersonel(p)).length;
   
   // Calculate attendance rate (Geldi ratio) for the current month
   let totalCheckedDays = 0;
