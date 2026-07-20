@@ -7,6 +7,7 @@ import {
   canonicalizeAnaFirmaAdi,
   isTaseronPersonel,
 } from './yoklamaUtils';
+import { formatPersonelMissingDocs } from './personelMissingDocs';
 
 export type PersonelExcelScope = 'taseron' | 'all';
 
@@ -84,7 +85,7 @@ export async function exportPersonelExcel(options: {
     views: [{ state: 'frozen', ySplit: 3 }],
   });
 
-  const colCount = includeKamp ? 13 : 12;
+  const colCount = (includeKamp ? 13 : 12) + 1;
   sheet.mergeCells(1, 1, 1, colCount);
   const title = sheet.getCell(1, 1);
   title.value =
@@ -118,6 +119,7 @@ export async function exportPersonelExcel(options: {
     'Durum',
   ];
   if (includeKamp) headers.push('Kamp Yerleşimi');
+  headers.push('Eksik Evrak');
 
   const headerRow = sheet.addRow(headers);
   headerRow.eachCell((cell) => {
@@ -146,6 +148,7 @@ export async function exportPersonelExcel(options: {
     { width: 12 },
     { width: 10 },
     ...(includeKamp ? [{ width: 28 }] : []),
+    { width: 36 },
   ];
 
   rows.forEach((p) => {
@@ -168,6 +171,7 @@ export async function exportPersonelExcel(options: {
         formatPersonelKampYerlesim(p, options.kampKayitlari || [], options.kampOdalari || []) || '—'
       );
     }
+    values.push(formatPersonelMissingDocs(p) || '—');
     const row = sheet.addRow(values);
     row.eachCell((cell) => {
       cell.font = { name: 'Arial', size: 10 };
