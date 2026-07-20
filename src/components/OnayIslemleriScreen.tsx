@@ -736,40 +736,10 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   };
 
   const handleGenerateSignedPdf = (type: 'request' | 'waybill' | 'invoice', doc: any) => {
-    const todayStr = new Date().toLocaleDateString('tr-TR');
     let title = "";
     let code = "";
     let contentHtml = "";
-    
-    let signatureHtml = "";
-    const activeText = doc.onaySignatureText || signatureText;
-    const activeStyle = doc.onaySignatureStyle || signatureStyle;
 
-    if (activeText) {
-      if (activeStyle === 'cursive') {
-        signatureHtml = `
-          <div style="font-family: 'Georgia', serif; font-style: italic; color: #1e3a8a; font-size: 20px; border: 2px solid #1e3a8a; padding: 4px 10px; border-radius: 6px; display: inline-block; transform: rotate(-2deg); margin: 4px 0; font-weight: bold;">
-            ${activeText}
-          </div>
-        `;
-      } else if (activeStyle === 'monospaced') {
-        signatureHtml = `
-          <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #b45309; border: 2px solid #b45309; border-style: dashed; padding: 4px 10px; border-radius: 6px; display: inline-block; transform: rotate(1deg); margin: 4px 0; text-align: center; background-color: #fffbeb;">
-            <div style="font-weight: bold; letter-spacing: 1.5px;">${activeText.toUpperCase()}</div>
-            <div style="font-size: 7px; opacity: 0.8; margin-top: 1px; font-weight: bold;">SECURE DİGİTAL ONAY</div>
-          </div>
-        `;
-      } else if (activeStyle === 'seal') {
-        signatureHtml = `
-          <div style="width: 75px; height: 75px; border: 3px dashed #dc2626; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: rotate(6deg); color: #dcdc2626; font-weight: 900; font-family: sans-serif; text-align: center; margin: 4px auto; padding: 2px; background-color: #fef2f2; font-size: 8px;">
-            <div style="font-size: 6px; letter-spacing: 0.5px; font-weight: bold; color:#dc2626;">KİBRİTÇİ</div>
-            <div style="font-size: 9px; margin: 1px 0; max-width: 60px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; font-weight: bold; color:#dc2626;">${activeText.split(' ')[0]}</div>
-            <div style="font-size: 5px; letter-spacing: 0.5px; font-weight: bold; color:#dc2626;">RESMİ ONAY</div>
-          </div>
-        `;
-      }
-    }
-    
     // Determine info based on type
     if (type === 'request') {
       title = "SATIN ALMA SİPARİŞİ / TALEBİ";
@@ -779,7 +749,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           <p class="mb-2"><strong>Cari Firma:</strong> ${doc.cariFirma}</p>
           <p class="mb-2"><strong>Ödeme Koşulu:</strong> ${doc.odemeKosulu || 'Şantiye Teslim / Vadeli'}</p>
           <p class="mb-2"><strong>Talep Tarihi:</strong> ${doc.tarih}</p>
-          <p class="mb-2"><strong>Durum:</strong> ONAYLANDI & SEVK EDİLEBİLİR</p>
+          <p class="mb-2"><strong>Durum:</strong> ${doc.onayDurumu || 'İmza Bekleniyor'}</p>
         </div>
         
         <h3 class="font-bold text-sm text-slate-800 mb-3">MALZEME DETAY KONTROL LİSTESİ</h3>
@@ -881,40 +851,28 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
     `;
 
     const innerBody = `
-        <div class="doc-title-badge">DİJİTAL GÜVENLİK HAVUZU RAPORU</div>
+        <div class="doc-title-badge">BELGE FORMU</div>
         <h1>${title}</h1>
         <p style="margin:2px 0 0;font-size:12px;color:#475569;">Belge No: <strong>${code}</strong></p>
         <div class="sub-header-line"></div>
         ${contentHtml}
-        <div class="digital-stamp" style="border:2px dashed #d97706;padding:15px;border-radius:12px;background-color:#fffbeb;margin:25px 0;display:flex;align-items:center;justify-content:space-between;gap:20px;">
-          <div style="flex:1;">
-            <div style="font-weight:900;font-size:11px;color:#b45309;text-transform:uppercase;margin-bottom:5px;">🔒 KİBRİTÇİ İNŞAAT - GÜVENLİ DİJİTAL ONAY RESMİ KAŞESİ</div>
-            <div style="font-size:11px;line-height:1.5;color:#4b5563;">
-              YÖNETİCİ ONAYI TAMAMLANDI<br>
-              Kaşe / Mobil E-İmza: <span style="color:#d97706;font-weight:bold;">${doc.onayStamp || '🔵 KİBRİTÇİ İNŞAAT GRUBU YÖNETİM ONAYI'}</span><br>
-              Onaylayan Yetkili Ünvanı: <span style="text-decoration:underline;">ŞİRKET GENEL MÜDÜRÜ / GÖREV ALANI</span><br>
-              Onay Tarihi: ${doc.onayTarihi || todayStr}
-            </div>
-          </div>
-          <div>${signatureHtml}</div>
-        </div>
         <div class="signatures-grid">
-          <div class="sig-box"><div class="sig-line"></div><div class="sig-title">TEKLİF / KABUL EDEN</div><div style="font-size:10px;color:#64748b;margin-top:2px;">ŞANTİYE SORUMLUSU</div></div>
-          <div class="sig-box"><div class="sig-line"></div><div class="sig-title">KONTROL EDEN</div><div style="font-size:10px;color:#64748b;margin-top:2px;">MÜHENDİS / TEKNİK OFİS Sorumlusu</div></div>
-          <div class="sig-box"><div class="sig-line" style="border-top:1px solid #1e4e78;"></div><div class="sig-title" style="color:#1e4e78;font-weight:800;">DİJİTAL ONAY VEREN</div><div style="font-size:10px;color:#1e4e78;font-weight:bold;margin-top:2px;">ŞİRKET YÖNETİM KURULU / ORTAK</div></div>
+          <div class="sig-box"><div class="sig-line"></div><div class="sig-title">TEKLİF / KABUL EDEN</div><div style="font-size:10px;color:#64748b;margin-top:2px;">ŞANTİYE SORUMLUSU</div><div style="font-size:10px;color:#94a3b8;font-style:italic;margin-top:6px;">İmza Bekleniyor</div></div>
+          <div class="sig-box"><div class="sig-line"></div><div class="sig-title">KONTROL EDEN</div><div style="font-size:10px;color:#64748b;margin-top:2px;">MÜHENDİS / TEKNİK OFİS Sorumlusu</div><div style="font-size:10px;color:#94a3b8;font-style:italic;margin-top:6px;">İmza Bekleniyor</div></div>
+          <div class="sig-box"><div class="sig-line"></div><div class="sig-title">ONAY VEREN</div><div style="font-size:10px;color:#64748b;margin-top:2px;">ŞİRKET YÖNETİMİ</div><div style="font-size:10px;color:#94a3b8;font-style:italic;margin-top:6px;">İmza Bekleniyor</div></div>
         </div>
     `;
 
     const htmlContent = wrapCorporateReportHtml(innerBody, {
       docCode: `Belge No: ${code}`,
       orientation: 'portrait',
-      title: `ONAYLI BELGE - ${code}`,
+      title: `BELGE - ${code}`,
       extraCss: onayExtraCss,
       autoPrint: false,
     });
 
     void import('../lib/reportEmail').then(({ openHtmlReportWindow }) => {
-      const printWin = openHtmlReportWindow(htmlContent, `ONAYLI BELGE - ${code}`);
+      const printWin = openHtmlReportWindow(htmlContent, `BELGE - ${code}`);
       if (!printWin) {
         alert('Lütfen baskı pencerelerini açabilmek için tarayıcınızın pop-up engelleyicisini devre dışı bırakın.');
       }
