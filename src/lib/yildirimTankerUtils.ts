@@ -1,4 +1,5 @@
-import { CariKart, Fatura, YildirimTankerFis } from '../types/erp';
+import { CariKart, CariKartIslem, Fatura, YildirimTankerFis } from '../types/erp';
+import { saveDocument } from './firebase';
 
 export const YILDIRIM_TANKER_UNVAN = 'YILDIRIM TANKER';
 
@@ -24,6 +25,57 @@ export function isYildirimTankerFirma(name?: string | null): boolean {
 
 export function findYildirimTankerCari(cariKartlar: CariKart[]): CariKart | undefined {
   return (cariKartlar || []).find((c) => isYildirimTankerFirma(c.unvan));
+}
+
+/** Yoksa Yıldırım Tanker cari kartını oluşturur (vidanjör Şeker cari gibi) */
+export async function ensureYildirimTankerCari(
+  cariKartlar: CariKart[],
+  setCariKartlar?: (updater: CariKart[] | ((prev: CariKart[]) => CariKart[])) => void
+): Promise<CariKart> {
+  const existing = findYildirimTankerCari(cariKartlar);
+  if (existing) return existing;
+
+  const created: CariKart = {
+    id: `cari_yildirim_tk_${Date.now()}`,
+    kartTipi: 'TEDARIKCI',
+    kod: `CAR-YT-${Date.now().toString().slice(-6)}`,
+    unvan: YILDIRIM_TANKER_UNVAN,
+    yetkili: '',
+    telefon: '',
+    eposta: '',
+    vergiNo: '',
+    vergiDairesi: '',
+    adres: 'Yıldırım Tanker su teslimatı — tesisatçı fişlerinden otomatik oluşturuldu.',
+    iban: '',
+    durum: 'AKTIF',
+    notlar: 'Sistem tarafından Yıldırım Tanker fiş kaydında oluşturuldu. Fatura kontrolünde irsaliye toplamları bu cari altında toplanır.',
+  };
+  await saveDocument('cariKartlar', created);
+  setCariKartlar?.((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
+  return created;
+}
+
+export function buildYildirimCariIslem(options: {
+  fisId: string;
+  irsaliyeId: string;
+  cariKartId: string;
+  fisNo: string;
+  tarih: string;
+  icme: number;
+  sanayi: number;
+  damaca: number;
+}): CariKartIslem {
+  const { fisId, irsaliyeId, cariKartId, fisNo, tarih, icme, sanayi, damaca } = options;
+  return {
+    id: `cari_islem_yt_${fisId}`,
+    cariKartId,
+    islemTipi: 'IRSALIYE',
+    islemId: irsaliyeId,
+    islemBaslik: 'Yıldırım Tanker İrsaliyesi',
+    islemDetay: `${fisNo} · içme ${icme} · sanayi ${sanayi} · damaca ${damaca}`,
+    tarih,
+    belgeNo: fisNo,
+  };
 }
 
 export function vibrateYildirimAlert(): void {

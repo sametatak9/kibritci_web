@@ -50,6 +50,7 @@ import {
   resolveMicirKiloKg,
 } from '../lib/micirUtils';
 import { buildMicirKalemler } from '../lib/micirOnayUtils';
+import { YILDIRIM_TANKER_UNVAN } from '../lib/yildirimTankerUtils';
 
 interface GuvenlikScreenProps {
   personeller: Personel[];
@@ -70,6 +71,10 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'irsaliye' | 'personel' | 'arac' | 'su_tankeri' | 'vidanjor' | 'petrol_tankeri' | 'mici_stabilize' | 'ziyaretci' | 'nobet_arsivi' | 'akvizyon_yoklama' | 'evrak_galerisi'>('irsaliye');
   const [viewMode, setViewMode] = useState<'web' | 'mobile'>('web');
+  const [showGecmisKayitlar, setShowGecmisKayitlar] = useState(false);
+  useEffect(() => {
+    setShowGecmisKayitlar(false);
+  }, [activeTab]);
   const [selectedPersonelLogIds, setSelectedPersonelLogIds] = useState<string[]>([]);
   const [selectedAracLogIds, setSelectedAracLogIds] = useState<string[]>([]);
   const [selectedSuTankeriLogIds, setSelectedSuTankeriLogIds] = useState<string[]>([]);
@@ -1229,7 +1234,11 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             : 'Su Tankeri';
 
     const isMicir = currentTip === 'MICIR_STABILIZE';
-    const firma = isMicir ? ENTO_MADEN_UNVAN : stFirma.trim();
+    const firma = isMicir
+      ? ENTO_MADEN_UNVAN
+      : currentTip === 'SU_TANKERI'
+        ? stFirma.trim() || YILDIRIM_TANKER_UNVAN
+        : stFirma.trim();
     const kiloKgNum = Number(String(stKiloKg || stMiktar).replace(',', '.'));
     const tonajNum = isMicir
       ? kgToTon(kiloKgNum)
@@ -1363,13 +1372,15 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             }
           );
         } else if (currentTip === 'SU_TANKERI') {
+          // Vidanjör→kampçı gibi: Yıldırım Tanker girince tesisatçılara bildirim
+          const yildirimFirma = String(logData.firma || YILDIRIM_TANKER_UNVAN);
           await addNotification(
-            `💧 Su tankeri sahaya girdi: ${logData.plaka} (${logData.firma}). Tesisatçı fiş yüklemeli.`,
+            `💧 Yıldırım Tanker sahaya girdi: ${logData.plaka} (${yildirimFirma}). Tesisatçı fiş yüklemeli.`,
             {
               tip: 'YILDIRIM_TANKER_GIRIS',
               hedefRol: 'TESİSATÇI',
               plaka: logData.plaka,
-              firma: logData.firma,
+              firma: yildirimFirma,
               kapıLogId: logId,
             }
           );
@@ -1629,9 +1640,31 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     [nobetArsivleri, islemTarihi]
   );
 
-  const bugunkuPersonelLoglar = seciliGunPersonelLoglar;
-  const bugunkuAracLoglar = seciliGunAracLoglar;
-  const bugunkuSuTankeriLoglar = seciliGunSuTankeriLoglar;
+  const bugunkuPersonelLoglar = showGecmisKayitlar
+    ? [...personelLoglar]
+        .sort((a, b) => String(b.girisZamani || '').localeCompare(String(a.girisZamani || '')))
+        .slice(0, 100)
+    : seciliGunPersonelLoglar;
+  const bugunkuAracLoglar = showGecmisKayitlar
+    ? [...tumAracLoglar]
+        .sort((a, b) => String(b.girisZamani || '').localeCompare(String(a.girisZamani || '')))
+        .slice(0, 100)
+    : seciliGunAracLoglar;
+  const bugunkuSuTankeriLoglar = showGecmisKayitlar
+    ? [...tumSuTankeriLoglar]
+        .sort((a, b) => String(b.girisZamani || '').localeCompare(String(a.girisZamani || '')))
+        .slice(0, 100)
+    : seciliGunSuTankeriLoglar;
+  const gorunenEvraklar = showGecmisKayitlar
+    ? [...gelenEvraklar]
+        .sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || '')))
+        .slice(0, 100)
+    : seciliGunEvraklar;
+  const gorunenZiyaretciLoglar = showGecmisKayitlar
+    ? [...tumZiyaretciLoglar]
+        .sort((a, b) => String(b.girisZamani || '').localeCompare(String(a.girisZamani || '')))
+        .slice(0, 100)
+    : seciliGunZiyaretciLoglar;
 
   const plakaQueryNorm = hizliPlakaQ.trim().toLocaleUpperCase('tr-TR');
   const filtreliIceridekiAraclar = useMemo(() => {
@@ -2042,9 +2075,20 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                 islemTarihi={islemTarihi}
                 onTarihChange={setIslemTarihi}
                 tabLabel="Evrak Girişi"
-                logCount={seciliGunEvraklar.length}
+                logCount={gorunenEvraklar.length}
                 archivedCount={seciliGunNobetArsivleri.length}
                 onGoster={() => handleGosterSeciliGun('Evrak Girişi', seciliGunEvraklar.length)}
+                onGecmisGoster={() =>
+                  setShowGecmisKayitlar((v) => {
+                    const next = !v;
+                    showStatus(
+                      'success',
+                      next ? 'Geçmiş kayıtlar gösteriliyor.' : 'Seçili gün kayıtlarına dönüldü.'
+                    );
+                    return next;
+                  })
+                }
+                gecmisAktif={showGecmisKayitlar}
                 onKaydet={handleSendQueueToManager}
                 kaydetLabel="Kuyruğu Kaydet"
                 kaydetDisabled={uploadQueue.length === 0}
@@ -2240,8 +2284,8 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                   </div>
                 </div>
 
-                {/* Evrak Log Tablosu — seçili güne göre */}
-                {seciliGunEvraklar.filter(e => {
+                {/* Evrak Log Tablosu — seçili gün / geçmiş */}
+                {gorunenEvraklar.filter(e => {
                   // Apply search
                   const q = docSearch.toLowerCase();
                   const matchesSearch = 
@@ -2260,7 +2304,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                   return matchesSearch && matchesType && matchesStatus;
                 }).length === 0 ? (
                   <div className="text-center py-10 text-[11px] text-slate-400 font-bold">
-                    {seciliTarihLabel} için aranan kriterlere uygun evrak kaydı bulunamadı.
+                    {showGecmisKayitlar ? 'Geçmiş' : seciliTarihLabel} için aranan kriterlere uygun evrak kaydı bulunamadı.
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -2276,7 +2320,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-150">
-                        {seciliGunEvraklar
+                        {gorunenEvraklar
                           .filter(e => {
                             const q = docSearch.toLowerCase();
                             const matchesSearch = 
@@ -2478,9 +2522,20 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                 islemTarihi={islemTarihi}
                 onTarihChange={setIslemTarihi}
                 tabLabel="Personel Kapı"
-                logCount={seciliGunPersonelLoglar.length}
+                logCount={bugunkuPersonelLoglar.length}
                 archivedCount={seciliGunNobetArsivleri.length}
                 onGoster={() => handleGosterSeciliGun('Personel Kapı', seciliGunPersonelLoglar.length)}
+                onGecmisGoster={() =>
+                  setShowGecmisKayitlar((v) => {
+                    const next = !v;
+                    showStatus(
+                      'success',
+                      next ? 'Geçmiş kayıtlar gösteriliyor.' : 'Seçili gün kayıtlarına dönüldü.'
+                    );
+                    return next;
+                  })
+                }
+                gecmisAktif={showGecmisKayitlar}
                 onKaydet={() =>
                   showStatus(
                     'success',
@@ -2684,9 +2739,20 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                 islemTarihi={islemTarihi}
                 onTarihChange={setIslemTarihi}
                 tabLabel="Araç Giriş-Çıkış"
-                logCount={seciliGunAracLoglar.length}
+                logCount={bugunkuAracLoglar.length}
                 archivedCount={seciliGunNobetArsivleri.length}
                 onGoster={() => handleGosterSeciliGun('Araç Giriş-Çıkış', seciliGunAracLoglar.length)}
+                onGecmisGoster={() =>
+                  setShowGecmisKayitlar((v) => {
+                    const next = !v;
+                    showStatus(
+                      'success',
+                      next ? 'Geçmiş kayıtlar gösteriliyor.' : 'Seçili gün kayıtlarına dönüldü.'
+                    );
+                    return next;
+                  })
+                }
+                gecmisAktif={showGecmisKayitlar}
                 onKaydet={() =>
                   showStatus(
                     'success',
@@ -2971,17 +3037,41 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               suTankeriGecmisLoglar;
 
             const historyList = [...insideList, ...pastList]
-              .filter(item => item.girisZamani && item.girisZamani.startsWith(islemTarihi));
+              .filter((item) =>
+                showGecmisKayitlar
+                  ? true
+                  : item.girisZamani && String(item.girisZamani).startsWith(islemTarihi)
+              )
+              .sort((a, b) =>
+                String(b.girisZamani || '').localeCompare(String(a.girisZamani || ''))
+              )
+              .slice(0, showGecmisKayitlar ? 100 : 500);
 
             return (
               <div className="space-y-6">
                 <GuvenlikTabDateBar
                   islemTarihi={islemTarihi}
-                  onTarihChange={setIslemTarihi}
+                  onTarihChange={(t) => {
+                    setShowGecmisKayitlar(false);
+                    setIslemTarihi(t);
+                  }}
                   tabLabel={currentLabel}
                   logCount={historyList.length}
                   archivedCount={seciliGunNobetArsivleri.length}
                   onGoster={() => handleGosterSeciliGun(currentLabel, historyList.length)}
+                  onGecmisGoster={() => {
+                    setShowGecmisKayitlar((v) => {
+                      const next = !v;
+                      showStatus(
+                        'success',
+                        next
+                          ? `${currentLabel} geçmiş kayıtları gösteriliyor (${[...insideList, ...pastList].length} toplam).`
+                          : `${seciliTarihLabel} kayıtlarına dönüldü.`
+                      );
+                      return next;
+                    });
+                  }}
+                  gecmisAktif={showGecmisKayitlar}
                   onKaydet={() =>
                     showStatus(
                       'success',
@@ -3471,30 +3561,41 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                 islemTarihi={islemTarihi}
                 onTarihChange={setIslemTarihi}
                 tabLabel="Ziyaretçi Defteri"
-                logCount={seciliGunZiyaretciLoglar.length}
+                logCount={gorunenZiyaretciLoglar.length}
                 archivedCount={seciliGunNobetArsivleri.length}
-                onGoster={() => handleGosterSeciliGun('Ziyaretçi Defteri', seciliGunZiyaretciLoglar.length)}
+                onGoster={() => handleGosterSeciliGun('Ziyaretçi Defteri', gorunenZiyaretciLoglar.length)}
+                onGecmisGoster={() =>
+                  setShowGecmisKayitlar((v) => {
+                    const next = !v;
+                    showStatus(
+                      'success',
+                      next ? 'Geçmiş kayıtlar gösteriliyor.' : 'Seçili gün kayıtlarına dönüldü.'
+                    );
+                    return next;
+                  })
+                }
+                gecmisAktif={showGecmisKayitlar}
                 onKaydet={() =>
                   showStatus(
                     'success',
-                    `${seciliTarihLabel} için ziyaretçi girişleri anında kaydedilir. Bu güne ${seciliGunZiyaretciLoglar.length} kayıt bağlı.`
+                    `${seciliTarihLabel} için ziyaretçi girişleri anında kaydedilir. Bu güne ${gorunenZiyaretciLoglar.length} kayıt bağlı.`
                   )
                 }
                 kaydetLabel="Tarihe Bağla"
                 onGuncelle={() => {
-                  const first = seciliGunZiyaretciLoglar[0];
+                  const first = gorunenZiyaretciLoglar[0];
                   if (!first) {
                     showStatus('error', 'Güncellenecek ziyaretçi kaydı yok.');
                     return;
                   }
                   setEditingKayit({ kind: 'ziyaretci', record: first });
                 }}
-                guncelleDisabled={seciliGunZiyaretciLoglar.length === 0}
+                guncelleDisabled={gorunenZiyaretciLoglar.length === 0}
                 onSil={() => {
-                  if (seciliGunZiyaretciLoglar.length === 0) return;
-                  handleDeleteZiyaretciLog(seciliGunZiyaretciLoglar[0].id);
+                  if (gorunenZiyaretciLoglar.length === 0) return;
+                  handleDeleteZiyaretciLog(gorunenZiyaretciLoglar[0].id);
                 }}
-                silDisabled={seciliGunZiyaretciLoglar.length === 0}
+                silDisabled={gorunenZiyaretciLoglar.length === 0}
               />
               
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -3642,10 +3743,10 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
               <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4">
                 <span className="font-display font-black text-xs text-amber-500 uppercase tracking-widest block border-b border-slate-200 pb-2">
-                  🎫 {seciliTarihLabel} ZİYARETÇİ LOGLARI ({seciliGunZiyaretciLoglar.length})
+                  🎫 {showGecmisKayitlar ? 'GEÇMİŞ' : seciliTarihLabel} ZİYARETÇİ LOGLARI ({gorunenZiyaretciLoglar.length})
                 </span>
                 <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
-                  {seciliGunZiyaretciLoglar.map((log) => (
+                  {gorunenZiyaretciLoglar.map((log) => (
                     <div
                       key={log.id}
                       className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex justify-between items-center text-[11px] gap-2"
@@ -3694,9 +3795,9 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                       </div>
                     </div>
                   ))}
-                  {seciliGunZiyaretciLoglar.length === 0 && (
+                  {gorunenZiyaretciLoglar.length === 0 && (
                     <div className="text-center p-8 text-slate-500 italic text-[11px]">
-                      {seciliTarihLabel} için ziyaretçi kaydı yok. Tarih seçip Göster ile kontrol edin.
+                      {showGecmisKayitlar ? 'Geçmiş ziyaretçi kaydı yok.' : `${seciliTarihLabel} için ziyaretçi kaydı yok. Tarih seçip Göster ile kontrol edin.`}
                     </div>
                   )}
                 </div>

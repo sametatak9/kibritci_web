@@ -3,7 +3,7 @@ import {
   Calendar, Camera, Check, Pencil, Trash2, RefreshCw, Truck, Download
 } from 'lucide-react';
 import { collection, deleteDoc, doc, onSnapshot, setDoc } from 'firebase/firestore';
-import { CariKart, Fatura, YildirimTankerFis } from '../types/erp';
+import { CariKart, CariKartIslem, Fatura, YildirimTankerFis } from '../types/erp';
 import { db } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { todayDateKey, formatDateLabelTr } from '../lib/dateKeyUtils';
@@ -14,10 +14,14 @@ import {
   filterYildirimFislerByMonth,
   sumYildirimSular,
   isYildirimTankerFirma,
+  ensureYildirimTankerCari,
+  buildYildirimCariIslem,
 } from '../lib/yildirimTankerUtils';
 
 interface TesisatciYildirimTabProps {
   cariKartlar?: CariKart[];
+  setCariKartlar?: (updater: CariKart[] | ((prev: CariKart[]) => CariKart[])) => void;
+  setCariIslemGecmisi?: React.Dispatch<React.SetStateAction<CariKartIslem[]>>;
   faturalar?: Fatura[];
   currentUser: any;
   addNotification?: (mesaj: string, meta?: Record<string, unknown>) => void | Promise<void>;
@@ -26,6 +30,8 @@ interface TesisatciYildirimTabProps {
 
 export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
   cariKartlar = [],
+  setCariKartlar,
+  setCariIslemGecmisi,
   faturalar = [],
   currentUser,
   addNotification,
@@ -133,9 +139,34 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
 
     setSaving(true);
     try {
+      const cari = await ensureYildirimTankerCari(cariKartlar, setCariKartlar);
+      const resolvedUnvan = cari.unvan || YILDIRIM_TANKER_UNVAN;
+
       const id = editingId || `ytfis_${Date.now()}`;
       const existing = editingId ? fisler.find((f) => f.id === editingId) : null;
       const guvenlikEvrakId = existing?.guvenlikEvrakId || `EVR-YT-${id}`;
+      const irsaliyeId = existing?.irsaliyeId || `IR-YT-${id}`;
+      const kalemler = [
+        {
+          id: `k_icme_${id}`,
+          urunAdi: 'İçme Suyu Tanker',
+          miktar: icme,
+          birim: 'ADET',
+        },
+        {
+          id: `k_sanayi_${id}`,
+          urunAdi: 'Sanayi Suyu Tanker',
+          miktar: sanayi,
+          birim: 'ADET',
+        },
+        {
+          id: `k_damaca_${id}`,
+          urunAdi: 'Damaca',
+          miktar: damaca,
+          birim: 'ADET',
+        },
+      ].filter((k) => Number(k.miktar) > 0);
+
       const fis: YildirimTankerFis = {
         id,
         tarih: islemTarihi,
@@ -144,9 +175,9 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
         sanayiSuyuAdet: sanayi,
         damacaAdet: damaca,
         fisGorselUrl: fisGorselUrl || existing?.fisGorselUrl || '',
-        firmaUnvan,
-        cariKartId: yildirimCari?.id,
-        irsaliyeId: existing?.irsaliyeId || `IR-YT-${id}`,
+        firmaUnvan: resolvedUnvan,
+        cariKartId: cari.id,
+        irsaliyeId,
         guvenlikEvrakId,
         kaydeden: currentUser?.email || 'tesisatci',
         olusturulma: existing?.olusturulma || new Date().toISOString(),
@@ -155,16 +186,17 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
 
       await setDoc(doc(db, 'yildirimTankerFisleri', id), fis);
 
-      const irsaliyeId = fis.irsaliyeId!;
+      // Vidanjör onayı sonrası gibi: irsaliye + cari altına bağla (fatura kontrolü için)
       await setDoc(
         doc(db, 'irsaliyeler', irsaliyeId),
         {
           id: irsaliyeId,
           irsaliyeId,
           irsaliyeNo: fis.fisNo,
-          firma: firmaUnvan,
+          firma: resolvedUnvan,
+          cariKartId: cari.id,
           tarih: fis.tarih,
-          onayDurumu: 'ONAY BEKLİYOR',
+          onayDurumu: 'ONAYLANDI',
           fisEvrakUrl: fis.fisGorselUrl || '',
           kaynak: 'YILDIRIM_TANKER_FIS',
           fisNo: fis.fisNo,
@@ -172,29 +204,29 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
           sanayiSuyuAdet: fis.sanayiSuyuAdet,
           damacaAdet: fis.damacaAdet || 0,
           yildirimTankerFisId: id,
-          kalemler: [
-            {
-              id: `k_icme_${id}`,
-              urunAdi: 'İçme Suyu Tanker',
-              miktar: fis.icmeSuyuAdet,
-              birim: 'ADET',
-            },
-            {
-              id: `k_sanayi_${id}`,
-              urunAdi: 'Sanayi Suyu Tanker',
-              miktar: fis.sanayiSuyuAdet,
-              birim: 'ADET',
-            },
-            {
-              id: `k_damaca_${id}`,
-              urunAdi: 'Damaca',
-              miktar: fis.damacaAdet || 0,
-              birim: 'ADET',
-            },
-          ].filter((k) => Number(k.miktar) > 0),
+          guvenlikEvrakId,
+          kalemler,
+          onaylayanYonetici: currentUser?.email || 'tesisatci',
+          onayTarihi: new Date().toISOString(),
         },
         { merge: true }
       );
+
+      const cariIslem = buildYildirimCariIslem({
+        fisId: id,
+        irsaliyeId,
+        cariKartId: cari.id,
+        fisNo: fis.fisNo,
+        tarih: fis.tarih,
+        icme,
+        sanayi,
+        damaca,
+      });
+      await setDoc(doc(db, 'cariIslemGecmisi', cariIslem.id), cariIslem);
+      setCariIslemGecmisi?.((prev) => {
+        const rest = (prev || []).filter((x) => x.id !== cariIslem.id);
+        return [cariIslem, ...rest];
+      });
 
       await setDoc(
         doc(db, 'guvenlikGelenEvraklar', guvenlikEvrakId),
@@ -202,20 +234,24 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
           id: guvenlikEvrakId,
           evrakNo: fis.fisNo,
           evrakTuru: 'İRSALİYE',
-          firma: firmaUnvan,
+          firma: resolvedUnvan,
           tarih: fis.tarih,
           saat: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
           fotoUrl: fis.fisGorselUrl || '',
           fileName: `yildirim_${fis.fisNo}.jpg`,
           fileType: 'image/jpeg',
-          durum: 'BEKLEMEDE',
+          durum: 'ONAYLANDI',
           aciklama: `Tesisatçı Yıldırım Tanker fişi · İçme ${fis.icmeSuyuAdet} · Sanayi ${fis.sanayiSuyuAdet} · Damaca ${fis.damacaAdet || 0}`,
           kaydeden: currentUser?.email || 'tesisatci',
           kaynak: 'YILDIRIM_TANKER_FIS',
           yildirimTankerFisId: id,
+          irsaliyeId,
+          cariKartId: cari.id,
           icmeSuyuAdet: fis.icmeSuyuAdet,
           sanayiSuyuAdet: fis.sanayiSuyuAdet,
           damacaAdet: fis.damacaAdet || 0,
+          kalemler,
+          islenenEvrakTuru: 'İRSALİYE',
           aiStatus: 'SKIPPED',
         },
         { merge: true }
@@ -223,14 +259,14 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
 
       if (addNotification) {
         await addNotification(
-          `Yıldırım Tanker fişi ${editingId ? 'güncellendi' : 'kaydedildi'}: ${fis.fisNo} · içme ${fis.icmeSuyuAdet} · sanayi ${fis.sanayiSuyuAdet} · damaca ${fis.damacaAdet || 0}`
+          `Yıldırım Tanker fişi ${editingId ? 'güncellendi' : 'kaydedildi'}: ${fis.fisNo} · içme ${fis.icmeSuyuAdet} · sanayi ${fis.sanayiSuyuAdet} · damaca ${fis.damacaAdet || 0} → cari: ${resolvedUnvan}`
         );
       }
       showStatus?.(
         'success',
         editingId
-          ? 'Fiş güncellendi; liste ve cari/irsaliye güncellendi.'
-          : 'Fiş kaydedildi; güvenlik / cari / irsaliye listesine eklendi.'
+          ? 'Fiş güncellendi; irsaliye ve Yıldırım Tanker cari geçmişi güncellendi.'
+          : 'Fiş kaydedildi; irsaliye ve Yıldırım Tanker cari kartına eklendi.'
       );
       resetForm();
     } catch (err: any) {
@@ -262,6 +298,13 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
           /* ignore */
         }
       }
+      const cariIslemId = `cari_islem_yt_${f.id}`;
+      try {
+        await deleteDoc(doc(db, 'cariIslemGecmisi', cariIslemId));
+      } catch {
+        /* ignore */
+      }
+      setCariIslemGecmisi?.((prev) => (prev || []).filter((x) => x.id !== cariIslemId));
       const evrakId = f.guvenlikEvrakId || `EVR-YT-${f.id}`;
       try {
         await deleteDoc(doc(db, 'guvenlikGelenEvraklar', evrakId));
@@ -319,8 +362,9 @@ export const TesisatciYildirimTab: React.FC<TesisatciYildirimTabProps> = ({
             </h3>
             <p className="text-[10px] text-slate-500 mt-0.5">
               Cari: <strong>{firmaUnvan}</strong>
+              {' — '}irsaliye + cari geçmişine vidanjör gibi yazılır (fatura kontrolü için).
               {!yildirimCari && (
-                <span className="text-rose-600"> — cari kart bulunamadı, yine de bu unvanla kaydedilir</span>
+                <span className="text-amber-700"> İlk kayıtta cari kart otomatik oluşur.</span>
               )}
             </p>
           </div>
