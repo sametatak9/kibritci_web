@@ -27,6 +27,7 @@ import {
   linkIrsaliyelerToFatura,
 } from '../lib/evrakDonusum';
 import { findStokMatch } from '../lib/evrakBatchImportUtils';
+import { listFaturasizIrsaliyeler } from '../lib/operasyonUyarilari';
 import { EvrakZincirBanner } from './EvrakZincirBanner';
 import {
   EvrakAiDropzone,
@@ -95,7 +96,7 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
   const [suggestedStokCat, setSuggestedStokCat] = useState("Kaba İnşaat İmalatı");
   const [suggestedStokUnit, setSuggestedStokUnit] = useState("ADET");
   const [archiveSearch, setArchiveSearch] = useState("");
-  const [archiveFilter, setArchiveFilter] = useState<'ALL' | 'CARI_YOK' | 'STOK_EKSIK'>('ALL');
+  const [archiveFilter, setArchiveFilter] = useState<'ALL' | 'CARI_YOK' | 'STOK_EKSIK' | 'FATURASIZ'>('ALL');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -573,6 +574,13 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
 
   const liveCari = resolveCariKartId(irSupplier, cariKartlar);
   const liveStok = countLinkedStok(irProducts);
+  const faturasizIds = useMemo(() => {
+    const ids = new Set(
+      listFaturasizIrsaliyeler(irsaliyeler, faturalar, 0).map((x) => x.id)
+    );
+    return ids;
+  }, [irsaliyeler, faturalar]);
+
   const filteredArchive = useMemo(() => {
     const q = archiveSearch.trim().toLocaleLowerCase('tr-TR');
     return [...irsaliyeler]
@@ -583,6 +591,7 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
           const link = countLinkedStok(ir.kalemler || []);
           if (link.total === 0 || link.linked === link.total) return false;
         }
+        if (archiveFilter === 'FATURASIZ' && !faturasizIds.has(ir.id)) return false;
         if (!q) return true;
         return (
           String(ir.irsaliyeNo || '').toLocaleLowerCase('tr-TR').includes(q) ||
@@ -591,9 +600,10 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
         );
       })
       .slice(0, 200);
-  }, [irsaliyeler, archiveSearch, archiveFilter]);
+  }, [irsaliyeler, archiveSearch, archiveFilter, faturasizIds]);
 
   const cariYokCount = irsaliyeler.filter((ir) => !ir.cariKartId).length;
+  const faturasizCount = faturasizIds.size;
 
   return (
     <EvrakPageShell>
@@ -634,6 +644,11 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
             label: 'Cari bağsız',
             value: cariYokCount,
             tone: cariYokCount > 0 ? 'warn' : 'ok',
+          },
+          {
+            label: 'Faturasız',
+            value: faturasizCount,
+            tone: faturasizCount > 0 ? 'warn' : 'ok',
           },
         ]}
       />
@@ -853,11 +868,12 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                     className="w-full text-[11px] font-semibold pl-8 pr-2 py-2 bg-slate-50 border border-slate-200 rounded-lg"
                   />
                 </div>
-                <div className="flex gap-1">
+                <div className="flex gap-1 flex-wrap">
                   {([
                     ['ALL', 'Tümü'],
                     ['CARI_YOK', 'Cari yok'],
                     ['STOK_EKSIK', 'Stok eksik'],
+                    ['FATURASIZ', `Faturasız${faturasizCount > 0 ? ` (${faturasizCount})` : ''}`],
                   ] as const).map(([id, label]) => (
                     <button
                       key={id}
@@ -865,8 +881,12 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                       onClick={() => setArchiveFilter(id)}
                       className={`text-[10px] font-bold px-2.5 py-2 rounded-lg border cursor-pointer ${
                         archiveFilter === id
-                          ? 'bg-emerald-700 text-white border-emerald-700'
-                          : 'bg-white text-slate-600 border-slate-200'
+                          ? id === 'FATURASIZ'
+                            ? 'bg-rose-700 text-white border-rose-700'
+                            : 'bg-emerald-700 text-white border-emerald-700'
+                          : id === 'FATURASIZ' && faturasizCount > 0
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : 'bg-white text-slate-600 border-slate-200'
                       }`}
                     >
                       {label}
@@ -918,6 +938,17 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                               <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded w-fit ${stokLink.total > 0 && stokLink.linked === stokLink.total ? 'bg-sky-50 text-sky-700' : 'bg-slate-100 text-slate-600'}`}>
                                 Stok {stokLink.linked}/{stokLink.total}
                               </span>
+                              {ir.kaynak !== 'VIDANJOR_FIS' && ir.kaynak !== 'MICIR_STABILIZE_FIS' ? (
+                                faturasizIds.has(ir.id) ? (
+                                  <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded w-fit bg-rose-50 text-rose-700">
+                                    Faturasız
+                                  </span>
+                                ) : (
+                                  <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded w-fit bg-violet-50 text-violet-700">
+                                    Faturalı
+                                  </span>
+                                )
+                              ) : null}
                             </div>
                           </td>
                           <td className="px-2 py-1.5">
