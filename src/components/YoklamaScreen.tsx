@@ -610,9 +610,9 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   }, [monthPersoneller, searchTerm]);
 
   const handleExportExcelTables = async (emptyMode: boolean = false) => {
-    const { Workbook } = await import('exceljs');
+    const { createExcelWorkbook } = await import('../lib/exceljsLoader');
 
-    const wb = new Workbook();
+    const wb = await createExcelWorkbook();
     const ws = wb.addWorksheet('Puantaj', {
       views: [{ state: 'frozen', ySplit: 5, xSplit: 7 }],
     });

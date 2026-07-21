@@ -317,8 +317,8 @@ async function buildYerleskeSheet(
 }
 
 export async function exportKampYerlesimExcel(input: KampYerlesimExportInput): Promise<void> {
-  const { Workbook } = await import('exceljs');
-  const wb = new Workbook();
+  const { createExcelWorkbook } = await import('./exceljsLoader');
+  const wb = await createExcelWorkbook();
   wb.creator = 'Kibritçi ERP';
   wb.created = new Date();
 

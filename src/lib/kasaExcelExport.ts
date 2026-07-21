@@ -1,8 +1,8 @@
-import ExcelJS from 'exceljs';
 import { KasaHareketi } from '../types/erp';
+import { createExcelWorkbook } from './exceljsLoader';
 
 export async function exportKasaExcel(kasaHareketleri: KasaHareketi[], startDate: string, endDate: string): Promise<void> {
-  const workbook = new ExcelJS.Workbook();
+  const workbook = await createExcelWorkbook();
   const sheet = workbook.addWorksheet('Haftalık Kasa', {
     pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 }
   });
