@@ -62,6 +62,7 @@ import {
 import type { SahaFaaliyetSaveSource } from '../lib/sahaFaaliyetPersistence';
 import { ParselBlokAnalizPanel } from './ParselBlokAnalizPanel';
 import { KampFaaliyetTakipTab } from './KampFaaliyetTakipTab';
+import { KampKrokiGorunumTab } from './KampKrokiGorunumTab';
 
 interface IdariScreenProps {
   currentSubTab: string; // arac, kamp, saha, tutanak, cari_stok, eposta
@@ -477,7 +478,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
   const [selectedKat, setSelectedKat] = useState("");
   
   const [campCreationStep, setCampCreationStep] = useState<'campus' | 'floor' | 'room'>('room');
-  const [kampMainView, setKampMainView] = useState<'odalar' | 'faaliyet' | 'personel'>('odalar');
+  const [kampMainView, setKampMainView] = useState<'odalar' | 'faaliyet' | 'personel' | 'kroki'>('odalar');
   const [kampPersonelSearch, setKampPersonelSearch] = useState('');
   const [kampPersonelFirmFilter, setKampPersonelFirmFilter] = useState('');
   const [newCampusInput, setNewCampusInput] = useState("");
@@ -2623,7 +2624,7 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           ───────────────────────────────────────────────────────────── */}
       {currentSubTab === 'kamp' && (
         <div className="flex-1 flex flex-col min-h-0 gap-3">
-          <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit shrink-0">
+          <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit shrink-0 flex-wrap">
             <button
               type="button"
               onClick={() => setKampMainView('odalar')}
@@ -2634,6 +2635,17 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
               }`}
             >
               🏕️ Oda &amp; Yerleşim
+            </button>
+            <button
+              type="button"
+              onClick={() => setKampMainView('kroki')}
+              className={`px-4 py-2 text-[10px] font-black rounded-lg transition ${
+                kampMainView === 'kroki'
+                  ? 'bg-white text-teal-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              🗺️ Kamp Krokisi
             </button>
             <button
               type="button"
@@ -2662,6 +2674,12 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
           {kampMainView === 'faaliyet' ? (
             <KampFaaliyetTakipTab
               currentUser={auth.currentUser || undefined}
+              personeller={personeller}
+            />
+          ) : kampMainView === 'kroki' ? (
+            <KampKrokiGorunumTab
+              kampOdalari={kampOdalari}
+              kampKayitlari={kampKayitlari}
               personeller={personeller}
             />
           ) : kampMainView === 'personel' ? (
