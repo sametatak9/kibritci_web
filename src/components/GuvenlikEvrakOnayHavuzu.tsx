@@ -305,11 +305,22 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                     {docItem.aiParsed && (
                       <div className="mt-2 text-[10px] bg-indigo-50 border border-indigo-100 p-2.5 rounded-xl text-indigo-800 font-sans">
                         <span className="font-bold block text-[8px] uppercase tracking-wider text-indigo-600 mb-1 flex items-center gap-1">
-                          <Sparkles size={9} className="text-amber-500" /> YZ ön okuma
+                          <Sparkles size={9} className="text-amber-500" /> YZ ön okuma · kapı irsaliye
                         </span>
                         <div className="truncate"><strong>Firma:</strong> {docItem.firma || '-'}</div>
                         <div className="truncate"><strong>No/Kod:</strong> {docItem.evrakNo || '-'}</div>
                         <div className="truncate"><strong>Kalem:</strong> {docItem.kalemler?.length || 0}</div>
+                        {docItem.matchSummary && (
+                          <div className={`mt-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded border inline-block ${
+                            docItem.matchSummary.cariMatched
+                              ? 'bg-teal-50 text-teal-800 border-teal-200'
+                              : 'bg-amber-50 text-amber-800 border-amber-200'
+                          }`}>
+                            {docItem.matchSummary.cariMatched ? 'Cari eşleşti' : 'Cari bulunamadı'}
+                            {' · '}
+                            Stok {docItem.matchSummary.stokLinked || 0}/{docItem.matchSummary.stokTotal || 0}
+                          </div>
+                        )}
                       </div>
                     )}
                     {docItem.aiStatus === 'PARSING' && (
@@ -854,6 +865,17 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                             onChange={(e) => setIrsaliyeFirma(e.target.value)}
                             className="w-full bg-white border border-slate-200 text-slate-900 p-2 rounded-lg font-bold"
                           />
+                          {activeGateDoc?.matchSummary && (
+                            <p className={`text-[9px] font-bold mt-1 ${
+                              activeGateDoc.matchSummary.cariMatched ? 'text-teal-700' : 'text-amber-700'
+                            }`}>
+                              {activeGateDoc.matchSummary.cariMatched
+                                ? `Cari kart eşleşti${activeGateDoc.matchSummary.cariKartId ? ` · ${activeGateDoc.matchSummary.cariKartId}` : ''}`
+                                : 'Cari kart bulunamadı — onayda unvan serbest kaydedilir'}
+                              {' · '}
+                              Stok {activeGateDoc.matchSummary.stokLinked || 0}/{activeGateDoc.matchSummary.stokTotal || 0} kalem bağlandı
+                            </p>
+                          )}
                         </div>
 
                         {/* Items table for Irsaliye */}
@@ -907,7 +929,14 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                             <div className="max-h-[150px] overflow-y-auto bg-white border border-slate-200 rounded-xl text-[10px] divide-y divide-slate-100">
                               {irsaliyeKalemler.map((it, idx) => (
                                 <div key={idx} className="flex justify-between items-center p-2 hover:bg-slate-50 transition">
-                                  <div className="font-semibold text-slate-800 truncate max-w-[250px]">{it.urunAdi}</div>
+                                  <div className="min-w-0">
+                                    <div className="font-semibold text-slate-800 truncate max-w-[220px]">{it.urunAdi}</div>
+                                    {it.stokKartId ? (
+                                      <span className="text-[8px] font-bold text-teal-700">Stok eşleşti</span>
+                                    ) : (
+                                      <span className="text-[8px] font-bold text-amber-600">Stok eşleşmedi</span>
+                                    )}
+                                  </div>
                                   <div className="flex items-center space-x-3 text-right">
                                     <span className="font-mono text-amber-500 font-bold">{it.miktar} {it.birim || 'Adet'}</span>
                                     <button

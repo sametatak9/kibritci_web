@@ -4,10 +4,10 @@ import {
   Truck, CreditCard, ChevronRight, PenTool, Check, CheckCircle2, UserCheck, Eye, Trash2,
   FileUp, ExternalLink, MessageSquare, AlertTriangle, Sparkles, Package, Tent, X
 } from 'lucide-react';
-import { SatinAlmaTalebi, Irsaliye, Fatura, CariKart, CariKartIslem } from '../types/erp';
+import { SatinAlmaTalebi, Irsaliye, Fatura, CariKart, CariKartIslem, StokKart, StokKartIslem } from '../types/erp';
 import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
-import { collection, doc, setDoc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import {
   buildSingleApprovalUpdate,
   buildWhatsAppUrl,
@@ -24,6 +24,12 @@ import { AcilOnayBadge } from './AcilOnayBadge';
 import { VidanjorFisOnayPanel } from './VidanjorFisOnayPanel';
 import { MicirFisOnayPanel } from './MicirFisOnayPanel';
 import { KibritciLogo } from './KibritciLogo';
+import {
+  finalizeKapiIrsaliyeApproval,
+  formatKapiMatchLabel,
+  KAPI_EVRAK_KAYNAK,
+  matchKapiEvrakToDb,
+} from '../lib/kapiIrsaliyeUtils';
 
 interface OnayIslemleriScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
@@ -40,6 +46,9 @@ interface OnayIslemleriScreenProps {
   cariKartlar?: CariKart[];
   setCariKartlar?: React.Dispatch<React.SetStateAction<CariKart[]>>;
   setCariIslemGecmisi?: React.Dispatch<React.SetStateAction<CariKartIslem[]>>;
+  stokKartlar?: StokKart[];
+  setStokKartlar?: React.Dispatch<React.SetStateAction<StokKart[]>>;
+  setStokIslemGecmisi?: React.Dispatch<React.SetStateAction<StokKartIslem[]>>;
 }
 
 export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
@@ -57,6 +66,9 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   cariKartlar = [],
   setCariKartlar,
   setCariIslemGecmisi,
+  stokKartlar = [],
+  setStokKartlar,
+  setStokIslemGecmisi,
 }) => {
   const [activeTab, setActiveTab] = useState<'satin_alma' | 'guvenlik_belgeleri' | 'kampci_belgeleri' | 'formen_belgeleri' | 'gunluk_loglar' | 'sofor_talepleri' | 'depocu_talepleri' | 'gecmis' | 'imzalar' | 'anahtarci_tutanaklari'>('satin_alma');
   const [selectedYoneticiEmail, setSelectedYoneticiEmail] = useState<string>('');
@@ -903,8 +915,14 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   });
 
   const pendingWaybills = irsaliyeler.filter(doc => {
-    // Vidanjör / mıcır-stabilize özel panelden yönetilir
-    if (doc.kaynak === 'VIDANJOR_FIS' || doc.kaynak === 'MICIR_STABILIZE_FIS') return false;
+    // Vidanjör / mıcır-stabilize / kapı evrak özel panelden yönetilir
+    if (
+      doc.kaynak === 'VIDANJOR_FIS' ||
+      doc.kaynak === 'MICIR_STABILIZE_FIS' ||
+      doc.kaynak === KAPI_EVRAK_KAYNAK
+    ) {
+      return false;
+    }
     const isPending = doc.onayDurumu === 'ONAY BEKLİYOR' || doc.onayDurumu === 'FARK VAR — YÖNETİCİ BİLDİRİLDİ';
     if (!isPending) return false;
     const targets = (doc as any).onayGonderilenYoneticiMailleri;
@@ -1171,6 +1189,22 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
         durum: 'REDDEDİLDİ',
         onaylayanYonetici: currentUser?.email || 'Yönetici'
       });
+      try {
+        await updateDoc(doc(db, 'irsaliyeler', id), {
+          onayDurumu: 'REDDEDİLDİ',
+          onaylayanYonetici: currentUser?.email || 'Yönetici',
+          onayTarihi: new Date().toISOString(),
+        });
+        setIrsaliyeler((prev) =>
+          prev.map((item) =>
+            item.id === id || item.irsaliyeId === id || item.guvenlikEvrakId === id
+              ? { ...item, onayDurumu: 'REDDEDİLDİ' }
+              : item
+          )
+        );
+      } catch {
+        /* kapı taslağı yoksa sorun değil */
+      }
       alert("Evrak reddedildi.");
     } catch (err) {
       console.error(err);
@@ -1307,10 +1341,27 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           setFaturaGenelToplam(parsed.genelToplam || 0);
           setFaturaKalemler(parsed.kalemler || []);
         } else if (selectedDocType === 'İRSALİYE') {
+          const firma = parsed.firma || activeGateDoc.firma || '';
+          const kalemler = parsed.kalemler || [];
+          const { summary, kalemler: linked } = matchKapiEvrakToDb(
+            firma,
+            kalemler,
+            cariKartlar,
+            stokKartlar
+          );
           setIrsaliyeNo(parsed.irsaliyeNo || activeGateDoc.evrakNo || '');
-          setIrsaliyeFirma(parsed.firma || activeGateDoc.firma || '');
+          setIrsaliyeFirma(summary.cariUnvan || firma);
           setIrsaliyeTarih(parsed.tarih || activeGateDoc.tarih || todayStr);
-          setIrsaliyeKalemler(parsed.kalemler || []);
+          setIrsaliyeKalemler(linked.length ? linked : kalemler);
+          setActiveGateDoc((prev: any) =>
+            prev
+              ? {
+                  ...prev,
+                  matchSummary: summary,
+                  cariKartId: summary.cariKartId || prev.cariKartId,
+                }
+              : prev
+          );
         } else if (selectedDocType === 'MAKBUZ') {
           setMakbuzRefNo(parsed.referansId || activeGateDoc.evrakNo || '');
           setMakbuzFirma(parsed.firma || activeGateDoc.firma || '');
@@ -1379,24 +1430,65 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           alert("Lütfen İrsaliye No, Firma ve Tarih alanlarını doldurun!");
           return;
         }
-        const newIrsaliye = {
-          id: docId,
-          irsaliyeId: docId,
+
+        let liveCari = cariKartlar;
+        let liveStok = stokKartlar;
+        if (!liveCari.length || !liveStok.length) {
+          const [cariSnap, stokSnap] = await Promise.all([
+            getDocs(collection(db, 'cariKartlar')),
+            getDocs(collection(db, 'stokKartlar')),
+          ]);
+          if (!liveCari.length) {
+            liveCari = [];
+            cariSnap.forEach((d) => liveCari.push({ id: d.id, ...(d.data() as any) }));
+          }
+          if (!liveStok.length) {
+            liveStok = [];
+            stokSnap.forEach((d) => liveStok.push({ id: d.id, ...(d.data() as any) }));
+          }
+        }
+
+        const { summary } = await finalizeKapiIrsaliyeApproval({
+          guvenlikEvrakId: docId,
           irsaliyeNo,
           firma: irsaliyeFirma,
-          saId: "",
           tarih: irsaliyeTarih,
-          onayDurumu: 'ONAYLANDI',
-          fisEvrakUrl: activeGateDoc.fotoUrl || "",
-          kalemler: irsaliyeKalemler.map(x => ({
-            urunAdi: x.urunAdi,
-            miktar: Number(x.miktar),
-            birim: x.birim || 'Adet'
-          })),
+          fotoUrl: activeGateDoc.fotoUrl || '',
+          kalemler: irsaliyeKalemler,
+          onaylayan: currentUser?.email || 'Yönetici',
+          cariKartlar: liveCari,
+          stokKartlar: liveStok,
+          setIrsaliyeler,
+          setCariIslemGecmisi,
+          setStokKartlar,
+          setStokIslemGecmisi,
+        });
+
+        await updateDoc(doc(db, 'guvenlikGelenEvraklar', docId), {
+          durum: 'ONAYLANDI',
           onaylayanYonetici: currentUser?.email || 'Yönetici',
-          onayTarihi: new Date().toISOString()
-        };
-        await setDoc(doc(db, 'irsaliyeler', docId), newIrsaliye);
+          islenenEvrakTuru: type,
+          irsaliyeId: docId,
+          cariKartId: summary.cariKartId || '',
+          matchSummary: summary,
+          evrakNo: irsaliyeNo,
+          firma: summary.cariUnvan || irsaliyeFirma,
+          tarih: irsaliyeTarih,
+          kalemler: irsaliyeKalemler,
+          onayTarihi: new Date().toISOString(),
+        });
+
+        if (addNotification) {
+          addNotification(
+            `Kapı irsaliyesi onaylandı (${irsaliyeNo}) · ${formatKapiMatchLabel(summary)}`
+          );
+        }
+
+        alert(
+          `İrsaliye onaylandı ve cari/stok ile eşleştirildi.\n${formatKapiMatchLabel(summary)}`
+        );
+        setActiveGateDoc(null);
+        return;
 
       } else if (type === 'MAKBUZ') {
         if (!makbuzRefNo || !makbuzFirma || !makbuzTarih || !makbuzTutar) {

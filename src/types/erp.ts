@@ -104,7 +104,7 @@ export interface Irsaliye {
   kalemler: IrsaliyeItem[];
   eImzalar?: string[];
   /** Kampçı vidanjör / kapı mıcır-stabilize fişi irsaliye niteliğinde */
-  kaynak?: 'VIDANJOR_FIS' | 'YILDIRIM_TANKER_FIS' | 'MICIR_STABILIZE_FIS' | string;
+  kaynak?: 'VIDANJOR_FIS' | 'YILDIRIM_TANKER_FIS' | 'MICIR_STABILIZE_FIS' | 'KAPI_EVRAK' | string;
   plaka?: string;
   cekimAdedi?: number;
   fisNo?: string;
