@@ -173,7 +173,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
         const purchasesSnap = await getDocs(collection(db, 'satinAlmaTalepleri'));
         purchasesSnap.forEach((docSnap) => {
           const data = docSnap.data();
-          if (firmaEslesir(String(data.cariFirma || ''), name)) {
+          if (firmaEslesir(String(data.cariFirma || ''), name) || Boolean(data.cariKartId && data.cariKartId === id)) {
             logs.push({
               id: docSnap.id,
               type: 'SATIN ALMA',
@@ -209,7 +209,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
         const invoicesSnap = await getDocs(collection(db, 'faturalar'));
         invoicesSnap.forEach((docSnap) => {
           const data = docSnap.data();
-          if (firmaEslesir(String(data.cariUnvan || ''), name)) {
+          if (firmaEslesir(String(data.cariUnvan || ''), name) || Boolean(data.cariKartId && data.cariKartId === id)) {
             logs.push({
               id: docSnap.id,
               type: 'FATURA',
@@ -238,26 +238,48 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
           }
         });
 
-        // Personel + malzeme teslim geçmişi (cariIslemGecmisi)
+        // Cari işlem geçmişi (SA / irsaliye / fatura / personel / teslim)
         const cariIslemSnap = await getDocs(collection(db, 'cariIslemGecmisi'));
         cariIslemSnap.forEach((docSnap) => {
           const data = docSnap.data();
           if (data.cariKartId !== id) return;
+          const tip = String(data.islemTipi || '').toUpperCase();
           const baslik = String(data.islemBaslik || '').toLocaleLowerCase('tr-TR');
           const detay = String(data.islemDetay || '').toLocaleLowerCase('tr-TR');
           const isPersonelIslem = baslik.includes('personel') || detay.includes('personel');
           const isMalzemeTeslim =
             baslik.includes('malzeme teslim') || baslik.includes('teslim tutanağı');
-          if (!isPersonelIslem && !isMalzemeTeslim) return;
+          const isEvrak =
+            tip === 'SATIN_ALMA' ||
+            tip === 'IRSALIYE' ||
+            tip === 'FATURA' ||
+            tip === 'KASA_HAREKETI';
+
+          if (!isPersonelIslem && !isMalzemeTeslim && !isEvrak) return;
+
+          const typeLabel = isMalzemeTeslim
+            ? 'MALZEME TESLİM'
+            : isPersonelIslem
+              ? 'TAŞERON PERSONEL'
+              : tip === 'SATIN_ALMA'
+                ? 'SATIN ALMA (İŞLEM)'
+                : tip === 'IRSALIYE'
+                  ? 'İRSALİYE (İŞLEM)'
+                  : tip === 'FATURA'
+                    ? 'FATURA (İŞLEM)'
+                    : 'CARİ İŞLEM';
+
           logs.push({
             id: isMalzemeTeslim && data.islemId ? String(data.islemId) : docSnap.id,
-            type: isMalzemeTeslim ? 'MALZEME TESLİM' : 'TAŞERON PERSONEL',
-            title: data.islemBaslik || (isMalzemeTeslim ? 'Malzeme Teslim Tutanağı' : 'Taşeron Personel'),
+            type: typeLabel,
+            title: data.islemBaslik || typeLabel,
             desc: data.islemDetay || '',
             date: data.tarih || '',
             badgeColor: isMalzemeTeslim
               ? 'bg-emerald-100 text-emerald-800'
-              : 'bg-indigo-100 text-indigo-800',
+              : isEvrak
+                ? 'bg-blue-100 text-blue-800'
+                : 'bg-indigo-100 text-indigo-800',
             collection: isMalzemeTeslim ? 'hazirTutanaklar' : 'cariIslemGecmisi',
           });
         });
@@ -317,6 +339,25 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
               date: data.tarih || '',
               badgeColor: 'bg-amber-100 text-amber-800',
               collection: 'irsaliyeler',
+            });
+          }
+        });
+
+        const invoicesSnap = await getDocs(collection(db, 'faturalar'));
+        invoicesSnap.forEach((docSnap) => {
+          const data = docSnap.data();
+          const hasItem = data.kalemler?.some(
+            (k: any) => k.urunAdi?.toLowerCase() === name.toLowerCase() || k.stokKartId === id
+          );
+          if (hasItem) {
+            logs.push({
+              id: docSnap.id,
+              type: 'FATURA',
+              title: `Fatura: ${data.faturaNo || 'FAT-KOD'}`,
+              desc: `Firma: ${data.cariUnvan || '-'} · ₺${Number(data.genelToplam || 0).toLocaleString('tr-TR')}`,
+              date: data.tarih || '',
+              badgeColor: 'bg-stone-200 text-stone-800',
+              collection: 'faturalar',
             });
           }
         });
@@ -966,6 +1007,9 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
                   <h2 className="text-lg font-black text-slate-900 mt-0.5">{selectedStok.stokAdi}</h2>
                   <p className="text-xs text-slate-500 mt-1">
                     {selectedStok.kategori} · Birim: {selectedStok.birim}
+                    <span className="ml-2 inline-flex items-center font-bold text-slate-800 bg-slate-100 border border-slate-200 rounded-lg px-2 py-0.5">
+                      Stok: {Number(selectedStok.miktar ?? 0).toLocaleString('tr-TR')} {selectedStok.birim}
+                    </span>
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">

@@ -3,7 +3,7 @@ import {
   ShoppingCart, Plus, Trash2, Edit3, Eye, Upload, 
   Send, ShieldCheck, Search, Sparkles, CheckCircle2, AlertCircle 
 } from 'lucide-react';
-import { SatinAlmaTalebi, SatinAlmaItem, CariKart, StokKart, StokKartIslem } from '../types/erp';
+import { SatinAlmaTalebi, SatinAlmaItem, CariKart, StokKart, StokKartIslem, CariKartIslem } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
 import { confirmSignedUploadWithMismatchCheck } from '../lib/evrakOnayUtils';
 import { findNearDuplicateStokName, normalizeCardName } from '../lib/duplicateNameUtils';
@@ -12,6 +12,15 @@ import { normalizeDateKey } from '../lib/dateKeyUtils';
 import { openHtmlReportWindow, openReportEmailComposer } from '../lib/reportEmail';
 import { buildSatinAlmaReportHtml } from '../lib/satinAlmaReportHtml';
 import { createSatinAlmaPublicShare } from '../lib/satinAlmaPublicShare';
+import {
+  applyStokGirisFromKalemler,
+  appendCariIslemOnce,
+  buildCariEvrakHistory,
+  countLinkedStok,
+  linkSatinAlmaKalemler,
+  resolveCariKartId,
+} from '../lib/evrakCariStokSync';
+import { EvrakZincirBanner } from './EvrakZincirBanner';
 
 interface SatinAlmaScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
@@ -25,6 +34,7 @@ interface SatinAlmaScreenProps {
   stokKartlar: StokKart[];
   setStokKartlar?: React.Dispatch<React.SetStateAction<StokKart[]>>;
   setStokIslemGecmisi?: React.Dispatch<React.SetStateAction<StokKartIslem[]>>;
+  setCariIslemGecmisi?: React.Dispatch<React.SetStateAction<CariKartIslem[]>>;
   kullanicilar?: any[];
   currentUser?: any;
   addNotification?: (mesaj: string) => void;
@@ -38,6 +48,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
   stokKartlar,
   setStokKartlar,
   setStokIslemGecmisi,
+  setCariIslemGecmisi,
   currentUser,
   addNotification
 }) => {
@@ -194,75 +205,19 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     });
 
   const syncPurchaseToStokCards = (items: SatinAlmaItem[], saId: string, tarih: string, supplier: string) => {
-    if (!setStokKartlar) return;
-    const islemSatirlari: StokKartIslem[] = [];
-
-    setStokKartlar((prev) => {
-      let next = [...prev];
-      for (const kalem of items) {
-        const rawName = String(kalem.urunAdi || '').trim();
-        if (!rawName) continue;
-
-        let stok = findExistingStok(rawName, next);
-        if (!stok) {
-          stok = {
-            id: `sk_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-            stokKodu: `STK-${Math.floor(1000 + Math.random() * 9000)}`,
-            stokAdi: rawName,
-            kategori: suggestedStokCat || 'Kaba İnşaat İmalatı',
-            birim: kalem.birim || suggestedStokUnit || 'ADET',
-            kritikSeviye: 5,
-            durum: 'AKTIF',
-            aciklama: 'Satın alma entegrasyonuyla otomatik oluşturuldu.',
-          };
-          next = [stok, ...next];
-        }
-
-        const historyLine = `${tarih} ${saId} · ${supplier} · ${kalem.miktar} ${kalem.birim || stok.birim}`;
-        next = next.map((s) => {
-          if (s.id !== stok!.id) return s;
-          const oldDesc = String(s.aciklama || '');
-          const alreadyLogged = oldDesc.includes(saId);
-          const mergedDesc = alreadyLogged
-            ? oldDesc
-            : `${oldDesc}\n[Satın Alma] ${historyLine}`.trim();
-          return {
-            ...s,
-            stokAdi: stok!.stokAdi,
-            birim: s.birim || kalem.birim || 'ADET',
-            aciklama: mergedDesc,
-          };
-        });
-
-        islemSatirlari.push({
-          id: `stk_islem_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-          stokKartId: stok.id,
-          islemTipi: 'GIRIS',
-          islemId: saId,
-          islemBaslik: 'Satın Alma Talebi',
-          islemDetay: `${supplier} firmasından satın alma kaydı işlendi.`,
-          miktarDegisimi: Number(kalem.miktar || 0),
-          tarih,
-          belgeNo: saId,
-        });
-      }
-      return next;
+    applyStokGirisFromKalemler({
+      kalemler: items,
+      belgeNo: saId,
+      tarih,
+      supplier,
+      islemBaslik: 'Satın Alma Talebi',
+      islemDetayPrefix: 'Satın alma kaydı ·',
+      bumpMiktar: true,
+      stokKartlar,
+      setStokKartlar,
+      setStokIslemGecmisi,
+      aciklamaTag: 'Satın Alma',
     });
-
-    if (setStokIslemGecmisi && islemSatirlari.length > 0) {
-      setStokIslemGecmisi((prev) => {
-        const existingKeys = new Set(
-          prev.map((row) => `${row.stokKartId}|${row.belgeNo}|${row.islemTipi}`)
-        );
-        const uniqueIncoming = islemSatirlari.filter((row) => {
-          const key = `${row.stokKartId}|${row.belgeNo}|${row.islemTipi}`;
-          if (existingKeys.has(key)) return false;
-          existingKeys.add(key);
-          return true;
-        });
-        return [...uniqueIncoming, ...prev];
-      });
-    }
   };
 
   const handleAddToCart = () => {
@@ -275,6 +230,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
       ...tempItem,
       urunAdi: existingStok?.stokAdi || tempItem.urunAdi.trim(),
       birim: tempItem.birim || existingStok?.birim || 'ADET',
+      stokKartId: existingStok?.id,
       id: `sai_${Date.now()}`
     };
     setCartItems(prev => [...prev, newItem]);
@@ -296,10 +252,15 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     }
 
     const cleanDate = saDate || new Date().toISOString().split('T')[0];
-    const normalizedCartItems = normalizeCartItemsByKnownStok(cartItems);
+    const cariResolved = resolveCariKartId(saSupplier, cariKartlar);
+    const normalizedCartItems = linkSatinAlmaKalemler(
+      normalizeCartItemsByKnownStok(cartItems),
+      stokKartlar
+    );
     const purchaseSaId = editingSaId
       ? satinAlmaTalepleri.find((s) => s.id === editingSaId)?.saId || buildSaId(cleanDate)
       : buildSaId(cleanDate);
+    const recordId = editingSaId || `sa_${Date.now()}`;
 
     if (editingSaId) {
       setSatinAlmaTalepleri(prev => prev.map(sa => {
@@ -309,6 +270,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
             tarih: cleanDate,
             saId: purchaseSaId,
             cariFirma: saSupplier,
+            cariKartId: cariResolved.cariKartId || sa.cariKartId,
             aciklama: saNotes,
             kalemler: normalizedCartItems,
             imzaliEvrakUrl: saAttachmentUrl || sa.imzaliEvrakUrl
@@ -319,11 +281,12 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
       setEditingSaId(null);
     } else {
       const newSa: SatinAlmaTalebi = {
-        id: `sa_${Date.now()}`,
+        id: recordId,
         saId: purchaseSaId,
         tarih: cleanDate,
         talepEden: '',
         cariFirma: saSupplier,
+        cariKartId: cariResolved.cariKartId || undefined,
         onayDurumu: 'ONAY BEKLİYOR',
         aciklama: saNotes,
         kalemler: normalizedCartItems,
@@ -335,8 +298,27 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
 
     checkAndSuggestCari(saSupplier);
     syncPurchaseToStokCards(normalizedCartItems, purchaseSaId, cleanDate, saSupplier);
+
+    if (cariResolved.cariKartId) {
+      appendCariIslemOnce(
+        setCariIslemGecmisi,
+        buildCariEvrakHistory({
+          cariKartId: cariResolved.cariKartId,
+          islemTipi: 'SATIN_ALMA',
+          islemId: recordId,
+          islemBaslik: 'Satın Alma Talebi',
+          islemDetay: `${purchaseSaId} · ${saSupplier} · ${normalizedCartItems.length} kalem`,
+          tarih: cleanDate,
+          belgeNo: purchaseSaId,
+        })
+      );
+    }
+
+    const stokLink = countLinkedStok(normalizedCartItems);
     if (addNotification) {
-      addNotification(`${purchaseSaId} satın alma kaydı işlendi. ${normalizedCartItems.length} kalem stok kart geçmişine eklendi.`);
+      addNotification(
+        `${purchaseSaId} kaydedildi. Cari: ${cariResolved.matched ? 'bağlı' : 'önerildi'} · Stok: ${stokLink.linked}/${stokLink.total}`
+      );
     }
 
     // reset
@@ -345,7 +327,11 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     setSaNotes("");
     setCartItems([]);
     setSaAttachmentUrl(null);
-    alert("Satın alma talebi kaydedildi.");
+    alert(
+      cariResolved.matched
+        ? `Satın alma kaydedildi.\nCari kart bağlı · Stok eşleşmesi ${stokLink.linked}/${stokLink.total}`
+        : `Satın alma kaydedildi.\nCari kart bulunamadı — öneri penceresini kontrol edin.\nStok eşleşmesi ${stokLink.linked}/${stokLink.total}`
+    );
   };
 
   const handleSimulateESignature = (sa: SatinAlmaTalebi) => {
@@ -820,16 +806,36 @@ ${kalemOzet || '—'}${more}`,
       .sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || ''), 'tr'));
   }, [satinAlmaTalepleri, talepTab, talepTarihFiltre, saSearchKeyword]);
 
+  const liveCari = resolveCariKartId(saSupplier, cariKartlar);
+  const liveStok = countLinkedStok(cartItems);
+  const cariBagliCount = satinAlmaTalepleri.filter((t) => Boolean(t.cariKartId)).length;
+
   return (
-    <div className="flex-grow p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col lg:flex-row font-sans gap-6 select-none bg-slate-50/50">
-      
+    <div className="flex-grow p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col font-sans gap-5 select-none bg-slate-50/50">
+      <EvrakZincirBanner
+        aktif="satin_alma"
+        cariBagli={liveCari.matched}
+        cariAdi={saSupplier || undefined}
+        stokLinked={liveStok.linked}
+        stokTotal={liveStok.total}
+        metrics={[
+          { label: 'Açık talepler', value: satinAlmaTalepleri.filter((t) => !t.arsivde).length, tone: 'neutral' },
+          {
+            label: 'Cari bağlı kayıt',
+            value: `${cariBagliCount}/${satinAlmaTalepleri.length || 0}`,
+            tone: cariBagliCount > 0 ? 'ok' : 'warn',
+          },
+        ]}
+      />
+
+      <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
       {/* LEFT FORM PANEL */}
       <div className="w-full lg:w-[420px] lg:h-[680px] shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
-        <div className="bg-slate-900 text-white p-4 shrink-0 flex items-center gap-2">
-          <ShoppingCart size={18} className="text-amber-500" />
+        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-800 text-white p-4 shrink-0 flex items-center gap-2">
+          <ShoppingCart size={18} className="text-amber-400" />
           <div>
-            <h3 className="font-display font-semibold text-sm">🛒 Satın Alma Sipariş Talebi</h3>
-            <p className="text-[10px] text-slate-400">Yeni bir malzeme tedarik sipariş talebi oluşturun.</p>
+            <h3 className="font-display font-semibold text-sm">Satın Alma Sipariş Talebi</h3>
+            <p className="text-[10px] text-slate-400">Cari ve stok kartlarına bağlı tedarik talebi.</p>
           </div>
         </div>
 
@@ -1048,7 +1054,23 @@ ${kalemOzet || '—'}${more}`,
                           {sa.onayDurumu === 'ONAYLANDI' ? '✓ ONAYLANDI (KİLİTLİ)' : sa.onayDurumu}
                         </span>
                       </div>
-                      <h5 className="font-bold text-slate-950 mt-1">Şantiye: {sa.cariFirma} · Tarih: {sa.tarih}</h5>
+                      <h5 className="font-bold text-slate-950 mt-1">
+                        {sa.cariFirma} · {sa.tarih}
+                        {sa.cariKartId ? (
+                          <span className="ml-2 text-[8px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-100 px-1.5 py-0.5 rounded">
+                            Cari bağlı
+                          </span>
+                        ) : (
+                          <span className="ml-2 text-[8px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-100 px-1.5 py-0.5 rounded">
+                            Cari yok
+                          </span>
+                        )}
+                        {countLinkedStok(sa.kalemler).linked > 0 && (
+                          <span className="ml-1 text-[8px] font-black uppercase bg-sky-50 text-sky-700 border border-sky-100 px-1.5 py-0.5 rounded">
+                            Stok {countLinkedStok(sa.kalemler).linked}/{sa.kalemler.length}
+                          </span>
+                        )}
+                      </h5>
                     </div>
 
                     {isLocked && (
@@ -1222,6 +1244,7 @@ ${kalemOzet || '—'}${more}`,
             })
           )}
         </div>
+      </div>
       </div>
 
       {/* ➕ CARİ SUGGEST MODAL */}
