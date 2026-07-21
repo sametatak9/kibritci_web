@@ -862,8 +862,6 @@ ${kalemOzet || '—'}${more}`,
     });
   };
 
-  const isSaDonusturuldu = (sa: SatinAlmaTalebi) => findIrsaliyelerForSa(sa, irsaliyeler).length > 0;
-
   const tabCounts = useMemo(() => {
     let mevcut = 0;
     let donusturuldu = 0;
