@@ -2801,6 +2801,9 @@ export default function App() {
                 <SatinAlmaScreen 
                   satinAlmaTalepleri={satinAlmaTalepleri}
                   setSatinAlmaTalepleri={setSatinAlmaTalepleriWithSync}
+                  irsaliyeler={irsaliyeler}
+                  setIrsaliyeler={setIrsaliyelerWithSync}
+                  faturalar={faturalar}
                   cariKartlar={cariKartlar}
                   setCariKartlar={setCariKartlarWithSync}
                   stokKartlar={stokKartlar}

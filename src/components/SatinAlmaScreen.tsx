@@ -3,7 +3,7 @@ import {
   ShoppingCart, Plus, Trash2, Edit3, Eye, Upload, 
   Send, ShieldCheck, Search, Sparkles, CheckCircle2, AlertCircle 
 } from 'lucide-react';
-import { SatinAlmaTalebi, SatinAlmaItem, CariKart, StokKart, StokKartIslem, CariKartIslem } from '../types/erp';
+import { SatinAlmaTalebi, SatinAlmaItem, CariKart, StokKart, StokKartIslem, CariKartIslem, Irsaliye, Fatura } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
 import { confirmSignedUploadWithMismatchCheck } from '../lib/evrakOnayUtils';
 import { findNearDuplicateStokName, normalizeCardName } from '../lib/duplicateNameUtils';
@@ -20,15 +20,20 @@ import {
   linkSatinAlmaKalemler,
   resolveCariKartId,
 } from '../lib/evrakCariStokSync';
+import {
+  buildIrsaliyeFromSatinAlma,
+  describeEvrakZinciri,
+  findIrsaliyelerForSa,
+} from '../lib/evrakDonusum';
 import { EvrakZincirBanner } from './EvrakZincirBanner';
 
 interface SatinAlmaScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
   setSatinAlmaTalepleri: React.Dispatch<React.SetStateAction<SatinAlmaTalebi[]>>;
-  irsaliyeler?: any;
-  setIrsaliyeler?: any;
-  faturalar?: any;
-  setFaturalar?: any;
+  irsaliyeler?: Irsaliye[];
+  setIrsaliyeler?: React.Dispatch<React.SetStateAction<Irsaliye[]>>;
+  faturalar?: Fatura[];
+  setFaturalar?: React.Dispatch<React.SetStateAction<Fatura[]>>;
   cariKartlar: CariKart[];
   setCariKartlar?: React.Dispatch<React.SetStateAction<CariKart[]>>;
   stokKartlar: StokKart[];
@@ -43,6 +48,9 @@ interface SatinAlmaScreenProps {
 export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
   satinAlmaTalepleri,
   setSatinAlmaTalepleri,
+  irsaliyeler = [],
+  setIrsaliyeler,
+  faturalar = [],
   cariKartlar,
   setCariKartlar,
   stokKartlar,
@@ -331,6 +339,62 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
       cariResolved.matched
         ? `Satın alma kaydedildi.\nCari kart bağlı · Stok eşleşmesi ${stokLink.linked}/${stokLink.total}`
         : `Satın alma kaydedildi.\nCari kart bulunamadı — öneri penceresini kontrol edin.\nStok eşleşmesi ${stokLink.linked}/${stokLink.total}`
+    );
+  };
+
+  const handleConvertSaToIrsaliye = (sa: SatinAlmaTalebi) => {
+    if (!setIrsaliyeler) {
+      alert('İrsaliye kaydı için sistem bağlantısı yok. Sayfayı yenileyip tekrar deneyin.');
+      return;
+    }
+    if (!sa.kalemler?.length) {
+      alert('Bu siparişte kalem yok; irsaliyeye dönüştürülemez.');
+      return;
+    }
+
+    const { irsaliye, alreadyExists, warning } = buildIrsaliyeFromSatinAlma(sa, {
+      irsaliyeler,
+      cariKartlar,
+      stokKartlar,
+    });
+
+    if (alreadyExists.length > 0) {
+      const ok = window.confirm(
+        `${warning || 'Bu sipariş için irsaliye zaten var.'}\n\nMevcut: ${alreadyExists
+          .map((x) => x.irsaliyeNo)
+          .join(', ')}\n\nYine de yeni sevk irsaliyesi oluşturulsun mu?`
+      );
+      if (!ok) return;
+    } else if (
+      !window.confirm(
+        `"${sa.saId}" siparişi sevk irsaliyesine dönüştürülsün mü?\n\nFirma: ${sa.cariFirma}\nKalem: ${sa.kalemler.length}`
+      )
+    ) {
+      return;
+    }
+
+    setIrsaliyeler((prev) => [irsaliye, ...prev]);
+
+    if (irsaliye.cariKartId) {
+      appendCariIslemOnce(
+        setCariIslemGecmisi,
+        buildCariEvrakHistory({
+          cariKartId: irsaliye.cariKartId,
+          islemTipi: 'IRSALIYE',
+          islemId: irsaliye.id,
+          islemBaslik: 'Siparişten İrsaliye',
+          islemDetay: `${sa.saId} → ${irsaliye.irsaliyeNo} · ${sa.cariFirma}`,
+          tarih: irsaliye.tarih,
+          belgeNo: irsaliye.irsaliyeNo,
+        })
+      );
+    }
+
+    if (addNotification) {
+      addNotification(`${sa.saId} → irsaliye ${irsaliye.irsaliyeNo} oluşturuldu (sevk hazırlık).`);
+    }
+    alert(
+      `İrsaliye oluşturuldu.\nNo: ${irsaliye.irsaliyeNo}\nSipariş bağı: ${sa.saId}\n\nİrsaliye sekmesinden kontrol edebilirsiniz.`
     );
   };
 
@@ -1070,6 +1134,15 @@ ${kalemOzet || '—'}${more}`,
                             Stok {countLinkedStok(sa.kalemler).linked}/{sa.kalemler.length}
                           </span>
                         )}
+                        {(() => {
+                          const z = describeEvrakZinciri(sa, irsaliyeler, faturalar);
+                          if (!z.sevk && !z.fatura) return null;
+                          return (
+                            <span className="ml-1 text-[8px] font-black uppercase bg-violet-50 text-violet-700 border border-violet-100 px-1.5 py-0.5 rounded">
+                              Sevk {z.sevk} · Fatura {z.fatura}
+                            </span>
+                          );
+                        })()}
                       </h5>
                     </div>
 
@@ -1108,6 +1181,17 @@ ${kalemOzet || '—'}${more}`,
 
                   {/* Actions buttons */}
                   <div className="flex flex-wrap gap-2 pt-1.5 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => handleConvertSaToIrsaliye(sa)}
+                      className="bg-violet-50 hover:bg-violet-100 text-violet-800 border border-violet-200 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer"
+                      title="Siparişi sevk irsaliyesine dönüştür (kalemler + firma + SA bağı)"
+                    >
+                      → İrsaliyeye Dönüştür
+                      {findIrsaliyelerForSa(sa, irsaliyeler).length > 0
+                        ? ` (${findIrsaliyelerForSa(sa, irsaliyeler).length})`
+                        : ''}
+                    </button>
                     <button
                       onClick={() =>
                         exportSpecificTaleplerToExcel(

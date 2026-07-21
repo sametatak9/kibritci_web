@@ -68,7 +68,7 @@ export const EvrakZincirBanner: React.FC<Props> = ({
               Evrak · Cari · Stok zinciri
             </p>
             <p className="text-sm font-bold text-slate-900 leading-snug">
-              Satın alma, irsaliye ve fatura aynı cari ve stok kartlarına bağlanır.
+              Sipariş → sevk irsaliyesi → fatura aynı cari/stok kartlarına bağlanır.
             </p>
           </div>
 

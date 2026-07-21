@@ -21,6 +21,11 @@ import {
   linkIrsaliyeKalemler,
   resolveCariKartId,
 } from '../lib/evrakCariStokSync';
+import {
+  buildFaturaFromIrsaliyeler,
+  findFaturalarForIrsaliye,
+  linkIrsaliyelerToFatura,
+} from '../lib/evrakDonusum';
 import { findStokMatch } from '../lib/evrakBatchImportUtils';
 import { EvrakZincirBanner } from './EvrakZincirBanner';
 
@@ -359,6 +364,66 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
     setIrSignedAttachmentUrl(null);
     alert(
       `İrsaliye kaydedildi.\nCari: ${cariResolved.matched ? 'bağlı' : 'kart önerildi'}\nStok eşleşmesi: ${stokLink.linked}/${stokLink.total}`
+    );
+  };
+
+  const handleConvertIrsaliyeToFatura = (ir: Irsaliye) => {
+    if (!setFaturalar) {
+      alert('Fatura kaydı için sistem bağlantısı yok.');
+      return;
+    }
+    if (!(ir.kalemler || []).length) {
+      alert('Bu irsaliyede kalem yok; faturaya dönüştürülemez.');
+      return;
+    }
+
+    const { fatura, alreadyExists, warning } = buildFaturaFromIrsaliyeler([ir], {
+      faturalar,
+      cariKartlar,
+      stokKartlar,
+    });
+
+    if (alreadyExists.length > 0) {
+      const ok = window.confirm(
+        `${warning || 'Bu irsaliye için fatura zaten var.'}\n\nMevcut: ${alreadyExists
+          .map((x) => x.faturaNo)
+          .join(', ')}\n\nYine de yeni fatura oluşturulsun mu?`
+      );
+      if (!ok) return;
+    } else if (
+      !window.confirm(
+        `"${ir.irsaliyeNo}" irsaliyesi faturaya dönüştürülsün mü?\n\nFirma: ${ir.firma}\nKalem: ${(ir.kalemler || []).length}\n\nNot: Birim fiyatlar 0 gelir; Fatura sekmesinde doldurun.`
+      )
+    ) {
+      return;
+    }
+
+    setFaturalar((prev) => [fatura, ...prev]);
+    setIrsaliyeler((prev) => linkIrsaliyelerToFatura(prev, fatura));
+
+    if (fatura.cariKartId) {
+      appendCariIslemOnce(
+        setCariIslemGecmisi,
+        buildCariEvrakHistory({
+          cariKartId: fatura.cariKartId,
+          islemTipi: 'FATURA',
+          islemId: fatura.id,
+          islemBaslik: 'İrsaliyeden Fatura',
+          islemDetay: `${ir.irsaliyeNo} → ${fatura.faturaNo} · ${ir.firma}`,
+          tarih: fatura.tarih,
+          belgeNo: fatura.faturaNo,
+          tutar: fatura.genelToplam,
+        })
+      );
+    }
+
+    if (addNotification) {
+      addNotification(`${ir.irsaliyeNo} → fatura ${fatura.faturaNo} oluşturuldu (mali dönüşüm).`);
+    }
+    alert(
+      `Fatura oluşturuldu.\nNo: ${fatura.faturaNo}\nİrsaliye bağı: ${ir.irsaliyeNo}${
+        fatura.saId ? `\nSipariş: ${fatura.saId}` : ''
+      }\n\nFatura sekmesinden birim fiyatları doldurun.`
     );
   };
 
@@ -864,7 +929,18 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                               : (ir.kalemler || []).length}
                           </td>
                           <td className="px-2 py-1.5">
-                            <div className="flex gap-1">
+                            <div className="flex flex-wrap gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleConvertIrsaliyeToFatura(ir)}
+                                className="text-[10px] bg-violet-50 hover:bg-violet-100 text-violet-800 border border-violet-200 rounded px-2 py-1 font-bold cursor-pointer"
+                                title="Sevk irsaliyesini faturaya dönüştür"
+                              >
+                                → Fatura
+                                {findFaturalarForIrsaliye(ir, faturalar).length > 0
+                                  ? ` (${findFaturalarForIrsaliye(ir, faturalar).length})`
+                                  : ''}
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => {
