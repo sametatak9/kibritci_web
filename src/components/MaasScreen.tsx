@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { CreditCard, Copy, Check, DollarSign, Download, Building, Search, Clock } from 'lucide-react';
+import { CreditCard, Copy, Check, Search, Clock, AlertTriangle, Wallet } from 'lucide-react';
 import { Personel, AylikYoklamaMap, MaaşOdeme } from '../types/erp';
 import { CorporateReportLayout } from './CorporateReportLayout';
-import { buildPersonelListForMonth, getYoklamaDay, isDayActiveForPersonel, iterateMonthYoklama, normalizeTurkishName } from '../lib/yoklamaUtils';
+import { buildPersonelListForMonth, getYoklamaDay, isDayActiveForPersonel, iterateMonthYoklama } from '../lib/yoklamaUtils';
 import { resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 
 interface MaasScreenProps {
@@ -27,6 +27,8 @@ interface MaasScreenProps {
   onOpenMaasOdeme?: () => void;
 }
 
+type IbanFilter = 'HEPSI' | 'IBAN_HAZIR' | 'IBAN_EKSIK';
+
 export const MaasScreen: React.FC<MaasScreenProps> = ({
   personeller,
   yoklamalar,
@@ -41,6 +43,8 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
   const [selectedYear, setSelectedYear] = useState(initialYear ?? new Date().getFullYear());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [ibanFilter, setIbanFilter] = useState<IbanFilter>('HEPSI');
+  const [bulkCopied, setBulkCopied] = useState(false);
 
   const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
 
@@ -101,14 +105,6 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
       }
     });
 
-    if (normalizeTurkishName(`${p.ad} ${p.soyad}`) === 'ADEMCAGLAR') {
-      const monthPrefix = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-`;
-      const monthKeys = Object.keys(personYoklama).filter((k) => k.startsWith(monthPrefix)).sort();
-      // #region agent log
-      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-3',hypothesisId:'H4',location:'MaasScreen.tsx:calculatedSalaries(adem)',message:'target payroll row source',data:{selectedYear,selectedMonth,personId:p.id,monthKeyCount:monthKeys.length,monthKeys:monthKeys.slice(0,31),hakedisDays,geldiGun,totalOvertimeHours},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-    }
-
     const baseWage = p.maas;
     const katsayi = hakedisDays / daysInMonth;
     const totalBaseHakedis = katsayi * baseWage;
@@ -120,6 +116,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
     const periodPayment = maasOdemeleri.find((m) => m.personelId === p.id && m.ay === selectedMonth && m.yil === selectedYear);
     const cutAmount = periodPayment?.kesintiToplami || 0;
     const netPayable = (totalBaseHakedis + totalOvertimeHakedis) - cutAmount;
+    const hasIban = Boolean(String(p.ibanNo || '').replace(/\s/g, '').length >= 15);
 
     grandBaseHakedis += totalBaseHakedis;
     grandOvertimeHakedis += totalOvertimeHakedis;
@@ -141,9 +138,38 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
       yokGun,
       raporluGun,
       hourlyWage,
-      hourlyOvertimeRate
+      hourlyOvertimeRate,
+      hasIban,
     };
   });
+
+  const filteredSalaries = calculatedSalaries.filter((row) => {
+    if (ibanFilter === 'IBAN_HAZIR') return row.hasIban;
+    if (ibanFilter === 'IBAN_EKSIK') return !row.hasIban;
+    return true;
+  });
+
+  const ibanHazirCount = calculatedSalaries.filter((r) => r.hasIban).length;
+  const ibanEksikCount = calculatedSalaries.filter((r) => !r.hasIban).length;
+  const odenebilirNet = calculatedSalaries
+    .filter((r) => r.hasIban)
+    .reduce((sum, r) => sum + r.netPayable, 0);
+
+  const handleBulkCopyIbans = () => {
+    const lines = calculatedSalaries
+      .filter((r) => r.hasIban && r.netPayable > 0)
+      .map((r) => {
+        const iban = String(r.personel.ibanNo || '').replace(/\s/g, '');
+        return `${r.personel.ad} ${r.personel.soyad}\t${iban}\t${r.netPayable.toFixed(2)}`;
+      });
+    if (lines.length === 0) {
+      alert('Kopyalanacak IBAN bulunamadı.');
+      return;
+    }
+    navigator.clipboard.writeText(lines.join('\n'));
+    setBulkCopied(true);
+    setTimeout(() => setBulkCopied(false), 1600);
+  };
 
   const [showMaasRaporu, setShowMaasRaporu] = useState(false);
 
@@ -197,6 +223,39 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
         ))}
       </div>
 
+      {/* Ödeme hazırlık şeridi */}
+      <div className="shrink-0 rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 text-white p-4 flex flex-col lg:flex-row lg:items-center gap-4 shadow-sm">
+        <div className="flex items-start gap-3 flex-1 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+            <Wallet size={18} className="text-emerald-300" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-display font-bold text-sm tracking-wide">Banka Ödeme Hazırlığı</h3>
+            <p className="text-[11px] text-slate-300 mt-0.5">
+              IBAN’ı olan personelin net tutarı kopyalanabilir; eksik IBAN’lar ödeme listesinden ayrılır.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          <span className="bg-emerald-500/15 border border-emerald-400/30 text-emerald-200 font-bold px-2.5 py-1.5 rounded-lg">
+            Ödenebilir · {ibanHazirCount} kişi · ₺{odenebilirNet.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}
+          </span>
+          <span className="bg-amber-500/15 border border-amber-400/30 text-amber-100 font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1">
+            <AlertTriangle size={12} />
+            Eksik IBAN · {ibanEksikCount}
+          </span>
+          <button
+            type="button"
+            onClick={handleBulkCopyIbans}
+            className="bg-white text-slate-900 hover:bg-emerald-50 font-bold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer"
+            title="Ad Soyad + IBAN + Net tutarı panoya kopyala"
+          >
+            {bulkCopied ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
+            {bulkCopied ? 'Kopyalandı' : 'Toplu IBAN Kopyala'}
+          </button>
+        </div>
+      </div>
+
       {/* Main List Box */}
       <div className="flex-1 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
         
@@ -219,6 +278,28 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                 placeholder="Personel ara..."
                 className="pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 outline-none focus:border-amber-500 w-full sm:w-44"
               />
+            </div>
+            <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5">
+              {([
+                { id: 'HEPSI' as const, label: 'Tümü' },
+                { id: 'IBAN_HAZIR' as const, label: 'IBAN hazır' },
+                { id: 'IBAN_EKSIK' as const, label: 'Eksik IBAN' },
+              ]).map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setIbanFilter(f.id)}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition cursor-pointer ${
+                    ibanFilter === f.id
+                      ? f.id === 'IBAN_EKSIK'
+                        ? 'bg-amber-500 text-white'
+                        : 'bg-slate-900 text-white'
+                      : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
             </div>
             <button
               onClick={() => setShowMaasRaporu(true)}
@@ -269,11 +350,18 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
 
         {/* Scrollable list items panel */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {calculatedSalaries.map(({ personel, hakedisDays, totalOvertimeHours, totalBaseHakedis, totalOvertimeHakedis, cutAmount, netPayable, geldiGun, izinliGun, pazarGun, tatilGun, yokGun, raporluGun, hourlyWage, hourlyOvertimeRate }) => {
+          {filteredSalaries.length === 0 && (
+            <div className="text-center py-12 text-xs text-slate-400 font-semibold">
+              Bu filtreye uygun personel bulunamadı.
+            </div>
+          )}
+          {filteredSalaries.map(({ personel, hakedisDays, totalOvertimeHours, totalBaseHakedis, totalOvertimeHakedis, cutAmount, netPayable, geldiGun, izinliGun, pazarGun, tatilGun, yokGun, raporluGun, hourlyWage, hourlyOvertimeRate, hasIban }) => {
             return (
               <div 
                 key={personel.id}
-                className="border rounded-xl p-4 flex flex-col gap-4 transition duration-200 bg-white border-slate-150 hover:border-slate-200"
+                className={`border rounded-xl p-4 flex flex-col gap-4 transition duration-200 bg-white hover:border-slate-200 ${
+                  hasIban ? 'border-slate-150' : 'border-amber-200/80 bg-amber-50/20'
+                }`}
               >
                 
                 {/* Top row: Avatar, Identity, Stats, Payment */}
@@ -286,9 +374,18 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                       {personel.ad[0]}{personel.soyad[0]}
                     </div>
                     <div>
-                      <h5 className="font-bold text-slate-800 text-xs">
-                        {personel.ad} {personel.soyad}
-                      </h5>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h5 className="font-bold text-slate-800 text-xs">
+                          {personel.ad} {personel.soyad}
+                        </h5>
+                        <span className={`text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded border ${
+                          hasIban
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-amber-50 text-amber-800 border-amber-200'
+                        }`}>
+                          {hasIban ? 'IBAN hazır' : 'IBAN eksik'}
+                        </span>
+                      </div>
                       <p className="text-[10px] text-slate-400 font-medium">
                         {personel.gorev} · Base: <span className="font-bold">₺{personel.maas.toLocaleString('tr-TR')}</span>
                       </p>
@@ -328,7 +425,7 @@ export const MaasScreen: React.FC<MaasScreenProps> = ({
                   <div className="flex items-center space-x-2 md:border-l md:pl-4 border-slate-100 md:shrink-0">
                     <div className="text-right">
                       <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Banka / IBAN</p>
-                      <p className="text-[10px] font-semibold text-slate-700 font-mono truncate w-36">
+                      <p className={`text-[10px] font-semibold font-mono truncate w-36 ${hasIban ? 'text-slate-700' : 'text-amber-700'}`}>
                         {personel.ibanNo ? personel.ibanNo : "IBAN GİRİLMEMİŞ"}
                       </p>
                     </div>

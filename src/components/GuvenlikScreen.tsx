@@ -5,11 +5,15 @@ import {
   Archive, Calendar, Lock, ClipboardList, MessageCircle, Droplets, Fuel, Images
 } from 'lucide-react';
 import EvrakDuvariPanel, { type EvrakDuvariItem } from './EvrakDuvariPanel';
-import { Personel, Irsaliye, IrsaliyeItem, Fatura, MicirStabilizeFis } from '../types/erp';
+import { Personel, Irsaliye, IrsaliyeItem, Fatura, MicirStabilizeFis, CariKart, StokKart } from '../types/erp';
 import { db } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { fetchApiJson } from '../lib/apiClient';
 import { collection, doc, setDoc, onSnapshot, addDoc, getDocs, deleteDoc, updateDoc } from 'firebase/firestore';
+import {
+  formatKapiMatchLabel,
+  upsertKapiDraftIrsaliye,
+} from '../lib/kapiIrsaliyeUtils';
 import { CorporateReportLayout } from './CorporateReportLayout';
 import { KibritciLogo } from './KibritciLogo';
 import { openBase64InNewTab } from '../lib/fileViewerUtils';
@@ -85,6 +89,8 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   const [uploadQueue, setUploadQueue] = useState<any[]>([]);
   const [loadingIrsaliye, setLoadingIrsaliye] = useState(false);
   const [gelenEvraklar, setGelenEvraklar] = useState<any[]>([]);
+  const [cariKartlarLive, setCariKartlarLive] = useState<CariKart[]>([]);
+  const [stokKartlarLive, setStokKartlarLive] = useState<StokKart[]>([]);
 
   // Search & Filter States
   const [docSearch, setDocSearch] = useState('');
@@ -372,6 +378,18 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       setGelenEvraklar(list);
     });
 
+    // 4b. Cari / stok — kapı irsaliye AI eşleştirmesi için
+    const unsubCari = onSnapshot(collection(db, 'cariKartlar'), (snap) => {
+      const list: CariKart[] = [];
+      snap.forEach((d) => list.push({ id: d.id, ...(d.data() as any) }));
+      setCariKartlarLive(list);
+    });
+    const unsubStok = onSnapshot(collection(db, 'stokKartlar'), (snap) => {
+      const list: StokKart[] = [];
+      snap.forEach((d) => list.push({ id: d.id, ...(d.data() as any) }));
+      setStokKartlarLive(list);
+    });
+
     // 5. Nöbet Arşivleri
     const nobetColl = collection(db, 'guvenlikNobetArsivleri');
     const unsubNobet = onSnapshot(nobetColl, (snap) => {
@@ -396,6 +414,8 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       unsubSt();
       unsubViz();
       unsubEvrak();
+      unsubCari();
+      unsubStok();
       unsubNobet();
       unsubAkvizyon();
     };
@@ -453,6 +473,39 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
           updates.firma = parsed.firma || '';
           updates.tarih = parsed.tarih || '';
           updates.kalemler = parsed.kalemler || [];
+
+          // Kapı irsaliye girişi: firma + kalemleri DB ile eşleştir, yönetici onayı için taslak yaz
+          try {
+            const [cariSnap, stokSnap] = await Promise.all([
+              getDocs(collection(db, 'cariKartlar')),
+              getDocs(collection(db, 'stokKartlar')),
+            ]);
+            const cariler: CariKart[] = [];
+            cariSnap.forEach((d) => cariler.push({ id: d.id, ...(d.data() as any) }));
+            const stoklar: StokKart[] = [];
+            stokSnap.forEach((d) => stoklar.push({ id: d.id, ...(d.data() as any) }));
+
+            const { irsaliye, summary } = await upsertKapiDraftIrsaliye({
+              guvenlikEvrakId: docId,
+              firma: updates.firma,
+              irsaliyeNo: updates.evrakNo || docId,
+              tarih: updates.tarih || new Date().toISOString().split('T')[0],
+              fotoUrl,
+              kalemler: updates.kalemler,
+              cariKartlar: cariler.length ? cariler : cariKartlarLive,
+              stokKartlar: stoklar.length ? stoklar : stokKartlarLive,
+              kaydeden: currentUser?.email || 'nobetci_guvenlik',
+            });
+            updates.irsaliyeId = irsaliye.id;
+            updates.cariKartId = summary.cariKartId || '';
+            updates.matchSummary = summary;
+            updates.kalemler = irsaliye.kalemler;
+            if (summary.cariUnvan) updates.firma = summary.cariUnvan;
+            updates.aciklama = `Kapı irsaliye girişi · ${formatKapiMatchLabel(summary)} (yönetici onayı bekleniyor)`;
+          } catch (matchErr) {
+            console.error('Kapı irsaliye eşleştirme/taslak hatası:', matchErr);
+            updates.matchError = (matchErr as any)?.message || 'Eşleştirme başarısız';
+          }
         } else if (evrakTuru === 'MAKBUZ') {
           updates.evrakNo = parsed.referansId || '';
           updates.firma = parsed.firma || '';
@@ -1108,6 +1161,11 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     if (!window.confirm('Bu evrak kaydını tamamen silmek istediğinize emin misiniz?')) return;
     try {
       await deleteDoc(doc(db, 'guvenlikGelenEvraklar', evrakId));
+      try {
+        await deleteDoc(doc(db, 'irsaliyeler', evrakId));
+      } catch {
+        /* taslak yoksa sorun değil */
+      }
       if (addNotification) addNotification('Evrak kaydı silindi.');
     } catch (e) {
       console.error(e);
@@ -2112,8 +2170,11 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               {/* 1. YENİ EVRAK YÜKLEME ALANI */}
               <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4 shadow-sm">
                 <span className="font-display font-black text-xs text-slate-800 uppercase tracking-widest block border-b pb-2">
-                  📄 YÖNETİCİ ONAYINA EVRAK GÖNDER (ÇOKLU YÜKLEME)
+                  📄 KAPIDA İRSALİYE / EVRAK GİRİŞİ (YÖNETİCİ ONAYINA)
                 </span>
+                <p className="text-[10px] text-slate-500 -mt-2">
+                  Kapıda teslim alınan belgeler genelde irsaliyedir. YZ firma adı ve kalemleri okur, cari/stok kartlarıyla eşleştirir; son onay yöneticidedir.
+                </p>
                 
                 <div className="relative border-2 border-dashed border-indigo-200 rounded-2xl p-6 text-center bg-indigo-50/30 hover:bg-indigo-50/70 transition duration-300 cursor-pointer group">
                   <input
@@ -2369,13 +2430,30 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                                 <div className="text-[9px] mt-0.5">{e.saat}</div>
                               </td>
                               <td className="p-3">
-                                <span className={`text-[9px] font-extrabold px-2.5 py-0.5 rounded-full ${
-                                  e.durum === 'ONAYLANDI' ? 'bg-emerald-100 text-emerald-800' :
-                                  e.durum === 'REDDEDİLDİ' ? 'bg-rose-100 text-rose-800' :
-                                  'bg-amber-100 text-amber-800'
-                                }`}>
-                                  {e.durum}
-                                </span>
+                                <div className="flex flex-col gap-1 items-start">
+                                  <span className={`text-[9px] font-extrabold px-2.5 py-0.5 rounded-full ${
+                                    e.durum === 'ONAYLANDI' ? 'bg-emerald-100 text-emerald-800' :
+                                    e.durum === 'REDDEDİLDİ' ? 'bg-rose-100 text-rose-800' :
+                                    'bg-amber-100 text-amber-800'
+                                  }`}>
+                                    {e.durum}
+                                  </span>
+                                  {e.aiStatus === 'PARSING' && (
+                                    <span className="text-[8px] font-bold text-indigo-600 animate-pulse">YZ okuyor…</span>
+                                  )}
+                                  {e.matchSummary && (
+                                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded border ${
+                                      e.matchSummary.cariMatched
+                                        ? 'bg-teal-50 text-teal-800 border-teal-200'
+                                        : 'bg-amber-50 text-amber-800 border-amber-200'
+                                    }`}>
+                                      {formatKapiMatchLabel(e.matchSummary)}
+                                    </span>
+                                  )}
+                                  {e.firma && !e.matchSummary && e.aiParsed && (
+                                    <span className="text-[8px] text-slate-500 font-semibold truncate max-w-[140px]">{e.firma}</span>
+                                  )}
+                                </div>
                               </td>
                               <td className="p-3 text-center">
                                 <div className="flex justify-center items-center gap-1.5">

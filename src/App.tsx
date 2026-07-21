@@ -2946,7 +2946,7 @@ export default function App() {
 
 
               {activeTab === "onay_islemleri" && (
-                <OnayIslemleriScreen 
+                  <OnayIslemleriScreen 
                   satinAlmaTalepleri={satinAlmaTalepleri}
                   setSatinAlmaTalepleri={setSatinAlmaTalepleriWithSync}
                   irsaliyeler={irsaliyeler}
@@ -2961,6 +2961,9 @@ export default function App() {
                   cariKartlar={cariKartlar}
                   setCariKartlar={setCariKartlarWithSync}
                   setCariIslemGecmisi={setCariIslemGecmisiWithSync}
+                  stokKartlar={stokKartlar}
+                  setStokKartlar={setStokKartlarWithSync}
+                  setStokIslemGecmisi={setStokIslemGecmisiWithSync}
                 />
               )}
 
