@@ -11,7 +11,11 @@ import { compressImage } from '../lib/imageCompress';
 import { fetchApiJson } from '../lib/apiClient';
 import { collection, doc, setDoc, onSnapshot, addDoc, getDocs, deleteDoc, updateDoc } from 'firebase/firestore';
 import {
+  cariOneriReasonLabel,
+  doubleCheckKapiMatch,
   formatKapiMatchLabel,
+  suggestCariFromDb,
+  suggestStokFromDb,
   upsertKapiDraftIrsaliye,
 } from '../lib/kapiIrsaliyeUtils';
 import { CorporateReportLayout } from './CorporateReportLayout';
@@ -105,6 +109,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   const [editEvrakFirma, setEditEvrakFirma] = useState('');
   const [editEvrakTarih, setEditEvrakTarih] = useState('');
   const [editEvrakSaat, setEditEvrakSaat] = useState('');
+  const [editCariKartId, setEditCariKartId] = useState('');
   const [editingKayit, setEditingKayit] = useState<{
     kind: GuvenlikDuzenleKind;
     record: any;
@@ -134,7 +139,9 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
           fileType: file.type,
           dataUrl: displayBase64,
           evrakTuru: 'İRSALİYE',
-          aciklama: ''
+          aciklama: '',
+          firma: '',
+          cariKartId: '',
         }]);
       };
       reader.readAsDataURL(file);
@@ -424,7 +431,12 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   // ─────────────────────────────────────────────────────────────
   // 💾 EVRAK GÖNDERİM EVENTLERİ
   // ─────────────────────────────────────────────────────────────
-  const triggerBackgroundAiParsing = async (docId: string, fotoUrl: string, evrakTuru: string) => {
+  const triggerBackgroundAiParsing = async (
+    docId: string,
+    fotoUrl: string,
+    evrakTuru: string,
+    hints?: { firmaHint?: string; cariKartId?: string }
+  ) => {
     let docTypeParam = 'general';
     if (evrakTuru === 'FATURA') docTypeParam = 'fatura';
     if (evrakTuru === 'İRSALİYE') docTypeParam = 'irsaliye';
@@ -462,19 +474,32 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
         if (evrakTuru === 'FATURA') {
           updates.evrakNo = parsed.faturaNo || '';
-          updates.firma = parsed.cariUnvan || '';
+          updates.firma = hints?.firmaHint || parsed.cariUnvan || '';
           updates.tarih = parsed.tarih || '';
           updates.toplamTutar = parsed.toplamTutar || 0;
           updates.kdvTutar = parsed.kdvTutar || 0;
           updates.genelToplam = parsed.genelToplam || 0;
           updates.kalemler = parsed.kalemler || [];
+          if (hints?.cariKartId) {
+            updates.cariKartId = hints.cariKartId;
+            const c = cariKartlarLive.find((x) => x.id === hints.cariKartId);
+            if (c) updates.firma = c.unvan;
+          } else {
+            const cariOn = suggestCariFromDb(updates.firma, cariKartlarLive, 1)[0];
+            if (cariOn) {
+              updates.cariKartId = cariOn.id;
+              updates.firma = cariOn.unvan;
+              updates.cariOneriler = [cariOn];
+            } else {
+              updates.cariOneriler = suggestCariFromDb(updates.firma, cariKartlarLive, 5);
+            }
+          }
         } else if (evrakTuru === 'İRSALİYE') {
           updates.evrakNo = parsed.irsaliyeNo || '';
-          updates.firma = parsed.firma || '';
+          updates.firma = hints?.firmaHint || parsed.firma || '';
           updates.tarih = parsed.tarih || '';
           updates.kalemler = parsed.kalemler || [];
 
-          // Kapı irsaliye girişi: firma + kalemleri DB ile eşleştir, yönetici onayı için taslak yaz
           try {
             const [cariSnap, stokSnap] = await Promise.all([
               getDocs(collection(db, 'cariKartlar')),
@@ -484,35 +509,76 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             cariSnap.forEach((d) => cariler.push({ id: d.id, ...(d.data() as any) }));
             const stoklar: StokKart[] = [];
             stokSnap.forEach((d) => stoklar.push({ id: d.id, ...(d.data() as any) }));
+            const liveCari = cariler.length ? cariler : cariKartlarLive;
+            const liveStok = stoklar.length ? stoklar : stokKartlarLive;
+
+            let firmaForMatch = updates.firma;
+            if (hints?.cariKartId) {
+              const picked = liveCari.find((c) => c.id === hints.cariKartId);
+              if (picked) {
+                firmaForMatch = picked.unvan;
+                updates.cariKartId = picked.id;
+              }
+            }
 
             const { irsaliye, summary } = await upsertKapiDraftIrsaliye({
               guvenlikEvrakId: docId,
-              firma: updates.firma,
+              firma: firmaForMatch,
               irsaliyeNo: updates.evrakNo || docId,
               tarih: updates.tarih || new Date().toISOString().split('T')[0],
               fotoUrl,
               kalemler: updates.kalemler,
-              cariKartlar: cariler.length ? cariler : cariKartlarLive,
-              stokKartlar: stoklar.length ? stoklar : stokKartlarLive,
+              cariKartlar: liveCari,
+              stokKartlar: liveStok,
               kaydeden: currentUser?.email || 'nobetci_guvenlik',
             });
             updates.irsaliyeId = irsaliye.id;
-            updates.cariKartId = summary.cariKartId || '';
+            updates.cariKartId = summary.cariKartId || updates.cariKartId || '';
             updates.matchSummary = summary;
             updates.kalemler = irsaliye.kalemler;
             if (summary.cariUnvan) updates.firma = summary.cariUnvan;
+
+            if (!summary.cariMatched) {
+              updates.cariOneriler = suggestCariFromDb(updates.firma || parsed.firma || '', liveCari, 5);
+            } else {
+              updates.cariOneriler = [];
+            }
+            updates.stokOneriler = (updates.kalemler || [])
+              .filter((k: any) => !k.stokKartId)
+              .slice(0, 4)
+              .flatMap((k: any) =>
+                suggestStokFromDb(k.urunAdi, liveStok, 1).map((s) => ({
+                  ...s,
+                  kalemAdi: k.urunAdi,
+                }))
+              );
+
             updates.aciklama = `Kapı irsaliye girişi · ${formatKapiMatchLabel(summary)} (yönetici onayı bekleniyor)`;
           } catch (matchErr) {
             console.error('Kapı irsaliye eşleştirme/taslak hatası:', matchErr);
             updates.matchError = (matchErr as any)?.message || 'Eşleştirme başarısız';
+            updates.cariOneriler = suggestCariFromDb(updates.firma, cariKartlarLive, 5);
           }
         } else if (evrakTuru === 'MAKBUZ') {
           updates.evrakNo = parsed.referansId || '';
-          updates.firma = parsed.firma || '';
+          updates.firma = hints?.firmaHint || parsed.firma || '';
           updates.tarih = parsed.tarih || '';
           updates.tutar = parsed.tutar || 0;
           updates.aciklama = parsed.aciklama || '';
           updates.hareketTipi = parsed.hareketTipi || 'ÇIKIŞ';
+          if (hints?.cariKartId) {
+            updates.cariKartId = hints.cariKartId;
+            const c = cariKartlarLive.find((x) => x.id === hints.cariKartId);
+            if (c) updates.firma = c.unvan;
+          } else {
+            const cariOn = suggestCariFromDb(updates.firma, cariKartlarLive, 1)[0];
+            if (cariOn) {
+              updates.cariKartId = cariOn.id;
+              updates.firma = cariOn.unvan;
+            } else {
+              updates.cariOneriler = suggestCariFromDb(updates.firma, cariKartlarLive, 5);
+            }
+          }
         }
 
         await updateDoc(doc(db, 'guvenlikGelenEvraklar', docId), updates);
@@ -544,8 +610,9 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         const newEvrak = {
           id: uniqueId,
           evrakNo: "",
-          evrakTuru: item.evrakTuru, // 'İRSALİYE' | 'FATURA' | 'MAKBUZ' | 'GENEL_EVRAK'
-          firma: "",
+          evrakTuru: item.evrakTuru,
+          firma: String(item.firma || '').trim(),
+          cariKartId: item.cariKartId || '',
           tarih: islemTarihi,
           saat: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
           fotoUrl: item.dataUrl || "",
@@ -556,9 +623,12 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
           kaydeden: currentUser?.email || 'nobetci_guvenlik'
         };
         await setDoc(doc(db, 'guvenlikGelenEvraklar', uniqueId), newEvrak);
-        
+
         if (newEvrak.fotoUrl) {
-          triggerBackgroundAiParsing(uniqueId, newEvrak.fotoUrl, newEvrak.evrakTuru);
+          triggerBackgroundAiParsing(uniqueId, newEvrak.fotoUrl, newEvrak.evrakTuru, {
+            firmaHint: newEvrak.firma || undefined,
+            cariKartId: newEvrak.cariKartId || undefined,
+          });
         }
       }
 
@@ -581,16 +651,47 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     if (!editingEvrak) return;
 
     try {
-      await setDoc(doc(db, 'guvenlikGelenEvraklar', editingEvrak.id), {
+      const firma = editEvrakFirma.trim();
+      const patch: any = {
         ...editingEvrak,
         evrakTuru: editEvrakTuru,
         aciklama: editAciklama,
         evrakNo: editEvrakNo.trim() || editingEvrak.evrakNo,
-        firma: editEvrakFirma.trim(),
+        firma,
+        cariKartId: editCariKartId || '',
         tarih: editEvrakTarih || editingEvrak.tarih,
         saat: editEvrakSaat || editingEvrak.saat,
         duzeltmeZamani: new Date().toISOString(),
-      }, { merge: true });
+      };
+
+      // İrsaliye: firma değişince cari/stok önerisini yenile (yeni kart açmaz)
+      if (editEvrakTuru === 'İRSALİYE' && firma) {
+        const matched = doubleCheckKapiMatch(
+          firma,
+          editingEvrak.kalemler || [],
+          cariKartlarLive,
+          stokKartlarLive
+        );
+        patch.matchSummary = matched.summary;
+        patch.kalemler = matched.kalemler;
+        if (matched.summary.cariMatched) {
+          patch.cariKartId = matched.summary.cariKartId;
+          patch.firma = matched.summary.cariUnvan;
+          patch.cariOneriler = [];
+        } else {
+          patch.cariOneriler = suggestCariFromDb(firma, cariKartlarLive, 5);
+        }
+      } else if (firma && !editCariKartId) {
+        const oneri = suggestCariFromDb(firma, cariKartlarLive, 1)[0];
+        if (oneri) {
+          patch.cariKartId = oneri.id;
+          patch.firma = oneri.unvan;
+        } else {
+          patch.cariOneriler = suggestCariFromDb(firma, cariKartlarLive, 5);
+        }
+      }
+
+      await setDoc(doc(db, 'guvenlikGelenEvraklar', editingEvrak.id), patch, { merge: true });
 
       showStatus('success', 'Evrak bilgileri güncellendi.');
       setEditingEvrak(null);
@@ -608,6 +709,46 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     setEditEvrakFirma(e.firma || '');
     setEditEvrakTarih(e.tarih || islemTarihi);
     setEditEvrakSaat(e.saat || '');
+    setEditCariKartId(e.cariKartId || '');
+  };
+
+  const handleApplyCariOneri = async (evrak: any, oneri: { id: string; unvan: string }) => {
+    try {
+      const patch: any = {
+        firma: oneri.unvan,
+        cariKartId: oneri.id,
+        cariOneriler: [],
+      };
+      if ((evrak.evrakTuru || 'İRSALİYE') === 'İRSALİYE') {
+        const matched = doubleCheckKapiMatch(
+          oneri.unvan,
+          evrak.kalemler || [],
+          cariKartlarLive,
+          stokKartlarLive
+        );
+        patch.matchSummary = matched.summary;
+        patch.kalemler = matched.kalemler;
+        patch.aciklama = `Kapı irsaliye · ${formatKapiMatchLabel(matched.summary)} · cari seçildi: ${oneri.unvan}`;
+        if (evrak.irsaliyeId || evrak.id) {
+          await upsertKapiDraftIrsaliye({
+            guvenlikEvrakId: evrak.id,
+            firma: oneri.unvan,
+            irsaliyeNo: evrak.evrakNo || evrak.id,
+            tarih: evrak.tarih || islemTarihi,
+            fotoUrl: evrak.fotoUrl,
+            kalemler: matched.kalemler,
+            cariKartlar: cariKartlarLive,
+            stokKartlar: stokKartlarLive,
+            kaydeden: currentUser?.email || 'nobetci_guvenlik',
+          });
+        }
+      }
+      await updateDoc(doc(db, 'guvenlikGelenEvraklar', evrak.id), patch);
+      showStatus('success', `Cari önerisi uygulandı: ${oneri.unvan}`);
+    } catch (err) {
+      console.error(err);
+      showStatus('error', 'Cari önerisi uygulanamadı.');
+    }
   };
 
   const handleSaveDuzenlenenKayit = async (patch: Record<string, unknown>) => {
@@ -2173,7 +2314,8 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                   📄 KAPIDA İRSALİYE / EVRAK GİRİŞİ (YÖNETİCİ ONAYINA)
                 </span>
                 <p className="text-[10px] text-slate-500 -mt-2">
-                  Kapıda teslim alınan belgeler genelde irsaliyedir. YZ firma adı ve kalemleri okur, cari/stok kartlarıyla eşleştirir; son onay yöneticidedir.
+                  Amaç: irsaliyeyi doğru firmaya bağlamak. Firma yazdıkça DB’deki cari kartlar önerilir;
+                  YZ kalemleri okuyunca stok eşleşmesi de gösterilir. Yeni kart açılmaz — mevcut kart seçilir.
                 </p>
                 
                 <div className="relative border-2 border-dashed border-indigo-200 rounded-2xl p-6 text-center bg-indigo-50/30 hover:bg-indigo-50/70 transition duration-300 cursor-pointer group">
@@ -2247,6 +2389,61 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                                 </select>
                               </div>
                             </div>
+                          </div>
+
+                          <div className="space-y-1 text-xs">
+                            <label className="text-[8px] font-black text-slate-500 uppercase block">
+                              Firma / Cari (doğru firmaya irsaliye)
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="Firma adını yazın — DB’de varsa önerilir…"
+                              value={item.firma || ''}
+                              onChange={(e) => {
+                                const next = [...uploadQueue];
+                                next[index].firma = e.target.value;
+                                next[index].cariKartId = '';
+                                setUploadQueue(next);
+                              }}
+                              className="w-full bg-white border border-slate-200 p-1.5 rounded-lg text-xs"
+                            />
+                            {item.cariKartId ? (
+                              <p className="text-[9px] font-bold text-teal-700">
+                                ✓ Cari seçildi · {item.firma}
+                              </p>
+                            ) : (
+                              (() => {
+                                const oneriler = suggestCariFromDb(item.firma || '', cariKartlarLive, 4);
+                                if (!oneriler.length) {
+                                  return item.firma && String(item.firma).trim().length >= 2 ? (
+                                    <p className="text-[9px] text-amber-700 font-semibold">
+                                      DB’de birebir cari yok — yine de gönderebilirsiniz; YZ sonrası tekrar önerilir.
+                                    </p>
+                                  ) : null;
+                                }
+                                return (
+                                  <div className="flex flex-wrap gap-1 pt-0.5">
+                                    {oneriler.map((o) => (
+                                      <button
+                                        key={o.id}
+                                        type="button"
+                                        onClick={() => {
+                                          const next = [...uploadQueue];
+                                          next[index].firma = o.unvan;
+                                          next[index].cariKartId = o.id;
+                                          setUploadQueue(next);
+                                        }}
+                                        className="text-[9px] font-bold px-2 py-1 rounded-lg border border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100 cursor-pointer"
+                                        title={cariOneriReasonLabel(o.reason)}
+                                      >
+                                        {o.unvan}
+                                        <span className="opacity-60 ml-1">({cariOneriReasonLabel(o.reason)})</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                );
+                              })()
+                            )}
                           </div>
 
                           <div className="space-y-1 text-xs">
@@ -2453,6 +2650,27 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                                   {e.firma && !e.matchSummary && e.aiParsed && (
                                     <span className="text-[8px] text-slate-500 font-semibold truncate max-w-[140px]">{e.firma}</span>
                                   )}
+                                  {Array.isArray(e.cariOneriler) && e.cariOneriler.length > 0 && e.durum === 'BEKLEMEDE' && (
+                                    <div className="flex flex-col gap-0.5 max-w-[160px]">
+                                      <span className="text-[8px] font-black uppercase text-indigo-600">Cari önerisi</span>
+                                      {e.cariOneriler.slice(0, 2).map((o: any) => (
+                                        <button
+                                          key={o.id}
+                                          type="button"
+                                          onClick={() => handleApplyCariOneri(e, o)}
+                                          className="text-left text-[8px] font-bold px-1.5 py-0.5 rounded border border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100 truncate cursor-pointer"
+                                          title="Bu cariyi uygula"
+                                        >
+                                          → {o.unvan}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {Array.isArray(e.stokOneriler) && e.stokOneriler.length > 0 && (
+                                    <span className="text-[8px] text-sky-700 font-semibold">
+                                      Stok öneri: {e.stokOneriler.length} kalem
+                                    </span>
+                                  )}
                                 </div>
                               </td>
                               <td className="p-3 text-center">
@@ -2523,13 +2741,56 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-slate-500 uppercase block">Firma</label>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block">Firma (cari önerisi)</label>
                           <input
                             type="text"
                             value={editEvrakFirma}
-                            onChange={(e) => setEditEvrakFirma(e.target.value)}
+                            onChange={(e) => {
+                              setEditEvrakFirma(e.target.value);
+                              setEditCariKartId('');
+                            }}
                             className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-medium text-slate-800"
+                            placeholder="Firma yazın — DB’de varsa önerilir"
                           />
+                          {editCariKartId ? (
+                            <p className="text-[9px] font-bold text-teal-700">✓ Cari seçildi</p>
+                          ) : (
+                            <div className="flex flex-wrap gap-1 pt-1">
+                              {suggestCariFromDb(editEvrakFirma, cariKartlarLive, 5).map((o) => (
+                                <button
+                                  key={o.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setEditEvrakFirma(o.unvan);
+                                    setEditCariKartId(o.id);
+                                  }}
+                                  className="text-[9px] font-bold px-2 py-1 rounded-lg border border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100 cursor-pointer"
+                                >
+                                  {o.unvan}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {editEvrakTuru === 'İRSALİYE' && (editingEvrak?.kalemler || []).length > 0 && (
+                            <div className="mt-2 rounded-xl border border-slate-100 bg-slate-50 p-2 space-y-1">
+                              <p className="text-[9px] font-black uppercase text-slate-500">Stok eşleşme önizleme</p>
+                              {(editingEvrak.kalemler || []).slice(0, 5).map((k: any, i: number) => {
+                                const stokHit = k.stokKartId
+                                  ? stokKartlarLive.find((s) => s.id === k.stokKartId)
+                                  : suggestStokFromDb(k.urunAdi, stokKartlarLive, 1)[0];
+                                return (
+                                  <div key={i} className="flex justify-between gap-2 text-[9px]">
+                                    <span className="truncate text-slate-700">{k.urunAdi}</span>
+                                    <span className={stokHit ? 'text-teal-700 font-bold' : 'text-amber-700 font-bold'}>
+                                      {stokHit
+                                        ? `Stok: ${(stokHit as any).stokAdi || (stokHit as any).unvan || 'eşleşti'}`
+                                        : 'Stok yok'}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       </div>
 
