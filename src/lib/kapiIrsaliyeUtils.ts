@@ -265,3 +265,134 @@ export function formatKapiMatchLabel(summary?: Partial<KapiMatchSummary> | null)
       : 'Kalem yok';
   return `${cari} · ${stok}`;
 }
+
+export type CariOneri = {
+  id: string;
+  unvan: string;
+  reason: 'TAM' | 'ICERIR' | 'YAKIN';
+};
+
+export type StokOneri = {
+  id: string;
+  stokAdi: string;
+  birim?: string;
+  reason: 'TAM' | 'ICERIR' | 'YAKIN';
+};
+
+/** Kapı evrak girişinde firma yazılırken DB’deki cari kart önerileri (yeni kart açmaz). */
+export function suggestCariFromDb(
+  query: string,
+  cariler: CariKart[],
+  limit = 6
+): CariOneri[] {
+  const q = String(query || '').trim();
+  if (q.length < 2) return [];
+
+  const seen = new Set<string>();
+  const out: CariOneri[] = [];
+
+  const push = (c: CariKart | undefined, reason: CariOneri['reason']) => {
+    if (!c?.id || seen.has(c.id)) return;
+    seen.add(c.id);
+    out.push({ id: c.id, unvan: c.unvan, reason });
+  };
+
+  const exact = resolveCariKartId(q, cariler);
+  if (exact.matched) {
+    const hit = cariler.find((c) => c.id === exact.cariKartId);
+    push(hit, 'TAM');
+  }
+
+  const qNorm = q
+    .toLocaleLowerCase('tr-TR')
+    .replace(/[ıİ]/g, 'i')
+    .replace(/[şŞ]/g, 's')
+    .replace(/[çÇ]/g, 'c')
+    .replace(/[ğĞ]/g, 'g')
+    .replace(/[üÜ]/g, 'u')
+    .replace(/[öÖ]/g, 'o');
+
+  for (const c of cariler) {
+    if (out.length >= limit) break;
+    const cu = String(c.unvan || '')
+      .toLocaleLowerCase('tr-TR')
+      .replace(/[ıİ]/g, 'i')
+      .replace(/[şŞ]/g, 's')
+      .replace(/[çÇ]/g, 'c')
+      .replace(/[ğĞ]/g, 'g')
+      .replace(/[üÜ]/g, 'u')
+      .replace(/[öÖ]/g, 'o');
+    if (!cu) continue;
+    if (cu.includes(qNorm) || qNorm.includes(cu)) push(c, 'ICERIR');
+  }
+
+  // Yakın unvanlar (yazım farkı)
+  const scored = cariler
+    .map((c) => {
+      const cu = String(c.unvan || '').trim();
+      if (!cu) return null;
+      const a = qNorm;
+      const b = cu
+        .toLocaleLowerCase('tr-TR')
+        .replace(/[ıİ]/g, 'i')
+        .replace(/[şŞ]/g, 's')
+        .replace(/[çÇ]/g, 'c')
+        .replace(/[ğĞ]/g, 'g')
+        .replace(/[üÜ]/g, 'u')
+        .replace(/[öÖ]/g, 'o');
+      let dist = 0;
+      const max = Math.max(a.length, b.length);
+      if (!max) return null;
+      // basit fark oranı — çok uzun metinde erken kes
+      if (Math.abs(a.length - b.length) > 4) return null;
+      const n = Math.min(a.length, b.length);
+      for (let i = 0; i < n; i++) if (a[i] !== b[i]) dist++;
+      dist += Math.abs(a.length - b.length);
+      return dist <= 3 ? { c, dist } : null;
+    })
+    .filter(Boolean) as Array<{ c: CariKart; dist: number }>;
+
+  scored
+    .sort((x, y) => x.dist - y.dist)
+    .forEach((row) => {
+      if (out.length < limit) push(row.c, 'YAKIN');
+    });
+
+  return out.slice(0, limit);
+}
+
+/** Kalem adı için stok kartı önerileri (yeni kart açmaz). */
+export function suggestStokFromDb(
+  urunAdi: string,
+  stoklar: StokKart[],
+  limit = 5
+): StokOneri[] {
+  const linked = linkIrsaliyeKalemler(
+    [{ id: 'tmp', urunAdi: String(urunAdi || '').trim(), miktar: 0, birim: 'Adet' }],
+    stoklar
+  );
+  const hitId = linked[0]?.stokKartId;
+  if (hitId) {
+    const s = stoklar.find((x) => x.id === hitId);
+    if (s) return [{ id: s.id, stokAdi: s.stokAdi, birim: s.birim, reason: 'TAM' }];
+  }
+
+  const q = String(urunAdi || '').trim().toLocaleLowerCase('tr-TR');
+  if (q.length < 2) return [];
+  const out: StokOneri[] = [];
+  for (const s of stoklar) {
+    if (out.length >= limit) break;
+    const sn = String(s.stokAdi || '').toLocaleLowerCase('tr-TR');
+    if (sn.includes(q) || q.includes(sn)) {
+      out.push({ id: s.id, stokAdi: s.stokAdi, birim: s.birim, reason: 'ICERIR' });
+    }
+  }
+  return out;
+}
+
+export function cariOneriReasonLabel(reason: CariOneri['reason']): string {
+  if (reason === 'TAM') return 'Tam eşleşme';
+  if (reason === 'ICERIR') return 'İsim benzeri';
+  return 'Yakın unvan';
+}
+
