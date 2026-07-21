@@ -1,5 +1,4 @@
-import ExcelJS from 'exceljs';
-import { KampKaydi, KampOdasi, Personel } from '../types/erp';
+import type { KampKaydi, KampOdasi, Personel } from '../types/erp';
 import { displayPersonelGorev } from './guvenlikHelpers';
 import { formatPersonelKampYerlesim } from './taseronUtils';
 import {
@@ -8,6 +7,7 @@ import {
   isTaseronPersonel,
 } from './yoklamaUtils';
 import { formatPersonelMissingDocs } from './personelMissingDocs';
+import { createExcelWorkbook } from './exceljsLoader';
 
 export type PersonelExcelScope = 'taseron' | 'all';
 
@@ -78,7 +78,7 @@ export async function exportPersonelExcel(options: {
   }
 
   const includeKamp = Boolean(options.kampKayitlari?.length || options.kampOdalari?.length);
-  const workbook = new ExcelJS.Workbook();
+  const workbook = await createExcelWorkbook();
   workbook.creator = 'Kibritçi ERP';
   const sheetName = scope === 'all' ? 'Tüm Firmalar' : 'Taşeron Personel';
   const sheet = workbook.addWorksheet(sheetName, {

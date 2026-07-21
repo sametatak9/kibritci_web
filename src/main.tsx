@@ -23,9 +23,13 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, RootErrorBoun
   };
 
   static getDerivedStateFromError(error: unknown): RootErrorBoundaryState {
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'Bilinmeyen bir uygulama hatası oluştu.';
     return {
       hasError: true,
-      message: error instanceof Error ? error.message : 'Bilinmeyen bir uygulama hatası oluştu.',
+      message,
     };
   }
 
@@ -33,24 +37,48 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, RootErrorBoun
     console.error('RootErrorBoundary:', error);
   }
 
-  clearStorageAndReload = () => {
+  clearStorageAndReload = async () => {
     try {
       localStorage.clear();
       sessionStorage.clear();
     } catch {
       // no-op
     }
-    window.location.reload();
+    try {
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch {
+      // no-op
+    }
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+    } catch {
+      // no-op
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set('_reload', String(Date.now()));
+    window.location.replace(url.toString());
   };
 
   render() {
     if (!this.state.hasError) return (this as any).props.children;
+    const looksLikeModuleInterop =
+      /is not a constructor|is not a function|Cannot read propert/i.test(
+        this.state.message || ''
+      );
     return (
       <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#f8fafc', padding: '24px', fontFamily: 'Inter, system-ui, sans-serif' }}>
         <div style={{ maxWidth: '620px', width: '100%', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px' }}>
           <h1 style={{ margin: 0, fontSize: '18px', color: '#0f172a' }}>Uygulama başlatılırken hata oluştu</h1>
           <p style={{ marginTop: '10px', color: '#475569', fontSize: '14px' }}>
-            Sayfa boş görünüyorsa tarayıcı önbelleği veya eski oturum verisi kaynaklı olabilir.
+            {looksLikeModuleInterop
+              ? 'Bu hata genelde eski önbellek / karışık JS paketinden kaynaklanır. “Önbellek Temizle” ile yeniden açın.'
+              : 'Sayfa boş görünüyorsa tarayıcı önbelleği veya eski oturum verisi kaynaklı olabilir.'}
           </p>
           <div style={{ marginTop: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', fontSize: '12px', color: '#334155', wordBreak: 'break-word' }}>
             Teknik detay: {this.state.message || 'Hata mesajı alınamadı.'}
@@ -63,7 +91,7 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, RootErrorBoun
               Sayfayı Yenile
             </button>
             <button
-              onClick={this.clearStorageAndReload}
+              onClick={() => void this.clearStorageAndReload()}
               style={{ border: '1px solid #e2e8f0', background: '#fff', color: '#0f172a', borderRadius: '10px', padding: '8px 12px', fontWeight: 700, cursor: 'pointer' }}
             >
               Önbellek/Oturum Temizle ve Yeniden Aç

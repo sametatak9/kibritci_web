@@ -121,8 +121,8 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
   const exportPersonelDetayExcel = async () => {
     if (!selectedPersonnel) return;
     const p = selectedPersonnel;
-    const { Workbook } = await import('exceljs');
-    const wb = new Workbook();
+    const { createExcelWorkbook } = await import('../lib/exceljsLoader');
+    const wb = await createExcelWorkbook();
     const ws = wb.addWorksheet('Personel Detay');
     const addSection = (title: string) => {
       ws.addRow([]);

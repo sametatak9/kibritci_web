@@ -495,8 +495,8 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
   };
 
   const handleExportSatinAlmaExcel = async () => {
-    const { Workbook } = await import('exceljs');
-    const wb = new Workbook();
+    const { createExcelWorkbook } = await import('../lib/exceljsLoader');
+    const wb = await createExcelWorkbook();
 
     const current = satinAlmaTalepleri.filter((t) => !t.arsivde);
     const archive = satinAlmaTalepleri.filter((t) => t.arsivde);
@@ -606,8 +606,8 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
   };
 
   const exportSpecificTaleplerToExcel = async (rows: SatinAlmaTalebi[], fileName: string) => {
-    const { Workbook } = await import('exceljs');
-    const wb = new Workbook();
+    const { createExcelWorkbook } = await import('../lib/exceljsLoader');
+    const wb = await createExcelWorkbook();
     const ws = wb.addWorksheet('Satın Alma Raporu');
     ws.addRow(['SA ID', 'Tarih', 'Cari Firma', 'Talep Eden', 'Durum', 'Arşiv', 'Açıklama']);
     ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
