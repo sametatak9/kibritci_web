@@ -75,7 +75,7 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
   const [editingSaId, setEditingSaId] = useState<string | null>(null);
   const [saAttachmentUrl, setSaAttachmentUrl] = useState<string | null>(null);
   const [saSearchKeyword, setSaSearchKeyword] = useState("");
-  const [talepTab, setTalepTab] = useState<'MEVCUT' | 'ARSIV'>('MEVCUT');
+  const [talepTab, setTalepTab] = useState<'MEVCUT' | 'DONUSTURULDU' | 'ARSIV'>('MEVCUT');
   const [emailSendingId, setEmailSendingId] = useState<string | null>(null);
   const [talepTarihFiltre, setTalepTarihFiltre] = useState('');
   const legacyDocInputRef = useRef<HTMLInputElement | null>(null);
@@ -401,8 +401,9 @@ export const SatinAlmaScreen: React.FC<SatinAlmaScreenProps> = ({
     if (addNotification) {
       addNotification(`${sa.saId} → irsaliye ${irsaliye.irsaliyeNo} oluşturuldu (sevk hazırlık).`);
     }
+    setTalepTab('DONUSTURULDU');
     alert(
-      `İrsaliye oluşturuldu.\nNo: ${irsaliye.irsaliyeNo}\nSipariş bağı: ${sa.saId}\n\nİrsaliye sekmesinden kontrol edebilirsiniz.`
+      `İrsaliye oluşturuldu.\nNo: ${irsaliye.irsaliyeNo}\nSipariş bağı: ${sa.saId}\n\nSipariş «Dönüştürüldü» listesine alındı. İrsaliye sekmesinden kontrol edebilirsiniz.`
     );
   };
 
@@ -861,11 +862,30 @@ ${kalemOzet || '—'}${more}`,
     });
   };
 
+  const tabCounts = useMemo(() => {
+    let mevcut = 0;
+    let donusturuldu = 0;
+    let arsiv = 0;
+    for (const sa of satinAlmaTalepleri) {
+      if (sa.arsivde) {
+        arsiv += 1;
+        continue;
+      }
+      if (findIrsaliyelerForSa(sa, irsaliyeler).length > 0) donusturuldu += 1;
+      else mevcut += 1;
+    }
+    return { mevcut, donusturuldu, arsiv };
+  }, [satinAlmaTalepleri, irsaliyeler]);
+
   const filteredTalepler = useMemo(() => {
     const kw = saSearchKeyword.toLowerCase();
     return satinAlmaTalepleri
       .filter((sa) => {
-        const inTab = talepTab === 'MEVCUT' ? !sa.arsivde : Boolean(sa.arsivde);
+        const donusturuldu = findIrsaliyelerForSa(sa, irsaliyeler).length > 0;
+        let inTab = false;
+        if (talepTab === 'MEVCUT') inTab = !sa.arsivde && !donusturuldu;
+        else if (talepTab === 'DONUSTURULDU') inTab = !sa.arsivde && donusturuldu;
+        else inTab = Boolean(sa.arsivde);
         if (!inTab) return false;
         if (talepTarihFiltre && normalizeDateKey(sa.tarih) !== talepTarihFiltre) return false;
         if (!kw) return true;
@@ -876,7 +896,7 @@ ${kalemOzet || '—'}${more}`,
         );
       })
       .sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || ''), 'tr'));
-  }, [satinAlmaTalepleri, talepTab, talepTarihFiltre, saSearchKeyword]);
+  }, [satinAlmaTalepleri, talepTab, talepTarihFiltre, saSearchKeyword, irsaliyeler]);
 
   const liveCari = resolveCariKartId(saSupplier, cariKartlar);
   const liveStok = countLinkedStok(cartItems);
@@ -897,7 +917,12 @@ ${kalemOzet || '—'}${more}`,
         stokLinked={liveStok.linked}
         stokTotal={liveStok.total}
         metrics={[
-          { label: 'Açık talepler', value: satinAlmaTalepleri.filter((t) => !t.arsivde).length, tone: 'neutral' },
+          { label: 'Bekleyen (sevk yok)', value: tabCounts.mevcut, tone: 'neutral' },
+          {
+            label: 'Dönüştürüldü',
+            value: tabCounts.donusturuldu,
+            tone: tabCounts.donusturuldu > 0 ? 'ok' : 'neutral',
+          },
           {
             label: 'Cari bağlı kayıt',
             value: `${cariBagliCount}/${satinAlmaTalepleri.length || 0}`,
@@ -1050,16 +1075,23 @@ ${kalemOzet || '—'}${more}`,
             <button
               type="button"
               onClick={() => setTalepTab('MEVCUT')}
-              className={`text-[10px] px-2.5 py-1.5 rounded-xl border font-bold transition ${talepTab === 'MEVCUT' ? 'bg-slate-900 text-white border-slate-800' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+              className={`text-[10px] px-2.5 py-1.5 rounded-xl border font-bold transition cursor-pointer ${talepTab === 'MEVCUT' ? 'bg-slate-900 text-white border-slate-800' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
             >
-              Mevcut
+              Mevcut ({tabCounts.mevcut})
+            </button>
+            <button
+              type="button"
+              onClick={() => setTalepTab('DONUSTURULDU')}
+              className={`text-[10px] px-2.5 py-1.5 rounded-xl border font-bold transition cursor-pointer ${talepTab === 'DONUSTURULDU' ? 'bg-violet-700 text-white border-violet-800' : 'bg-white text-violet-800 border-violet-200 hover:bg-violet-50'}`}
+            >
+              Dönüştürüldü ({tabCounts.donusturuldu})
             </button>
             <button
               type="button"
               onClick={() => setTalepTab('ARSIV')}
-              className={`text-[10px] px-2.5 py-1.5 rounded-xl border font-bold transition ${talepTab === 'ARSIV' ? 'bg-amber-600 text-white border-amber-700' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+              className={`text-[10px] px-2.5 py-1.5 rounded-xl border font-bold transition cursor-pointer ${talepTab === 'ARSIV' ? 'bg-amber-600 text-white border-amber-700' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
             >
-              Arşiv
+              Arşiv ({tabCounts.arsiv})
             </button>
             <input
               type="date"
@@ -1088,15 +1120,25 @@ ${kalemOzet || '—'}${more}`,
 
         <div className="flex-1 overflow-y-auto space-y-3 max-h-[min(58vh,560px)] pr-0.5">
           {filteredTalepler.length === 0 ? (
-            <p className="text-xs text-slate-400 italic text-center py-6">Kayıtlı talep bulunmuyor.</p>
+            <p className="text-xs text-slate-400 italic text-center py-6">
+              {talepTab === 'DONUSTURULDU'
+                ? 'İrsaliyeye dönüştürülmüş sipariş yok.'
+                : talepTab === 'ARSIV'
+                  ? 'Arşivde kayıt yok.'
+                  : 'Dönüştürülmeyi bekleyen sipariş yok.'}
+            </p>
           ) : (
             filteredTalepler.map(sa => {
               const isLocked = sa.onayDurumu === 'ONAYLANDI';
+              const linkedIrs = findIrsaliyelerForSa(sa, irsaliyeler);
+              const donusturuldu = linkedIrs.length > 0;
               return (
-                <div key={sa.id} className="border border-slate-150 rounded-2xl p-4 bg-white hover:shadow-md hover:border-slate-200 transition-all duration-200 flex flex-col space-y-3.5 text-xs text-slate-700">
+                <div key={sa.id} className={`border rounded-2xl p-4 bg-white hover:shadow-md transition-all duration-200 flex flex-col space-y-3.5 text-xs text-slate-700 ${
+                  donusturuldu ? 'border-violet-200 hover:border-violet-300' : 'border-slate-150 hover:border-slate-200'
+                }`}>
                   <div className="flex justify-between items-start border-b pb-2">
                     <div className="space-y-1">
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                         <span className="font-mono bg-slate-900 text-amber-500 rounded px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider">
                           {sa.saId}
                         </span>
@@ -1109,6 +1151,11 @@ ${kalemOzet || '—'}${more}`,
                         }`}>
                           {sa.onayDurumu === 'ONAYLANDI' ? '✓ ONAYLANDI (KİLİTLİ)' : sa.onayDurumu}
                         </span>
+                        {donusturuldu && (
+                          <span className="text-[9px] font-black px-2 py-0.5 rounded-full uppercase border bg-violet-100 text-violet-800 border-violet-200">
+                            Dönüştürüldü · {linkedIrs.length} irsaliye
+                          </span>
+                        )}
                       </div>
                       <h5 className="font-bold text-slate-950 mt-1">
                         {sa.cariFirma} · {sa.tarih}
@@ -1136,6 +1183,11 @@ ${kalemOzet || '—'}${more}`,
                           );
                         })()}
                       </h5>
+                      {donusturuldu && (
+                        <p className="text-[10px] text-violet-700 font-semibold">
+                          İrsaliye: {linkedIrs.map((ir) => ir.irsaliyeNo).join(', ')}
+                        </p>
+                      )}
                     </div>
 
                     {isLocked && (
@@ -1176,13 +1228,20 @@ ${kalemOzet || '—'}${more}`,
                     <button
                       type="button"
                       onClick={() => handleConvertSaToIrsaliye(sa)}
-                      className="bg-violet-50 hover:bg-violet-100 text-violet-800 border border-violet-200 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer"
-                      title="Siparişi sevk irsaliyesine dönüştür (kalemler + firma + SA bağı)"
+                      className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer border ${
+                        donusturuldu
+                          ? 'bg-violet-100 hover:bg-violet-200 text-violet-900 border-violet-300'
+                          : 'bg-violet-50 hover:bg-violet-100 text-violet-800 border-violet-200'
+                      }`}
+                      title={
+                        donusturuldu
+                          ? 'Bu sipariş zaten irsaliyeye dönüştürüldü; gerekirse yeni sevk oluşturabilirsiniz'
+                          : 'Siparişi sevk irsaliyesine dönüştür (kalemler + firma + SA bağı)'
+                      }
                     >
-                      → İrsaliyeye Dönüştür
-                      {findIrsaliyelerForSa(sa, irsaliyeler).length > 0
-                        ? ` (${findIrsaliyelerForSa(sa, irsaliyeler).length})`
-                        : ''}
+                      {donusturuldu
+                        ? `✓ Dönüştürüldü · Tekrar (${linkedIrs.length})`
+                        : '→ İrsaliyeye Dönüştür'}
                     </button>
                     <button
                       onClick={() =>
