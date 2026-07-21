@@ -51,6 +51,7 @@ export interface SatinAlmaItem {
   marka: string;
   kullanilacakYer: string;
   aciklama: string;
+  stokKartId?: string;
 }
 
 export interface SatinAlmaTalebi {
@@ -59,6 +60,8 @@ export interface SatinAlmaTalebi {
   tarih: string;
   talepEden: string;
   cariFirma: string;
+  /** Eşleşen cari kart id — Cari/Stok timeline için */
+  cariKartId?: string;
   aciklama: string;
   onayDurumu: 'ONAY BEKLİYOR' | '1. ONAY TAMAMLANDI' | '2. ONAY TAMAMLANDI' | 'REDDEDİLDİ' | 'KAPATILDI' | 'ONAYLANDI' | 'BİLİNMİYOR';
   imzaliEvrakUrl?: string;

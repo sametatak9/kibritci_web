@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   CreditCard, FileText, ClipboardList, Plus, Trash2, Edit3, 
   Search, Eye, Printer, Upload, Sparkles, Send, CheckCircle2 
 } from 'lucide-react';
-import { Fatura, FaturaItem, Irsaliye, CariKart, StokKart, SatinAlmaTalebi, EvrakBaglantiGrubu } from '../types/erp';
+import { Fatura, FaturaItem, Irsaliye, CariKart, StokKart, SatinAlmaTalebi, EvrakBaglantiGrubu, CariKartIslem } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
 import { fetchApiJson } from '../lib/apiClient';
 import { fileToAiPayload } from '../lib/aiFileUpload';
@@ -12,6 +12,15 @@ import { EvrakTabBilgi } from './EvrakTabBilgi';
 import { kibritciLogoHtml } from '../lib/kibritciBrand';
 import { getReportEmailToolbarHtml, openHtmlReportWindow } from '../lib/reportEmail';
 import { ReportEmailButton } from './ReportEmailButton';
+import {
+  appendCariIslemOnce,
+  buildCariEvrakHistory,
+  countLinkedStok,
+  linkFaturaKalemler,
+  resolveCariKartId,
+} from '../lib/evrakCariStokSync';
+import { findStokMatch } from '../lib/evrakBatchImportUtils';
+import { EvrakZincirBanner } from './EvrakZincirBanner';
 
 interface FaturaGirisScreenProps {
   faturalar: Fatura[];
@@ -23,6 +32,7 @@ interface FaturaGirisScreenProps {
   setCariKartlar?: React.Dispatch<React.SetStateAction<CariKart[]>>;
   stokKartlar: StokKart[];
   setStokKartlar?: React.Dispatch<React.SetStateAction<StokKart[]>>;
+  setCariIslemGecmisi?: React.Dispatch<React.SetStateAction<CariKartIslem[]>>;
   evrakBaglantiGruplari: EvrakBaglantiGrubu[];
   setEvrakBaglantiGruplari: React.Dispatch<React.SetStateAction<EvrakBaglantiGrubu[]>>;
   currentUser?: any;
@@ -39,6 +49,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
   setCariKartlar,
   stokKartlar,
   setStokKartlar,
+  setCariIslemGecmisi,
   evrakBaglantiGruplari,
   setEvrakBaglantiGruplari,
   currentUser,
@@ -72,6 +83,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
+  const [archiveFilter, setArchiveFilter] = useState<'ALL' | 'BAGIMSIZ' | 'CARI_YOK'>('ALL');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -227,16 +239,18 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
   const handleAddItem = () => {
     if (!tempItem.name || tempItem.qty <= 0 || tempItem.price <= 0) return;
     const itemTotal = tempItem.qty * tempItem.price;
+    const matched = findStokMatch(tempItem.name, stokKartlar);
     setFtItems(prev => [
       ...prev,
       {
         id: `fti_${Date.now()}`,
-        urunAdi: tempItem.name,
+        urunAdi: matched?.stokAdi || tempItem.name,
         miktar: tempItem.qty,
-        birim: tempItem.unit,
+        birim: tempItem.unit || matched?.birim || 'ADET',
         birimFiyat: tempItem.price,
         kdvOran: tempItem.kdv,
-        toplam: itemTotal
+        toplam: itemTotal,
+        stokKartId: matched?.id,
       }
     ]);
     checkAndSuggestStok(tempItem.name, tempItem.unit);
@@ -249,9 +263,12 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
       return;
     }
 
-    const calculatedSub = ftItems.reduce((acc, curr) => acc + curr.toplam, 0);
-    const calculatedKdv = ftItems.reduce((acc, curr) => acc + (curr.toplam * (curr.kdvOran / 100)), 0);
+    const linkedItems = linkFaturaKalemler(ftItems, stokKartlar);
+    const calculatedSub = linkedItems.reduce((acc, curr) => acc + curr.toplam, 0);
+    const calculatedKdv = linkedItems.reduce((acc, curr) => acc + (curr.toplam * (curr.kdvOran / 100)), 0);
     const calculatedGrand = calculatedSub + calculatedKdv;
+    const cariResolved = resolveCariKartId(ftSupplier, cariKartlar);
+    const recordId = editingFtId || `ft_${Date.now()}`;
 
     if (editingFtId) {
       const existing = faturalar.find((f) => f.id === editingFtId);
@@ -262,12 +279,12 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
             faturaNo: ftNo,
             tarih: ftDate,
             cariUnvan: ftSupplier,
-            cariKartId: cariKartlar.find(c => c.unvan === ftSupplier)?.id || "",
+            cariKartId: cariResolved.cariKartId || ft.cariKartId || "",
             saId: existing?.saId,
             toplamTutar: calculatedSub,
             kdvTutar: calculatedKdv,
             genelToplam: calculatedGrand,
-            kalemler: ftItems,
+            kalemler: linkedItems,
             evrakUrl: ftAttachmentUrl || undefined,
             imzaliEvrakUrl: ftSignedAttachmentUrl || undefined,
             bagliIrsaliyeler: existing?.bagliIrsaliyeler || [],
@@ -278,16 +295,16 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
       setEditingFtId(null);
     } else {
       const newFt: Fatura = {
-        id: `ft_${Date.now()}`,
+        id: recordId,
         faturaNo: ftNo,
         tarih: ftDate,
         cariUnvan: ftSupplier,
-        cariKartId: cariKartlar.find(c => c.unvan === ftSupplier)?.id || "",
+        cariKartId: cariResolved.cariKartId || "",
         toplamTutar: calculatedSub,
         kdvTutar: calculatedKdv,
         genelToplam: calculatedGrand,
         durum: 'KONTROL BEKLEYOR',
-        kalemler: ftItems,
+        kalemler: linkedItems,
         evrakUrl: ftAttachmentUrl || undefined,
         imzaliEvrakUrl: ftSignedAttachmentUrl || undefined,
         bagliIrsaliyeler: [],
@@ -297,12 +314,37 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
 
     checkAndSuggestCari(ftSupplier);
 
+    if (cariResolved.cariKartId) {
+      appendCariIslemOnce(
+        setCariIslemGecmisi,
+        buildCariEvrakHistory({
+          cariKartId: cariResolved.cariKartId,
+          islemTipi: 'FATURA',
+          islemId: recordId,
+          islemBaslik: 'Fatura Kaydı',
+          islemDetay: `${ftNo} · ${ftSupplier} · ₺${calculatedGrand.toLocaleString('tr-TR')}`,
+          tarih: ftDate,
+          belgeNo: ftNo,
+          tutar: calculatedGrand,
+        })
+      );
+    }
+
+    const stokLink = countLinkedStok(linkedItems);
+    if (addNotification) {
+      addNotification(
+        `${ftNo} fatura kaydedildi. Cari: ${cariResolved.matched ? 'bağlı' : 'önerildi'} · Stok: ${stokLink.linked}/${stokLink.total}`
+      );
+    }
+
     setFtNo("");
     setFtSupplier("");
     setFtItems([]);
     setFtAttachmentUrl(null);
     setFtSignedAttachmentUrl(null);
-    alert("Fatura kaydedildi.");
+    alert(
+      `Fatura kaydedildi.\nCari: ${cariResolved.matched ? 'bağlı' : 'kart önerildi'}\nStok eşleşmesi: ${stokLink.linked}/${stokLink.total}`
+    );
   };
 
   const handlePreviewPdf = (ft: Fatura) => {
@@ -484,6 +526,25 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
     openHtmlReportWindow(html, 'Fatura Evrak Arşiv Raporu');
   };
 
+  const liveCari = resolveCariKartId(ftSupplier, cariKartlar);
+  const liveStok = countLinkedStok(ftItems);
+  const filteredArchive = useMemo(() => {
+    const q = searchTerm.trim().toLocaleLowerCase('tr-TR');
+    return [...faturalar]
+      .sort((a, b) => (b.tarih || '').localeCompare(a.tarih || ''))
+      .filter((ft) => {
+        if (archiveFilter === 'BAGIMSIZ' && faturaIsLinked(ft)) return false;
+        if (archiveFilter === 'CARI_YOK' && ft.cariKartId) return false;
+        if (!q) return true;
+        return (
+          String(ft.faturaNo || '').toLocaleLowerCase('tr-TR').includes(q) ||
+          String(ft.cariUnvan || '').toLocaleLowerCase('tr-TR').includes(q) ||
+          String(ft.durum || '').toLocaleLowerCase('tr-TR').includes(q)
+        );
+      })
+      .slice(0, 200);
+  }, [faturalar, searchTerm, archiveFilter]);
+
   const bagimsizFaturalar = faturalar.filter(ft => !faturaIsLinked(ft));
 
   return (
@@ -492,9 +553,9 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
       {/* Navigation tabs */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-xs gap-4 shrink-0">
         <div className="space-y-1">
-          <span className="text-[10px] font-black tracking-widest text-[#2563eb] uppercase">Fatura &amp; Finansal Kontrol</span>
+          <span className="text-[10px] font-black tracking-widest text-blue-700 uppercase">Fatura · Cari &amp; Finans</span>
           <h2 className="font-display font-bold text-sm text-slate-900 flex items-center gap-1.5">
-            💳 Şantiye Fatura Kayıt ve Yapay Zeka Eşleştirme Paneli
+            Şantiye Fatura Kayıt Paneli
           </h2>
         </div>
         <button
@@ -505,6 +566,23 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
           Fatura Giriş (Manuel / AI)
         </button>
       </div>
+
+
+      <EvrakZincirBanner
+        aktif="fatura"
+        cariBagli={liveCari.matched}
+        cariAdi={ftSupplier || undefined}
+        stokLinked={liveStok.linked}
+        stokTotal={liveStok.total}
+        metrics={[
+          { label: 'Arşiv kayıt', value: faturalar.length, tone: 'neutral' },
+          {
+            label: 'Bağımsız fatura',
+            value: bagimsizFaturalar.length,
+            tone: bagimsizFaturalar.length > 0 ? 'warn' : 'ok',
+          },
+        ]}
+      />
 
       <EvrakTabBilgi tab="fatura-giris" />
 
@@ -701,12 +779,12 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
             <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
               <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">💡 Finansal Uyarı</h4>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Kaydedilen faturalar sağdaki arşivde listelenir; rapor için Aç butonunu kullanın.
+                Kaydedilen faturalar cari/stok kartlarına bağlanır; arşivden düzenleyip raporlayabilirsiniz.
               </p>
             </div>
             <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">📚 Fatura Evrak Arşivi</h4>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Fatura Evrak Arşivi</h4>
                 <div className="flex items-center gap-2">
                   <ReportEmailButton
                     className="text-[10px] bg-sky-600 hover:bg-sky-700 text-white px-3 py-1.5 rounded-lg font-bold cursor-pointer inline-flex items-center gap-1"
@@ -725,44 +803,114 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
                   </button>
                 </div>
               </div>
-              <div className="max-h-64 overflow-auto border border-slate-100 rounded-xl">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="search"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="No / firma / durum ara…"
+                    className="w-full text-[11px] font-semibold pl-8 pr-2 py-2 bg-slate-50 border border-slate-200 rounded-lg"
+                  />
+                </div>
+                <div className="flex gap-1">
+                  {([
+                    ['ALL', 'Tümü'],
+                    ['BAGIMSIZ', 'Bağımsız'],
+                    ['CARI_YOK', 'Cari yok'],
+                  ] as const).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setArchiveFilter(id)}
+                      className={`text-[10px] font-bold px-2.5 py-2 rounded-lg border cursor-pointer ${
+                        archiveFilter === id
+                          ? 'bg-blue-700 text-white border-blue-700'
+                          : 'bg-white text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="max-h-72 overflow-auto border border-slate-100 rounded-xl">
                 <table className="w-full text-[11px]">
                   <thead className="sticky top-0 bg-slate-50">
                     <tr className="text-left text-slate-600">
                       <th className="px-2 py-2">Tarih</th>
                       <th className="px-2 py-2">Fatura No</th>
                       <th className="px-2 py-2">Firma</th>
+                      <th className="px-2 py-2">Bağ</th>
                       <th className="px-2 py-2 text-right">Toplam</th>
-                      <th className="px-2 py-2">Rapor</th>
+                      <th className="px-2 py-2">İşlem</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {[...faturalar]
-                      .sort((a, b) => (b.tarih || '').localeCompare(a.tarih || ''))
-                      .slice(0, 200)
-                      .map((ft) => (
-                        <tr key={ft.id} className="border-t border-slate-100">
+                    {filteredArchive.map((ft) => {
+                      const stokLink = countLinkedStok(ft.kalemler || []);
+                      const linked = faturaIsLinked(ft);
+                      return (
+                        <tr key={ft.id} className="border-t border-slate-100 hover:bg-blue-50/30">
                           <td className="px-2 py-1.5">{ft.tarih || '-'}</td>
                           <td className="px-2 py-1.5 font-semibold">{ft.faturaNo}</td>
                           <td className="px-2 py-1.5">{ft.cariUnvan}</td>
+                          <td className="px-2 py-1.5">
+                            <div className="flex flex-col gap-0.5">
+                              <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded w-fit ${ft.cariKartId ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                                {ft.cariKartId ? 'Cari' : 'Cari yok'}
+                              </span>
+                              <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded w-fit ${linked ? 'bg-sky-50 text-sky-700' : 'bg-slate-100 text-slate-600'}`}>
+                                {linked ? 'Evrak bağlı' : 'Bağımsız'}
+                              </span>
+                              <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded w-fit bg-slate-50 text-slate-600">
+                                Stok {stokLink.linked}/{stokLink.total}
+                              </span>
+                            </div>
+                          </td>
                           <td className="px-2 py-1.5 text-right font-mono">{Number(ft.genelToplam || 0).toLocaleString('tr-TR')} TL</td>
                           <td className="px-2 py-1.5">
-                            <button
-                              type="button"
-                              onClick={() => handlePreviewPdf(ft)}
-                              className="text-[10px] bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 rounded px-2 py-1 font-bold cursor-pointer"
-                            >
-                              Aç
-                            </button>
+                            <div className="flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingFtId(ft.id);
+                                  setFtNo(ft.faturaNo || '');
+                                  setFtDate(ft.tarih || new Date().toISOString().slice(0, 10));
+                                  setFtSupplier(ft.cariUnvan || '');
+                                  setFtItems(ft.kalemler || []);
+                                  setFtAttachmentUrl(ft.evrakUrl || null);
+                                  setFtSignedAttachmentUrl(ft.imzaliEvrakUrl || null);
+                                }}
+                                className="text-[10px] bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded px-2 py-1 font-bold cursor-pointer"
+                              >
+                                Düzenle
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handlePreviewPdf(ft)}
+                                className="text-[10px] bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 rounded px-2 py-1 font-bold cursor-pointer"
+                              >
+                                Aç
+                              </button>
+                            </div>
                           </td>
                         </tr>
-                      ))}
+                      );
+                    })}
+                    {filteredArchive.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-3 py-6 text-center text-slate-400 italic">
+                          Filtreye uyan fatura yok.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
           </div>
-
         </div>
       )}
 

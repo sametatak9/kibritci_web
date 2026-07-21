@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   Truck, ClipboardList, Plus, Trash2, Edit3, ArrowRight, 
-  Upload, Printer, Download, Sparkles, FileText, CheckCircle2 
+  Upload, Printer, Download, Sparkles, FileText, CheckCircle2, Search 
 } from 'lucide-react';
-import { Irsaliye, IrsaliyeItem, SatinAlmaTalebi, CariKart, StokKart, Fatura, EvrakBaglantiGrubu } from '../types/erp';
+import { Irsaliye, IrsaliyeItem, SatinAlmaTalebi, CariKart, StokKart, Fatura, EvrakBaglantiGrubu, CariKartIslem, StokKartIslem } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
 import { fetchApiJson } from '../lib/apiClient';
 import { fileToAiPayload } from '../lib/aiFileUpload';
@@ -13,6 +13,16 @@ import { kibritciLogoHtml } from '../lib/kibritciBrand';
 import { wrapCorporateReportHtml } from '../lib/corporateReportHtml';
 import { getReportEmailToolbarHtml, openHtmlReportWindow } from '../lib/reportEmail';
 import { ReportEmailButton } from './ReportEmailButton';
+import {
+  applyStokGirisFromKalemler,
+  appendCariIslemOnce,
+  buildCariEvrakHistory,
+  countLinkedStok,
+  linkIrsaliyeKalemler,
+  resolveCariKartId,
+} from '../lib/evrakCariStokSync';
+import { findStokMatch } from '../lib/evrakBatchImportUtils';
+import { EvrakZincirBanner } from './EvrakZincirBanner';
 
 interface IrsaliyeGirisScreenProps {
   irsaliyeler: Irsaliye[];
@@ -26,6 +36,8 @@ interface IrsaliyeGirisScreenProps {
   setCariKartlar?: React.Dispatch<React.SetStateAction<CariKart[]>>;
   stokKartlar: StokKart[];
   setStokKartlar?: React.Dispatch<React.SetStateAction<StokKart[]>>;
+  setStokIslemGecmisi?: React.Dispatch<React.SetStateAction<StokKartIslem[]>>;
+  setCariIslemGecmisi?: React.Dispatch<React.SetStateAction<CariKartIslem[]>>;
   currentUser?: any;
   addNotification?: (mesaj: string) => void;
 }
@@ -42,6 +54,8 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
   setCariKartlar,
   stokKartlar,
   setStokKartlar,
+  setStokIslemGecmisi,
+  setCariIslemGecmisi,
   currentUser,
   addNotification,
 }) => {
@@ -70,6 +84,8 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
   const [suggestedStokName, setSuggestedStokName] = useState("");
   const [suggestedStokCat, setSuggestedStokCat] = useState("Kaba İnşaat İmalatı");
   const [suggestedStokUnit, setSuggestedStokUnit] = useState("ADET");
+  const [archiveSearch, setArchiveSearch] = useState("");
+  const [archiveFilter, setArchiveFilter] = useState<'ALL' | 'CARI_YOK' | 'STOK_EKSIK'>('ALL');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -235,13 +251,15 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
 
   const handleAddProduct = () => {
     if (!tempProduct.name || tempProduct.qty <= 0) return;
+    const matched = findStokMatch(tempProduct.name, stokKartlar);
     setIrProducts(prev => [
       ...prev,
       {
         id: `iri_${Date.now()}`,
-        urunAdi: tempProduct.name,
+        urunAdi: matched?.stokAdi || tempProduct.name,
         miktar: tempProduct.qty,
-        birim: tempProduct.unit
+        birim: tempProduct.unit || matched?.birim || 'ADET',
+        stokKartId: matched?.id,
       }
     ]);
     checkAndSuggestStok(tempProduct.name, tempProduct.unit);
@@ -255,6 +273,10 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
     }
 
     const calculatedStatus = 'ONAY BEKLİYOR';
+    const cariResolved = resolveCariKartId(irSupplier, cariKartlar);
+    const linkedProducts = linkIrsaliyeKalemler(irProducts, stokKartlar);
+    const recordId = editingIrId || `ir_${Date.now()}`;
+    const bumpMiktar = true; // fiziksel giriş → stok miktarı
 
     if (editingIrId) {
       const existing = irsaliyeler.find((ir) => ir.id === editingIrId);
@@ -265,9 +287,10 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
             irsaliyeNo: irNo,
             tarih: irDate,
             firma: irSupplier,
+            cariKartId: cariResolved.cariKartId || ir.cariKartId,
             saId: existing?.saId,
             onayDurumu: calculatedStatus,
-            kalemler: irProducts,
+            kalemler: linkedProducts,
             fisEvrakUrl: irAttachmentUrl || undefined,
             imzaliEvrakUrl: irSignedAttachmentUrl || undefined
           };
@@ -277,13 +300,14 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
       setEditingIrId(null);
     } else {
       const newIr: Irsaliye = {
-        id: `ir_${Date.now()}`,
+        id: recordId,
         irsaliyeId: `IR-${irDate.replace(/-/g, '')}-${Math.random().toString(16).substr(2, 4).toUpperCase()}`,
         irsaliyeNo: irNo,
         tarih: irDate,
         firma: irSupplier,
+        cariKartId: cariResolved.cariKartId || undefined,
         onayDurumu: calculatedStatus,
-        kalemler: irProducts,
+        kalemler: linkedProducts,
         fisEvrakUrl: irAttachmentUrl || undefined,
         imzaliEvrakUrl: irSignedAttachmentUrl || undefined
       };
@@ -292,12 +316,50 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
 
     checkAndSuggestCari(irSupplier);
 
+    applyStokGirisFromKalemler({
+      kalemler: linkedProducts,
+      belgeNo: irNo,
+      tarih: irDate,
+      supplier: irSupplier,
+      islemBaslik: 'İrsaliye Girişi',
+      islemDetayPrefix: 'Sevk irsaliyesi ·',
+      bumpMiktar,
+      stokKartlar,
+      setStokKartlar,
+      setStokIslemGecmisi,
+      aciklamaTag: 'İrsaliye',
+    });
+
+    if (cariResolved.cariKartId) {
+      appendCariIslemOnce(
+        setCariIslemGecmisi,
+        buildCariEvrakHistory({
+          cariKartId: cariResolved.cariKartId,
+          islemTipi: 'IRSALIYE',
+          islemId: recordId,
+          islemBaslik: 'İrsaliye Kaydı',
+          islemDetay: `${irNo} · ${irSupplier} · ${linkedProducts.length} kalem`,
+          tarih: irDate,
+          belgeNo: irNo,
+        })
+      );
+    }
+
+    const stokLink = countLinkedStok(linkedProducts);
+    if (addNotification) {
+      addNotification(
+        `${irNo} irsaliye kaydedildi. Cari: ${cariResolved.matched ? 'bağlı' : 'önerildi'} · Stok: ${stokLink.linked}/${stokLink.total}`
+      );
+    }
+
     setIrNo("");
     setIrSupplier("");
     setIrProducts([]);
     setIrAttachmentUrl(null);
     setIrSignedAttachmentUrl(null);
-    alert("İrsaliye kaydedildi.");
+    alert(
+      `İrsaliye kaydedildi.\nCari: ${cariResolved.matched ? 'bağlı' : 'kart önerildi'}\nStok eşleşmesi: ${stokLink.linked}/${stokLink.total}`
+    );
   };
 
   const handlePreviewIrsaliyePdf = (ir: Irsaliye) => {
@@ -439,25 +501,65 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
     openHtmlReportWindow(html, 'İrsaliye Evrak Arşiv Raporu');
   };
 
+  const liveCari = resolveCariKartId(irSupplier, cariKartlar);
+  const liveStok = countLinkedStok(irProducts);
+  const filteredArchive = useMemo(() => {
+    const q = archiveSearch.trim().toLocaleLowerCase('tr-TR');
+    return [...irsaliyeler]
+      .sort((a, b) => (b.tarih || '').localeCompare(a.tarih || ''))
+      .filter((ir) => {
+        if (archiveFilter === 'CARI_YOK' && ir.cariKartId) return false;
+        if (archiveFilter === 'STOK_EKSIK') {
+          const link = countLinkedStok(ir.kalemler || []);
+          if (link.total === 0 || link.linked === link.total) return false;
+        }
+        if (!q) return true;
+        return (
+          String(ir.irsaliyeNo || '').toLocaleLowerCase('tr-TR').includes(q) ||
+          String(ir.firma || '').toLocaleLowerCase('tr-TR').includes(q) ||
+          String(ir.onayDurumu || '').toLocaleLowerCase('tr-TR').includes(q)
+        );
+      })
+      .slice(0, 200);
+  }, [irsaliyeler, archiveSearch, archiveFilter]);
+
+  const cariYokCount = irsaliyeler.filter((ir) => !ir.cariKartId).length;
+
   return (
-    <div className="flex-grow p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col font-sans select-none bg-slate-50/50 space-y-6">
+    <div className="flex-grow p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col font-sans select-none bg-slate-50/50 space-y-5">
       
       {/* Sub navigation Tabs */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-xs gap-4 shrink-0">
         <div className="space-y-1">
-          <span className="text-[10px] font-black tracking-widest text-[#10b981] uppercase">Teslimat &amp; Sevkiyat Girişi</span>
+          <span className="text-[10px] font-black tracking-widest text-emerald-700 uppercase">Teslimat &amp; Sevkiyat Girişi</span>
           <h2 className="font-display font-bold text-sm text-slate-900 flex items-center gap-1.5">
-            🚛 Şantiye İrsaliye, Makbuz ve Fiş Giriş Paneli
+            Şantiye İrsaliye, Makbuz ve Fiş Giriş Paneli
           </h2>
         </div>
         <button
           type="button"
           onClick={() => setEditingIrId(null)}
-          className="px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer bg-[#10b981] text-white shadow-sm"
+          className="px-4 py-2 font-bold rounded-xl text-xs transition cursor-pointer bg-emerald-700 text-white shadow-sm"
         >
           İrsaliye Giriş (Manuel / AI)
         </button>
       </div>
+
+      <EvrakZincirBanner
+        aktif="irsaliye"
+        cariBagli={liveCari.matched}
+        cariAdi={irSupplier || undefined}
+        stokLinked={liveStok.linked}
+        stokTotal={liveStok.total}
+        metrics={[
+          { label: 'Arşiv kayıt', value: irsaliyeler.length, tone: 'neutral' },
+          {
+            label: 'Cari bağsız',
+            value: cariYokCount,
+            tone: cariYokCount > 0 ? 'warn' : 'ok',
+          },
+        ]}
+      />
 
       <EvrakTabBilgi tab="irsaliye-giris" />
 
@@ -654,8 +756,8 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
 
           <div className="flex-1 space-y-6">
             <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">📚 İrsaliye Evrak Arşivi</h4>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">İrsaliye Evrak Arşivi</h4>
                 <div className="flex items-center gap-2">
                   <ReportEmailButton
                     className="text-[10px] bg-sky-600 hover:bg-sky-700 text-white px-3 py-1.5 rounded-lg font-bold cursor-pointer inline-flex items-center gap-1"
@@ -674,43 +776,66 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                   </button>
                 </div>
               </div>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                İrsaliye belgelerinizi burada arşivleyip tek ekrandan raporlayabilirsiniz.
-              </p>
-              <div className="max-h-64 overflow-auto border border-slate-100 rounded-xl">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="search"
+                    value={archiveSearch}
+                    onChange={(e) => setArchiveSearch(e.target.value)}
+                    placeholder="No / firma / durum ara…"
+                    className="w-full text-[11px] font-semibold pl-8 pr-2 py-2 bg-slate-50 border border-slate-200 rounded-lg"
+                  />
+                </div>
+                <div className="flex gap-1">
+                  {([
+                    ['ALL', 'Tümü'],
+                    ['CARI_YOK', 'Cari yok'],
+                    ['STOK_EKSIK', 'Stok eksik'],
+                  ] as const).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setArchiveFilter(id)}
+                      className={`text-[10px] font-bold px-2.5 py-2 rounded-lg border cursor-pointer ${
+                        archiveFilter === id
+                          ? 'bg-emerald-700 text-white border-emerald-700'
+                          : 'bg-white text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="max-h-72 overflow-auto border border-slate-100 rounded-xl">
                 <table className="w-full text-[11px]">
                   <thead className="sticky top-0 bg-slate-50">
                     <tr className="text-left text-slate-600">
                       <th className="px-2 py-2">Tarih</th>
                       <th className="px-2 py-2">İrsaliye No</th>
                       <th className="px-2 py-2">Firma</th>
+                      <th className="px-2 py-2">Bağ</th>
                       <th className="px-2 py-2">Kalem</th>
-                      <th className="px-2 py-2">Rapor</th>
+                      <th className="px-2 py-2">İşlem</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {[...irsaliyeler]
-                      .sort((a, b) => (b.tarih || '').localeCompare(a.tarih || ''))
-                      .slice(0, 200)
-                      .map((ir) => (
-                        <tr key={ir.id} className="border-t border-slate-100">
+                    {filteredArchive.map((ir) => {
+                      const stokLink = countLinkedStok(ir.kalemler || []);
+                      return (
+                        <tr key={ir.id} className="border-t border-slate-100 hover:bg-emerald-50/30">
                           <td className="px-2 py-1.5">{ir.tarih || '-'}</td>
                           <td className="px-2 py-1.5 font-semibold">
                             {ir.irsaliyeNo}
                             {(ir as any).kaynak === 'VIDANJOR_FIS' && (
-                              <span className="ml-1 text-[8px] font-black uppercase bg-indigo-100 text-indigo-700 px-1 py-0.5 rounded">
-                                Vidanjör
-                              </span>
+                              <span className="ml-1 text-[8px] font-black uppercase bg-indigo-100 text-indigo-700 px-1 py-0.5 rounded">Vidanjör</span>
                             )}
                             {(ir as any).kaynak === 'YILDIRIM_TANKER_FIS' && (
-                              <span className="ml-1 text-[8px] font-black uppercase bg-sky-100 text-sky-700 px-1 py-0.5 rounded">
-                                Yıldırım
-                              </span>
+                              <span className="ml-1 text-[8px] font-black uppercase bg-sky-100 text-sky-700 px-1 py-0.5 rounded">Yıldırım</span>
                             )}
                             {(ir as any).kaynak === 'MICIR_STABILIZE_FIS' && (
-                              <span className="ml-1 text-[8px] font-black uppercase bg-emerald-100 text-emerald-700 px-1 py-0.5 rounded">
-                                Mıcır/Stabilize
-                              </span>
+                              <span className="ml-1 text-[8px] font-black uppercase bg-emerald-100 text-emerald-700 px-1 py-0.5 rounded">Mıcır/Stabilize</span>
                             )}
                           </td>
                           <td className="px-2 py-1.5">
@@ -718,6 +843,16 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                             {(ir as any).plaka ? (
                               <span className="block text-[9px] text-slate-400 font-mono">{(ir as any).plaka}</span>
                             ) : null}
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <div className="flex flex-col gap-0.5">
+                              <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded w-fit ${ir.cariKartId ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                                {ir.cariKartId ? 'Cari' : 'Cari yok'}
+                              </span>
+                              <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded w-fit ${stokLink.total > 0 && stokLink.linked === stokLink.total ? 'bg-sky-50 text-sky-700' : 'bg-slate-100 text-slate-600'}`}>
+                                Stok {stokLink.linked}/{stokLink.total}
+                              </span>
+                            </div>
                           </td>
                           <td className="px-2 py-1.5">
                             {(ir as any).kaynak === 'VIDANJOR_FIS'
@@ -729,16 +864,41 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                               : (ir.kalemler || []).length}
                           </td>
                           <td className="px-2 py-1.5">
-                            <button
-                              type="button"
-                              onClick={() => handlePreviewIrsaliyePdf(ir)}
-                              className="text-[10px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded px-2 py-1 font-bold cursor-pointer"
-                            >
-                              Aç
-                            </button>
+                            <div className="flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingIrId(ir.id);
+                                  setIrNo(ir.irsaliyeNo || '');
+                                  setIrDate(ir.tarih || new Date().toISOString().slice(0, 10));
+                                  setIrSupplier(ir.firma || '');
+                                  setIrProducts(ir.kalemler || []);
+                                  setIrAttachmentUrl(ir.fisEvrakUrl || null);
+                                  setIrSignedAttachmentUrl(ir.imzaliEvrakUrl || null);
+                                }}
+                                className="text-[10px] bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded px-2 py-1 font-bold cursor-pointer"
+                              >
+                                Düzenle
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handlePreviewIrsaliyePdf(ir)}
+                                className="text-[10px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded px-2 py-1 font-bold cursor-pointer"
+                              >
+                                Aç
+                              </button>
+                            </div>
                           </td>
                         </tr>
-                      ))}
+                      );
+                    })}
+                    {filteredArchive.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-3 py-6 text-center text-slate-400 italic">
+                          Filtreye uyan irsaliye yok.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>

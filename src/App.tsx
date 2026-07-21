@@ -2806,6 +2806,7 @@ export default function App() {
                   stokKartlar={stokKartlar}
                   setStokKartlar={setStokKartlarWithSync}
                   setStokIslemGecmisi={setStokIslemGecmisiWithSync}
+                  setCariIslemGecmisi={setCariIslemGecmisiWithSync}
                   kullanicilar={kullanicilar}
                   currentUser={currentUser}
                   addNotification={addNotification}
@@ -2825,6 +2826,8 @@ export default function App() {
                   setCariKartlar={setCariKartlarWithSync}
                   stokKartlar={stokKartlar}
                   setStokKartlar={setStokKartlarWithSync}
+                  setStokIslemGecmisi={setStokIslemGecmisiWithSync}
+                  setCariIslemGecmisi={setCariIslemGecmisiWithSync}
                   currentUser={currentUser}
                   addNotification={addNotification}
                 />
@@ -2843,6 +2846,7 @@ export default function App() {
                   setCariKartlar={setCariKartlarWithSync}
                   stokKartlar={stokKartlar}
                   setStokKartlar={setStokKartlarWithSync}
+                  setCariIslemGecmisi={setCariIslemGecmisiWithSync}
                   currentUser={currentUser}
                   addNotification={addNotification}
                 />
