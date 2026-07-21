@@ -14,6 +14,8 @@ import { DashboardFavoriteTabsStrip } from './DashboardFavoriteTabsStrip';
 import { DashboardSonIslemlerFeed } from './DashboardSonIslemlerFeed';
 import { isPersonelActiveOnDate } from '../lib/guvenlikHelpers';
 import { isTaseronPersonel } from '../lib/yoklamaUtils';
+import { buildOperasyonOzeti } from '../lib/operasyonUyarilari';
+import type { Fatura, Irsaliye } from '../types/erp';
 
 interface DashboardScreenProps {
   personeller: Personel[];
@@ -24,6 +26,8 @@ interface DashboardScreenProps {
   aracKmLoglari?: any[];
   kampOdalari?: KampOdasi[];
   kampKayitlari?: KampKaydi[];
+  irsaliyeler?: Irsaliye[];
+  faturalar?: Fatura[];
   onNavigate: (tab: string) => void;
   currentUser?: any;
   stokKartlar?: any[];
@@ -39,6 +43,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   aracKmLoglari = [],
   kampOdalari = [],
   kampKayitlari = [],
+  irsaliyeler = [],
+  faturalar = [],
   onNavigate,
   currentUser,
   stokKartlar = [],
@@ -89,8 +95,20 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
   // Calculate pending manager approvals
   const pendingStokKartCount = (stokKartlar || []).filter((s: any) => s.durum === 'ONAY BEKLİYOR').length;
-  const pendingSatinAlmaCount = (satinAlmaTalepleri || []).filter((sa: any) => sa.onayDurumu === 'BEKLİYOR').length;
-  const totalPendingApprovals = pendingStokKartCount + pendingSatinAlmaCount;
+  const operasyonOzeti = useMemo(
+    () =>
+      buildOperasyonOzeti({
+        satinAlmaTalepleri,
+        irsaliyeler,
+        faturalar,
+        stokKartlar,
+        kampOdalari,
+        kampKayitlari,
+      }),
+    [satinAlmaTalepleri, irsaliyeler, faturalar, stokKartlar, kampOdalari, kampKayitlari]
+  );
+  const pendingSatinAlmaCount = operasyonOzeti.bekleyenSatinAlma;
+  const totalPendingApprovals = operasyonOzeti.bekleyenOnay;
 
   // Personnel selection state for tracing history
   const [selectedPersonelId, setSelectedPersonelId] = useState<string>('');
@@ -307,6 +325,87 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </div>
           );
         })}
+      </div>
+
+      {/* Operasyon uyarı şeridi — salt okunur, mevcut akışa dokunmaz */}
+      <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-2xl bg-slate-900 text-amber-300 shrink-0">
+              <Activity size={18} className="stroke-[2.5]" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                Operasyon Uyarıları
+              </h4>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Geciken onay, faturasız irsaliye ve kamp doluluk — tıklayınca ilgili sekmeye gider.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+          <button
+            type="button"
+            onClick={() => onNavigate('onay_islemleri')}
+            className="text-left rounded-2xl border border-slate-200 bg-slate-50 hover:bg-slate-100 p-3 cursor-pointer transition"
+          >
+            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">Bekleyen onay</span>
+            <span className="text-lg font-black tabular-nums text-slate-900">{operasyonOzeti.bekleyenOnay}</span>
+            {operasyonOzeti.gecikenOnay > 0 && (
+              <span className="ml-2 text-[10px] font-bold text-amber-700">· {operasyonOzeti.gecikenOnay} gecikmiş (48s+)</span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('irsaliye_giris')}
+            className="text-left rounded-2xl border border-slate-200 bg-slate-50 hover:bg-slate-100 p-3 cursor-pointer transition"
+          >
+            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">Faturasız irsaliye</span>
+            <span className="text-lg font-black tabular-nums text-slate-900">{operasyonOzeti.faturasizIrsaliye}</span>
+            {operasyonOzeti.faturasizEski > 0 && (
+              <span className="ml-2 text-[10px] font-bold text-rose-700">· {operasyonOzeti.faturasizEski} adet ≥3 gün</span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('kamp')}
+            className="text-left rounded-2xl border border-slate-200 bg-slate-50 hover:bg-slate-100 p-3 cursor-pointer transition"
+          >
+            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">Kamp uyarı</span>
+            <span className="text-lg font-black tabular-nums text-slate-900">{operasyonOzeti.kampUyarilari.length}</span>
+            <span className="ml-2 text-[10px] text-slate-500 font-semibold">doluluk / oda</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('satin_alma')}
+            className="text-left rounded-2xl border border-slate-200 bg-slate-50 hover:bg-slate-100 p-3 cursor-pointer transition"
+          >
+            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">Bekleyen SA</span>
+            <span className="text-lg font-black tabular-nums text-slate-900">{operasyonOzeti.bekleyenSatinAlma}</span>
+            {pendingStokKartCount > 0 && (
+              <span className="ml-2 text-[10px] font-bold text-slate-600">· {pendingStokKartCount} stok kartı</span>
+            )}
+          </button>
+        </div>
+        {operasyonOzeti.kampUyarilari.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {operasyonOzeti.kampUyarilari.slice(0, 4).map((u, i) => (
+              <span
+                key={`${u.tip}_${i}`}
+                className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${
+                  u.seviye === 'critical'
+                    ? 'bg-rose-50 text-rose-800 border-rose-200'
+                    : u.seviye === 'warn'
+                      ? 'bg-amber-50 text-amber-800 border-amber-200'
+                      : 'bg-slate-50 text-slate-600 border-slate-200'
+                }`}
+              >
+                {u.baslik}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Ödeme Engeli Paneli — maaş günü öncesi */}

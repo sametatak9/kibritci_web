@@ -2717,6 +2717,8 @@ export default function App() {
                   aracKmLoglari={aracKmLoglari}
                   kampOdalari={kampOdalari}
                   kampKayitlari={kampKayitlari}
+                  irsaliyeler={irsaliyeler}
+                  faturalar={faturalar}
                   onNavigate={handleTabNavigation}
                   currentUser={currentUser}
                   stokKartlar={stokKartlar}
@@ -2794,6 +2796,8 @@ export default function App() {
                   cariKartlar={cariKartlar}
                   stokKartlar={stokKartlar}
                   setCariIslemGecmisi={setCariIslemGecmisiWithSync}
+                  yoklamalar={yoklamalar}
+                  setYoklamalar={setYoklamalarWithSync}
                 />
               )}
 

@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
-  FileText, Trash2, Eye, Printer, Search, Edit3, Landmark,
+  FileText, Trash2, Eye, Printer, Search, Edit3, Landmark, Check, X,
 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { CorporateReportLayout } from './CorporateReportLayout';
-import { collection, query, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, getDocs, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { HazirTutanakTab } from './HazirTutanakTab';
 import { ReportEmailButton } from './ReportEmailButton';
+import type { AylikYoklamaMap } from '../types/erp';
+import { applyOnayliIzinToYoklama } from '../lib/operasyonUyarilari';
 
 interface IzinFormu {
   id: string;
@@ -40,15 +42,20 @@ interface PersonelIzinScreenProps {
   cariKartlar?: any[];
   stokKartlar?: any[];
   setCariIslemGecmisi?: any;
+  yoklamalar?: AylikYoklamaMap;
+  setYoklamalar?: React.Dispatch<React.SetStateAction<AylikYoklamaMap>>;
 }
 
 export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({ 
   personeller, 
+  currentUser,
   hazirTutanaklar = [], 
   setHazirTutanaklar,
   cariKartlar = [],
   stokKartlar = [],
   setCariIslemGecmisi,
+  yoklamalar = {},
+  setYoklamalar,
 }) => {
   const [activeTab, setActiveTab] = useState<'izin' | 'tutanak'>('izin');
   
@@ -286,6 +293,58 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({
     } catch (err) {
       console.error(err);
       alert('Silme işlemi başarısız.');
+    }
+  };
+
+  const handleApproveIzin = async (item: IzinFormu) => {
+    if (item.onayDurumu === 'ONAYLANDI') return;
+    if (!window.confirm(`${item.personelIsim} için izni onaylayıp (mümkünse) yoklamaya İzinli yazayım mı?`)) return;
+    try {
+      const patch = {
+        onayDurumu: 'ONAYLANDI' as const,
+        onaylayanYonetici: currentUser?.email || 'Yönetici',
+        onayTarihi: new Date().toISOString(),
+      };
+      await updateDoc(doc(db, 'personelIzinFormlari', item.id), patch);
+      setIzinFormlari((prev) => prev.map((x) => (x.id === item.id ? { ...x, ...patch } : x)));
+
+      if (setYoklamalar && item.personelId && !String(item.personelId).startsWith('manual_')) {
+        const result = applyOnayliIzinToYoklama(yoklamalar, {
+          personelId: item.personelId,
+          baslangicTarihi: item.baslangicTarihi,
+          bitisTarihi: item.bitisTarihi,
+        });
+        if (result.yazilanGun > 0) {
+          setYoklamalar(result.next);
+        }
+        alert(
+          `İzin onaylandı.\nYoklamaya yazılan gün: ${result.yazilanGun}` +
+            (result.atlananGun ? `\nAtlanan (zaten dolu) gün: ${result.atlananGun}` : '')
+        );
+      } else {
+        alert('İzin onaylandı. (Manuel personelde yoklama yazılmadı.)');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Onay işlemi başarısız.');
+    }
+  };
+
+  const handleRejectIzin = async (item: IzinFormu) => {
+    if (item.onayDurumu === 'REDDEDİLDİ') return;
+    if (!window.confirm('Bu izin talebini reddetmek istediğinize emin misiniz?')) return;
+    try {
+      const patch = {
+        onayDurumu: 'REDDEDİLDİ' as const,
+        onaylayanYonetici: currentUser?.email || 'Yönetici',
+        onayTarihi: new Date().toISOString(),
+      };
+      await updateDoc(doc(db, 'personelIzinFormlari', item.id), patch);
+      setIzinFormlari((prev) => prev.map((x) => (x.id === item.id ? { ...x, ...patch } : x)));
+      alert('İzin talebi reddedildi.');
+    } catch (err) {
+      console.error(err);
+      alert('Red işlemi başarısız.');
     }
   };
 
@@ -572,6 +631,26 @@ export const PersonelIzinScreen: React.FC<PersonelIzinScreenProps> = ({
                   </div>
 
                   <div className="flex flex-wrap gap-2 border-t pt-3.5 mt-3 justify-end text-[10px]">
+                    {item.onayDurumu === 'ONAY BEKLİYOR' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => void handleApproveIzin(item)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 px-3 rounded-lg flex items-center space-x-1 cursor-pointer"
+                        >
+                          <Check size={12} />
+                          <span>Onayla + Yoklamaya Yaz</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleRejectIzin(item)}
+                          className="bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 font-bold py-1.5 px-3 rounded-lg flex items-center space-x-1 cursor-pointer"
+                        >
+                          <X size={12} />
+                          <span>Reddet</span>
+                        </button>
+                      </>
+                    )}
                     <button
                       type="button"
                       onClick={() => startEditIzin(item)}
