@@ -28,6 +28,11 @@ import {
 } from '../lib/evrakDonusum';
 import { findStokMatch } from '../lib/evrakBatchImportUtils';
 import { EvrakZincirBanner } from './EvrakZincirBanner';
+import {
+  EvrakAiDropzone,
+  EvrakPageShell,
+  EvrakSectionHeader,
+} from './evrakUi/EvrakScreenChrome';
 
 interface IrsaliyeGirisScreenProps {
   irsaliyeler: Irsaliye[];
@@ -591,10 +596,17 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
   const cariYokCount = irsaliyeler.filter((ir) => !ir.cariKartId).length;
 
   return (
-    <div className="flex-grow p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col font-sans select-none bg-slate-50/50 space-y-5">
+    <EvrakPageShell>
+      <EvrakSectionHeader
+        accent="ir"
+        eyebrow="Sevk / hazırlık evrağı"
+        title="İrsaliye Girişi"
+        subtitle="Siparişin fiziksel karşılığı · faturaya dönüştürülür"
+      />
+
       
       {/* Sub navigation Tabs */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-xs gap-4 shrink-0">
+      <div className="bg-white/90 border border-slate-200/80 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-sm gap-4 shrink-0 backdrop-blur-sm">
         <div className="space-y-1">
           <span className="text-[10px] font-black tracking-widest text-emerald-700 uppercase">Teslimat &amp; Sevkiyat Girişi</span>
           <h2 className="font-display font-bold text-sm text-slate-900 flex items-center gap-1.5">
@@ -630,28 +642,17 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
 
       <div className="flex flex-col lg:flex-row gap-6">
           {/* Creator Drawer Form */}
-          <div className="w-full lg:w-[440px] bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+          <div className="w-full lg:w-[440px] bg-white border border-slate-200/90 rounded-2xl p-5 shadow-sm space-y-4 ring-1 ring-black/5">
             
-            {/* AI Document parser widget */}
-            <div className="bg-gradient-to-tr from-emerald-50 to-teal-50 border border-emerald-100 rounded-2xl p-4 space-y-3">
-              <span className="font-extrabold text-emerald-900 tracking-wide text-[9px] uppercase block">🤖 YAPAY ZEKA DESTEKLİ İRSALİYE OKUYUCU</span>
-              <p className="text-[10px] text-emerald-700 font-medium">Fotoğraf veya PDF irsaliye belgesini sürükleyip bırakarak form alanlarını otomatik doldurun.</p>
-              <div className="relative border-2 border-dashed border-emerald-250 rounded-xl p-4 text-center bg-white hover:bg-emerald-50/20 transition cursor-pointer">
-                <input 
-                  type="file"
-                  accept="image/*,application/pdf"
-                  onChange={(e) => { if(e.target.files?.[0]) processIrsaliyeAi(e.target.files[0]); }}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                />
-                {isIrParsing ? (
-                  <span className="text-[10px] font-bold text-emerald-850 block animate-pulse">Gemini Belgeyi Çözümlüyor...</span>
-                ) : (
-                  <span className="text-[10px] font-bold text-slate-550 block">Dosya Seçin veya Sürükleyin</span>
-                )}
-              </div>
-              {irParseError && <p className="text-[9px] font-bold text-rose-600">❌ {irParseError}</p>}
-              {irParseSuccess && <p className="text-[9px] font-bold text-emerald-700">✅ {irParseSuccess}</p>}
-            </div>
+            <EvrakAiDropzone
+              accent="ir"
+              title="Yapay zeka irsaliye okuyucu"
+              hint="PDF veya görsel yükleyin; no, firma ve kalemler otomatik dolar."
+              loading={isIrParsing}
+              error={irParseError}
+              success={irParseSuccess}
+              onFile={(f) => processIrsaliyeAi(f)}
+            />
 
             <div className="space-y-3 text-xs">
               <div>
@@ -873,9 +874,9 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                   ))}
                 </div>
               </div>
-              <div className="max-h-72 overflow-auto border border-slate-100 rounded-xl">
+              <div className="max-h-[min(58vh,520px)] overflow-auto border border-slate-100 rounded-xl shadow-inner">
                 <table className="w-full text-[11px]">
-                  <thead className="sticky top-0 bg-slate-50">
+                  <thead className="sticky top-0 z-[1] bg-slate-50/95 backdrop-blur-sm">
                     <tr className="text-left text-slate-600">
                       <th className="px-2 py-2">Tarih</th>
                       <th className="px-2 py-2">İrsaliye No</th>
@@ -889,7 +890,7 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
                     {filteredArchive.map((ir) => {
                       const stokLink = countLinkedStok(ir.kalemler || []);
                       return (
-                        <tr key={ir.id} className="border-t border-slate-100 hover:bg-emerald-50/30">
+                        <tr key={ir.id} className="border-t border-slate-100 hover:bg-emerald-50/50 transition-colors">
                           <td className="px-2 py-1.5">{ir.tarih || '-'}</td>
                           <td className="px-2 py-1.5 font-semibold">
                             {ir.irsaliyeNo}
@@ -1075,7 +1076,7 @@ export const IrsaliyeGirisScreen: React.FC<IrsaliyeGirisScreenProps> = ({
         </div>
       )}
 
-    </div>
+    </EvrakPageShell>
   );
 };
 

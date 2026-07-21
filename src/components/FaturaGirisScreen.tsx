@@ -21,6 +21,11 @@ import {
 } from '../lib/evrakCariStokSync';
 import { findStokMatch } from '../lib/evrakBatchImportUtils';
 import { EvrakZincirBanner } from './EvrakZincirBanner';
+import {
+  EvrakAiDropzone,
+  EvrakPageShell,
+  EvrakSectionHeader,
+} from './evrakUi/EvrakScreenChrome';
 
 interface FaturaGirisScreenProps {
   faturalar: Fatura[];
@@ -548,10 +553,17 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
   const bagimsizFaturalar = faturalar.filter(ft => !faturaIsLinked(ft));
 
   return (
-    <div className="flex-grow p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col font-sans select-none bg-slate-50/50 space-y-6">
+    <EvrakPageShell>
+      <EvrakSectionHeader
+        accent="ft"
+        eyebrow="Mali sonuç evrağı"
+        title="Fatura Girişi"
+        subtitle="İrsaliyenin faturalaşması · cari ve stok bağları"
+      />
+
       
       {/* Navigation tabs */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-xs gap-4 shrink-0">
+      <div className="bg-white/90 border border-slate-200/80 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-sm gap-4 shrink-0 backdrop-blur-sm">
         <div className="space-y-1">
           <span className="text-[10px] font-black tracking-widest text-blue-700 uppercase">Fatura · Cari &amp; Finans</span>
           <h2 className="font-display font-bold text-sm text-slate-900 flex items-center gap-1.5">
@@ -590,28 +602,17 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
         <div className="flex flex-col lg:flex-row gap-6">
           
           {/* Left Form Panel */}
-          <div className="w-full lg:w-[440px] bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+          <div className="w-full lg:w-[440px] bg-white border border-slate-200/90 rounded-2xl p-5 shadow-sm space-y-4 ring-1 ring-black/5">
             
-            {/* AI parse box */}
-            <div className="bg-gradient-to-tr from-slate-50 to-slate-100 border border-slate-200 rounded-2xl p-4 space-y-3">
-              <span className="font-extrabold text-slate-800 tracking-wide text-[9px] uppercase block">🤖 YAPAY ZEKA DESTEKLİ FATURA OKUYUCU</span>
-              <p className="text-[10px] text-slate-800 font-medium">Fatura belgenizi yükleyin; no, firma ve kalemleri yapay zeka ile otomatik dolduralım.</p>
-              <div className="relative border-2 border-dashed border-slate-200 rounded-xl p-4 text-center bg-white hover:bg-slate-50/20 transition cursor-pointer">
-                <input 
-                  type="file"
-                  accept="image/*,application/pdf"
-                  onChange={(e) => { if(e.target.files?.[0]) processFaturaAi(e.target.files[0]); }}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                />
-                {isFtParsing ? (
-                  <span className="text-[10px] font-bold text-slate-800 block animate-pulse">Gemini Belgeyi Çözümlüyor...</span>
-                ) : (
-                  <span className="text-[10px] font-bold text-slate-550 block">Belge Seçin veya Sürükleyin</span>
-                )}
-              </div>
-              {ftParseError && <p className="text-[9px] font-bold text-rose-600">❌ {ftParseError}</p>}
-              {ftParseSuccess && <p className="text-[9px] font-bold text-emerald-700">✅ {ftParseSuccess}</p>}
-            </div>
+            <EvrakAiDropzone
+              accent="ft"
+              title="Yapay zeka fatura okuyucu"
+              hint="PDF veya görsel yükleyin; no, firma ve kalemler otomatik dolar."
+              loading={isFtParsing}
+              error={ftParseError}
+              success={ftParseSuccess}
+              onFile={(f) => processFaturaAi(f)}
+            />
 
             <div className="space-y-3 text-xs">
               <div>
@@ -835,9 +836,9 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
                   ))}
                 </div>
               </div>
-              <div className="max-h-72 overflow-auto border border-slate-100 rounded-xl">
+              <div className="max-h-[min(58vh,520px)] overflow-auto border border-slate-100 rounded-xl shadow-inner">
                 <table className="w-full text-[11px]">
-                  <thead className="sticky top-0 bg-slate-50">
+                  <thead className="sticky top-0 z-[1] bg-slate-50/95 backdrop-blur-sm">
                     <tr className="text-left text-slate-600">
                       <th className="px-2 py-2">Tarih</th>
                       <th className="px-2 py-2">Fatura No</th>
@@ -852,7 +853,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
                       const stokLink = countLinkedStok(ft.kalemler || []);
                       const linked = faturaIsLinked(ft);
                       return (
-                        <tr key={ft.id} className="border-t border-slate-100 hover:bg-blue-50/30">
+                        <tr key={ft.id} className="border-t border-slate-100 hover:bg-blue-50/50 transition-colors">
                           <td className="px-2 py-1.5">{ft.tarih || '-'}</td>
                           <td className="px-2 py-1.5 font-semibold">{ft.faturaNo}</td>
                           <td className="px-2 py-1.5">{ft.cariUnvan}</td>
@@ -1007,7 +1008,7 @@ export const FaturaGirisScreen: React.FC<FaturaGirisScreenProps> = ({
         </div>
       )}
 
-    </div>
+    </EvrakPageShell>
   );
 };
 

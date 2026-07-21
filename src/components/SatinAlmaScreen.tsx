@@ -26,6 +26,14 @@ import {
   findIrsaliyelerForSa,
 } from '../lib/evrakDonusum';
 import { EvrakZincirBanner } from './EvrakZincirBanner';
+import {
+  EvrakArchivePanel,
+  EvrakArchiveSearch,
+  EvrakFormCard,
+  EvrakPageShell,
+  EvrakPrimaryButton,
+  EvrakSectionHeader,
+} from './evrakUi/EvrakScreenChrome';
 
 interface SatinAlmaScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
@@ -875,7 +883,13 @@ ${kalemOzet || '—'}${more}`,
   const cariBagliCount = satinAlmaTalepleri.filter((t) => Boolean(t.cariKartId)).length;
 
   return (
-    <div className="flex-grow p-6 min-h-[calc(100vh-52px)] overflow-y-auto flex flex-col font-sans gap-5 select-none bg-slate-50/50">
+    <EvrakPageShell>
+      <EvrakSectionHeader
+        accent="sa"
+        eyebrow="Sipariş evrağı"
+        title="Satın Alma"
+        subtitle="Sipariş oluştur · sevk irsaliyesine dönüştür · cari/stok bağla"
+      />
       <EvrakZincirBanner
         aktif="satin_alma"
         cariBagli={liveCari.matched}
@@ -892,18 +906,19 @@ ${kalemOzet || '—'}${more}`,
         ]}
       />
 
-      <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
-      {/* LEFT FORM PANEL */}
-      <div className="w-full lg:w-[420px] lg:h-[680px] shrink-0 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm">
-        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-800 text-white p-4 shrink-0 flex items-center gap-2">
-          <ShoppingCart size={18} className="text-amber-400" />
-          <div>
-            <h3 className="font-display font-semibold text-sm">Satın Alma Sipariş Talebi</h3>
-            <p className="text-[10px] text-slate-400">Cari ve stok kartlarına bağlı tedarik talebi.</p>
-          </div>
-        </div>
-
-        <div className="flex-grow p-5 space-y-4 overflow-y-auto text-xs text-slate-700">
+      <div className="flex flex-col lg:flex-row gap-5 flex-1 min-h-0">
+      <EvrakFormCard
+        accent="sa"
+        icon={<ShoppingCart size={18} className="text-amber-300" />}
+        title="Yeni sipariş girişi"
+        subtitle="Tedarikçi, tarih ve malzeme kalemlerini girin"
+        badge={editingSaId ? 'Düzenleme' : 'Yeni'}
+        footer={
+          <EvrakPrimaryButton accent="sa" onClick={handleSavePurchaseOrder}>
+            {editingSaId ? 'Siparişi Güncelle' : 'Siparişi Kaydet'}
+          </EvrakPrimaryButton>
+        }
+      >
           <div>
             <label className="text-[10px] font-bold text-slate-500 uppercase">Belge Tarihi *</label>
             <input
@@ -1019,89 +1034,66 @@ ${kalemOzet || '—'}${more}`,
               className="w-full text-xs mt-1 p-2 bg-slate-50 border border-[#e2e8f0] rounded-lg resize-none"
             />
           </div>
-        </div>
+      </EvrakFormCard>
 
-        <div className="p-4 border-t bg-slate-50 shrink-0">
-          <button
-            onClick={handleSavePurchaseOrder}
-            className="w-full bg-slate-900 hover:bg-slate-900 text-white font-bold text-xs py-2.5 rounded-xl shadow transition cursor-pointer"
-          >
-            Satın Alma Talebini Kaydet
-          </button>
-        </div>
-      </div>
-
-      {/* RIGHT LIST PANEL */}
-      <div className="flex-1 bg-white border border-[#e2e8f0] rounded-2xl flex flex-col overflow-hidden shadow-sm min-h-[450px]">
-        <div className="p-4 border-b border-[#e2e8f0] bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shrink-0">
-          <div className="flex items-center gap-2">
-            <h4 className="font-display font-bold text-xs text-slate-800 uppercase tracking-widest">
-              📋 Satın Alma Talepleri
-            </h4>
+      <EvrakArchivePanel
+        accent="sa"
+        title="Sipariş listesi"
+        toolbar={
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button type="button" onClick={handleExportSatinAlmaExcel} className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">Excel</button>
+            <button type="button" onClick={handleExportSelectedExcel} className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-slate-800 text-white hover:bg-slate-900">Seçili Excel</button>
+          </div>
+        }
+      >
+        <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setTalepTab('MEVCUT')}
-              className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${talepTab === 'MEVCUT' ? 'bg-slate-900 text-white border-slate-800' : 'bg-white text-slate-700 border-slate-250'}`}
+              className={`text-[10px] px-2.5 py-1.5 rounded-xl border font-bold transition ${talepTab === 'MEVCUT' ? 'bg-slate-900 text-white border-slate-800' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
             >
-              Mevcut Talepler
+              Mevcut
             </button>
             <button
               type="button"
               onClick={() => setTalepTab('ARSIV')}
-              className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${talepTab === 'ARSIV' ? 'bg-amber-600 text-white border-amber-700' : 'bg-white text-slate-700 border-slate-250'}`}
+              className={`text-[10px] px-2.5 py-1.5 rounded-xl border font-bold transition ${talepTab === 'ARSIV' ? 'bg-amber-600 text-white border-amber-700' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
             >
-              Eski Talepler (Arşiv)
+              Arşiv
             </button>
             <input
               type="date"
               value={talepTarihFiltre}
               onChange={(e) => setTalepTarihFiltre(e.target.value)}
-              className="text-xs border border-slate-250 rounded-lg px-2 py-1"
+              className="text-xs border border-slate-200 rounded-xl px-2.5 py-1.5 bg-slate-50"
               title="Tarihe göre filtrele"
             />
             {talepTarihFiltre && (
               <button
                 type="button"
                 onClick={() => setTalepTarihFiltre('')}
-                className="text-[10px] border border-slate-300 bg-white hover:bg-slate-100 px-2 py-1 rounded-lg font-semibold"
+                className="text-[10px] border border-slate-200 bg-white hover:bg-slate-100 px-2.5 py-1.5 rounded-xl font-semibold"
               >
-                Tüm Tarihler
+                Tüm tarihler
               </button>
             )}
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={handleExportSatinAlmaExcel}
-              className="text-[10px] font-bold px-2.5 py-2 rounded-lg border bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700"
-            >
-              Tümünü Excel Raporla
-            </button>
-            <button
-              type="button"
-              onClick={handleExportSelectedExcel}
-              className="text-[10px] font-bold px-2.5 py-2 rounded-lg border bg-slate-900 text-white border-slate-800 hover:bg-slate-900"
-            >
-              Seçili Satın Almaları Excel Raporla
-            </button>
-            <input
-              type="text"
-              placeholder="Kod veya firma ara..."
-              value={saSearchKeyword}
-              onChange={(e) => setSaSearchKeyword(e.target.value)}
-              className="text-xs border p-2 rounded-xl bg-white w-48 sm:w-64"
-            />
-          </div>
+            <div className="flex-1 min-w-[160px]">
+              <EvrakArchiveSearch
+                value={saSearchKeyword}
+                onChange={setSaSearchKeyword}
+                placeholder="Kod veya firma ara…"
+              />
+            </div>
         </div>
 
-        <div className="flex-grow overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto space-y-3 max-h-[min(58vh,560px)] pr-0.5">
           {filteredTalepler.length === 0 ? (
             <p className="text-xs text-slate-400 italic text-center py-6">Kayıtlı talep bulunmuyor.</p>
           ) : (
             filteredTalepler.map(sa => {
               const isLocked = sa.onayDurumu === 'ONAYLANDI';
               return (
-                <div key={sa.id} className="border border-slate-100 rounded-2xl p-4 bg-white hover:shadow transition flex flex-col space-y-3.5 text-xs text-slate-700">
+                <div key={sa.id} className="border border-slate-150 rounded-2xl p-4 bg-white hover:shadow-md hover:border-slate-200 transition-all duration-200 flex flex-col space-y-3.5 text-xs text-slate-700">
                   <div className="flex justify-between items-start border-b pb-2">
                     <div className="space-y-1">
                       <div className="flex items-center space-x-2">
@@ -1328,14 +1320,14 @@ ${kalemOzet || '—'}${more}`,
             })
           )}
         </div>
-      </div>
+      </EvrakArchivePanel>
       </div>
 
       {/* ➕ CARİ SUGGEST MODAL */}
       {showCariSuggest && (
         <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-sm p-5 space-y-4">
-            <h3 className="font-display font-bold text-xs text-slate-900 uppercase">🏢 Cari Firma Önerisi</h3>
+            <h3 className="font-display font-bold text-xs text-slate-900 uppercase">Cari Firma Önerisi</h3>
             <p className="text-xs text-slate-500 leading-normal">
               Girdiğiniz <strong>"{suggestedCariName}"</strong> firması veritabanında bulunamadı. Bu firmayı yeni bir Cari Kart olarak eklemek ister misiniz?
             </p>
@@ -1364,7 +1356,7 @@ ${kalemOzet || '—'}${more}`,
               </button>
               <button 
                 onClick={handleCreateCari} 
-                className="flex-1 bg-slate-900 hover:bg-slate-900 text-white font-bold py-2 rounded-xl text-center text-xs"
+                className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 rounded-xl text-center text-xs"
               >
                 Evet, Kart Aç
               </button>
@@ -1373,11 +1365,10 @@ ${kalemOzet || '—'}${more}`,
         </div>
       )}
 
-      {/* ➕ STOK SUGGEST MODAL */}
       {showStokSuggest && (
         <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-sm p-5 space-y-4">
-            <h3 className="font-display font-bold text-xs text-slate-900 uppercase">📦 Stok Malzeme Önerisi</h3>
+            <h3 className="font-display font-bold text-xs text-slate-900 uppercase">Stok Malzeme Önerisi</h3>
             <p className="text-xs text-slate-500 leading-normal">
               Girdiğiniz <strong>"{suggestedStokName}"</strong> malzemesi veritabanında bulunamadı. Bu malzemeyi yeni bir Stok Kartı olarak envantere eklemek ister misiniz?
             </p>
@@ -1415,7 +1406,7 @@ ${kalemOzet || '—'}${more}`,
               </button>
               <button 
                 onClick={handleCreateStok} 
-                className="flex-1 bg-slate-900 hover:bg-slate-900 text-white font-bold py-2 rounded-xl text-center text-xs"
+                className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 rounded-xl text-center text-xs"
               >
                 Evet, Kart Aç
               </button>
@@ -1423,8 +1414,7 @@ ${kalemOzet || '—'}${more}`,
           </div>
         </div>
       )}
-
-    </div>
+    </EvrakPageShell>
   );
 };
 
