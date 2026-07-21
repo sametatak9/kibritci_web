@@ -13,6 +13,8 @@ interface GuvenlikEvrakOnayHavuzuProps {
   handleApproveDocument: (type: 'waybill' | 'invoice', id: string) => void;
   handleRejectGateDoc: (id: string) => void;
   handleOpenGateDocApproval: (doc: any) => void;
+  handleQuickApproveGateIrsaliye?: (doc: any) => void;
+  handleRematchActiveGateIrsaliye?: () => void;
   activeGateDoc: any | null;
   setActiveGateDoc: (val: any) => void;
   approvalStep: 'SELECT_METHOD' | 'FORM';
@@ -85,6 +87,8 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
   handleApproveDocument,
   handleRejectGateDoc,
   handleOpenGateDocApproval,
+  handleQuickApproveGateIrsaliye,
+  handleRematchActiveGateIrsaliye,
   activeGateDoc,
   setActiveGateDoc,
   approvalStep,
@@ -332,30 +336,47 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                     <ImzaOnizlemeStrip doc={docItem} pendingSignatureText={signatureText} />
                   </div>
 
-                  <div className="flex gap-2 pt-2 border-t border-slate-100 mt-auto">
-                    {previewUrl && (
+                  <div className="flex flex-col gap-2 pt-2 border-t border-slate-100 mt-auto">
+                    <div className="flex gap-2">
+                      {previewUrl && (
+                        <button
+                          type="button"
+                          onClick={() => openCardPreview(previewUrl, docItem.fileName)}
+                          className="bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-[10px] py-2 px-2.5 rounded-lg transition flex items-center justify-center"
+                          title="Önizle"
+                        >
+                          <Eye size={13} />
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => openCardPreview(previewUrl, docItem.fileName)}
-                        className="bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-[10px] py-2 px-2.5 rounded-lg transition flex items-center justify-center"
-                        title="Önizle"
+                        onClick={() => handleOpenGateDocApproval(docItem)}
+                        className="flex-grow bg-[#0F6C5C] hover:bg-[#0C584B] text-white font-extrabold text-[10px] py-2 px-3 rounded-xl transition tracking-wider uppercase flex items-center justify-center space-x-1"
                       >
-                        <Eye size={13} />
+                        <Sparkles size={12} />
+                        <span>Kontrol &amp; İşle</span>
                       </button>
-                    )}
-                    <button
-                      onClick={() => handleOpenGateDocApproval(docItem)}
-                      className="flex-grow bg-[#0F6C5C] hover:bg-[#0C584B] text-white font-extrabold text-[10px] py-2 px-3 rounded-xl transition tracking-wider uppercase flex items-center justify-center space-x-1"
-                    >
-                      <Sparkles size={12} />
-                      <span>Onayla &amp; İşle</span>
-                    </button>
-                    <button
-                      onClick={() => handleRejectGateDoc(docItem.id)}
-                      className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-[10px] py-2 px-3 rounded-lg transition"
-                    >
-                      Reddet
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRejectGateDoc(docItem.id)}
+                        className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-[10px] py-2 px-3 rounded-lg transition"
+                      >
+                        Reddet
+                      </button>
+                    </div>
+                    {docItem.evrakTuru === 'İRSALİYE' &&
+                      (docItem.aiParsed || (docItem.kalemler || []).length > 0) &&
+                      handleQuickApproveGateIrsaliye && (
+                        <button
+                          type="button"
+                          onClick={() => handleQuickApproveGateIrsaliye(docItem)}
+                          className="w-full bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-[10px] py-2.5 px-3 rounded-xl transition flex items-center justify-center gap-1.5"
+                          title="2 kez cari/stok eşleştir · mevcut kart altına yaz · onayla (yeni kart açmaz)"
+                        >
+                          <Check size={13} />
+                          Eşleştirip Onayla (cari/stok)
+                        </button>
+                      )}
                   </div>
                 </div>
               </div>
@@ -870,11 +891,20 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                               activeGateDoc.matchSummary.cariMatched ? 'text-teal-700' : 'text-amber-700'
                             }`}>
                               {activeGateDoc.matchSummary.cariMatched
-                                ? `Cari kart eşleşti${activeGateDoc.matchSummary.cariKartId ? ` · ${activeGateDoc.matchSummary.cariKartId}` : ''}`
-                                : 'Cari kart bulunamadı — onayda unvan serbest kaydedilir'}
+                                ? `Cari kart eşleşti${activeGateDoc.matchSummary.cariKartId ? ` · ${activeGateDoc.matchSummary.cariKartId}` : ''} — altına işlem yazılır (yeni kart açılmaz)`
+                                : 'Cari kart bulunamadı — onayda unvan serbest kaydedilir, yeni kart açılmaz'}
                               {' · '}
                               Stok {activeGateDoc.matchSummary.stokLinked || 0}/{activeGateDoc.matchSummary.stokTotal || 0} kalem bağlandı
                             </p>
+                          )}
+                          {handleRematchActiveGateIrsaliye && (
+                            <button
+                              type="button"
+                              onClick={() => handleRematchActiveGateIrsaliye()}
+                              className="mt-2 text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100 cursor-pointer"
+                            >
+                              Yeniden eşleştir (2. kontrol)
+                            </button>
                           )}
                         </div>
 

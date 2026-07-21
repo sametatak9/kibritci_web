@@ -25,11 +25,16 @@ import { VidanjorFisOnayPanel } from './VidanjorFisOnayPanel';
 import { MicirFisOnayPanel } from './MicirFisOnayPanel';
 import { KibritciLogo } from './KibritciLogo';
 import {
+  doubleCheckKapiMatch,
   finalizeKapiIrsaliyeApproval,
   formatKapiMatchLabel,
   KAPI_EVRAK_KAYNAK,
-  matchKapiEvrakToDb,
 } from '../lib/kapiIrsaliyeUtils';
+import {
+  appendCariIslemOnce,
+  buildCariEvrakHistory,
+  resolveCariKartId,
+} from '../lib/evrakCariStokSync';
 
 interface OnayIslemleriScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
@@ -1212,7 +1217,148 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
     }
   };
 
-  const handleOpenGateDocApproval = (docItem: any) => {
+  const loadLiveCariStok = async (): Promise<{ cari: CariKart[]; stok: StokKart[] }> => {
+    let liveCari = cariKartlar || [];
+    let liveStok = stokKartlar || [];
+    if (!liveCari.length || !liveStok.length) {
+      const [cariSnap, stokSnap] = await Promise.all([
+        getDocs(collection(db, 'cariKartlar')),
+        getDocs(collection(db, 'stokKartlar')),
+      ]);
+      if (!liveCari.length) {
+        liveCari = [];
+        cariSnap.forEach((d) => liveCari.push({ id: d.id, ...(d.data() as any) }));
+      }
+      if (!liveStok.length) {
+        liveStok = [];
+        stokSnap.forEach((d) => liveStok.push({ id: d.id, ...(d.data() as any) }));
+      }
+    }
+    return { cari: liveCari, stok: liveStok };
+  };
+
+  /** Güvenlik irsaliyesini 2 geçişli eşleştir; yeni kart açmaz. */
+  const rematchGateIrsaliye = async (
+    firma: string,
+    kalemler: any[]
+  ): Promise<ReturnType<typeof doubleCheckKapiMatch>> => {
+    const { cari, stok } = await loadLiveCariStok();
+    return doubleCheckKapiMatch(firma, kalemler || [], cari, stok);
+  };
+
+  const applyIrsaliyeMatchToForm = (matched: ReturnType<typeof doubleCheckKapiMatch>, base?: any) => {
+    setIrsaliyeFirma(matched.summary.cariUnvan || base?.firma || irsaliyeFirma);
+    setIrsaliyeKalemler(matched.kalemler);
+    setActiveGateDoc((prev: any) =>
+      prev
+        ? {
+            ...prev,
+            matchSummary: matched.summary,
+            cariKartId: matched.summary.cariKartId || prev.cariKartId,
+            firma: matched.summary.cariUnvan || prev.firma,
+            kalemler: matched.kalemler,
+          }
+        : prev
+    );
+  };
+
+  const handleRematchActiveGateIrsaliye = async () => {
+    if (!activeGateDoc) return;
+    try {
+      const matched = await rematchGateIrsaliye(
+        irsaliyeFirma || activeGateDoc.firma || '',
+        irsaliyeKalemler.length ? irsaliyeKalemler : activeGateDoc.kalemler || []
+      );
+      applyIrsaliyeMatchToForm(matched, activeGateDoc);
+      alert(
+        `İkinci kontrol tamam.\n${formatKapiMatchLabel(matched.summary)}` +
+          (matched.summary.unmatchedKalemler?.length
+            ? `\nEşleşmeyen: ${matched.summary.unmatchedKalemler.join(', ')}`
+            : '\nMevcut cari/stok kartlarına bağlandı (yeni kart açılmadı).')
+      );
+    } catch (err) {
+      console.error(err);
+      alert('Yeniden eşleştirme başarısız.');
+    }
+  };
+
+  /**
+   * Listeden tek tık: 2× eşleştir → mevcut cari altına işlem + stok giriş → onayla.
+   * Yeni cari/stok kartı açmaz.
+   */
+  const handleQuickApproveGateIrsaliye = async (docItem: any) => {
+    const tur = docItem?.evrakTuru || 'İRSALİYE';
+    if (tur !== 'İRSALİYE') {
+      handleOpenGateDocApproval(docItem);
+      return;
+    }
+    if (!docItem?.firma && !(docItem?.kalemler || []).length) {
+      alert('Evrakta firma/kalem yok. Önce YZ ile okutup kontrol edin.');
+      handleOpenGateDocApproval(docItem);
+      return;
+    }
+
+    try {
+      const matched = await rematchGateIrsaliye(docItem.firma || '', docItem.kalemler || []);
+      const label = formatKapiMatchLabel(matched.summary);
+      const ok = window.confirm(
+        `Güvenlik irsaliyesini eşleştirip onaylayayım mı?\n\n` +
+          `No: ${docItem.evrakNo || docItem.id}\n` +
+          `Firma: ${matched.summary.cariUnvan || docItem.firma || '—'}\n` +
+          `${label}\n` +
+          (matched.summary.cariMatched
+            ? '→ Mevcut cari kartın altına işlem kaydı yazılacak.\n'
+            : '→ Cari bulunamadı; unvan serbest kaydedilecek (yeni kart açılmaz).\n') +
+          (matched.summary.stokLinked
+            ? `→ ${matched.summary.stokLinked} stok kartına giriş işlenecek.\n`
+            : '→ Eşleşen stok yok; miktar artırılmaz.\n') +
+          `\nYeni cari/stok kartı açılmaz.`
+      );
+      if (!ok) return;
+
+      const { cari, stok } = await loadLiveCariStok();
+      const { summary } = await finalizeKapiIrsaliyeApproval({
+        guvenlikEvrakId: docItem.id,
+        irsaliyeNo: docItem.evrakNo || docItem.id,
+        firma: matched.summary.cariUnvan || docItem.firma || '',
+        tarih: docItem.tarih || new Date().toISOString().split('T')[0],
+        fotoUrl: docItem.fotoUrl || '',
+        kalemler: matched.kalemler,
+        onaylayan: currentUser?.email || 'Yönetici',
+        cariKartlar: cari,
+        stokKartlar: stok,
+        setIrsaliyeler,
+        setCariIslemGecmisi,
+        setStokKartlar,
+        setStokIslemGecmisi,
+      });
+
+      await updateDoc(doc(db, 'guvenlikGelenEvraklar', docItem.id), {
+        durum: 'ONAYLANDI',
+        onaylayanYonetici: currentUser?.email || 'Yönetici',
+        islenenEvrakTuru: 'İRSALİYE',
+        irsaliyeId: docItem.id,
+        cariKartId: summary.cariKartId || '',
+        matchSummary: summary,
+        evrakNo: docItem.evrakNo || docItem.id,
+        firma: summary.cariUnvan || docItem.firma || '',
+        tarih: docItem.tarih || new Date().toISOString().split('T')[0],
+        kalemler: matched.kalemler,
+        onayTarihi: new Date().toISOString(),
+      });
+
+      if (addNotification) {
+        addNotification(`Kapı irsaliyesi onaylandı (${docItem.evrakNo || docItem.id}) · ${formatKapiMatchLabel(summary)}`);
+      }
+      alert(`Onaylandı.\n${formatKapiMatchLabel(summary)}\nCari altına kayıt yazıldı (varsa); stok girişleri işlendi.`);
+    } catch (err) {
+      console.error(err);
+      alert('Hızlı onay başarısız. Formdan kontrol edip tekrar deneyin.');
+      handleOpenGateDocApproval(docItem);
+    }
+  };
+
+  const handleOpenGateDocApproval = async (docItem: any) => {
     setActiveGateDoc(docItem);
     setSelectedDocType(docItem.evrakTuru || 'İRSALİYE');
     setIsAiResolving(false);
@@ -1241,6 +1387,28 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
       setGenelAciklama(docItem.aciklama || '');
 
       setApprovalStep('FORM');
+
+      // İrsaliye: açılışta 2. kontrol eşleştirmesi (yeni kart açmadan)
+      if ((docItem.evrakTuru || 'İRSALİYE') === 'İRSALİYE' && (docItem.firma || docItem.kalemler?.length)) {
+        try {
+          const matched = await rematchGateIrsaliye(docItem.firma || '', docItem.kalemler || []);
+          setIrsaliyeFirma(matched.summary.cariUnvan || docItem.firma || '');
+          setIrsaliyeKalemler(matched.kalemler);
+          setActiveGateDoc((prev: any) =>
+            prev
+              ? {
+                  ...prev,
+                  matchSummary: matched.summary,
+                  cariKartId: matched.summary.cariKartId || prev.cariKartId,
+                  firma: matched.summary.cariUnvan || prev.firma,
+                  kalemler: matched.kalemler,
+                }
+              : prev
+          );
+        } catch (err) {
+          console.error('Kapı açılış eşleştirme:', err);
+        }
+      }
     } else {
       // Clear all forms
       setFaturaNo('');
@@ -1343,7 +1511,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
         } else if (selectedDocType === 'İRSALİYE') {
           const firma = parsed.firma || activeGateDoc.firma || '';
           const kalemler = parsed.kalemler || [];
-          const { summary, kalemler: linked } = matchKapiEvrakToDb(
+          const { summary, kalemler: linked } = doubleCheckKapiMatch(
             firma,
             kalemler,
             cariKartlar,
@@ -1399,12 +1567,14 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           alert("Lütfen Fatura No, Firma ve Tarih alanlarını doldurun!");
           return;
         }
+        const { cari: liveCari } = await loadLiveCariStok();
+        const cariHit = resolveCariKartId(faturaFirma, liveCari);
         const newFatura = {
           id: docId,
           faturaNo,
           tarih: faturaTarih,
-          cariKartId: "",
-          cariUnvan: faturaFirma,
+          cariKartId: cariHit.cariKartId || '',
+          cariUnvan: cariHit.cariUnvan || faturaFirma,
           toplamTutar: Number(faturaToplam),
           kdvTutar: Number(faturaKdv),
           genelToplam: Number(faturaGenelToplam),
@@ -1424,7 +1594,20 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           onayTarihi: new Date().toISOString()
         };
         await setDoc(doc(db, 'faturalar', docId), newFatura);
-
+        if (cariHit.matched && cariHit.cariKartId) {
+          const cariRow = buildCariEvrakHistory({
+            cariKartId: cariHit.cariKartId,
+            islemTipi: 'FATURA',
+            islemId: docId,
+            islemBaslik: `Kapı Faturası · ${cariHit.cariUnvan}`,
+            islemDetay: `${faturaNo} · güvenlik kapısı (yeni kart açılmadı)`,
+            tarih: faturaTarih,
+            belgeNo: faturaNo,
+            tutar: Number(faturaGenelToplam) || Number(faturaToplam) || 0,
+          });
+          await saveDocument('cariIslemGecmisi', cariRow);
+          appendCariIslemOnce(setCariIslemGecmisi, cariRow);
+        }
       } else if (type === 'İRSALİYE') {
         if (!irsaliyeNo || !irsaliyeFirma || !irsaliyeTarih) {
           alert("Lütfen İrsaliye No, Firma ve Tarih alanlarını doldurun!");
@@ -1434,27 +1617,27 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
         let liveCari = cariKartlar;
         let liveStok = stokKartlar;
         if (!liveCari.length || !liveStok.length) {
-          const [cariSnap, stokSnap] = await Promise.all([
-            getDocs(collection(db, 'cariKartlar')),
-            getDocs(collection(db, 'stokKartlar')),
-          ]);
-          if (!liveCari.length) {
-            liveCari = [];
-            cariSnap.forEach((d) => liveCari.push({ id: d.id, ...(d.data() as any) }));
-          }
-          if (!liveStok.length) {
-            liveStok = [];
-            stokSnap.forEach((d) => liveStok.push({ id: d.id, ...(d.data() as any) }));
-          }
+          const loaded = await loadLiveCariStok();
+          liveCari = loaded.cari;
+          liveStok = loaded.stok;
         }
+
+        const rematched = doubleCheckKapiMatch(
+          irsaliyeFirma,
+          irsaliyeKalemler,
+          liveCari,
+          liveStok
+        );
+        setIrsaliyeFirma(rematched.summary.cariUnvan || irsaliyeFirma);
+        setIrsaliyeKalemler(rematched.kalemler);
 
         const { summary } = await finalizeKapiIrsaliyeApproval({
           guvenlikEvrakId: docId,
           irsaliyeNo,
-          firma: irsaliyeFirma,
+          firma: rematched.summary.cariUnvan || irsaliyeFirma,
           tarih: irsaliyeTarih,
           fotoUrl: activeGateDoc.fotoUrl || '',
-          kalemler: irsaliyeKalemler,
+          kalemler: rematched.kalemler,
           onaylayan: currentUser?.email || 'Yönetici',
           cariKartlar: liveCari,
           stokKartlar: liveStok,
@@ -1474,7 +1657,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           evrakNo: irsaliyeNo,
           firma: summary.cariUnvan || irsaliyeFirma,
           tarih: irsaliyeTarih,
-          kalemler: irsaliyeKalemler,
+          kalemler: rematched.kalemler,
           onayTarihi: new Date().toISOString(),
         });
 
@@ -1485,7 +1668,11 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
         }
 
         alert(
-          `İrsaliye onaylandı ve cari/stok ile eşleştirildi.\n${formatKapiMatchLabel(summary)}`
+          `İrsaliye onaylandı.\n${formatKapiMatchLabel(summary)}\n` +
+            (summary.cariMatched
+              ? 'Mevcut cari kartın altına işlem kaydı yazıldı.\n'
+              : 'Cari bulunamadı; yeni kart açılmadı.\n') +
+            'Stok eşleşen kalemlere giriş işlendi.'
         );
         setActiveGateDoc(null);
         return;
@@ -1760,6 +1947,8 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
               handleApproveDocument={handleApproveDocument}
               handleRejectGateDoc={handleRejectGateDoc}
               handleOpenGateDocApproval={handleOpenGateDocApproval}
+              handleQuickApproveGateIrsaliye={handleQuickApproveGateIrsaliye}
+              handleRematchActiveGateIrsaliye={handleRematchActiveGateIrsaliye}
               activeGateDoc={activeGateDoc}
               setActiveGateDoc={setActiveGateDoc}
               approvalStep={approvalStep}

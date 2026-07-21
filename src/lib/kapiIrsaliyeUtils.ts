@@ -81,6 +81,31 @@ export function matchKapiEvrakToDb(
   };
 }
 
+/**
+ * İki geçişli kontrol: 1) ham firma/kalem 2) eşleşen cari unvanı + normalize stok adlarıyla tekrar.
+ * Yeni kart açmaz; mevcut cari/stoka bağlar.
+ */
+export function doubleCheckKapiMatch(
+  firma: string,
+  kalemler: KapiKalemInput[],
+  cariKartlar: CariKart[],
+  stokKartlar: StokKart[]
+): { summary: KapiMatchSummary; kalemler: IrsaliyeItem[]; pass1: KapiMatchSummary; pass2: KapiMatchSummary } {
+  const pass1 = matchKapiEvrakToDb(firma, kalemler, cariKartlar, stokKartlar);
+  const pass2 = matchKapiEvrakToDb(
+    pass1.summary.cariUnvan || firma,
+    pass1.kalemler,
+    cariKartlar,
+    stokKartlar
+  );
+  return {
+    summary: pass2.summary,
+    kalemler: pass2.kalemler,
+    pass1: pass1.summary,
+    pass2: pass2.summary,
+  };
+}
+
 export function buildKapiDraftIrsaliye(opts: {
   guvenlikEvrakId: string;
   irsaliyeNo: string;
@@ -124,7 +149,7 @@ export async function upsertKapiDraftIrsaliye(opts: {
   stokKartlar: StokKart[];
   kaydeden?: string;
 }): Promise<{ irsaliye: Irsaliye; summary: KapiMatchSummary }> {
-  const { summary, kalemler } = matchKapiEvrakToDb(
+  const { summary, kalemler } = doubleCheckKapiMatch(
     opts.firma,
     opts.kalemler,
     opts.cariKartlar,
@@ -166,7 +191,7 @@ export async function finalizeKapiIrsaliyeApproval(opts: {
   setStokIslemGecmisi?: Dispatch<SetStateAction<StokKartIslem[]>>;
 }): Promise<{ irsaliye: Irsaliye; summary: KapiMatchSummary }> {
   const now = new Date().toISOString();
-  const { summary, kalemler } = matchKapiEvrakToDb(
+  const { summary, kalemler } = doubleCheckKapiMatch(
     opts.firma,
     opts.kalemler,
     opts.cariKartlar,

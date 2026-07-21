@@ -55,6 +55,13 @@ export function findStokMatch(urunAdi: string, stoklar: StokKart[]): StokKart | 
   const exact = stoklar.find((s) => normalizeStockCompareName(s.stokAdi) === norm);
   if (exact) return exact;
 
+  const contains = stoklar.find((s) => {
+    const sn = normalizeStockCompareName(s.stokAdi);
+    if (!sn || sn.length < 4 || norm.length < 4) return false;
+    return sn.includes(norm) || norm.includes(sn);
+  });
+  if (contains) return contains;
+
   let best: StokKart | undefined;
   let bestDist = Number.POSITIVE_INFINITY;
   for (const stok of stoklar) {
