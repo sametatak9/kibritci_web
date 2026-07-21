@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Building2, Layers, Map, Users, ChevronDown, ChevronUp } from 'lucide-react';
+import { Building2, Layers, Map as MapIcon, Users, ChevronDown, ChevronUp } from 'lucide-react';
 import { KampKaydi, KampOdasi, Personel } from '../types/erp';
 import {
   buildKampKrokiModel,
@@ -324,7 +324,7 @@ export const KampKrokiGorunumTab: React.FC<KampKrokiGorunumTabProps> = ({
   if (kampOdalari.length === 0) {
     return (
       <div className="flex-1 bg-white border border-slate-200 rounded-2xl flex flex-col items-center justify-center p-12 text-center shadow-sm">
-        <Map size={28} className="text-slate-300 mb-3" />
+        <MapIcon size={28} className="text-slate-300 mb-3" />
         <h3 className="font-bold text-sm text-slate-800">Kamp krokisi için oda yok</h3>
         <p className="text-xs text-slate-500 mt-1 max-w-sm">
           Önce Oda &amp; Yerleşim sekmesinden yerleşke, kat ve oda oluşturun; burada kat–firma–kişi krokisi görünür.
@@ -340,7 +340,7 @@ export const KampKrokiGorunumTab: React.FC<KampKrokiGorunumTabProps> = ({
         <div className="p-4 sm:p-5 flex flex-col lg:flex-row lg:items-end gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 text-amber-200/90 text-[10px] font-bold uppercase tracking-[0.2em]">
-              <Map size={12} />
+              <MapIcon size={12} />
               Kamp krokisi
             </div>
             <h2
