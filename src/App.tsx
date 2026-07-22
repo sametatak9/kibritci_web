@@ -305,6 +305,8 @@ export default function App() {
   const kuterCariSeedRef = useRef(false);
   const deltaKapiPersonelSeedRef = useRef(false);
   const deltaKapiCariSeedRef = useRef(false);
+  const yeditepePersonelSeedRef = useRef(false);
+  const yeditepeCariSeedRef = useRef(false);
   const kampRepairInFlightRef = useRef(false);
   const personelAutoCreateBlocklistRef = useRef(new Set<string>());
   const persistenceFailureRef = useRef<(collection: string, message: string) => void>((c, m) => {
@@ -687,8 +689,16 @@ export default function App() {
         // DELTA KAPI taşeron personeli: TC ile mükerrersiz seed
         const { mergeDeltaKapiIntoPersonelList, ensureDeltaKapiCari } = await import('./data/deltaKapiPersonelSeed');
         const deltaMerged = mergeDeltaKapiIntoPersonelList(kuterMerged.list);
-        setPersoneller(deltaMerged.list);
-        if (idariMerged.toSave.length > 0 || kuterMerged.toSave.length > 0 || deltaMerged.toSave.length > 0) {
+        // YEDİTEPE taşeron personeli: TC ile mükerrersiz seed
+        const { mergeYeditepeIntoPersonelList, ensureYeditepeCari } = await import('./data/yeditepePersonelSeed');
+        const yeditepeMerged = mergeYeditepeIntoPersonelList(deltaMerged.list);
+        setPersoneller(yeditepeMerged.list);
+        if (
+          idariMerged.toSave.length > 0 ||
+          kuterMerged.toSave.length > 0 ||
+          deltaMerged.toSave.length > 0 ||
+          yeditepeMerged.toSave.length > 0
+        ) {
           void (async () => {
             for (const p of idariMerged.toSave) {
               try {
@@ -720,6 +730,16 @@ export default function App() {
             if (deltaMerged.toSave.length > 0) {
               console.log(`DELTA KAPI personel senkronu: ${deltaMerged.toSave.length} kayıt`);
             }
+            for (const p of yeditepeMerged.toSave) {
+              try {
+                await saveDocument('personeller', p);
+              } catch (e) {
+                console.warn('YEDİTEPE personel kaydı atlandı:', p.tcNo, e);
+              }
+            }
+            if (yeditepeMerged.toSave.length > 0) {
+              console.log(`YEDİTEPE personel senkronu: ${yeditepeMerged.toSave.length} kayıt`);
+            }
           })();
         }
         const kuterCari = ensureKuterCari(companyData as CariKart[]);
@@ -738,6 +758,15 @@ export default function App() {
         if (deltaCari) {
           void saveDocument('cariKartlar', deltaCari).catch((e) =>
             console.warn('DELTA KAPI cari kaydı atlandı:', e)
+          );
+        }
+        const yeditepeCari = ensureYeditepeCari(companyDataWithDelta);
+        const companyDataWithYeditepe = yeditepeCari
+          ? [...companyDataWithDelta, yeditepeCari]
+          : companyDataWithDelta;
+        if (yeditepeCari) {
+          void saveDocument('cariKartlar', yeditepeCari).catch((e) =>
+            console.warn('YEDİTEPE cari kaydı atlandı:', e)
           );
         }
         setYoklamalar(attData);
@@ -788,7 +817,7 @@ export default function App() {
         setSahaFaaliyetleri(reportData);
         setProgramliFaaliyetler(loadedProgramliFaaliyetler);
         setHazirTutanaklar(protocolData);
-        setCariKartlar(companyDataWithDelta);
+        setCariKartlar(companyDataWithYeditepe);
         setStokKartlar(stockData);
         setEpostaGonderimleri(emailLogData);
         setKullanicilar(loadedUsers);
@@ -1000,6 +1029,25 @@ export default function App() {
           })();
         });
       }
+
+      // YEDİTEPE taşeron personeli: TC ile mükerrersiz tamamla
+      if (!yeditepePersonelSeedRef.current) {
+        yeditepePersonelSeedRef.current = true;
+        void import('./data/yeditepePersonelSeed').then(({ mergeYeditepeIntoPersonelList }) => {
+          const { toSave } = mergeYeditepeIntoPersonelList(list);
+          if (toSave.length === 0) return;
+          void (async () => {
+            for (const p of toSave) {
+              try {
+                await saveDocument('personeller', p);
+              } catch (e) {
+                console.warn('YEDİTEPE personel snapshot senkronu atlandı:', p.tcNo, e);
+              }
+            }
+            console.log(`YEDİTEPE personel snapshot senkronu: ${toSave.length} kayıt`);
+          })();
+        });
+      }
     });
 
     const unsubYoklamalar = onSnapshot(doc(db, 'yoklamalar', 'global_yoklama_map'), (snap) => {
@@ -1144,6 +1192,17 @@ export default function App() {
           if (!cari) return;
           void saveDocument('cariKartlar', cari).catch((e) =>
             console.warn('DELTA KAPI cari snapshot senkronu atlandı:', e)
+          );
+        });
+      }
+
+      if (!yeditepeCariSeedRef.current) {
+        yeditepeCariSeedRef.current = true;
+        void import('./data/yeditepePersonelSeed').then(({ ensureYeditepeCari }) => {
+          const cari = ensureYeditepeCari(list);
+          if (!cari) return;
+          void saveDocument('cariKartlar', cari).catch((e) =>
+            console.warn('YEDİTEPE cari snapshot senkronu atlandı:', e)
           );
         });
       }
