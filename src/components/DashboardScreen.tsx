@@ -3,7 +3,7 @@ import {
   Users, Wallet, ShoppingCart, Truck, RefreshCw, 
   FileText, BarChart, ArrowUpRight, ArrowDownRight, Compass, Settings,
   Search, ClipboardList, Briefcase, CalendarCheck2, ChevronRight, UserCheck, AlertTriangle, Tent,
-  MapPin, Sun, HelpCircle, Activity, ArrowRight, BookOpen, Plus, TrendingUp, CreditCard
+  MapPin, Sun, HelpCircle, Activity, ArrowRight, BookOpen, Plus, TrendingUp, CreditCard, Link2
 } from 'lucide-react';
 import { Personel, KasaHareketi, SatinAlmaTalebi, AracBakim, AylikYoklamaMap, KampOdasi, KampKaydi } from '../types/erp';
 import { KibritciLogo } from './KibritciLogo';
@@ -15,6 +15,8 @@ import { DashboardSonIslemlerFeed } from './DashboardSonIslemlerFeed';
 import { isPersonelActiveOnDate } from '../lib/guvenlikHelpers';
 import { isTaseronPersonel } from '../lib/yoklamaUtils';
 import { buildOperasyonOzeti } from '../lib/operasyonUyarilari';
+import { EKSIK_HALKA_LABEL, listEksikHalka, summarizeEksikHalka } from '../lib/eksikHalkaUtils';
+import { countTaseronMevcudiyetBugun } from '../lib/taseronMevcudiyetUtils';
 import type { Fatura, Irsaliye } from '../types/erp';
 
 interface DashboardScreenProps {
@@ -106,6 +108,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         kampKayitlari,
       }),
     [satinAlmaTalepleri, irsaliyeler, faturalar, stokKartlar, kampOdalari, kampKayitlari]
+  );
+  const eksikHalkaRows = useMemo(
+    () => listEksikHalka({ satinAlmaTalepleri, irsaliyeler, faturalar }),
+    [satinAlmaTalepleri, irsaliyeler, faturalar]
+  );
+  const eksikHalkaOzet = useMemo(() => summarizeEksikHalka(eksikHalkaRows), [eksikHalkaRows]);
+  const taseronMevcudiyet = useMemo(
+    () => countTaseronMevcudiyetBugun(personeller, yoklamalar, bugun),
+    [personeller, yoklamalar, bugun]
   );
   const pendingSatinAlmaCount = operasyonOzeti.bekleyenSatinAlma;
   const totalPendingApprovals = operasyonOzeti.bekleyenOnay;
@@ -405,6 +416,167 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
               </span>
             ))}
           </div>
+        )}
+      </div>
+
+      {/* Eksik halka — SA ↔ irsaliye ↔ fatura (salt okunur mutabakat) */}
+      <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-700 shrink-0">
+              <Link2 size={18} className="stroke-[2.5]" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                Evrak Eksik Halka
+              </h4>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Satın alma → irsaliye → fatura zincirinde kopuk kayıtlar (salt okunur).
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-full">
+            {eksikHalkaOzet.toplam} kayıt
+          </span>
+        </div>
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
+          {(
+            [
+              ['SA_IRSALIYESIZ', 'satin_alma'],
+              ['IRSALIYE_SA_SIZ', 'irsaliye_giris'],
+              ['IRSALIYE_FATURASIZ', 'irsaliye_giris'],
+              ['FATURA_IRSALIYESIZ', 'fatura_giris'],
+            ] as const
+          ).map(([tip, tab]) => (
+            <button
+              key={tip}
+              type="button"
+              onClick={() => onNavigate(tab)}
+              className="text-left rounded-2xl border border-slate-200 bg-slate-50 hover:bg-slate-100 p-3 cursor-pointer transition"
+            >
+              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">
+                {EKSIK_HALKA_LABEL[tip]}
+              </span>
+              <span className="text-lg font-black tabular-nums text-slate-900">
+                {eksikHalkaOzet[tip]}
+              </span>
+            </button>
+          ))}
+        </div>
+        {eksikHalkaRows.length > 0 ? (
+          <div className="overflow-x-auto max-h-[220px] rounded-2xl border border-slate-100">
+            <table className="w-full text-left text-[11px]">
+              <thead className="bg-slate-50 text-slate-500 uppercase text-[9px] font-bold sticky top-0">
+                <tr>
+                  <th className="px-3 py-2">Tip</th>
+                  <th className="px-3 py-2">Kod</th>
+                  <th className="px-3 py-2">Firma</th>
+                  <th className="px-3 py-2">Tarih</th>
+                  <th className="px-3 py-2">Detay</th>
+                </tr>
+              </thead>
+              <tbody>
+                {eksikHalkaRows.slice(0, 40).map((r) => (
+                  <tr
+                    key={`${r.tip}_${r.id}`}
+                    className="border-t border-slate-100 hover:bg-indigo-50/40 cursor-pointer"
+                    onClick={() => onNavigate(r.navigateTab)}
+                  >
+                    <td className="px-3 py-2 font-bold text-indigo-800 whitespace-nowrap">
+                      {EKSIK_HALKA_LABEL[r.tip]}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-slate-800">{r.kod}</td>
+                    <td className="px-3 py-2 text-slate-700">{r.firma}</td>
+                    <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{r.tarih || '—'}</td>
+                    <td className="px-3 py-2 text-slate-600">{r.detay}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2 font-semibold">
+            Görünür eksik halka yok — zincir şu an tutarlı görünüyor.
+          </p>
+        )}
+      </div>
+
+      {/* Taşeron günlük mevcudiyet — salt okunur */}
+      <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-2xl bg-amber-50 border border-amber-100 text-amber-800 shrink-0">
+              <UserCheck size={18} className="stroke-[2.5]" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                Taşeron Günlük Mevcudiyet
+              </h4>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Bugün ({taseronMevcudiyet.tarih}) aktif taşeron kadrosunun yoklama özeti — yazma yok.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('yoklama')}
+            className="text-[10px] font-bold px-3 py-1.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800 cursor-pointer"
+          >
+            Yoklamaya git
+          </button>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
+          {[
+            ['Aktif kadro', taseronMevcudiyet.aktifKadro, 'text-slate-900'],
+            ['Geldi', taseronMevcudiyet.geldi, 'text-emerald-700'],
+            ['Yok', taseronMevcudiyet.yok, 'text-rose-700'],
+            ['İzinli', taseronMevcudiyet.izinli, 'text-sky-700'],
+            ['Raporlu', taseronMevcudiyet.raporlu, 'text-amber-700'],
+            ['Girilmedi', taseronMevcudiyet.girilmedi, 'text-slate-500'],
+          ].map(([label, val, color]) => (
+            <div key={String(label)} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">
+                {label}
+              </span>
+              <span className={`text-lg font-black tabular-nums ${color}`}>{val as number}</span>
+            </div>
+          ))}
+        </div>
+        {taseronMevcudiyet.byFirma.length > 0 ? (
+          <div className="overflow-x-auto max-h-[200px] rounded-2xl border border-slate-100">
+            <table className="w-full text-left text-[11px]">
+              <thead className="bg-slate-50 text-slate-500 uppercase text-[9px] font-bold sticky top-0">
+                <tr>
+                  <th className="px-3 py-2">Firma</th>
+                  <th className="px-3 py-2 text-right">Kadro</th>
+                  <th className="px-3 py-2 text-right">Geldi</th>
+                  <th className="px-3 py-2 text-right">Yok</th>
+                  <th className="px-3 py-2 text-right">İzin/Rap.</th>
+                  <th className="px-3 py-2 text-right">Girilmedi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {taseronMevcudiyet.byFirma.slice(0, 25).map((f) => (
+                  <tr key={f.firma} className="border-t border-slate-100">
+                    <td className="px-3 py-2 font-bold text-slate-900">{f.firma}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{f.aktifKadro}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-emerald-700 font-bold">
+                      {f.geldi}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-rose-700">{f.yok}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                      {f.izinli + f.raporlu}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-500">{f.girilmedi}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2">
+            Aktif taşeron personeli bulunamadı.
+          </p>
         )}
       </div>
 
