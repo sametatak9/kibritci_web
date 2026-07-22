@@ -32,7 +32,7 @@ import {
   aggressiveCompressPaket,
   buildLeanGuvenlikEvrakFotoFields,
   isFirestorePayloadTooLarge,
-  uploadGuvenlikFotoPaket,
+  prepareGuvenlikFotoPaketForSave,
 } from '../lib/guvenlikFotoStorage';
 import { withTimeout } from '../lib/firebase';
 import { CorporateReportLayout } from './CorporateReportLayout';
@@ -757,23 +757,38 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     const savedIds = new Set<string>();
     const failures: string[] = [];
     const queueSnapshot = [...uploadQueue];
+    let watchdogFired = false;
+    // Mutlak güvenlik: hiçbir promise asılı kalsa bile buton «Gönderiliyor…»da kalmasın
+    const watchdog = window.setTimeout(() => {
+      watchdogFired = true;
+      setLoadingIrsaliye(false);
+      showStatus(
+        'error',
+        'Gönderim zaman aşımına uğradı. Bağlantıyı kontrol edip tekrar deneyin. (Kısmi kayıtlar yansımış olabilir.)'
+      );
+    }, 45000);
     try {
       for (const item of queueSnapshot) {
+        if (watchdogFired) break;
         const uniqueId = `EVR-${islemTarihi.replace(/-/g, '')}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
         try {
-          let uploaded = await uploadGuvenlikFotoPaket(uniqueId, {
-            kalemFotolar: item.kalemFotolar || [],
-            firmaFotolar: item.firmaFotolar || [],
-            faturaFotolar: item.faturaFotolar || [],
-          });
+          // Storage atlanır — sıkıştır + doğrudan Firestore (takılma kök nedeni Storage/Image asılmasıydı)
+          let prepared = await withTimeout(
+            prepareGuvenlikFotoPaketForSave({
+              kalemFotolar: item.kalemFotolar || [],
+              firmaFotolar: item.firmaFotolar || [],
+              faturaFotolar: item.faturaFotolar || [],
+            }),
+            20000
+          );
 
-          let lean = buildLeanGuvenlikEvrakFotoFields(uploaded);
+          let lean = buildLeanGuvenlikEvrakFotoFields(prepared);
           const primarySlot =
             lean.kalemFotolar[0] || lean.firmaFotolar[0] || lean.faturaFotolar[0] || null;
 
           let newEvrak: Record<string, unknown> = {
             id: uniqueId,
-            evrakNo: "",
+            evrakNo: '',
             evrakTuru: item.evrakTuru,
             firma: String(item.firma || '').trim(),
             cariKartId: item.cariKartId || '',
@@ -787,7 +802,9 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             fileName: primarySlot?.fileName || 'evrak_paketi',
             fileType: primarySlot?.fileType || 'image/jpeg',
             durum: 'BEKLEMEDE',
-            aciklama: item.aciklama || `Güvenlik kapısı evrak teslim alımı (${item.evrakTuru}) · 3 yöntemli foto`,
+            aciklama:
+              item.aciklama ||
+              `Güvenlik kapısı evrak teslim alımı (${item.evrakTuru}) · 3 yöntemli foto`,
             kaydeden: currentUser?.email || 'nobetci_guvenlik',
             fotoMetodOzet: {
               kalem: lean.kalemFotolar.length,
@@ -798,8 +815,8 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
           };
 
           if (isFirestorePayloadTooLarge(newEvrak)) {
-            uploaded = await aggressiveCompressPaket(uploaded);
-            lean = buildLeanGuvenlikEvrakFotoFields(uploaded);
+            prepared = await withTimeout(aggressiveCompressPaket(prepared), 15000);
+            lean = buildLeanGuvenlikEvrakFotoFields(prepared);
             newEvrak = {
               ...newEvrak,
               fotoUrl: lean.fotoUrl,
@@ -821,27 +838,31 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
           savedIds.add(item.id);
 
           if (lean.fotoUrl) {
-            // YZ arka planda — gönderimi bekletmez
+            // YZ arka planda — gönderimi bekletmez; inline URL kullan (orijinal kuyruk boyutu büyük olabilir)
             void triggerBackgroundAiParsing(
               uniqueId,
-              pickPrimaryFotoUrl(item) || lean.fotoUrl,
+              lean.fotoUrl,
               newEvrak.evrakTuru as string,
               {
                 firmaHint: (newEvrak.firma as string) || undefined,
                 cariKartId: (newEvrak.cariKartId as string) || undefined,
-                kalemFotoUrl: item.kalemFotolar?.[0]?.dataUrl || lean.kalemFotolar[0]?.dataUrl,
-                firmaFotoUrl: item.firmaFotolar?.[0]?.dataUrl || lean.firmaFotolar[0]?.dataUrl,
-                faturaFotoUrl: item.faturaFotolar?.[0]?.dataUrl || lean.faturaFotolar[0]?.dataUrl,
+                kalemFotoUrl: lean.kalemFotolar[0]?.dataUrl,
+                firmaFotoUrl: lean.firmaFotolar[0]?.dataUrl,
+                faturaFotoUrl: lean.faturaFotolar[0]?.dataUrl,
               }
             );
           }
         } catch (itemErr: any) {
           console.error('Evrak paketi kaydı başarısız:', item.id, itemErr);
-          failures.push(
-            `${item.firma || item.evrakTuru || 'Paket'}: ${itemErr?.message || 'kayıt hatası'}`
-          );
+          const msg =
+            itemErr?.message === 'FIRESTORE_TIMEOUT'
+              ? 'veritabanı zaman aşımı'
+              : itemErr?.message || 'kayıt hatası';
+          failures.push(`${item.firma || item.evrakTuru || 'Paket'}: ${msg}`);
         }
       }
+
+      if (watchdogFired) return;
 
       if (savedIds.size > 0) {
         setUploadQueue((prev) => prev.filter((p) => !savedIds.has(p.id)));
@@ -862,9 +883,12 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       }
     } catch (err: any) {
       console.error(err);
-      showStatus('error', err?.message || 'Veritabanına kaydedilirken bir hata oluştu!');
+      if (!watchdogFired) {
+        showStatus('error', err?.message || 'Veritabanına kaydedilirken bir hata oluştu!');
+      }
     } finally {
-      setLoadingIrsaliye(false);
+      window.clearTimeout(watchdog);
+      if (!watchdogFired) setLoadingIrsaliye(false);
     }
   };
 
