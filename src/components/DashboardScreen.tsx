@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, startTransition } from 'react';
 import { 
   Users, Wallet, ShoppingCart, Truck, RefreshCw, 
   FileText, BarChart, ArrowUpRight, ArrowDownRight, Compass, Settings,
@@ -13,7 +13,7 @@ import { DashboardPeriodSummary } from './DashboardPeriodSummary';
 import { DashboardFavoriteTabsStrip } from './DashboardFavoriteTabsStrip';
 import { DashboardSonIslemlerFeed } from './DashboardSonIslemlerFeed';
 import { isPersonelActiveOnDate } from '../lib/guvenlikHelpers';
-import { isTaseronPersonel } from '../lib/yoklamaUtils';
+import { getYoklamaDay, isTaseronPersonel } from '../lib/yoklamaUtils';
 import { buildOperasyonOzeti } from '../lib/operasyonUyarilari';
 import { EKSIK_HALKA_LABEL, listEksikHalka, summarizeEksikHalka } from '../lib/eksikHalkaUtils';
 import { countTaseronMevcudiyetBugun } from '../lib/taseronMevcudiyetUtils';
@@ -78,48 +78,92 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const activePersonelCount = aktifKadro.length;
   const anaFirmaActiveCount = aktifKadro.filter((p) => !isTaseronPersonel(p)).length;
   const taseronActiveCount = aktifKadro.filter((p) => isTaseronPersonel(p)).length;
-  
-  // Calculate attendance rate (Geldi ratio) for the current month
-  let totalCheckedDays = 0;
-  let totalPresentDays = 0;
-  Object.keys(yoklamalar || {}).forEach(pId => {
-    const pYoklama = yoklamalar[pId] || {};
-    Object.values(pYoklama).forEach((day: any) => {
-      if (day?.durum && day?.durum !== 'Girilmedi') {
-        totalCheckedDays++;
-        if (day?.durum === 'Geldi') {
-          totalPresentDays++;
+
+  // Ağır paneller ilk boyamadan sonra (UI donmasın)
+  const [panelsReady, setPanelsReady] = useState(false);
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      startTransition(() => setPanelsReady(true));
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  // Puantaj: yalnızca içinde bulunulan ay (tüm geçmişi tarama)
+  const attendanceRate = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth() + 1;
+    const daysInMonth = new Date(y, m, 0).getDate();
+    let totalCheckedDays = 0;
+    let totalPresentDays = 0;
+    for (const pId of Object.keys(yoklamalar || {})) {
+      const personMap = yoklamalar[pId] || {};
+      for (let d = 1; d <= daysInMonth; d += 1) {
+        const day = getYoklamaDay(personMap, y, m, d);
+        const durum = day?.durum;
+        if (durum && durum !== 'Girilmedi') {
+          totalCheckedDays += 1;
+          if (durum === 'Geldi') totalPresentDays += 1;
         }
       }
-    });
-  });
-  const attendanceRate = totalCheckedDays > 0 ? Math.round((totalPresentDays / totalCheckedDays) * 100) : 0;
+    }
+    return totalCheckedDays > 0 ? Math.round((totalPresentDays / totalCheckedDays) * 100) : 0;
+  }, [yoklamalar]);
 
   // Calculate pending manager approvals
   const pendingStokKartCount = (stokKartlar || []).filter((s: any) => s.durum === 'ONAY BEKLİYOR').length;
   const operasyonOzeti = useMemo(
     () =>
-      buildOperasyonOzeti({
-        satinAlmaTalepleri,
-        irsaliyeler,
-        faturalar,
-        stokKartlar,
-        kampOdalari,
-        kampKayitlari,
-      }),
-    [satinAlmaTalepleri, irsaliyeler, faturalar, stokKartlar, kampOdalari, kampKayitlari]
+      panelsReady
+        ? buildOperasyonOzeti({
+            satinAlmaTalepleri,
+            irsaliyeler,
+            faturalar,
+            stokKartlar,
+            kampOdalari,
+            kampKayitlari,
+          })
+        : {
+            bekleyenOnay: 0,
+            gecikenOnay: 0,
+            bekleyenSatinAlma: 0,
+            kampUyarilari: [],
+            faturasizIrsaliye: 0,
+            faturasizEski: 0,
+          },
+    [panelsReady, satinAlmaTalepleri, irsaliyeler, faturalar, stokKartlar, kampOdalari, kampKayitlari]
   );
   const eksikHalkaRows = useMemo(
-    () => listEksikHalka({ satinAlmaTalepleri, irsaliyeler, faturalar }),
-    [satinAlmaTalepleri, irsaliyeler, faturalar]
+    () =>
+      panelsReady
+        ? listEksikHalka({ satinAlmaTalepleri, irsaliyeler, faturalar, limit: 60 })
+        : [],
+    [panelsReady, satinAlmaTalepleri, irsaliyeler, faturalar]
   );
   const eksikHalkaOzet = useMemo(() => summarizeEksikHalka(eksikHalkaRows), [eksikHalkaRows]);
   const taseronMevcudiyet = useMemo(
-    () => countTaseronMevcudiyetBugun(personeller, yoklamalar, bugun),
-    [personeller, yoklamalar, bugun]
+    () =>
+      panelsReady
+        ? countTaseronMevcudiyetBugun(personeller, yoklamalar, bugun)
+        : {
+            tarih: bugun,
+            aktifKadro: 0,
+            geldi: 0,
+            yok: 0,
+            izinli: 0,
+            raporlu: 0,
+            girilmedi: 0,
+            byFirma: [],
+          },
+    [panelsReady, personeller, yoklamalar, bugun]
   );
   const pendingSatinAlmaCount = operasyonOzeti.bekleyenSatinAlma;
   const totalPendingApprovals = operasyonOzeti.bekleyenOnay;
+  const dataStillHydrating =
+    personeller.length > 0 &&
+    satinAlmaTalepleri.length === 0 &&
+    irsaliyeler.length === 0 &&
+    faturalar.length === 0;
 
   // Personnel selection state for tracing history
   const [selectedPersonelId, setSelectedPersonelId] = useState<string>('');
@@ -216,6 +260,23 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
   return (
     <div className="flex-grow p-6 space-y-6 overflow-y-auto h-full font-sans bg-slate-55 animate-slideUp">
+      {(dataStillHydrating || !panelsReady) && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-amber-900 text-[11px] font-bold">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            {dataStillHydrating
+              ? 'Canlı veriler hâlâ yükleniyor — özet kartları az sonra dolacak.'
+              : 'Operasyon panelleri hazırlanıyor…'}
+          </div>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="text-[10px] font-bold px-3 py-1.5 rounded-lg bg-white border border-amber-200 text-amber-900 cursor-pointer hover:bg-amber-100"
+          >
+            Sayfayı yenile
+          </button>
+        </div>
+      )}
       
       {/* Welcome Banner with Corporate Design */}
       <div className="flex flex-col bg-gradient-to-r from-slate-950 via-[#1e293b] to-slate-950 text-white rounded-3xl p-6 shadow-lg relative overflow-hidden border border-slate-800 gap-6 gradient-border-accent">
