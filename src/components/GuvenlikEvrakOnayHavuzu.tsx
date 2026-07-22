@@ -3,6 +3,12 @@ import { Truck, CreditCard, Eye, Check, X, Sparkles, ExternalLink, FileText, Dow
 import { openBase64InNewTab } from '../lib/fileViewerUtils';
 import { ImzaOnizlemeStrip } from './ImzaOnizlemeStrip';
 import { AcilOnayBadge } from './AcilOnayBadge';
+import {
+  collectAllFotoUrls,
+  GUVENLIK_FOTO_METOD_LABEL,
+  GuvenlikFotoSlot,
+  pickPrimaryFotoUrl,
+} from '../lib/guvenlikEvrakFotolar';
 
 interface GuvenlikEvrakOnayHavuzuProps {
   pendingGateDocs: any[];
@@ -235,9 +241,15 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {pendingGateDocs.map(docItem => {
-              const previewUrl = docItem.fotoUrl || docItem.fotoUrls?.[0];
+              const previewUrl = pickPrimaryFotoUrl(docItem);
+              const allUrls = collectAllFotoUrls(docItem);
               const imagePreview = isImageUrl(previewUrl);
               const pdfPreview = isPdfUrl(previewUrl, docItem.fileName);
+              const fotoGruplari: Array<{ label: string; list: GuvenlikFotoSlot[] }> = [
+                { label: GUVENLIK_FOTO_METOD_LABEL.KALEM, list: docItem.kalemFotolar || [] },
+                { label: GUVENLIK_FOTO_METOD_LABEL.FIRMA, list: docItem.firmaFotolar || [] },
+                { label: GUVENLIK_FOTO_METOD_LABEL.FATURA, list: docItem.faturaFotolar || [] },
+              ].filter((g) => g.list.length > 0);
               return (
               <div key={docItem.id} className="bg-white border border-[#D5DEE3] rounded-2xl flex flex-col hover:border-[#0F6C5C]/45 transition-all duration-200 overflow-hidden">
                 {/* Evrak önizleme */}
@@ -268,6 +280,11 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                       <span className="text-[10px] font-semibold">Önizleme yok</span>
                     </div>
                   )}
+                  {allUrls.length > 1 && (
+                    <span className="absolute top-2 left-2 bg-indigo-700 text-white text-[9px] font-black px-2 py-0.5 rounded-lg">
+                      {allUrls.length} foto
+                    </span>
+                  )}
                   {previewUrl && (
                     <span className="absolute bottom-2 right-2 bg-white/95 border border-slate-200 text-slate-700 text-[9px] font-bold px-2 py-1 rounded-lg flex items-center gap-1 shadow-sm opacity-0 group-hover:opacity-100 transition">
                       <ZoomIn size={11} /> Büyüt
@@ -293,8 +310,33 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                     </div>
 
                     <div className="text-xs text-slate-800 font-bold mt-2 truncate" title={docItem.fileName}>
-                      {docItem.fileName || 'Belge.jpg'}
+                      {docItem.fileName || 'Belge paketi'}
                     </div>
+
+                    {fotoGruplari.length > 0 && (
+                      <div className="mt-2 space-y-1.5">
+                        {fotoGruplari.map((g) => (
+                          <div key={g.label} className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[8px] font-black uppercase text-slate-500 w-full">{g.label}</span>
+                            {g.list.slice(0, 4).map((f) => (
+                              <button
+                                key={f.id}
+                                type="button"
+                                onClick={() => openCardPreview(f.dataUrl, f.fileName)}
+                                className="w-10 h-10 rounded-md overflow-hidden border border-slate-200 cursor-pointer"
+                                title={f.fileName}
+                              >
+                                {String(f.fileType || '').startsWith('image/') || String(f.dataUrl || '').startsWith('data:image/') ? (
+                                  <img src={f.dataUrl} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  <span className="text-[8px] font-bold text-slate-500 flex items-center justify-center h-full">PDF</span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     
                     {docItem.aciklama && (
                       <p className="text-[11px] text-slate-500 leading-relaxed bg-slate-50 p-2 rounded-lg border border-slate-100 mt-2 line-clamp-2">
@@ -516,7 +558,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
             <div className="w-full md:w-1/2 p-5 bg-slate-50 flex flex-col justify-between border-r border-slate-200">
               <div className="flex justify-between items-center mb-3">
                 <span className="font-bold text-[10px] text-slate-400 uppercase tracking-widest">Evrak Görseli / Önizleme</span>
-                {activeGateDoc.fotoUrl && (
+                {pickPrimaryFotoUrl(activeGateDoc) && (
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
@@ -530,7 +572,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                       type="button"
                       onClick={() => {
                         const link = document.createElement('a');
-                        link.href = activeGateDoc.fotoUrl;
+                        link.href = pickPrimaryFotoUrl(activeGateDoc);
                         link.download = activeGateDoc.fileName || 'evrak.png';
                         document.body.appendChild(link);
                         link.click();
@@ -545,7 +587,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                       href="#"
                       onClick={(event) => {
                         event.preventDefault();
-                        openBase64InNewTab(activeGateDoc.fotoUrl, activeGateDoc.fileName || 'Belge');
+                        openBase64InNewTab(pickPrimaryFotoUrl(activeGateDoc), activeGateDoc.fileName || 'Belge');
                       }}
                       className="text-[10px] text-slate-600 hover:underline flex items-center gap-1 font-semibold"
                     >
@@ -555,12 +597,45 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                   </div>
                 )}
               </div>
+
+              {(activeGateDoc.kalemFotolar?.length || activeGateDoc.firmaFotolar?.length || activeGateDoc.faturaFotolar?.length) ? (
+                <div className="mb-3 grid grid-cols-3 gap-2">
+                  {([
+                    ['KALEM', activeGateDoc.kalemFotolar || []],
+                    ['FIRMA', activeGateDoc.firmaFotolar || []],
+                    ['FATURA', activeGateDoc.faturaFotolar || []],
+                  ] as const).map(([metod, list]) => (
+                    <div key={metod} className="rounded-xl border border-slate-200 bg-white p-2 space-y-1">
+                      <p className="text-[8px] font-black uppercase text-slate-500">{GUVENLIK_FOTO_METOD_LABEL[metod]}</p>
+                      {list.length === 0 ? (
+                        <p className="text-[9px] text-slate-400 italic">Yok</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {list.map((f: GuvenlikFotoSlot) => (
+                            <button
+                              key={f.id}
+                              type="button"
+                              onClick={() => {
+                                setCardZoomUrl(f.dataUrl);
+                                setCardZoomName(f.fileName);
+                              }}
+                              className="w-11 h-11 rounded-md overflow-hidden border border-slate-200 cursor-pointer"
+                            >
+                              <img src={f.dataUrl} alt="" className="w-full h-full object-cover" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               
               <div className="flex-grow flex items-center justify-center overflow-hidden bg-white rounded-2xl border border-slate-200 p-3 min-h-[300px]">
-                {activeGateDoc.fotoUrl ? (
-                  activeGateDoc.fotoUrl.startsWith('data:image/') || activeGateDoc.fotoUrl.includes('.jpg') || activeGateDoc.fotoUrl.includes('.png') ? (
+                {pickPrimaryFotoUrl(activeGateDoc) ? (
+                  pickPrimaryFotoUrl(activeGateDoc).startsWith('data:image/') || pickPrimaryFotoUrl(activeGateDoc).includes('.jpg') || pickPrimaryFotoUrl(activeGateDoc).includes('.png') ? (
                     <img
-                      src={activeGateDoc.fotoUrl}
+                      src={pickPrimaryFotoUrl(activeGateDoc)}
                       alt="Evrak"
                       onClick={() => setIsZoomed(true)}
                       className="max-w-full max-h-[60vh] object-contain rounded-lg cursor-zoom-in hover:opacity-90 transition"
@@ -574,7 +649,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                         href="#"
                         onClick={(event) => {
                           event.preventDefault();
-                          openBase64InNewTab(activeGateDoc.fotoUrl, activeGateDoc.fileName || 'Belge');
+                          openBase64InNewTab(pickPrimaryFotoUrl(activeGateDoc), activeGateDoc.fileName || 'Belge');
                         }}
                         className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition"
                       >

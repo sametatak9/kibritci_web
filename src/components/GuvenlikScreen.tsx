@@ -18,6 +18,16 @@ import {
   suggestStokFromDb,
   upsertKapiDraftIrsaliye,
 } from '../lib/kapiIrsaliyeUtils';
+import {
+  collectAllFotoUrls,
+  countPaketFotolar,
+  createEmptyUploadPackage,
+  GUVENLIK_FOTO_METOD_HINT,
+  GUVENLIK_FOTO_METOD_LABEL,
+  GuvenlikFotoMetod,
+  GuvenlikFotoSlot,
+  pickPrimaryFotoUrl,
+} from '../lib/guvenlikEvrakFotolar';
 import { CorporateReportLayout } from './CorporateReportLayout';
 import { KibritciLogo } from './KibritciLogo';
 import { openBase64InNewTab } from '../lib/fileViewerUtils';
@@ -116,15 +126,18 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     tankerLabel?: string;
   } | null>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAddFotosToPackage = (
+    packageIndex: number,
+    metod: GuvenlikFotoMetod,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     if (!e.target.files) return;
     const files = Array.from(e.target.files) as File[];
-    files.forEach(file => {
+    files.forEach((file) => {
       const reader = new FileReader();
       reader.onload = async () => {
         const rawBase64 = reader.result as string;
         let displayBase64 = rawBase64;
-        
         if (file.type.startsWith('image/')) {
           try {
             displayBase64 = await compressImage(rawBase64);
@@ -132,21 +145,82 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             console.error('Image compression failed, using original', err);
           }
         }
-        
-        setUploadQueue(prev => [...prev, {
-          id: `q_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        const slot: GuvenlikFotoSlot = {
+          id: `f_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          dataUrl: displayBase64,
           fileName: file.name,
           fileType: file.type,
-          dataUrl: displayBase64,
-          evrakTuru: 'İRSALİYE',
-          aciklama: '',
-          firma: '',
-          cariKartId: '',
-        }]);
+          metod,
+        };
+        setUploadQueue((prev) => {
+          const next = [...prev];
+          const pkg = { ...next[packageIndex] };
+          if (metod === 'KALEM') pkg.kalemFotolar = [...(pkg.kalemFotolar || []), slot];
+          if (metod === 'FIRMA') pkg.firmaFotolar = [...(pkg.firmaFotolar || []), slot];
+          if (metod === 'FATURA') pkg.faturaFotolar = [...(pkg.faturaFotolar || []), slot];
+          next[packageIndex] = pkg;
+          return next;
+        });
       };
       reader.readAsDataURL(file);
     });
-    // Clear input
+    e.target.value = '';
+  };
+
+  const handleRemoveFotoFromPackage = (
+    packageIndex: number,
+    metod: GuvenlikFotoMetod,
+    fotoId: string
+  ) => {
+    setUploadQueue((prev) => {
+      const next = [...prev];
+      const pkg = { ...next[packageIndex] };
+      if (metod === 'KALEM') pkg.kalemFotolar = (pkg.kalemFotolar || []).filter((f: GuvenlikFotoSlot) => f.id !== fotoId);
+      if (metod === 'FIRMA') pkg.firmaFotolar = (pkg.firmaFotolar || []).filter((f: GuvenlikFotoSlot) => f.id !== fotoId);
+      if (metod === 'FATURA') pkg.faturaFotolar = (pkg.faturaFotolar || []).filter((f: GuvenlikFotoSlot) => f.id !== fotoId);
+      next[packageIndex] = pkg;
+      return next;
+    });
+  };
+
+  const handleNewUploadPackage = () => {
+    setUploadQueue((prev) => [...prev, createEmptyUploadPackage()]);
+  };
+
+  // Toplu seçim: yeni paket açıp kalem yuvasına koyar (3 yöntemli paketlerle uyumlu)
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.length) return;
+    const files = Array.from(e.target.files) as File[];
+    void (async () => {
+      const slots: GuvenlikFotoSlot[] = [];
+      for (const file of files) {
+        const rawBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        let displayBase64 = rawBase64;
+        if (file.type.startsWith('image/')) {
+          try {
+            displayBase64 = await compressImage(rawBase64);
+          } catch {
+            /* keep original */
+          }
+        }
+        slots.push({
+          id: `f_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          dataUrl: displayBase64,
+          fileName: file.name,
+          fileType: file.type,
+          metod: 'KALEM',
+        });
+      }
+      setUploadQueue((prev) => [
+        ...prev,
+        { ...createEmptyUploadPackage(), kalemFotolar: slots },
+      ]);
+    })();
     e.target.value = '';
   };
 
@@ -435,7 +509,13 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     docId: string,
     fotoUrl: string,
     evrakTuru: string,
-    hints?: { firmaHint?: string; cariKartId?: string }
+    hints?: {
+      firmaHint?: string;
+      cariKartId?: string;
+      kalemFotoUrl?: string;
+      firmaFotoUrl?: string;
+      faturaFotoUrl?: string;
+    }
   ) => {
     let docTypeParam = 'general';
     if (evrakTuru === 'FATURA') docTypeParam = 'fatura';
@@ -444,32 +524,74 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
     if (docTypeParam === 'general') return;
 
-    const parts = fotoUrl.split(',');
-    if (parts.length < 2) return;
-    const mimeMatch = parts[0].match(/data:(.*?);base64/);
-    const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-    const fileBase64 = parts[1];
+    const parseSingleFoto = async (url: string, docType: string) => {
+      const parts = String(url || '').split(',');
+      if (parts.length < 2) return null;
+      const mimeMatch = parts[0].match(/data:(.*?);base64/);
+      const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+      const fileBase64 = parts[1];
+      try {
+        const response: any = await fetchApiJson('/api/parse-legacy-document', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileBase64, mimeType, docType }),
+        });
+        if (response && !response.error) return response;
+      } catch (err) {
+        console.error('Tek foto YZ parse hatası:', err);
+      }
+      return null;
+    };
 
     try {
       await updateDoc(doc(db, 'guvenlikGelenEvraklar', docId), {
         aiStatus: 'PARSING'
       });
 
-      const response: any = await fetchApiJson('/api/parse-legacy-document', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileBase64,
-          mimeType,
-          docType: docTypeParam
-        })
-      });
+      // 3 yöntem: firma foto → unvan, kalem foto → kalemler, fatura foto → mali alanlar
+      const firmaUrl = hints?.firmaFotoUrl || fotoUrl;
+      const kalemUrl = hints?.kalemFotoUrl || fotoUrl;
+      const faturaUrl = hints?.faturaFotoUrl || fotoUrl;
+
+      let parsed: any = null;
+      if (evrakTuru === 'FATURA') {
+        parsed = (await parseSingleFoto(faturaUrl, 'fatura')) || (await parseSingleFoto(fotoUrl, 'fatura'));
+      } else if (evrakTuru === 'İRSALİYE') {
+        const parsedFirma =
+          firmaUrl && firmaUrl !== kalemUrl
+            ? await parseSingleFoto(firmaUrl, 'irsaliye')
+            : null;
+        const parsedKalem = await parseSingleFoto(kalemUrl || fotoUrl, 'irsaliye');
+        const parsedFaturaExtra =
+          faturaUrl && faturaUrl !== kalemUrl && faturaUrl !== firmaUrl
+            ? await parseSingleFoto(faturaUrl, 'fatura')
+            : null;
+        parsed = {
+          ...(parsedKalem || {}),
+          firma:
+            hints?.firmaHint ||
+            parsedFirma?.firma ||
+            parsedKalem?.firma ||
+            parsedFaturaExtra?.cariUnvan ||
+            '',
+          irsaliyeNo: parsedKalem?.irsaliyeNo || parsedFirma?.irsaliyeNo || '',
+          tarih: parsedKalem?.tarih || parsedFirma?.tarih || '',
+          kalemler: parsedKalem?.kalemler?.length
+            ? parsedKalem.kalemler
+            : parsedFirma?.kalemler || [],
+          _multiFoto: true,
+        };
+      } else if (evrakTuru === 'MAKBUZ') {
+        parsed = (await parseSingleFoto(firmaUrl || fotoUrl, 'makbuz')) || (await parseSingleFoto(fotoUrl, 'makbuz'));
+      }
+
+      const response = parsed;
 
       if (response && !response.error) {
-        const parsed = response;
         const updates: any = {
           aiParsed: true,
-          aiStatus: 'SUCCESS'
+          aiStatus: 'SUCCESS',
+          aiMultiFoto: Boolean(response._multiFoto),
         };
 
         if (evrakTuru === 'FATURA') {
@@ -602,11 +724,23 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       alert("Gönderilecek evrak bulunmuyor. Lütfen önce dosya yükleyin!");
       return;
     }
+    const eksikFoto = uploadQueue.filter((item) => countPaketFotolar(item) === 0);
+    if (eksikFoto.length > 0) {
+      alert("Her evrak paketinde en az bir fotoğraf olmalı (kalem / firma / fatura yuvalarından).");
+      return;
+    }
 
     setLoadingIrsaliye(true);
     try {
       for (const item of uploadQueue) {
         const uniqueId = `EVR-${islemTarihi.replace(/-/g, '')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+        const kalemFotolar = item.kalemFotolar || [];
+        const firmaFotolar = item.firmaFotolar || [];
+        const faturaFotolar = item.faturaFotolar || [];
+        const fotoUrls = collectAllFotoUrls(item);
+        const primaryUrl = pickPrimaryFotoUrl(item);
+        const primarySlot =
+          kalemFotolar[0] || firmaFotolar[0] || faturaFotolar[0] || null;
         const newEvrak = {
           id: uniqueId,
           evrakNo: "",
@@ -615,19 +749,31 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
           cariKartId: item.cariKartId || '',
           tarih: islemTarihi,
           saat: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
-          fotoUrl: item.dataUrl || "",
-          fileName: item.fileName,
-          fileType: item.fileType,
+          fotoUrl: primaryUrl,
+          fotoUrls,
+          kalemFotolar,
+          firmaFotolar,
+          faturaFotolar,
+          fileName: primarySlot?.fileName || 'evrak_paketi',
+          fileType: primarySlot?.fileType || 'image/jpeg',
           durum: 'BEKLEMEDE',
-          aciklama: item.aciklama || `Güvenlik kapısı evrak teslim alımı (${item.evrakTuru})`,
-          kaydeden: currentUser?.email || 'nobetci_guvenlik'
+          aciklama: item.aciklama || `Güvenlik kapısı evrak teslim alımı (${item.evrakTuru}) · 3 yöntemli foto`,
+          kaydeden: currentUser?.email || 'nobetci_guvenlik',
+          fotoMetodOzet: {
+            kalem: kalemFotolar.length,
+            firma: firmaFotolar.length,
+            fatura: faturaFotolar.length,
+          },
         };
         await setDoc(doc(db, 'guvenlikGelenEvraklar', uniqueId), newEvrak);
 
-        if (newEvrak.fotoUrl) {
-          triggerBackgroundAiParsing(uniqueId, newEvrak.fotoUrl, newEvrak.evrakTuru, {
+        if (primaryUrl) {
+          triggerBackgroundAiParsing(uniqueId, primaryUrl, newEvrak.evrakTuru, {
             firmaHint: newEvrak.firma || undefined,
             cariKartId: newEvrak.cariKartId || undefined,
+            kalemFotoUrl: kalemFotolar[0]?.dataUrl,
+            firmaFotoUrl: firmaFotolar[0]?.dataUrl,
+            faturaFotoUrl: faturaFotolar[0]?.dataUrl,
           });
         }
       }
@@ -2308,184 +2454,223 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                 silDisabled={seciliGunEvraklar.length === 0}
               />
               
-              {/* 1. YENİ EVRAK YÜKLEME ALANI */}
+              {/* 1. YENİ EVRAK YÜKLEME ALANI — 3 yöntemli foto */}
               <div className="bg-white p-5 border border-slate-200 rounded-3xl space-y-4 shadow-sm">
                 <span className="font-display font-black text-xs text-slate-800 uppercase tracking-widest block border-b pb-2">
-                  📄 KAPIDA İRSALİYE / EVRAK GİRİŞİ (YÖNETİCİ ONAYINA)
+                  📄 KAPIDA İRSALİYE / EVRAK GİRİŞİ (3 FOTO YÖNTEMİ)
                 </span>
                 <p className="text-[10px] text-slate-500 -mt-2">
-                  Amaç: irsaliyeyi doğru firmaya bağlamak. Firma yazdıkça DB’deki cari kartlar önerilir;
-                  YZ kalemleri okuyunca stok eşleşmesi de gösterilir. Yeni kart açılmaz — mevcut kart seçilir.
+                  Görünmeme sorununu çözmek için her evrak paketinde ayrı fotoğraflar yükleyin:
+                  <strong> 1) Kalem</strong>, <strong>2) Firma adı</strong>, <strong>3) Fatura</strong>.
+                  Birden fazla fotoğraf eklenebilir. Firma yazdıkça cari önerilir.
                 </p>
-                
-                <div className="relative border-2 border-dashed border-indigo-200 rounded-2xl p-6 text-center bg-indigo-50/30 hover:bg-indigo-50/70 transition duration-300 cursor-pointer group">
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    onChange={handleFileChange}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  />
-                  <div className="space-y-2 py-2 transform group-hover:scale-105 transition duration-300">
-                    <div className="bg-indigo-600 w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-2 shadow-md">
-                      <FileUp size={24} className="text-white" />
-                    </div>
-                    <span className="text-[13px] font-bold text-slate-850 block">Dosyaları Seçin veya Sürükleyin</span>
-                    <span className="text-[10px] text-slate-500 block">
-                      Birden fazla fotoğraf (PNG, JPG), PDF veya Word dosyası seçebilirsiniz
-                    </span>
-                  </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleNewUploadPackage}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-extrabold px-4 py-2 rounded-xl cursor-pointer"
+                  >
+                    + Yeni evrak paketi
+                  </button>
+                  <label className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold px-4 py-2 rounded-xl cursor-pointer border border-slate-200">
+                    Hızlı: kalem yuvasına çoklu foto
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*,application/pdf"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                  </label>
                 </div>
 
-                {/* Yükleme Kuyruğu (Upload Queue) */}
-                {uploadQueue.length > 0 && (
-                  <div className="space-y-3 pt-3 border-t border-slate-100">
+                {uploadQueue.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/40 p-6 text-center text-[11px] text-slate-500 font-semibold">
+                    Henüz paket yok. «Yeni evrak paketi» ile 3 yuvayı doldurun veya hızlı yükleme kullanın.
+                  </div>
+                ) : (
+                  <div className="space-y-4 pt-2 border-t border-slate-100">
                     <div className="flex justify-between items-center">
                       <span className="font-bold text-[10px] text-indigo-600 uppercase tracking-wider">
-                        Kuyruktaki Evraklar ({uploadQueue.length})
+                        Kuyruktaki paketler ({uploadQueue.length})
                       </span>
                       <button
+                        type="button"
                         onClick={() => setUploadQueue([])}
-                        className="text-[10px] text-rose-600 hover:text-rose-700 font-bold"
+                        className="text-[10px] text-rose-600 hover:text-rose-700 font-bold cursor-pointer"
                       >
                         Tümünü Temizle
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {uploadQueue.map((item, index) => (
-                        <div key={item.id} className="bg-slate-50 border border-slate-200 p-3 rounded-2xl flex flex-col justify-between gap-3 shadow-sm relative">
-                          <div className="flex gap-3">
-                            {/* File Preview */}
-                            <div className="w-16 h-16 bg-white border border-slate-200 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center">
-                              {item.fileType.startsWith('image/') ? (
-                                <img src={item.dataUrl} alt="preview" className="w-full h-full object-cover" />
-                              ) : (
-                                <div className="text-2xl">📄</div>
-                              )}
-                            </div>
-                            
-                            {/* Details Fields */}
-                            <div className="flex-grow space-y-2 text-xs">
-                              <div className="font-semibold text-slate-700 truncate max-w-[200px]" title={item.fileName}>
-                                {item.fileName}
-                              </div>
-                              
-                              <div className="space-y-1">
-                                <label className="text-[8px] font-black text-slate-500 uppercase block">Evrak Türü</label>
-                                <select
-                                  value={item.evrakTuru}
-                                  onChange={(e) => {
-                                    const next = [...uploadQueue];
-                                    next[index].evrakTuru = e.target.value;
-                                    setUploadQueue(next);
-                                  }}
-                                  className="w-full bg-white border border-slate-200 p-1.5 rounded-lg text-xs"
-                                >
-                                  <option value="İRSALİYE">📄 İRSALİYE</option>
-                                  <option value="FATURA">💰 FATURA</option>
-                                  <option value="MAKBUZ">🎫 MAKBUZ</option>
-                                  <option value="GENEL_EVRAK">📦 GENEL EVRAK</option>
-                                </select>
-                              </div>
-                            </div>
-                          </div>
+                    {uploadQueue.map((item, index) => (
+                      <div
+                        key={item.id}
+                        className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-3 shadow-sm relative"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setUploadQueue((prev) => prev.filter((x) => x.id !== item.id))}
+                          className="absolute top-2 right-2 text-rose-500 hover:bg-rose-50 p-1 rounded-full cursor-pointer"
+                          title="Paketi kaldır"
+                        >
+                          <X size={14} />
+                        </button>
 
-                          <div className="space-y-1 text-xs">
-                            <label className="text-[8px] font-black text-slate-500 uppercase block">
-                              Firma / Cari (doğru firmaya irsaliye)
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="Firma adını yazın — DB’de varsa önerilir…"
-                              value={item.firma || ''}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pr-6">
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black text-slate-500 uppercase block">Evrak Türü</label>
+                            <select
+                              value={item.evrakTuru}
                               onChange={(e) => {
                                 const next = [...uploadQueue];
-                                next[index].firma = e.target.value;
-                                next[index].cariKartId = '';
+                                next[index] = { ...next[index], evrakTuru: e.target.value };
                                 setUploadQueue(next);
                               }}
                               className="w-full bg-white border border-slate-200 p-1.5 rounded-lg text-xs"
-                            />
-                            {item.cariKartId ? (
-                              <p className="text-[9px] font-bold text-teal-700">
-                                ✓ Cari seçildi · {item.firma}
-                              </p>
-                            ) : (
-                              (() => {
-                                const oneriler = suggestCariFromDb(item.firma || '', cariKartlarLive, 4);
-                                if (!oneriler.length) {
-                                  return item.firma && String(item.firma).trim().length >= 2 ? (
-                                    <p className="text-[9px] text-amber-700 font-semibold">
-                                      DB’de birebir cari yok — yine de gönderebilirsiniz; YZ sonrası tekrar önerilir.
-                                    </p>
-                                  ) : null;
-                                }
-                                return (
-                                  <div className="flex flex-wrap gap-1 pt-0.5">
-                                    {oneriler.map((o) => (
-                                      <button
-                                        key={o.id}
-                                        type="button"
-                                        onClick={() => {
-                                          const next = [...uploadQueue];
-                                          next[index].firma = o.unvan;
-                                          next[index].cariKartId = o.id;
-                                          setUploadQueue(next);
-                                        }}
-                                        className="text-[9px] font-bold px-2 py-1 rounded-lg border border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100 cursor-pointer"
-                                        title={cariOneriReasonLabel(o.reason)}
-                                      >
-                                        {o.unvan}
-                                        <span className="opacity-60 ml-1">({cariOneriReasonLabel(o.reason)})</span>
-                                      </button>
-                                    ))}
-                                  </div>
-                                );
-                              })()
-                            )}
+                            >
+                              <option value="İRSALİYE">📄 İRSALİYE</option>
+                              <option value="FATURA">💰 FATURA</option>
+                              <option value="MAKBUZ">🎫 MAKBUZ</option>
+                              <option value="GENEL_EVRAK">📦 GENEL EVRAK</option>
+                            </select>
                           </div>
-
-                          <div className="space-y-1 text-xs">
-                            <label className="text-[8px] font-black text-slate-500 uppercase block">Açıklama (Zorunlu) *</label>
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black text-slate-500 uppercase block">Açıklama *</label>
                             <input
                               type="text"
-                              required
-                              placeholder="Evrak hakkında kısa bilgi girin..."
                               value={item.aciklama}
                               onChange={(e) => {
                                 const next = [...uploadQueue];
-                                next[index].aciklama = e.target.value;
+                                next[index] = { ...next[index], aciklama: e.target.value };
                                 setUploadQueue(next);
                               }}
+                              placeholder="Kısa açıklama…"
                               className="w-full bg-white border border-slate-200 p-1.5 rounded-lg text-xs"
                             />
                           </div>
-
-                          <button
-                            onClick={() => setUploadQueue(prev => prev.filter(x => x.id !== item.id))}
-                            className="absolute top-2 right-2 text-rose-500 hover:bg-rose-50 p-1 rounded-full"
-                            title="Listeden Kaldır"
-                          >
-                            <X size={14} />
-                          </button>
                         </div>
-                      ))}
-                    </div>
 
-                    <div className="flex justify-end pt-2">
+                        <div className="space-y-1 text-xs">
+                          <label className="text-[8px] font-black text-slate-500 uppercase block">
+                            Firma / Cari
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Firma adını yazın — DB’de varsa önerilir…"
+                            value={item.firma || ''}
+                            onChange={(e) => {
+                              const next = [...uploadQueue];
+                              next[index] = { ...next[index], firma: e.target.value, cariKartId: '' };
+                              setUploadQueue(next);
+                            }}
+                            className="w-full bg-white border border-slate-200 p-1.5 rounded-lg text-xs"
+                          />
+                          {item.cariKartId ? (
+                            <p className="text-[9px] font-bold text-teal-700">✓ Cari seçildi · {item.firma}</p>
+                          ) : (
+                            <div className="flex flex-wrap gap-1 pt-0.5">
+                              {suggestCariFromDb(item.firma || '', cariKartlarLive, 4).map((o) => (
+                                <button
+                                  key={o.id}
+                                  type="button"
+                                  onClick={() => {
+                                    const next = [...uploadQueue];
+                                    next[index] = { ...next[index], firma: o.unvan, cariKartId: o.id };
+                                    setUploadQueue(next);
+                                  }}
+                                  className="text-[9px] font-bold px-2 py-1 rounded-lg border border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100 cursor-pointer"
+                                >
+                                  {o.unvan}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          {([
+                            ['KALEM', 'kalemFotolar'],
+                            ['FIRMA', 'firmaFotolar'],
+                            ['FATURA', 'faturaFotolar'],
+                          ] as const).map(([metod, key]) => {
+                            const list = (item[key] || []) as GuvenlikFotoSlot[];
+                            return (
+                              <div
+                                key={metod}
+                                className="rounded-xl border border-indigo-100 bg-white p-2.5 space-y-2"
+                              >
+                                <div>
+                                  <p className="text-[9px] font-black uppercase text-indigo-700 tracking-wide">
+                                    {GUVENLIK_FOTO_METOD_LABEL[metod]}
+                                  </p>
+                                  <p className="text-[8px] text-slate-400 font-semibold">
+                                    {GUVENLIK_FOTO_METOD_HINT[metod]}
+                                  </p>
+                                </div>
+                                <label className="flex flex-col items-center justify-center gap-1 border border-dashed border-indigo-200 rounded-lg py-3 cursor-pointer hover:bg-indigo-50/50 transition">
+                                  <FileUp size={16} className="text-indigo-500" />
+                                  <span className="text-[9px] font-bold text-indigo-700">Foto ekle</span>
+                                  <input
+                                    type="file"
+                                    multiple
+                                    accept="image/*,application/pdf"
+                                    className="hidden"
+                                    onChange={(e) => handleAddFotosToPackage(index, metod, e)}
+                                  />
+                                </label>
+                                {list.length > 0 && (
+                                  <div className="grid grid-cols-3 gap-1">
+                                    {list.map((f) => (
+                                      <div key={f.id} className="relative group">
+                                        {String(f.fileType || '').startsWith('image/') ? (
+                                          <img
+                                            src={f.dataUrl}
+                                            alt={f.fileName}
+                                            className="w-full h-14 object-cover rounded-md border border-slate-200"
+                                          />
+                                        ) : (
+                                          <div className="h-14 rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center text-[9px] font-bold text-slate-500">
+                                            PDF
+                                          </div>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveFotoFromPackage(index, metod, f.id)}
+                                          className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full w-4 h-4 text-[9px] leading-none opacity-90 cursor-pointer"
+                                          title="Kaldır"
+                                        >
+                                          ×
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                <p className="text-[8px] text-slate-400 font-bold">{list.length} foto</p>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <p className="text-[9px] text-slate-500 font-semibold">
+                          Toplam foto: {countPaketFotolar(item)}
+                          {!countPaketFotolar(item) ? ' — en az bir yuvaya foto ekleyin' : ''}
+                        </p>
+                      </div>
+                    ))}
+
+                    <div className="flex justify-end pt-1">
                       <button
+                        type="button"
                         onClick={handleSendQueueToManager}
-                        disabled={loadingIrsaliye || uploadQueue.some(x => !x.aciklama.trim())}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs py-2.5 px-6 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1.5"
+                        disabled={
+                          loadingIrsaliye ||
+                          uploadQueue.some((x) => !String(x.aciklama || '').trim() || countPaketFotolar(x) === 0)
+                        }
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs py-2.5 px-6 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                       >
-                        {loadingIrsaliye ? (
-                          <span>Gönderiliyor...</span>
-                        ) : (
-                          <>
-                            <span>🚀 YÖNETİCİ ONAYINA GÖNDER</span>
-                          </>
-                        )}
+                        {loadingIrsaliye ? 'Gönderiliyor...' : '🚀 YÖNETİCİ ONAYINA GÖNDER'}
                       </button>
                     </div>
                   </div>
