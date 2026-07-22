@@ -95,7 +95,10 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   setCariIslemGecmisi,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [firmaFilter, setFirmaFilter] = useState("");
+  /** Boş = tüm firmalar; 'ANA_FIRMA' veya taşeron firma adı */
+  const [firmaFilters, setFirmaFilters] = useState<string[]>([]);
+  const [firmaFilterOpen, setFirmaFilterOpen] = useState(false);
+  const firmaFilterRef = useRef<HTMLDivElement | null>(null);
   const [selectedPersonel, setSelectedPersonel] = useState<Personel | null>(null);
   const [dismissingPersonel, setDismissingPersonel] = useState<Personel | null>(null);
   const [dismissDateStr, setDismissDateStr] = useState<string>("");
@@ -638,6 +641,24 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
 
   const dataToSave = () => formData;
 
+  useEffect(() => {
+    if (!firmaFilterOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!firmaFilterRef.current?.contains(e.target as Node)) {
+        setFirmaFilterOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFirmaFilterOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [firmaFilterOpen]);
+
   const firmaFilterOptions = useMemo(() => {
     const map = new Map<string, string>();
     personeller.forEach((p) => {
@@ -648,21 +669,52 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
         map.set('ANA_FIRMA', `${CANONICAL_ANA_FIRMA_ADI} (Ana Firma)`);
       }
     });
-    return Array.from(map.entries()).sort((a, b) =>
-      a[1].localeCompare(b[1], 'tr', { sensitivity: 'base' })
-    );
+    // Ana firma her zaman listede olsun (henüz personel yoksa bile seçilebilsin)
+    if (!map.has('ANA_FIRMA')) {
+      map.set('ANA_FIRMA', `${CANONICAL_ANA_FIRMA_ADI} (Ana Firma)`);
+    }
+    return Array.from(map.entries()).sort((a, b) => {
+      if (a[0] === 'ANA_FIRMA') return -1;
+      if (b[0] === 'ANA_FIRMA') return 1;
+      return a[1].localeCompare(b[1], 'tr', { sensitivity: 'base' });
+    });
   }, [personeller]);
 
-  const filteredPersonel = personeller.filter(p => {
-    if (showOnlyActive && !is_aktif_status(p.durum)) return false;
-    if (firmaFilter === 'ANA_FIRMA') {
-      if (p.firmaTipi === 'TASERON' || isAkvizyonFirmaAdi(p.firmaAdi)) return false;
-    } else if (firmaFilter) {
-      if ((p.firmaAdi || '').trim() !== firmaFilter) return false;
+  const matchesFirmaFilter = (p: Personel, filters: string[]) => {
+    if (!filters.length) return true;
+    return filters.some((key) => {
+      if (key === 'ANA_FIRMA') {
+        return p.firmaTipi !== 'TASERON' && !isAkvizyonFirmaAdi(p.firmaAdi);
+      }
+      return (p.firmaAdi || '').trim() === key;
+    });
+  };
+
+  const toggleFirmaFilter = (key: string) => {
+    setFirmaFilters((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+
+  const firmaFilterSummary = useMemo(() => {
+    if (firmaFilters.length === 0) return 'Tüm Firmalar';
+    if (firmaFilters.length === 1) {
+      const hit = firmaFilterOptions.find(([k]) => k === firmaFilters[0]);
+      return hit?.[1] || firmaFilters[0];
     }
+    return `${firmaFilters.length} firma seçili`;
+  }, [firmaFilters, firmaFilterOptions]);
+
+  const filteredPersonel = personeller.filter((p) => {
+    if (showOnlyActive && !is_aktif_status(p.durum)) return false;
+    if (!matchesFirmaFilter(p, firmaFilters)) return false;
     const term = searchTerm.toLowerCase();
     const fullName = `${p.ad} ${p.soyad}`.toLowerCase();
-    return fullName.includes(term) || p.tcNo.includes(term) || displayPersonelGorev(p).toLowerCase().includes(term);
+    return (
+      fullName.includes(term) ||
+      p.tcNo.includes(term) ||
+      displayPersonelGorev(p).toLowerCase().includes(term)
+    );
   });
 
   const handleShowHistory = (p: Personel) => {
@@ -671,10 +723,13 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   };
 
   const exportFilterLabel = useMemo(() => {
-    if (firmaFilter === 'ANA_FIRMA') return 'Kibritci_Insaat';
-    if (firmaFilter) return firmaFilter.replace(/\s+/g, '_');
-    return 'Tumu';
-  }, [firmaFilter]);
+    if (firmaFilters.length === 0) return 'Tumu';
+    if (firmaFilters.length === 1) {
+      if (firmaFilters[0] === 'ANA_FIRMA') return 'Kibritci_Insaat';
+      return firmaFilters[0].replace(/\s+/g, '_');
+    }
+    return `${firmaFilters.length}_Firma`;
+  }, [firmaFilters]);
 
   const exportFilteredPersonel = () => {
     if (filteredPersonel.length === 0) {
@@ -1397,19 +1452,77 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <select
-              value={firmaFilter}
-              onChange={(e) => setFirmaFilter(e.target.value)}
-              className="text-[10px] font-bold px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 cursor-pointer max-w-[200px]"
-              title="Firma bazlı filtre"
-            >
-              <option value="">Tüm Firmalar</option>
-              {firmaFilterOptions.map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
+            <div className="relative" ref={firmaFilterRef}>
+              <button
+                type="button"
+                onClick={() => setFirmaFilterOpen((v) => !v)}
+                className={`text-[10px] font-bold px-3 py-2 rounded-xl border cursor-pointer max-w-[240px] truncate inline-flex items-center gap-1.5 ${
+                  firmaFilters.length > 0
+                    ? 'bg-amber-50 text-amber-900 border-amber-300'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+                title="Firma seç (çoklu)"
+              >
+                <Building2 size={12} className="shrink-0" />
+                <span className="truncate">{firmaFilterSummary}</span>
+                {firmaFilters.length > 0 && (
+                  <span className="shrink-0 bg-amber-600 text-white rounded-md px-1.5 py-0.5 text-[9px]">
+                    {firmaFilters.length}
+                  </span>
+                )}
+              </button>
+              {firmaFilterOpen && (
+                <div className="absolute left-0 top-full mt-1 z-40 w-72 max-h-72 overflow-hidden bg-white border border-slate-200 rounded-xl shadow-lg flex flex-col">
+                  <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between gap-2 bg-slate-50">
+                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-600">
+                      Firma seç
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setFirmaFilters([])}
+                        className="text-[9px] font-bold px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer"
+                      >
+                        Tümü
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFirmaFilters(['ANA_FIRMA'])}
+                        className="text-[9px] font-bold px-2 py-1 rounded-lg bg-slate-900 text-white hover:bg-black cursor-pointer"
+                      >
+                        Sadece Ana Firma
+                      </button>
+                    </div>
+                  </div>
+                  <div className="overflow-y-auto p-2 space-y-0.5">
+                    {firmaFilterOptions.map(([key, label]) => {
+                      const checked = firmaFilters.includes(key);
+                      return (
+                        <label
+                          key={key}
+                          className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer text-[11px] font-semibold ${
+                            checked ? 'bg-amber-50 text-amber-950' : 'hover:bg-slate-50 text-slate-700'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleFirmaFilter(key)}
+                            className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                          />
+                          <span className="truncate">{label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {firmaFilters.length > 0 && (
+                    <div className="px-3 py-2 border-t border-slate-100 text-[9px] text-slate-500 font-medium">
+                      Seçili firmaların personeli listeleniyor · {filteredPersonel.length} kişi
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setShowOnlyActive((prev) => !prev)}
