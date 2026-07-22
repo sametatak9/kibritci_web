@@ -41,6 +41,19 @@ export function flattenGuvenlikFotolar(paket: Partial<GuvenlikFotoPaket> | null 
   ];
 }
 
+export function slotDisplayUrl(slot?: Pick<GuvenlikFotoSlot, 'dataUrl'> | null): string {
+  return String(slot?.dataUrl || '').trim();
+}
+
+export function isLikelyImageUrl(url: string): boolean {
+  const u = String(url || '').trim().toLowerCase();
+  if (!u) return false;
+  if (u.startsWith('data:image/')) return true;
+  if (/\.(jpe?g|png|webp|gif|bmp)(\?|#|$)/i.test(u)) return true;
+  if (/^https?:\/\//i.test(u) && !/\.pdf(\?|#|$)/i.test(u)) return true;
+  return false;
+}
+
 /** Geriye uyumlu tek fotoUrl: önce kalem, sonra firma, sonra fatura. */
 export function pickPrimaryFotoUrl(doc: {
   fotoUrl?: string;
@@ -50,9 +63,9 @@ export function pickPrimaryFotoUrl(doc: {
   faturaFotolar?: GuvenlikFotoSlot[];
 }): string {
   const fromPaket =
-    doc.kalemFotolar?.[0]?.dataUrl ||
-    doc.firmaFotolar?.[0]?.dataUrl ||
-    doc.faturaFotolar?.[0]?.dataUrl ||
+    slotDisplayUrl(doc.kalemFotolar?.[0]) ||
+    slotDisplayUrl(doc.firmaFotolar?.[0]) ||
+    slotDisplayUrl(doc.faturaFotolar?.[0]) ||
     '';
   if (fromPaket) return fromPaket;
   if (doc.fotoUrl) return doc.fotoUrl;

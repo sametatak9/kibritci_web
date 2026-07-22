@@ -12,6 +12,7 @@ import {
   query
 } from 'firebase/firestore';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getStorage } from 'firebase/storage';
 import { getFirestoreDatabaseId, resolveFirebaseConfig } from './firebaseConfig';
 import { shouldBlockMassDelete } from './productionDataGuard';
 
@@ -20,10 +21,11 @@ export { mergeYoklamaMaps } from './yoklamaGuard';
 const firebaseConfig = resolveFirebaseConfig();
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
+export const app = initializeApp(firebaseConfig);
 const firestoreDbId = getFirestoreDatabaseId(firebaseConfig);
 export const db = firestoreDbId ? getFirestore(app, firestoreDbId) : getFirestore(app);
 export const auth = getAuth(app);
+export const storage = getStorage(app);
 
 /** Firestore güvenlik kuralları oturum gerektirir; giriş öncesi anonim oturum açar. */
 async function waitForAuthUser(maxMs = 8000) {
