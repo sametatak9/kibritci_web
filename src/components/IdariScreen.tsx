@@ -4394,10 +4394,18 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                           </button>
                           <button 
                             onClick={() => {
-                              if (window.confirm("Bu cari kartı silmek istediğinize emin misiniz?")) {
-                                setCariKartlar(prev => prev.filter(c => c.id !== cr.id));
-                                alert("Cari kart silindi.");
-                              }
+                              void (async () => {
+                                if (!window.confirm("Bu cari kartı silmek istediğinize emin misiniz?")) return;
+                                try {
+                                  const { removeDocument } = await import('../lib/firebase');
+                                  await removeDocument('cariKartlar', cr.id);
+                                  setCariKartlar(prev => prev.filter(c => c.id !== cr.id));
+                                  alert("Cari kart silindi.");
+                                } catch (err: any) {
+                                  console.error(err);
+                                  alert(err?.message || 'Cari kart silinemedi.');
+                                }
+                              })();
                             }}
                             className="flex-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 py-1.5 rounded-lg font-bold transition flex items-center justify-center space-x-1 cursor-pointer"
                           >

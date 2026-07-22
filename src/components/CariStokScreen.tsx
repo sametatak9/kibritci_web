@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Building2, Package, Plus, Search, Trash2, Pencil, Download,
-  ClipboardList, X, RefreshCw, FileText, Truck, Receipt, Home, User, Users, Eye
+  ClipboardList, X, RefreshCw, FileText, Truck, Receipt, Home, User, Users, Eye, UserX
 } from 'lucide-react';
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import { CariKart, Fatura, Irsaliye, Personel, SatinAlmaTalebi, StokKart } from '../types/erp';
-import { db } from '../lib/firebase';
+import { db, removeDocument } from '../lib/firebase';
 import { warnIfDuplicateCari, warnIfDuplicateStok } from '../lib/duplicateNameUtils';
 import { exportHistoryReport } from '../lib/reportExport';
 import { firmaEslesir, personelForCariKart } from '../lib/taseronUtils';
@@ -21,6 +21,7 @@ interface CariStokScreenProps {
   stokKartlar: StokKart[];
   setStokKartlar: React.Dispatch<React.SetStateAction<StokKart[]>>;
   personeller?: Personel[];
+  setPersoneller?: React.Dispatch<React.SetStateAction<Personel[]>>;
 }
 
 type HistoryCollection =
@@ -68,6 +69,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
   stokKartlar,
   setStokKartlar,
   personeller = [],
+  setPersoneller,
 }) => {
   const [csTab, setCsTab] = useState<'cari' | 'stok'>('cari');
   const [cariSearchQuery, setCariSearchQuery] = useState('');
@@ -75,6 +77,10 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
   const [selectedCariId, setSelectedCariId] = useState<string | null>(null);
   const [selectedStokId, setSelectedStokId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [deletingCari, setDeletingCari] = useState(false);
+  const [deletingStok, setDeletingStok] = useState(false);
+  const [dismissingPersonel, setDismissingPersonel] = useState<Personel | null>(null);
+  const [dismissDateStr, setDismissDateStr] = useState(() => todayDateKey());
 
   const [newCariUnvan, setNewCariUnvan] = useState('');
   const [newCariType, setNewCariType] = useState<CariKart['kartTipi']>('TEDARIKCI');
@@ -102,14 +108,14 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
   const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
 
   const filteredCariKartlar = useMemo(() => {
-    const q = cariSearchQuery.trim().toLowerCase();
+    const q = cariSearchQuery.trim().toLocaleLowerCase('tr-TR');
     if (!q) return cariKartlar;
     return cariKartlar.filter(
       (cr) =>
-        String(cr.unvan || '').toLowerCase().includes(q) ||
-        String(cr.kod || '').toLowerCase().includes(q) ||
-        String(cr.kartTipi || '').toLowerCase().includes(q) ||
-        String(cr.iban || '').toLowerCase().includes(q)
+        String(cr.unvan || '').toLocaleLowerCase('tr-TR').includes(q) ||
+        String(cr.kod || '').toLocaleLowerCase('tr-TR').includes(q) ||
+        String(cr.kartTipi || '').toLocaleLowerCase('tr-TR').includes(q) ||
+        String(cr.iban || '').toLocaleLowerCase('tr-TR').includes(q)
     );
   }, [cariKartlar, cariSearchQuery]);
 
@@ -545,6 +551,85 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
     setNewStokKategori('Kaba İnşaat İmalatı');
   };
 
+  const handleDeleteCari = async (cari: CariKart) => {
+    const duplicates = cariKartlar.filter(
+      (c) => c.id !== cari.id && firmaEslesir(c.unvan, cari.unvan)
+    );
+    let idsToDelete = [cari.id];
+    if (duplicates.length > 0) {
+      const alsoDupes = window.confirm(
+        `"${cari.unvan}" için ${duplicates.length} kopya kart daha bulundu.\n\nTamam = hepsini sil\nİptal = yalnızca seçili kartı sil`
+      );
+      if (alsoDupes) {
+        idsToDelete = Array.from(new Set([cari.id, ...duplicates.map((d) => d.id)]));
+      }
+    } else if (
+      !window.confirm(`"${cari.unvan}" cari kartını silmek istediğinize emin misiniz?`)
+    ) {
+      return;
+    }
+
+    setDeletingCari(true);
+    try {
+      const errors: string[] = [];
+      for (const id of idsToDelete) {
+        try {
+          await removeDocument('cariKartlar', id);
+        } catch (err: any) {
+          console.error('Cari silme hatası:', id, err);
+          errors.push(`${id}: ${err?.message || 'silinemedi'}`);
+        }
+      }
+      setCariKartlar((prev) => prev.filter((c) => !idsToDelete.includes(c.id)));
+      if (selectedCariId && idsToDelete.includes(selectedCariId)) {
+        setSelectedCariId(null);
+      }
+      if (errors.length) {
+        alert(
+          `Bazı cari kayıtları silinemedi (${errors.length}). Yetki veya bağlantı sorununu kontrol edin.\n${errors.slice(0, 3).join('\n')}`
+        );
+      }
+    } finally {
+      setDeletingCari(false);
+    }
+  };
+
+  const handleDeleteStok = async (stok: StokKart) => {
+    if (!window.confirm(`"${stok.stokAdi}" stok kartını silmek istediğinize emin misiniz?`)) {
+      return;
+    }
+    setDeletingStok(true);
+    try {
+      await removeDocument('stokKartlar', stok.id);
+      setStokKartlar((prev) => prev.filter((s) => s.id !== stok.id));
+      if (selectedStokId === stok.id) setSelectedStokId(null);
+    } catch (err: any) {
+      console.error('Stok silme hatası:', err);
+      alert(err?.message || 'Stok kartı silinemedi. Yetki veya bağlantıyı kontrol edin.');
+    } finally {
+      setDeletingStok(false);
+    }
+  };
+
+  const handleDismissPersonelSave = () => {
+    if (!dismissingPersonel || !setPersoneller) return;
+    if (!dismissDateStr) {
+      alert('Lütfen geçerli bir tarih seçin.');
+      return;
+    }
+    setPersoneller((prev) =>
+      prev.map((p) =>
+        p.id === dismissingPersonel.id
+          ? { ...p, durum: false, istenCikisTarihi: dismissDateStr }
+          : p
+      )
+    );
+    alert(
+      `${dismissingPersonel.ad} ${dismissingPersonel.soyad} işten çıkış tarihi (${dismissDateStr}) kaydedildi; durum Pasif.`
+    );
+    setDismissingPersonel(null);
+  };
+
   const handleCreateCari = () => {
     if (!newCariUnvan.trim()) return;
     if (editingCariId) {
@@ -865,14 +950,11 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (!window.confirm('Bu cari kartı silmek istediğinize emin misiniz?')) return;
-                      setCariKartlar((prev) => prev.filter((c) => c.id !== selectedCari.id));
-                      setSelectedCariId(null);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 cursor-pointer"
+                    onClick={() => void handleDeleteCari(selectedCari)}
+                    disabled={deletingCari}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 cursor-pointer disabled:opacity-50"
                   >
-                    <Trash2 size={12} /> Sil
+                    <Trash2 size={12} /> {deletingCari ? 'Siliniyor…' : 'Sil'}
                   </button>
                 </div>
               </div>
@@ -933,6 +1015,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
                           <th className="px-3 py-2">Firma (kayıt)</th>
                           <th className="px-3 py-2">Telefon</th>
                           <th className="px-3 py-2 text-center">Durum</th>
+                          <th className="px-3 py-2 text-right">İşlem</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -963,6 +1046,23 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
                                 >
                                   {aktif ? 'Aktif' : 'Pasif'}
                                 </span>
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                {aktif && setPersoneller ? (
+                                  <button
+                                    type="button"
+                                    title="İşten çıkar"
+                                    onClick={() => {
+                                      setDismissDateStr(todayDateKey());
+                                      setDismissingPersonel(p);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 cursor-pointer"
+                                  >
+                                    <UserX size={12} /> İşten çıkar
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-slate-400">—</span>
+                                )}
                               </td>
                             </tr>
                           );
@@ -1022,14 +1122,11 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (!window.confirm('Bu stok kartını silmek istediğinize emin misiniz?')) return;
-                      setStokKartlar((prev) => prev.filter((s) => s.id !== selectedStok.id));
-                      setSelectedStokId(null);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 cursor-pointer"
+                    onClick={() => void handleDeleteStok(selectedStok)}
+                    disabled={deletingStok}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 cursor-pointer disabled:opacity-50"
                   >
-                    <Trash2 size={12} /> Sil
+                    <Trash2 size={12} /> {deletingStok ? 'Siliniyor…' : 'Sil'}
                   </button>
                 </div>
               </div>
@@ -1401,6 +1498,54 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
                 }`}
               >
                 Kaydet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {dismissingPersonel && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl border border-slate-150 p-6 w-[400px] max-w-full shadow-2xl space-y-4">
+            <div className="flex items-center space-x-2 text-rose-600">
+              <UserX size={20} />
+              <h3 className="font-display font-bold text-sm uppercase tracking-wider">
+                Personel İşten Çıkarma
+              </h3>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              <strong>
+                {dismissingPersonel.ad} {dismissingPersonel.soyad}
+              </strong>{' '}
+              ({selectedCari?.unvan || dismissingPersonel.firmaAdi || 'cari'}) personeli için işten
+              çıkış kaydı yapılacak.
+            </p>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-slate-500 uppercase block">
+                İşten Çıkış / Ayrılma Tarihi *
+              </label>
+              <input
+                type="date"
+                required
+                value={dismissDateStr}
+                onChange={(e) => setDismissDateStr(e.target.value)}
+                className="w-full text-xs font-semibold border border-rose-200 rounded-lg p-2.5 bg-slate-50 text-rose-950 focus:outline-none focus:border-rose-500"
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={handleDismissPersonelSave}
+                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs py-2 rounded-xl transition cursor-pointer"
+              >
+                Kaydet
+              </button>
+              <button
+                type="button"
+                onClick={() => setDismissingPersonel(null)}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-2 px-4 rounded-xl transition cursor-pointer"
+              >
+                Vazgeç
               </button>
             </div>
           </div>
