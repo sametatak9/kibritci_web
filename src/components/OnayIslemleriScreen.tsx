@@ -35,6 +35,8 @@ import {
   buildCariEvrakHistory,
   resolveCariKartId,
 } from '../lib/evrakCariStokSync';
+import { pickPrimaryFotoUrl } from '../lib/guvenlikEvrakFotolar';
+import { toAiParsePayload } from '../lib/guvenlikFotoStorage';
 
 interface OnayIslemleriScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
@@ -1465,19 +1467,33 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
   };
 
   const handleAnalyzeGateDocWithAi = async () => {
-    if (!activeGateDoc || !activeGateDoc.fotoUrl) {
+    if (!activeGateDoc) {
       alert("Evrak içeriği veya fotoğrafı bulunamadı!");
       return;
     }
 
-    const parts = activeGateDoc.fotoUrl.split(',');
-    if (parts.length < 2) {
-      alert("Evrak içeriği geçersiz (Base64 verisi bulunamadı)!");
+    const primaryUrl = pickPrimaryFotoUrl(activeGateDoc);
+    const kalemUrl = activeGateDoc.kalemFotolar?.[0]?.dataUrl || primaryUrl;
+    const firmaUrl = activeGateDoc.firmaFotolar?.[0]?.dataUrl || primaryUrl;
+    const faturaUrl = activeGateDoc.faturaFotolar?.[0]?.dataUrl || primaryUrl;
+    const preferredUrl =
+      selectedDocType === 'FATURA'
+        ? faturaUrl
+        : selectedDocType === 'İRSALİYE'
+          ? kalemUrl || firmaUrl
+          : firmaUrl || primaryUrl;
+
+    if (!preferredUrl) {
+      alert("Evrak içeriği veya fotoğrafı bulunamadı!");
       return;
     }
-    const mimeMatch = parts[0].match(/data:(.*?);base64/);
-    const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-    const fileBase64 = parts[1];
+
+    const payload = await toAiParsePayload(preferredUrl);
+    if (!payload) {
+      alert("Evrak içeriği okunamadı (fotoğraf indirilemedi veya geçersiz)!");
+      return;
+    }
+    const { mimeType, fileBase64 } = payload;
 
     let docTypeParam = 'general';
     if (selectedDocType === 'FATURA') docTypeParam = 'fatura';
@@ -1509,7 +1525,28 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           setFaturaGenelToplam(parsed.genelToplam || 0);
           setFaturaKalemler(parsed.kalemler || []);
         } else if (selectedDocType === 'İRSALİYE') {
-          const firma = parsed.firma || activeGateDoc.firma || '';
+          let firma = parsed.firma || activeGateDoc.firma || '';
+          if (firmaUrl && firmaUrl !== preferredUrl) {
+            const firmaPayload = await toAiParsePayload(firmaUrl);
+            if (firmaPayload) {
+              try {
+                const firmaRes: any = await fetchApiJson('/api/parse-legacy-document', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    fileBase64: firmaPayload.fileBase64,
+                    mimeType: firmaPayload.mimeType,
+                    docType: 'irsaliye',
+                  }),
+                });
+                if (firmaRes && !firmaRes.error && firmaRes.firma) {
+                  firma = firmaRes.firma;
+                }
+              } catch {
+                /* ignore */
+              }
+            }
+          }
           const kalemler = parsed.kalemler || [];
           const { summary, kalemler: linked } = doubleCheckKapiMatch(
             firma,
@@ -1579,7 +1616,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           kdvTutar: Number(faturaKdv),
           genelToplam: Number(faturaGenelToplam),
           durum: 'ONAYLANDI',
-          evrakUrl: activeGateDoc.fotoUrl || "",
+          evrakUrl: pickPrimaryFotoUrl(activeGateDoc) || "",
           kalemler: faturaKalemler.map(x => ({
             urunAdi: x.urunAdi,
             amount: Number(x.miktar),
@@ -1636,7 +1673,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           irsaliyeNo,
           firma: rematched.summary.cariUnvan || irsaliyeFirma,
           tarih: irsaliyeTarih,
-          fotoUrl: activeGateDoc.fotoUrl || '',
+          fotoUrl: pickPrimaryFotoUrl(activeGateDoc) || '',
           kalemler: rematched.kalemler,
           onaylayan: currentUser?.email || 'Yönetici',
           cariKartlar: liveCari,
@@ -1691,7 +1728,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           aciklama: makbuzAciklama || 'Güvenlik kapısı makbuzu',
           hareketTipi: makbuzTip,
           kategori: 'GÜVENLİK_MAKBUZ',
-          evrakUrl: activeGateDoc.fotoUrl || "",
+          evrakUrl: pickPrimaryFotoUrl(activeGateDoc) || "",
           durum: 'ONAYLANDI',
           kaydeden: activeGateDoc.kaydeden || '',
           onaylayanYonetici: currentUser?.email || 'Yönetici',
@@ -1706,7 +1743,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           saat: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
           evrakNo: activeGateDoc.evrakNo || 'GENEL',
           aciklama: genelAciklama || activeGateDoc.aciklama || 'Genel Evrak Teslimi',
-          fotoUrl: activeGateDoc.fotoUrl || '',
+          fotoUrl: pickPrimaryFotoUrl(activeGateDoc) || '',
           durum: 'ONAYLANDI',
           onayleyen: currentUser?.email || 'Yönetici'
         };

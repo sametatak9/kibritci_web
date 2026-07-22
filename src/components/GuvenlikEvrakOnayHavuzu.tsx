@@ -7,6 +7,7 @@ import {
   collectAllFotoUrls,
   GUVENLIK_FOTO_METOD_LABEL,
   GuvenlikFotoSlot,
+  isLikelyImageUrl,
   pickPrimaryFotoUrl,
 } from '../lib/guvenlikEvrakFotolar';
 
@@ -161,18 +162,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
   const [cardZoomUrl, setCardZoomUrl] = useState<string | null>(null);
   const [cardZoomName, setCardZoomName] = useState('');
 
-  const isImageUrl = (url?: string | null) => {
-    if (!url) return false;
-    const lower = url.toLowerCase();
-    return (
-      lower.startsWith('data:image/') ||
-      lower.includes('.jpg') ||
-      lower.includes('.jpeg') ||
-      lower.includes('.png') ||
-      lower.includes('.webp') ||
-      lower.includes('.gif')
-    );
-  };
+  const isImageUrl = (url?: string | null) => isLikelyImageUrl(url || '');
 
   const isPdfUrl = (url?: string | null, fileName?: string) => {
     if (!url && !fileName) return false;
@@ -326,7 +316,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
                                 className="w-10 h-10 rounded-md overflow-hidden border border-slate-200 cursor-pointer"
                                 title={f.fileName}
                               >
-                                {String(f.fileType || '').startsWith('image/') || String(f.dataUrl || '').startsWith('data:image/') ? (
+                                {String(f.fileType || '').startsWith('image/') || isLikelyImageUrl(f.dataUrl) ? (
                                   <img src={f.dataUrl} alt="" className="w-full h-full object-cover" />
                                 ) : (
                                   <span className="text-[8px] font-bold text-slate-500 flex items-center justify-center h-full">PDF</span>
@@ -633,7 +623,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
               
               <div className="flex-grow flex items-center justify-center overflow-hidden bg-white rounded-2xl border border-slate-200 p-3 min-h-[300px]">
                 {pickPrimaryFotoUrl(activeGateDoc) ? (
-                  pickPrimaryFotoUrl(activeGateDoc).startsWith('data:image/') || pickPrimaryFotoUrl(activeGateDoc).includes('.jpg') || pickPrimaryFotoUrl(activeGateDoc).includes('.png') ? (
+                  isLikelyImageUrl(pickPrimaryFotoUrl(activeGateDoc)) ? (
                     <img
                       src={pickPrimaryFotoUrl(activeGateDoc)}
                       alt="Evrak"
@@ -1176,12 +1166,12 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
       )}
 
       {/* 4. GÖRSEL YAKINLAŞTIRMA OVERLAY MODALI */}
-      {(isZoomed && activeGateDoc?.fotoUrl) || cardZoomUrl ? (
+      {(isZoomed && pickPrimaryFotoUrl(activeGateDoc || {})) || cardZoomUrl ? (
         <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center p-4">
           <div className="absolute top-4 right-4 flex items-center gap-3 z-10">
             <button
               onClick={() => {
-                const src = cardZoomUrl || activeGateDoc?.fotoUrl;
+                const src = cardZoomUrl || pickPrimaryFotoUrl(activeGateDoc || {});
                 if (!src) return;
                 const link = document.createElement('a');
                 link.href = src;
@@ -1208,7 +1198,7 @@ export const GuvenlikEvrakOnayHavuzu: React.FC<GuvenlikEvrakOnayHavuzuProps> = (
           </div>
           <div className="max-w-5xl max-h-[85vh] overflow-auto flex items-center justify-center p-2 rounded-2xl bg-white border border-slate-200 shadow-xl">
             <img
-              src={cardZoomUrl || activeGateDoc?.fotoUrl}
+              src={cardZoomUrl || pickPrimaryFotoUrl(activeGateDoc || {})}
               alt="Evrak Zoomed"
               className="max-w-full max-h-[80vh] object-contain rounded-lg"
             />
