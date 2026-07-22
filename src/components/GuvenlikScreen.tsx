@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   ShieldAlert, FileText, Users, Truck, UserCheck, Search, PlusCircle, Trash2, 
   Check, X, FileUp, Camera, Printer, Clock, AlertTriangle, Key, Download, ArrowRight, RefreshCw, Barcode,
@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import EvrakDuvariPanel, { type EvrakDuvariItem } from './EvrakDuvariPanel';
 import { Personel, Irsaliye, IrsaliyeItem, Fatura, MicirStabilizeFis, CariKart, StokKart } from '../types/erp';
-import { db } from '../lib/firebase';
+import { db, cleanUndefined, ensureFirestoreAuth, withTimeout } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { fetchApiJson } from '../lib/apiClient';
 import { collection, doc, setDoc, onSnapshot, addDoc, getDocs, deleteDoc, updateDoc } from 'firebase/firestore';
@@ -29,12 +29,10 @@ import {
   pickPrimaryFotoUrl,
 } from '../lib/guvenlikEvrakFotolar';
 import {
-  aggressiveCompressPaket,
   buildLeanGuvenlikEvrakFotoFields,
-  isFirestorePayloadTooLarge,
+  isPaketTooLargeForFirestore,
   prepareGuvenlikFotoPaketForSave,
 } from '../lib/guvenlikFotoStorage';
-import { withTimeout } from '../lib/firebase';
 import { CorporateReportLayout } from './CorporateReportLayout';
 import { KibritciLogo } from './KibritciLogo';
 import { openBase64InNewTab } from '../lib/fileViewerUtils';
@@ -109,6 +107,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
   // ─────────────────────────────────────────────────────────────
   const [uploadQueue, setUploadQueue] = useState<any[]>([]);
   const [loadingIrsaliye, setLoadingIrsaliye] = useState(false);
+  const sendInFlightRef = useRef(false);
   const [gelenEvraklar, setGelenEvraklar] = useState<any[]>([]);
   const [cariKartlarLive, setCariKartlarLive] = useState<CariKart[]>([]);
   const [stokKartlarLive, setStokKartlarLive] = useState<StokKart[]>([]);
@@ -152,9 +151,20 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         let displayBase64 = rawBase64;
         if (file.type.startsWith('image/')) {
           try {
-            displayBase64 = await compressImage(rawBase64, 720, 720, 0.58);
+            displayBase64 = await compressImage(rawBase64, 640, 640, 0.5, 4000);
           } catch (err) {
             console.error('Image compression failed, using original', err);
+          }
+        } else if (
+          file.type.includes('pdf') ||
+          rawBase64.startsWith('data:application/pdf')
+        ) {
+          // Büyük PDF kapı kaydını kilitler — reddet, fotoğraf iste
+          if (rawBase64.length > 140_000) {
+            alert(
+              `"${file.name}" PDF’si çok büyük. Lütfen belgeyi fotoğraf olarak çekip yükleyin.`
+            );
+            continue;
           }
         }
         slots.push({
@@ -217,9 +227,19 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         let displayBase64 = rawBase64;
         if (file.type.startsWith('image/')) {
           try {
-            displayBase64 = await compressImage(rawBase64, 720, 720, 0.58);
+            displayBase64 = await compressImage(rawBase64, 640, 640, 0.5, 4000);
           } catch {
             /* keep original */
+          }
+        } else if (
+          file.type.includes('pdf') ||
+          rawBase64.startsWith('data:application/pdf')
+        ) {
+          if (rawBase64.length > 140_000) {
+            alert(
+              `"${file.name}" PDF’si çok büyük. Lütfen belgeyi fotoğraf olarak çekip yükleyin.`
+            );
+            continue;
           }
         }
         slots.push({
@@ -737,56 +757,70 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
   const handleSendQueueToManager = async () => {
     if (uploadQueue.length === 0) {
-      alert("Gönderilecek evrak bulunmuyor. Lütfen önce dosya yükleyin!");
+      alert('Gönderilecek evrak bulunmuyor. Lütfen önce dosya yükleyin!');
       return;
     }
-    if (loadingIrsaliye) return;
+    // Takılı kaldıysa ikinci tık kilidi açar (yeniden denemek için bir kez daha basılır)
+    if (sendInFlightRef.current) {
+      sendInFlightRef.current = false;
+      setLoadingIrsaliye(false);
+      showStatus('error', 'Gönderim kilidi açıldı. Tekrar «Yönetici onayına gönder»e basın.');
+      return;
+    }
     const eksikFoto = uploadQueue.filter((item) => countPaketFotolar(item) === 0);
     if (eksikFoto.length > 0) {
-      alert("Her evrak paketinde en az bir fotoğraf olmalı (kalem / firma / fatura yuvalarından).");
+      alert('Her evrak paketinde en az bir fotoğraf olmalı (kalem / firma / fatura yuvalarından).');
       return;
     }
     const eksikAciklama = uploadQueue.filter((item) => !String(item.aciklama || '').trim());
     if (eksikAciklama.length > 0) {
-      alert("Her evrak paketinde açıklama zorunludur.");
+      alert('Her evrak paketinde açıklama zorunludur.');
       return;
     }
 
+    sendInFlightRef.current = true;
     setLoadingIrsaliye(true);
     showStatus('success', 'Evraklar gönderiliyor, lütfen bekleyin…');
     const savedIds = new Set<string>();
     const failures: string[] = [];
     const queueSnapshot = [...uploadQueue];
-    let watchdogFired = false;
-    // Mutlak güvenlik: hiçbir promise asılı kalsa bile buton «Gönderiliyor…»da kalmasın
     const watchdog = window.setTimeout(() => {
-      watchdogFired = true;
+      sendInFlightRef.current = false;
       setLoadingIrsaliye(false);
       showStatus(
         'error',
-        'Gönderim zaman aşımına uğradı. Bağlantıyı kontrol edip tekrar deneyin. (Kısmi kayıtlar yansımış olabilir.)'
+        'Gönderim uzun sürdü. Buton açıldı — kayıt listede yoksa tekrar deneyin.'
       );
-    }, 45000);
+    }, 12000);
+
     try {
+      await ensureFirestoreAuth();
+
       for (const item of queueSnapshot) {
-        if (watchdogFired) break;
         const uniqueId = `EVR-${islemTarihi.replace(/-/g, '')}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
         try {
-          // Storage atlanır — sıkıştır + doğrudan Firestore (takılma kök nedeni Storage/Image asılmasıydı)
-          let prepared = await withTimeout(
+          const prepared = await withTimeout(
             prepareGuvenlikFotoPaketForSave({
               kalemFotolar: item.kalemFotolar || [],
               firmaFotolar: item.firmaFotolar || [],
               faturaFotolar: item.faturaFotolar || [],
             }),
-            20000
+            8000
           );
 
-          let lean = buildLeanGuvenlikEvrakFotoFields(prepared);
+          const lean = buildLeanGuvenlikEvrakFotoFields(prepared);
           const primarySlot =
             lean.kalemFotolar[0] || lean.firmaFotolar[0] || lean.faturaFotolar[0] || null;
+          const fotoEksik =
+            countPaketFotolar(prepared) === 0 && countPaketFotolar(item) > 0;
 
-          let newEvrak: Record<string, unknown> = {
+          if (isPaketTooLargeForFirestore(prepared)) {
+            throw new Error(
+              'Fotoğraflar çok büyük. Lütfen tek net fotoğraf kullanın (PDF yerine kamera).'
+            );
+          }
+
+          const newEvrak = cleanUndefined({
             id: uniqueId,
             evrakNo: '',
             evrakTuru: item.evrakTuru,
@@ -794,8 +828,8 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             cariKartId: item.cariKartId || '',
             tarih: islemTarihi,
             saat: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
-            fotoUrl: lean.fotoUrl,
-            fotoUrls: lean.fotoUrls,
+            fotoUrl: lean.fotoUrl || '',
+            fotoUrls: lean.fotoUrls || [],
             kalemFotolar: lean.kalemFotolar,
             firmaFotolar: lean.firmaFotolar,
             faturaFotolar: lean.faturaFotolar,
@@ -811,34 +845,20 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
               firma: lean.firmaFotolar.length,
               fatura: lean.faturaFotolar.length,
             },
-            storageBackend: lean.storageBackend,
-          };
+            storageBackend: lean.storageBackend || 'INLINE_DATA_URL',
+            fotoUyari: fotoEksik
+              ? 'Fotoğraf boyutu limiti nedeniyle görsel kaydedilemedi; meta kayıt oluşturuldu. Tekrar fotoğraf ekleyin.'
+              : null,
+            kayitZamani: new Date().toISOString(),
+          });
 
-          if (isFirestorePayloadTooLarge(newEvrak)) {
-            prepared = await withTimeout(aggressiveCompressPaket(prepared), 15000);
-            lean = buildLeanGuvenlikEvrakFotoFields(prepared);
-            newEvrak = {
-              ...newEvrak,
-              fotoUrl: lean.fotoUrl,
-              fotoUrls: lean.fotoUrls,
-              kalemFotolar: lean.kalemFotolar,
-              firmaFotolar: lean.firmaFotolar,
-              faturaFotolar: lean.faturaFotolar,
-              storageBackend: 'INLINE_COMPRESSED',
-            };
-          }
-
-          if (isFirestorePayloadTooLarge(newEvrak)) {
-            throw new Error(
-              'Fotoğraflar çok büyük (Firestore limiti). Lütfen daha az / daha net tek kare yükleyin veya PDF yerine fotoğraf kullanın.'
-            );
-          }
-
-          await withTimeout(setDoc(doc(db, 'guvenlikGelenEvraklar', uniqueId), newEvrak), 20000);
+          await withTimeout(
+            setDoc(doc(db, 'guvenlikGelenEvraklar', uniqueId), newEvrak),
+            10000
+          );
           savedIds.add(item.id);
 
           if (lean.fotoUrl) {
-            // YZ arka planda — gönderimi bekletmez; inline URL kullan (orijinal kuyruk boyutu büyük olabilir)
             void triggerBackgroundAiParsing(
               uniqueId,
               lean.fotoUrl,
@@ -854,15 +874,16 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
           }
         } catch (itemErr: any) {
           console.error('Evrak paketi kaydı başarısız:', item.id, itemErr);
+          const code = itemErr?.code || '';
           const msg =
             itemErr?.message === 'FIRESTORE_TIMEOUT'
               ? 'veritabanı zaman aşımı'
-              : itemErr?.message || 'kayıt hatası';
+              : code === 'permission-denied'
+                ? 'yazma izni yok (oturum/yetki)'
+                : itemErr?.message || 'kayıt hatası';
           failures.push(`${item.firma || item.evrakTuru || 'Paket'}: ${msg}`);
         }
       }
-
-      if (watchdogFired) return;
 
       if (savedIds.size > 0) {
         setUploadQueue((prev) => prev.filter((p) => !savedIds.has(p.id)));
@@ -873,22 +894,25 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
       if (failures.length === 0 && savedIds.size > 0) {
         showStatus('success', 'Evraklar başarıyla kaydedildi ve yöneticiye gönderildi!');
+        alert('Evrak(lar) yönetici onayına gönderildi.');
       } else if (savedIds.size > 0) {
-        showStatus(
-          'error',
-          `${savedIds.size} paket kaydedildi, ${failures.length} başarısız:\n${failures.join('\n')}`
-        );
+        const text = `${savedIds.size} paket kaydedildi, ${failures.length} başarısız:\n${failures.join('\n')}`;
+        showStatus('error', text);
+        alert(text);
       } else {
-        showStatus('error', `Kayıt başarısız:\n${failures.join('\n') || 'Bilinmeyen hata'}`);
+        const text = `Kayıt başarısız:\n${failures.join('\n') || 'Bilinmeyen hata'}`;
+        showStatus('error', text);
+        alert(text);
       }
     } catch (err: any) {
       console.error(err);
-      if (!watchdogFired) {
-        showStatus('error', err?.message || 'Veritabanına kaydedilirken bir hata oluştu!');
-      }
+      const text = err?.message || 'Veritabanına kaydedilirken bir hata oluştu!';
+      showStatus('error', text);
+      alert(text);
     } finally {
       window.clearTimeout(watchdog);
-      if (!watchdogFired) setLoadingIrsaliye(false);
+      sendInFlightRef.current = false;
+      setLoadingIrsaliye(false);
     }
   };
 
@@ -2538,7 +2562,6 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                 kaydetLabel="Kuyruğu Kaydet"
                 kaydetDisabled={
                   uploadQueue.length === 0 ||
-                  loadingIrsaliye ||
                   uploadQueue.some((x) => !String(x.aciklama || '').trim() || countPaketFotolar(x) === 0)
                 }
                 kaydetLoading={loadingIrsaliye}
@@ -2768,13 +2791,14 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                       <button
                         type="button"
                         onClick={handleSendQueueToManager}
-                        disabled={
-                          loadingIrsaliye ||
-                          uploadQueue.some((x) => !String(x.aciklama || '').trim() || countPaketFotolar(x) === 0)
-                        }
+                        disabled={uploadQueue.some(
+                          (x) => !String(x.aciklama || '').trim() || countPaketFotolar(x) === 0
+                        )}
                         className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs py-2.5 px-6 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                       >
-                        {loadingIrsaliye ? 'Gönderiliyor...' : '🚀 YÖNETİCİ ONAYINA GÖNDER'}
+                        {loadingIrsaliye
+                          ? 'Gönderiliyor... (iptal için tekrar basın)'
+                          : '🚀 YÖNETİCİ ONAYINA GÖNDER'}
                       </button>
                     </div>
                   </div>
