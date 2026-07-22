@@ -1,5 +1,4 @@
 import type { Fatura, Irsaliye, SatinAlmaTalebi } from '../types/erp';
-import { findFaturalarForIrsaliye, findIrsaliyelerForSa } from './evrakDonusum';
 
 export type EksikHalkaTip =
   | 'SA_IRSALIYESIZ'
@@ -47,50 +46,77 @@ function daysSince(isoDate?: string | null): number {
   return Math.max(0, Math.floor((Date.now() - then) / (24 * 60 * 60 * 1000)));
 }
 
+function isSaOnayli(sa: SatinAlmaTalebi): boolean {
+  const durum = String(sa.onayDurumu || '').toLocaleUpperCase('tr-TR');
+  return (
+    durum.includes('ONAYLANDI') ||
+    durum.includes('ONAYLI') ||
+    durum.includes('TAMAMLANDI') ||
+    durum.includes('SEVK')
+  );
+}
+
 /**
- * Salt okunur mutabakat: SA ↔ irsaliye ↔ fatura eksik halkaları.
- * Yazma / bağlama / stok senkronuna dokunmaz.
+ * Salt okunur mutabakat — O(n) indeksli; ana iş parçacığını kilitlemez.
  */
 export function listEksikHalka(input: {
   satinAlmaTalepleri?: SatinAlmaTalebi[];
   irsaliyeler?: Irsaliye[];
   faturalar?: Fatura[];
-  /** Onaylı SA için sevk beklerken minimum gün (gürültüyü azaltır) */
   saMinGun?: number;
+  /** Liste üst sınırı (UI donmasın) */
+  limit?: number;
 }): EksikHalkaSatir[] {
   const saList = input.satinAlmaTalepleri || [];
   const irsList = input.irsaliyeler || [];
   const fatList = input.faturalar || [];
   const saMinGun = input.saMinGun ?? 1;
+  const limit = input.limit ?? 80;
   const rows: EksikHalkaSatir[] = [];
 
-  for (const sa of saList) {
-    if (!isSaAktif(sa)) continue;
-    const durum = String(sa.onayDurumu || '').toLocaleUpperCase('tr-TR');
-    // Sadece onaylanmış siparişler (bekleyen/taslak hariç)
-    const onayli =
-      durum.includes('ONAYLANDI') ||
-      durum.includes('ONAYLI') ||
-      durum.includes('TAMAMLANDI') ||
-      durum.includes('SEVK');
-    if (!onayli) continue;
+  // saId → irsaliye var mı
+  const irsBySaId = new Set<string>();
+  // irsaliye id / no → fatura bağlı mı
+  const faturaLinkedIrs = new Set<string>();
+  const faturaNos = new Set<string>();
 
-    const linked = findIrsaliyelerForSa(sa, irsList).filter(isIrsaliyeAktif);
-    if (linked.length === 0 && daysSince(sa.tarih) >= saMinGun) {
-      rows.push({
-        tip: 'SA_IRSALIYESIZ',
-        id: sa.id,
-        kod: sa.saId || sa.id,
-        firma: sa.cariFirma || '—',
-        tarih: sa.tarih || '',
-        detay: `Onaylı sipariş · ${daysSince(sa.tarih)} gündür irsaliyesiz`,
-        navigateTab: 'satin_alma',
-      });
+  for (const ft of fatList) {
+    if (!isFaturaAktif(ft)) continue;
+    if (ft.faturaNo) faturaNos.add(String(ft.faturaNo));
+    for (const ref of ft.bagliIrsaliyeler || []) {
+      if (ref) faturaLinkedIrs.add(String(ref));
+    }
+    if (ft.saId) {
+      // SA üzerinden dolaylı bağ — irsaliye kontrolünde kullanılmaz
     }
   }
 
+  const aktifIrs: Irsaliye[] = [];
   for (const ir of irsList) {
     if (!isIrsaliyeAktif(ir)) continue;
+    aktifIrs.push(ir);
+    if (ir.saId) irsBySaId.add(String(ir.saId));
+  }
+
+  for (const sa of saList) {
+    if (rows.length >= limit) break;
+    if (!isSaAktif(sa) || !isSaOnayli(sa)) continue;
+    const saId = String(sa.saId || '');
+    if (saId && irsBySaId.has(saId)) continue;
+    if (daysSince(sa.tarih) < saMinGun) continue;
+    rows.push({
+      tip: 'SA_IRSALIYESIZ',
+      id: sa.id,
+      kod: sa.saId || sa.id,
+      firma: sa.cariFirma || '—',
+      tarih: sa.tarih || '',
+      detay: `Onaylı sipariş · ${daysSince(sa.tarih)} gündür irsaliyesiz`,
+      navigateTab: 'satin_alma',
+    });
+  }
+
+  for (const ir of aktifIrs) {
+    if (rows.length >= limit) break;
     const hasSa = Boolean(String(ir.saId || '').trim());
     if (!hasSa) {
       rows.push({
@@ -103,37 +129,42 @@ export function listEksikHalka(input: {
         navigateTab: 'irsaliye_giris',
       });
     }
+    if (rows.length >= limit) break;
+
     const hasFatura =
       Boolean(String(ir.faturaNo || '').trim()) ||
-      findFaturalarForIrsaliye(ir, fatList).filter(isFaturaAktif).length > 0;
+      faturaLinkedIrs.has(String(ir.id)) ||
+      (ir.irsaliyeNo ? faturaLinkedIrs.has(String(ir.irsaliyeNo)) : false) ||
+      (ir.faturaNo ? faturaNos.has(String(ir.faturaNo)) : false);
+
     if (!hasFatura) {
+      const gecikme = daysSince(ir.tarih);
       rows.push({
         tip: 'IRSALIYE_FATURASIZ',
         id: ir.id,
         kod: ir.irsaliyeNo || ir.id,
         firma: ir.firma || '—',
         tarih: ir.tarih || '',
-        detay:
-          daysSince(ir.tarih) >= 3
-            ? `Faturasız · ${daysSince(ir.tarih)} gün`
-            : 'Fatura bağlantısı yok',
+        detay: gecikme >= 3 ? `Faturasız · ${gecikme} gün` : 'Fatura bağlantısı yok',
         navigateTab: 'irsaliye_giris',
       });
     }
   }
 
+  // Fatura → irsaliye yok: bagli boş ve faturaNo ile irsaliye eşleşmiyor
+  const irsFaturaNo = new Set(
+    aktifIrs.map((ir) => String(ir.faturaNo || '').trim()).filter(Boolean)
+  );
+  const irsIds = new Set(aktifIrs.map((ir) => ir.id));
+  const irsNos = new Set(aktifIrs.map((ir) => String(ir.irsaliyeNo || '')).filter(Boolean));
+
   for (const ft of fatList) {
+    if (rows.length >= limit) break;
     if (!isFaturaAktif(ft)) continue;
     const bagli = ft.bagliIrsaliyeler || [];
     const hasLink =
-      bagli.length > 0 ||
-      irsList.some(
-        (ir) =>
-          isIrsaliyeAktif(ir) &&
-          ((ir.faturaNo && ir.faturaNo === ft.faturaNo) ||
-            bagli.includes(ir.id) ||
-            bagli.includes(ir.irsaliyeNo))
-      );
+      bagli.some((ref) => irsIds.has(ref) || irsNos.has(ref)) ||
+      (ft.faturaNo ? irsFaturaNo.has(String(ft.faturaNo)) : false);
     if (!hasLink) {
       rows.push({
         tip: 'FATURA_IRSALIYESIZ',

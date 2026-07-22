@@ -835,7 +835,7 @@ export default function App() {
     setupCloudDatabase();
   }, [authLoading, currentUser]);
 
-  /** Açılış 35 sn'den uzun sürerse takılmayı önle */
+  /** Açılış 12 sn'den uzun sürerse takılmayı önle */
   useEffect(() => {
     if (authLoading || !currentUser || dbStatus !== 'loading') return;
     const failSafe = setTimeout(() => {
@@ -846,7 +846,7 @@ export default function App() {
         }
         return prev;
       });
-    }, 35000);
+    }, 12000);
     return () => clearTimeout(failSafe);
   }, [authLoading, currentUser, dbStatus]);
 
@@ -942,16 +942,6 @@ export default function App() {
       snapshot.forEach((doc) => {
         list.push({ id: doc.id, ...doc.data() } as any);
       });
-      const tcCounts = new Map<string, number>();
-      list.forEach((p) => {
-        const tc = String(p.tcNo || '').trim();
-        if (!tc) return;
-        tcCounts.set(tc, (tcCounts.get(tc) || 0) + 1);
-      });
-      const duplicateTcGroups = Array.from(tcCounts.values()).filter((v) => v > 1).length;
-      // #region agent log
-      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-1',hypothesisId:'H2',location:'App.tsx:onSnapshot(personeller)',message:'personel snapshot received',data:{snapshotCount:list.length,duplicateTcGroups},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       setPersoneller(list);
       if (list.length >= 20) markProductionLive();
 
@@ -1026,9 +1016,6 @@ export default function App() {
           if (!/^\d{4}-\d{2}-\d{2}$/.test(k)) nonDateKeyCount++;
         });
       });
-      // #region agent log
-      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'baseline-1',hypothesisId:'H4',location:'App.tsx:onSnapshot(yoklamalar)',message:'yoklama snapshot received',data:{personCount,totalDayKeys,nonDateKeyCount},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       setYoklamalar(data);
       if (hasSubstantialYoklamaData(data)) markProductionLive();
     });
@@ -1317,9 +1304,6 @@ export default function App() {
       } catch {
         /* no-op */
       }
-      // #region agent log
-      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'tab-layout-1',hypothesisId:'T1',location:'App.tsx:roleHomeRoute',message:'initial tab resolved after auth',data:{savedTab,homeTab,initialTab,isRestricted,yetki:String(matched.yetki || '')},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       roleHomeRoutedRef.current = true;
       setActiveTab(initialTab);
     }
@@ -1338,13 +1322,7 @@ export default function App() {
     if (!currentUser || !activeTab) return;
     try {
       persistLastTab(activeTab);
-      // #region agent log
-      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'tab-layout-1',hypothesisId:'T3',location:'App.tsx:activeTabPersist',message:'active tab persisted to localStorage',data:{activeTab,key:LAST_TAB_STORAGE_KEY},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
     } catch {
-      // #region agent log
-      fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'tab-layout-1',hypothesisId:'T3',location:'App.tsx:activeTabPersist',message:'active tab persist failed',data:{activeTab,key:LAST_TAB_STORAGE_KEY},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       /* no-op */
     }
   }, [currentUser, activeTab]);
@@ -1369,9 +1347,6 @@ export default function App() {
         }
         return acc;
       }, null);
-    // #region agent log
-    fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'tab-layout-1',hypothesisId:'L1',location:'App.tsx:tabLayoutProbe',message:'tab layout overflow probe',data:{activeTab,mainClientWidth:main.clientWidth,mainScrollWidth:main.scrollWidth,overflowX:main.scrollWidth>main.clientWidth+4,worstOverflow:sample},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
   }, [currentUser, activeTab, personeller.length, yoklamaPersonCount]);
 
   // Sekme bazlı scroll konumunu koru: sayfalar arası gidip gelince kaldığın yere dön.
@@ -2104,9 +2079,6 @@ export default function App() {
     } catch {
       /* no-op */
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7872/ingest/ef5f18bc-f649-42ac-a5a3-37f3283d64f9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ac11e'},body:JSON.stringify({sessionId:'9ac11e',runId:'tab-layout-1',hypothesisId:'T2',location:'App.tsx:handleTabNavigation',message:'tab navigation requested',data:{fromTab:activeTab,toTab:targetTab},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     setActiveTab(targetTab);
   };
 
