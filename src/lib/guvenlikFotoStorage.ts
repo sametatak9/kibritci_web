@@ -4,7 +4,12 @@ import type { GuvenlikFotoMetod, GuvenlikFotoPaket, GuvenlikFotoSlot } from './g
 import { compressImage } from './imageCompress';
 
 const STORAGE_UPLOAD_TIMEOUT_MS = 7000;
-const COMPRESS_TIMEOUT_MS = 6000;
+const COMPRESS_TIMEOUT_MS = 4000;
+/** Tek slot için güvenli üst sınır (karakter) — Firestore 1MB doküman limiti */
+const MAX_SLOT_CHARS = 140_000;
+/** Tüm data URL’lerin toplamı (karakter) — UTF-16 tahmini için *2 sonra ~700KB hedef */
+const MAX_TOTAL_DATA_CHARS = 320_000;
+const MAX_SLOTS_PER_METOD = 1;
 
 function extForSlot(slot: GuvenlikFotoSlot): string {
   const t = (slot.fileType || '').toLowerCase();
@@ -30,15 +35,20 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
-async function compressSlotPayload(slot: GuvenlikFotoSlot): Promise<string> {
+async function compressSlotPayload(
+  slot: GuvenlikFotoSlot,
+  maxW = 640,
+  maxH = 640,
+  quality = 0.48
+): Promise<string> {
   const raw = String(slot.dataUrl || '').trim();
   if (!raw) return raw;
   if (/^https?:\/\//i.test(raw)) return raw;
   if ((slot.fileType || '').startsWith('image/') || raw.startsWith('data:image/')) {
     try {
       return await withTimeout(
-        compressImage(raw, 720, 720, 0.55, COMPRESS_TIMEOUT_MS),
-        COMPRESS_TIMEOUT_MS + 500,
+        compressImage(raw, maxW, maxH, quality, COMPRESS_TIMEOUT_MS),
+        COMPRESS_TIMEOUT_MS + 400,
         'Foto sıkıştırma'
       );
     } catch {
@@ -49,41 +59,110 @@ async function compressSlotPayload(slot: GuvenlikFotoSlot): Promise<string> {
 }
 
 /**
- * Kapı «Yöneticiye gönder» yolu: Storage’a hiç gitmez.
- * Sadece sıkıştırır — kayıt Firestore’a hızlı ve güvenilir yazılır.
- * (Storage izin/ağ sorunları «Gönderiliyor…»da asılı bırakıyordu.)
+ * Tek slot’u Firestore’a sığacak boyuta indir.
+ * PDF / aşırı büyük dosyalar atlanır (kayıt yine yazılsın diye).
+ */
+async function capSlotForFirestore(slot: GuvenlikFotoSlot): Promise<GuvenlikFotoSlot | null> {
+  const raw = String(slot.dataUrl || '').trim();
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return slot;
+
+  const isPdf =
+    (slot.fileType || '').toLowerCase().includes('pdf') || raw.startsWith('data:application/pdf');
+  if (isPdf) {
+    // Büyük PDF Firestore’u kilitler — kapı kaydını engellemesin
+    if (raw.length > MAX_SLOT_CHARS) {
+      console.warn('Güvenlik PDF çok büyük, slot atlandı:', slot.fileName, raw.length);
+      return null;
+    }
+    return slot;
+  }
+
+  let payload = raw;
+  if (payload.startsWith('data:image/') && payload.length > 90_000) {
+    payload = await compressSlotPayload(slot, 640, 640, 0.45);
+  }
+  if (payload.length > MAX_SLOT_CHARS) {
+    payload = await compressSlotPayload({ ...slot, dataUrl: payload }, 480, 480, 0.35);
+  }
+  if (payload.length > MAX_SLOT_CHARS) {
+    payload = await compressSlotPayload({ ...slot, dataUrl: payload }, 360, 360, 0.28);
+  }
+  if (payload.length > MAX_SLOT_CHARS) {
+    console.warn('Güvenlik foto hâlâ büyük, slot atlandı:', slot.fileName, payload.length);
+    return null;
+  }
+  return { ...slot, dataUrl: payload };
+}
+
+/**
+ * Kapı gönderimi: Storage yok, ağır stringify yok.
+ * Slot’ları küçültüp paket döner — setDoc ana thread’i kilitlemesin.
  */
 export async function prepareGuvenlikFotoPaketForSave(
   paket: GuvenlikFotoPaket
 ): Promise<GuvenlikFotoPaket> {
   const mapSlots = async (slots: GuvenlikFotoSlot[]) => {
     const out: GuvenlikFotoSlot[] = [];
-    for (const s of slots || []) {
-      const raw = String(s.dataUrl || '').trim();
-      if (!raw || /^https?:\/\//i.test(raw)) {
-        out.push(s);
-        continue;
-      }
-      try {
-        const payload = await compressSlotPayload(s);
-        out.push({ ...s, dataUrl: payload });
-      } catch {
-        out.push(s);
-      }
+    for (const s of (slots || []).slice(0, MAX_SLOTS_PER_METOD)) {
+      const capped = await capSlotForFirestore(s);
+      if (capped) out.push(capped);
     }
     return out;
   };
 
-  return {
+  let result: GuvenlikFotoPaket = {
     kalemFotolar: await mapSlots(paket.kalemFotolar || []),
     firmaFotolar: await mapSlots(paket.firmaFotolar || []),
     faturaFotolar: await mapSlots(paket.faturaFotolar || []),
   };
+
+  // Toplam hâlâ büyükse yalnızca ilk foto kalsın
+  if (sumPaketDataChars(result) > MAX_TOTAL_DATA_CHARS) {
+    const first =
+      result.kalemFotolar[0] || result.firmaFotolar[0] || result.faturaFotolar[0] || null;
+    if (!first) {
+      return { kalemFotolar: [], firmaFotolar: [], faturaFotolar: [] };
+    }
+    const capped = await capSlotForFirestore(first);
+    if (!capped || String(capped.dataUrl || '').length > MAX_SLOT_CHARS) {
+      return { kalemFotolar: [], firmaFotolar: [], faturaFotolar: [] };
+    }
+    result = { kalemFotolar: [capped], firmaFotolar: [], faturaFotolar: [] };
+  }
+
+  // Son çare: fotoğrafsız paket (meta kayıt yine gitsin)
+  if (sumPaketDataChars(result) > MAX_TOTAL_DATA_CHARS) {
+    return { kalemFotolar: [], firmaFotolar: [], faturaFotolar: [] };
+  }
+
+  return result;
+}
+
+function sumPaketDataChars(paket: GuvenlikFotoPaket): number {
+  let n = 0;
+  for (const s of [
+    ...(paket.kalemFotolar || []),
+    ...(paket.firmaFotolar || []),
+    ...(paket.faturaFotolar || []),
+  ]) {
+    n += String(s.dataUrl || '').length;
+  }
+  return n;
+}
+
+/** Boyut tahmini — JSON.stringify YAPMAZ (büyük fotoda UI kilitlenmesin). */
+export function estimatePaketPayloadBytes(paket: GuvenlikFotoPaket, overhead = 4000): number {
+  return (sumPaketDataChars(paket) + overhead) * 2;
+}
+
+export function isPaketTooLargeForFirestore(paket: GuvenlikFotoPaket): boolean {
+  return estimatePaketPayloadBytes(paket) > 850_000;
 }
 
 /**
  * Fotoğrafı Storage’a yüklemeyi dener; 7 sn içinde olmazsa sıkıştırılmış
- * data URL ile devam eder. (Opsiyonel / arka plan — kapı gönderiminde kullanılmaz.)
+ * data URL ile devam eder. (Opsiyonel — kapı gönderiminde kullanılmaz.)
  */
 export async function uploadGuvenlikFotoSlot(
   docId: string,
@@ -95,7 +174,6 @@ export async function uploadGuvenlikFotoSlot(
 
   const payload = await compressSlotPayload(slot);
 
-  // Çok büyük PDF / data URL — Storage’a gönderme (asılabilir); inline sıkıştırılmış kullan
   if (payload.startsWith('data:') && payload.length > 900_000) {
     console.warn('Güvenlik foto çok büyük, Storage atlandı:', slot.fileName);
     return { ...slot, dataUrl: payload };
@@ -148,7 +226,7 @@ export async function uploadGuvenlikFotoPaket(
   };
 }
 
-/** Firestore doküman boyutu tahmini (UTF-16 ≈ 2 byte/char üst sınır). */
+/** @deprecated estimatePaketPayloadBytes kullanın — JSON.stringify UI kilitleyebilir */
 export function estimateFirestoreJsonBytes(value: unknown): number {
   try {
     return JSON.stringify(value).length * 2;
@@ -163,7 +241,6 @@ export function isFirestorePayloadTooLarge(value: unknown): boolean {
   return estimateFirestoreJsonBytes(value) > FIRESTORE_SAFE_LIMIT;
 }
 
-/** Pakette kalan data URL’leri daha agresif sıkıştır (Storage yoksa son çare). */
 export async function aggressiveCompressPaket(
   paket: GuvenlikFotoPaket
 ): Promise<GuvenlikFotoPaket> {
@@ -172,8 +249,8 @@ export async function aggressiveCompressPaket(
     if (!raw.startsWith('data:image/')) return slot;
     try {
       const dataUrl = await withTimeout(
-        compressImage(raw, 480, 480, 0.35, COMPRESS_TIMEOUT_MS),
-        COMPRESS_TIMEOUT_MS + 500,
+        compressImage(raw, 400, 400, 0.3, COMPRESS_TIMEOUT_MS),
+        COMPRESS_TIMEOUT_MS + 400,
         'Agresif sıkıştırma'
       );
       return { ...slot, dataUrl };
@@ -189,8 +266,8 @@ export async function aggressiveCompressPaket(
 }
 
 /**
- * Firestore’a yazılacak yalın paket: aynı görseli 3 kez kopyalamaz.
- * fotoUrl = primary; fotoUrls yalnızca http(s) Storage URL’leri (inline data URL tekrar edilmez).
+ * Firestore’a yazılacak yalın paket.
+ * fotoUrls yalnızca http(s); inline data URL tekrar edilmez.
  */
 export function buildLeanGuvenlikEvrakFotoFields(paket: GuvenlikFotoPaket): {
   kalemFotolar: GuvenlikFotoSlot[];
@@ -212,7 +289,6 @@ export function buildLeanGuvenlikEvrakFotoFields(paket: GuvenlikFotoPaket): {
     firmaFotolar,
     faturaFotolar,
     fotoUrl,
-    // Inline data URL’leri fotoUrls’de tekrar etme (Firestore 1MB) — slot’lar yeterli
     fotoUrls: httpUrls.length ? Array.from(new Set(httpUrls)) : [],
     storageBackend,
   };
@@ -224,7 +300,6 @@ export function metodLabelShort(metod: GuvenlikFotoMetod): string {
   return 'Fatura';
 }
 
-/** YZ API için data URL veya http(s) → base64 payload. */
 export async function toAiParsePayload(
   url: string
 ): Promise<{ fileBase64: string; mimeType: string } | null> {

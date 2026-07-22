@@ -114,11 +114,11 @@ export const GuvenlikTabDateBar: React.FC<GuvenlikTabDateBarProps> = ({
           <button
             type="button"
             onClick={onKaydet}
-            disabled={kaydetDisabled || kaydetLoading}
+            disabled={kaydetDisabled}
             className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
             <Save size={12} />
-            {kaydetLoading ? 'Kaydediliyor...' : kaydetLabel}
+            {kaydetLoading ? 'Kaydediliyor... (iptal için tekrar basın)' : kaydetLabel}
           </button>
         )}
         {onGuncelle && (
