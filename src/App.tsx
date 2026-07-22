@@ -303,6 +303,8 @@ export default function App() {
   const idariPersonelSeedRef = useRef(false);
   const kuterPersonelSeedRef = useRef(false);
   const kuterCariSeedRef = useRef(false);
+  const deltaKapiPersonelSeedRef = useRef(false);
+  const deltaKapiCariSeedRef = useRef(false);
   const kampRepairInFlightRef = useRef(false);
   const personelAutoCreateBlocklistRef = useRef(new Set<string>());
   const persistenceFailureRef = useRef<(collection: string, message: string) => void>((c, m) => {
@@ -682,8 +684,11 @@ export default function App() {
         // Kuter taşeron personeli: TC ile mükerrersiz seed
         const { mergeKuterIntoPersonelList, ensureKuterCari } = await import('./data/kuterPersonelSeed');
         const kuterMerged = mergeKuterIntoPersonelList(idariMerged.list);
-        setPersoneller(kuterMerged.list);
-        if (idariMerged.toSave.length > 0 || kuterMerged.toSave.length > 0) {
+        // DELTA KAPI taşeron personeli: TC ile mükerrersiz seed
+        const { mergeDeltaKapiIntoPersonelList, ensureDeltaKapiCari } = await import('./data/deltaKapiPersonelSeed');
+        const deltaMerged = mergeDeltaKapiIntoPersonelList(kuterMerged.list);
+        setPersoneller(deltaMerged.list);
+        if (idariMerged.toSave.length > 0 || kuterMerged.toSave.length > 0 || deltaMerged.toSave.length > 0) {
           void (async () => {
             for (const p of idariMerged.toSave) {
               try {
@@ -705,6 +710,16 @@ export default function App() {
             if (kuterMerged.toSave.length > 0) {
               console.log(`Kuter personel senkronu: ${kuterMerged.toSave.length} kayıt`);
             }
+            for (const p of deltaMerged.toSave) {
+              try {
+                await saveDocument('personeller', p);
+              } catch (e) {
+                console.warn('DELTA KAPI personel kaydı atlandı:', p.tcNo, e);
+              }
+            }
+            if (deltaMerged.toSave.length > 0) {
+              console.log(`DELTA KAPI personel senkronu: ${deltaMerged.toSave.length} kayıt`);
+            }
           })();
         }
         const kuterCari = ensureKuterCari(companyData as CariKart[]);
@@ -714,6 +729,15 @@ export default function App() {
         if (kuterCari) {
           void saveDocument('cariKartlar', kuterCari).catch((e) =>
             console.warn('Kuter cari kaydı atlandı:', e)
+          );
+        }
+        const deltaCari = ensureDeltaKapiCari(companyDataWithKuter);
+        const companyDataWithDelta = deltaCari
+          ? [...companyDataWithKuter, deltaCari]
+          : companyDataWithKuter;
+        if (deltaCari) {
+          void saveDocument('cariKartlar', deltaCari).catch((e) =>
+            console.warn('DELTA KAPI cari kaydı atlandı:', e)
           );
         }
         setYoklamalar(attData);
@@ -764,7 +788,7 @@ export default function App() {
         setSahaFaaliyetleri(reportData);
         setProgramliFaaliyetler(loadedProgramliFaaliyetler);
         setHazirTutanaklar(protocolData);
-        setCariKartlar(companyDataWithKuter);
+        setCariKartlar(companyDataWithDelta);
         setStokKartlar(stockData);
         setEpostaGonderimleri(emailLogData);
         setKullanicilar(loadedUsers);
@@ -967,6 +991,25 @@ export default function App() {
           })();
         });
       }
+
+      // DELTA KAPI taşeron personeli: TC ile mükerrersiz tamamla
+      if (!deltaKapiPersonelSeedRef.current) {
+        deltaKapiPersonelSeedRef.current = true;
+        void import('./data/deltaKapiPersonelSeed').then(({ mergeDeltaKapiIntoPersonelList }) => {
+          const { toSave } = mergeDeltaKapiIntoPersonelList(list);
+          if (toSave.length === 0) return;
+          void (async () => {
+            for (const p of toSave) {
+              try {
+                await saveDocument('personeller', p);
+              } catch (e) {
+                console.warn('DELTA KAPI personel snapshot senkronu atlandı:', p.tcNo, e);
+              }
+            }
+            console.log(`DELTA KAPI personel snapshot senkronu: ${toSave.length} kayıt`);
+          })();
+        });
+      }
     });
 
     const unsubYoklamalar = onSnapshot(doc(db, 'yoklamalar', 'global_yoklama_map'), (snap) => {
@@ -1102,6 +1145,17 @@ export default function App() {
           if (!cari) return;
           void saveDocument('cariKartlar', cari).catch((e) =>
             console.warn('Kuter cari snapshot senkronu atlandı:', e)
+          );
+        });
+      }
+
+      if (!deltaKapiCariSeedRef.current) {
+        deltaKapiCariSeedRef.current = true;
+        void import('./data/deltaKapiPersonelSeed').then(({ ensureDeltaKapiCari }) => {
+          const cari = ensureDeltaKapiCari(list);
+          if (!cari) return;
+          void saveDocument('cariKartlar', cari).catch((e) =>
+            console.warn('DELTA KAPI cari snapshot senkronu atlandı:', e)
           );
         });
       }
