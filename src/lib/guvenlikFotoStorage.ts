@@ -4,6 +4,7 @@ import type { GuvenlikFotoMetod, GuvenlikFotoPaket, GuvenlikFotoSlot } from './g
 import { compressImage } from './imageCompress';
 
 const STORAGE_UPLOAD_TIMEOUT_MS = 7000;
+const COMPRESS_TIMEOUT_MS = 6000;
 
 function extForSlot(slot: GuvenlikFotoSlot): string {
   const t = (slot.fileType || '').toLowerCase();
@@ -35,7 +36,11 @@ async function compressSlotPayload(slot: GuvenlikFotoSlot): Promise<string> {
   if (/^https?:\/\//i.test(raw)) return raw;
   if ((slot.fileType || '').startsWith('image/') || raw.startsWith('data:image/')) {
     try {
-      return await compressImage(raw, 720, 720, 0.55);
+      return await withTimeout(
+        compressImage(raw, 720, 720, 0.55, COMPRESS_TIMEOUT_MS),
+        COMPRESS_TIMEOUT_MS + 500,
+        'Foto sıkıştırma'
+      );
     } catch {
       return raw;
     }
@@ -44,8 +49,41 @@ async function compressSlotPayload(slot: GuvenlikFotoSlot): Promise<string> {
 }
 
 /**
+ * Kapı «Yöneticiye gönder» yolu: Storage’a hiç gitmez.
+ * Sadece sıkıştırır — kayıt Firestore’a hızlı ve güvenilir yazılır.
+ * (Storage izin/ağ sorunları «Gönderiliyor…»da asılı bırakıyordu.)
+ */
+export async function prepareGuvenlikFotoPaketForSave(
+  paket: GuvenlikFotoPaket
+): Promise<GuvenlikFotoPaket> {
+  const mapSlots = async (slots: GuvenlikFotoSlot[]) => {
+    const out: GuvenlikFotoSlot[] = [];
+    for (const s of slots || []) {
+      const raw = String(s.dataUrl || '').trim();
+      if (!raw || /^https?:\/\//i.test(raw)) {
+        out.push(s);
+        continue;
+      }
+      try {
+        const payload = await compressSlotPayload(s);
+        out.push({ ...s, dataUrl: payload });
+      } catch {
+        out.push(s);
+      }
+    }
+    return out;
+  };
+
+  return {
+    kalemFotolar: await mapSlots(paket.kalemFotolar || []),
+    firmaFotolar: await mapSlots(paket.firmaFotolar || []),
+    faturaFotolar: await mapSlots(paket.faturaFotolar || []),
+  };
+}
+
+/**
  * Fotoğrafı Storage’a yüklemeyi dener; 7 sn içinde olmazsa sıkıştırılmış
- * data URL ile devam eder (gönder butonu takılı kalmasın).
+ * data URL ile devam eder. (Opsiyonel / arka plan — kapı gönderiminde kullanılmaz.)
  */
 export async function uploadGuvenlikFotoSlot(
   docId: string,
@@ -79,11 +117,7 @@ export async function uploadGuvenlikFotoSlot(
       STORAGE_UPLOAD_TIMEOUT_MS,
       'Storage upload'
     );
-    const url = await withTimeout(
-      getDownloadURL(storageRef),
-      5000,
-      'Storage downloadURL'
-    );
+    const url = await withTimeout(getDownloadURL(storageRef), 5000, 'Storage downloadURL');
     return { ...slot, dataUrl: url };
   } catch (err) {
     console.warn(
@@ -99,7 +133,6 @@ export async function uploadGuvenlikFotoPaket(
   docId: string,
   paket: GuvenlikFotoPaket
 ): Promise<GuvenlikFotoPaket> {
-  // Sıralı yükleme: paralel Storage bazı ortamlarda asılıyor / kota yiyor
   const mapSlots = async (slots: GuvenlikFotoSlot[]) => {
     const out: GuvenlikFotoSlot[] = [];
     for (const s of slots || []) {
@@ -138,7 +171,11 @@ export async function aggressiveCompressPaket(
     const raw = String(slot.dataUrl || '');
     if (!raw.startsWith('data:image/')) return slot;
     try {
-      const dataUrl = await compressImage(raw, 480, 480, 0.4);
+      const dataUrl = await withTimeout(
+        compressImage(raw, 480, 480, 0.35, COMPRESS_TIMEOUT_MS),
+        COMPRESS_TIMEOUT_MS + 500,
+        'Agresif sıkıştırma'
+      );
       return { ...slot, dataUrl };
     } catch {
       return slot;
@@ -153,7 +190,7 @@ export async function aggressiveCompressPaket(
 
 /**
  * Firestore’a yazılacak yalın paket: aynı görseli 3 kez kopyalamaz.
- * fotoUrl = primary; fotoUrls yalnızca http(s) ise doldurulur (inline’da slot’lar yeterli).
+ * fotoUrl = primary; fotoUrls yalnızca http(s) Storage URL’leri (inline data URL tekrar edilmez).
  */
 export function buildLeanGuvenlikEvrakFotoFields(paket: GuvenlikFotoPaket): {
   kalemFotolar: GuvenlikFotoSlot[];
@@ -168,15 +205,15 @@ export function buildLeanGuvenlikEvrakFotoFields(paket: GuvenlikFotoPaket): {
   const faturaFotolar = paket.faturaFotolar || [];
   const all = [...kalemFotolar, ...firmaFotolar, ...faturaFotolar];
   const fotoUrl = all[0]?.dataUrl || '';
-  const httpUrls = all.map((s) => s.dataUrl).filter((u) => /^https?:\/\//i.test(u));
+  const httpUrls = all.map((s) => s.dataUrl).filter((u) => /^https?:\/\//i.test(String(u || '')));
   const storageBackend = httpUrls.length > 0 ? 'FIREBASE_STORAGE' : 'INLINE_DATA_URL';
   return {
     kalemFotolar,
     firmaFotolar,
     faturaFotolar,
     fotoUrl,
-    // Inline data URL’leri fotoUrls’de tekrar etme (Firestore 1MB)
-    fotoUrls: httpUrls.length ? Array.from(new Set(httpUrls)) : fotoUrl ? [fotoUrl] : [],
+    // Inline data URL’leri fotoUrls’de tekrar etme (Firestore 1MB) — slot’lar yeterli
+    fotoUrls: httpUrls.length ? Array.from(new Set(httpUrls)) : [],
     storageBackend,
   };
 }
