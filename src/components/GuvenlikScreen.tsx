@@ -19,7 +19,6 @@ import {
   upsertKapiDraftIrsaliye,
 } from '../lib/kapiIrsaliyeUtils';
 import {
-  collectAllFotoUrls,
   countPaketFotolar,
   createEmptyUploadPackage,
   GUVENLIK_FOTO_METOD_HINT,
@@ -31,9 +30,11 @@ import {
 } from '../lib/guvenlikEvrakFotolar';
 import {
   aggressiveCompressPaket,
+  buildLeanGuvenlikEvrakFotoFields,
   isFirestorePayloadTooLarge,
   uploadGuvenlikFotoPaket,
 } from '../lib/guvenlikFotoStorage';
+import { withTimeout } from '../lib/firebase';
 import { CorporateReportLayout } from './CorporateReportLayout';
 import { KibritciLogo } from './KibritciLogo';
 import { openBase64InNewTab } from '../lib/fileViewerUtils';
@@ -739,6 +740,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       alert("Gönderilecek evrak bulunmuyor. Lütfen önce dosya yükleyin!");
       return;
     }
+    if (loadingIrsaliye) return;
     const eksikFoto = uploadQueue.filter((item) => countPaketFotolar(item) === 0);
     if (eksikFoto.length > 0) {
       alert("Her evrak paketinde en az bir fotoğraf olmalı (kalem / firma / fatura yuvalarından).");
@@ -751,10 +753,12 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     }
 
     setLoadingIrsaliye(true);
+    showStatus('success', 'Evraklar gönderiliyor, lütfen bekleyin…');
     const savedIds = new Set<string>();
     const failures: string[] = [];
+    const queueSnapshot = [...uploadQueue];
     try {
-      for (const item of uploadQueue) {
+      for (const item of queueSnapshot) {
         const uniqueId = `EVR-${islemTarihi.replace(/-/g, '')}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
         try {
           let uploaded = await uploadGuvenlikFotoPaket(uniqueId, {
@@ -763,12 +767,9 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             faturaFotolar: item.faturaFotolar || [],
           });
 
-          let kalemFotolar = uploaded.kalemFotolar;
-          let firmaFotolar = uploaded.firmaFotolar;
-          let faturaFotolar = uploaded.faturaFotolar;
-          let fotoUrls = collectAllFotoUrls({ kalemFotolar, firmaFotolar, faturaFotolar });
-          let primaryUrl = pickPrimaryFotoUrl({ kalemFotolar, firmaFotolar, faturaFotolar });
-          const primarySlot = kalemFotolar[0] || firmaFotolar[0] || faturaFotolar[0] || null;
+          let lean = buildLeanGuvenlikEvrakFotoFields(uploaded);
+          const primarySlot =
+            lean.kalemFotolar[0] || lean.firmaFotolar[0] || lean.faturaFotolar[0] || null;
 
           let newEvrak: Record<string, unknown> = {
             id: uniqueId,
@@ -778,38 +779,34 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             cariKartId: item.cariKartId || '',
             tarih: islemTarihi,
             saat: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
-            fotoUrl: primaryUrl,
-            fotoUrls,
-            kalemFotolar,
-            firmaFotolar,
-            faturaFotolar,
+            fotoUrl: lean.fotoUrl,
+            fotoUrls: lean.fotoUrls,
+            kalemFotolar: lean.kalemFotolar,
+            firmaFotolar: lean.firmaFotolar,
+            faturaFotolar: lean.faturaFotolar,
             fileName: primarySlot?.fileName || 'evrak_paketi',
             fileType: primarySlot?.fileType || 'image/jpeg',
             durum: 'BEKLEMEDE',
             aciklama: item.aciklama || `Güvenlik kapısı evrak teslim alımı (${item.evrakTuru}) · 3 yöntemli foto`,
             kaydeden: currentUser?.email || 'nobetci_guvenlik',
             fotoMetodOzet: {
-              kalem: kalemFotolar.length,
-              firma: firmaFotolar.length,
-              fatura: faturaFotolar.length,
+              kalem: lean.kalemFotolar.length,
+              firma: lean.firmaFotolar.length,
+              fatura: lean.faturaFotolar.length,
             },
-            storageBackend: fotoUrls.some((u) => /^https?:\/\//i.test(u)) ? 'FIREBASE_STORAGE' : 'INLINE_DATA_URL',
+            storageBackend: lean.storageBackend,
           };
 
           if (isFirestorePayloadTooLarge(newEvrak)) {
             uploaded = await aggressiveCompressPaket(uploaded);
-            kalemFotolar = uploaded.kalemFotolar;
-            firmaFotolar = uploaded.firmaFotolar;
-            faturaFotolar = uploaded.faturaFotolar;
-            fotoUrls = collectAllFotoUrls({ kalemFotolar, firmaFotolar, faturaFotolar });
-            primaryUrl = pickPrimaryFotoUrl({ kalemFotolar, firmaFotolar, faturaFotolar });
+            lean = buildLeanGuvenlikEvrakFotoFields(uploaded);
             newEvrak = {
               ...newEvrak,
-              fotoUrl: primaryUrl,
-              fotoUrls,
-              kalemFotolar,
-              firmaFotolar,
-              faturaFotolar,
+              fotoUrl: lean.fotoUrl,
+              fotoUrls: lean.fotoUrls,
+              kalemFotolar: lean.kalemFotolar,
+              firmaFotolar: lean.firmaFotolar,
+              faturaFotolar: lean.faturaFotolar,
               storageBackend: 'INLINE_COMPRESSED',
             };
           }
@@ -820,18 +817,23 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             );
           }
 
-          await setDoc(doc(db, 'guvenlikGelenEvraklar', uniqueId), newEvrak);
+          await withTimeout(setDoc(doc(db, 'guvenlikGelenEvraklar', uniqueId), newEvrak), 20000);
           savedIds.add(item.id);
 
-          if (primaryUrl) {
-            // YZ için kuyruktaki orijinal data URL tercih (Storage https indirmeden)
-            triggerBackgroundAiParsing(uniqueId, pickPrimaryFotoUrl(item) || primaryUrl, newEvrak.evrakTuru as string, {
-              firmaHint: (newEvrak.firma as string) || undefined,
-              cariKartId: (newEvrak.cariKartId as string) || undefined,
-              kalemFotoUrl: item.kalemFotolar?.[0]?.dataUrl || kalemFotolar[0]?.dataUrl,
-              firmaFotoUrl: item.firmaFotolar?.[0]?.dataUrl || firmaFotolar[0]?.dataUrl,
-              faturaFotoUrl: item.faturaFotolar?.[0]?.dataUrl || faturaFotolar[0]?.dataUrl,
-            });
+          if (lean.fotoUrl) {
+            // YZ arka planda — gönderimi bekletmez
+            void triggerBackgroundAiParsing(
+              uniqueId,
+              pickPrimaryFotoUrl(item) || lean.fotoUrl,
+              newEvrak.evrakTuru as string,
+              {
+                firmaHint: (newEvrak.firma as string) || undefined,
+                cariKartId: (newEvrak.cariKartId as string) || undefined,
+                kalemFotoUrl: item.kalemFotolar?.[0]?.dataUrl || lean.kalemFotolar[0]?.dataUrl,
+                firmaFotoUrl: item.firmaFotolar?.[0]?.dataUrl || lean.firmaFotolar[0]?.dataUrl,
+                faturaFotoUrl: item.faturaFotolar?.[0]?.dataUrl || lean.faturaFotolar[0]?.dataUrl,
+              }
+            );
           }
         } catch (itemErr: any) {
           console.error('Evrak paketi kaydı başarısız:', item.id, itemErr);
@@ -848,7 +850,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         }
       }
 
-      if (failures.length === 0) {
+      if (failures.length === 0 && savedIds.size > 0) {
         showStatus('success', 'Evraklar başarıyla kaydedildi ve yöneticiye gönderildi!');
       } else if (savedIds.size > 0) {
         showStatus(
@@ -856,7 +858,7 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
           `${savedIds.size} paket kaydedildi, ${failures.length} başarısız:\n${failures.join('\n')}`
         );
       } else {
-        showStatus('error', `Kayıt başarısız:\n${failures.join('\n')}`);
+        showStatus('error', `Kayıt başarısız:\n${failures.join('\n') || 'Bilinmeyen hata'}`);
       }
     } catch (err: any) {
       console.error(err);
