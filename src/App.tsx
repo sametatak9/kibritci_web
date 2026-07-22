@@ -1108,8 +1108,8 @@ export default function App() {
 
     const unsubStoklar = onSnapshot(collection(db, 'stokKartlar'), (snapshot) => {
       const list: StokKart[] = [];
-      snapshot.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() } as any);
+      snapshot.forEach((docSnap) => {
+        list.push({ ...docSnap.data(), id: docSnap.id } as StokKart);
       });
       setStokKartlar(list);
     });
@@ -1133,8 +1133,9 @@ export default function App() {
 
     const unsubCari = onSnapshot(collection(db, 'cariKartlar'), (snapshot) => {
       const list: CariKart[] = [];
-      snapshot.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() } as any);
+      snapshot.forEach((docSnap) => {
+        // data.id, Firestore yolunu ezmesin (silme hedefi yanlış id olmasın)
+        list.push({ ...docSnap.data(), id: docSnap.id } as CariKart);
       });
       setCariKartlar(list);
 
@@ -2960,6 +2961,7 @@ export default function App() {
                   stokKartlar={stokKartlar}
                   setStokKartlar={setStokKartlarWithSync}
                   personeller={personeller}
+                  setPersoneller={setPersonellerWithSync}
                 />
               )}
 

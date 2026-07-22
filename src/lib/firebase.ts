@@ -85,7 +85,8 @@ export async function withTimeout<T>(promise: Promise<T>, ms = 18000): Promise<T
 export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
   const colRef = collection(db, collectionName);
   const snapshot = await withTimeout(getDocs(colRef));
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as unknown as T);
+  // Firestore doc.id her zaman kazanır — data.id üzerine yazmasın (silinemeyen kart bug'ı)
+  return snapshot.docs.map((d) => ({ ...d.data(), id: d.id }) as unknown as T);
 }
 
 /**
@@ -178,7 +179,7 @@ export async function seedCollectionIfEmpty<T extends { id: string }>(
     return initialItems;
   }
   
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as unknown as T);
+    return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as unknown as T);
 }
 
 export function parseYoklamaSnapshotData(
