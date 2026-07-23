@@ -8,6 +8,8 @@ import { saveDocument } from '../lib/firebase';
 import { kibritciLogoHtml } from '../lib/kibritciBrand';
 import { findNearDuplicateCariNames, normalizeCardName } from '../lib/duplicateNameUtils';
 import {
+  exportAnaFirmaPersonelExcel,
+  exportSeciliPersonelExcel,
   exportTaseronPersonelExcel,
   exportTumFirmalarPersonelExcel,
 } from '../lib/taseronPersonelExcelExport';
@@ -789,6 +791,36 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     }
   };
 
+  const handleExportAnaFirmaExcel = async () => {
+    try {
+      const count = await exportAnaFirmaPersonelExcel({
+        personeller,
+        onlyActive: showOnlyActive,
+      });
+      alert(`${count} ana firma personeli Excel olarak indirildi.`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Excel oluşturulamadı.');
+    }
+  };
+
+  const handleExportSeciliExcel = async () => {
+    if (filteredPersonel.length === 0) {
+      alert('Dışa aktarılacak personel bulunamadı. Filtreleri kontrol edin.');
+      return;
+    }
+    try {
+      const count = await exportSeciliPersonelExcel({
+        rows: filteredPersonel,
+        onlyActive: showOnlyActive,
+        title: `${CANONICAL_ANA_FIRMA_ADI} — ${firmaFilterSummary} Personel Listesi`,
+        fileNamePrefix: `Secili_${exportFilterLabel}`,
+      });
+      alert(`${count} personel (seçili filtre) Excel olarak indirildi.`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Excel oluşturulamadı.');
+    }
+  };
+
   const generateHistoryReport = () => {
     if (!historyPersonel) return;
     const html = `
@@ -1543,9 +1575,26 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
               type="button"
               onClick={exportFilteredPersonel}
               className="flex items-center gap-1.5 text-[10px] font-bold px-3 py-2 bg-slate-900 text-white rounded-xl hover:bg-black cursor-pointer"
-              title={`Listedeki ${filteredPersonel.length} personeli dışa aktar`}
+              title={`Listedeki ${filteredPersonel.length} personeli CSV/HTML olarak dışa aktar`}
             >
               <Download size={12} /> Dışa Aktar ({filteredPersonel.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleExportSeciliExcel()}
+              disabled={filteredPersonel.length === 0}
+              className="flex items-center gap-1.5 text-[10px] font-bold px-3 py-2 bg-emerald-700 text-white rounded-xl hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              title="Ekrandaki seçili firma filtresindeki personeli Excel (.xlsx) olarak indir"
+            >
+              <Download size={12} /> Seçili Excel ({filteredPersonel.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleExportAnaFirmaExcel()}
+              className="flex items-center gap-1.5 text-[10px] font-bold px-3 py-2 bg-indigo-700 text-white rounded-xl hover:bg-indigo-800 cursor-pointer"
+              title="Yalnızca ana firma (Kibritçi İnşaat) personelini Excel (.xlsx) olarak indir"
+            >
+              <Download size={12} /> Ana Firma Excel
             </button>
             <button
               type="button"
