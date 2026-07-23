@@ -9,7 +9,7 @@ import {
 } from '../lib/faaliyetPersonelUtils';
 import { CorporateReportLayout } from './CorporateReportLayout';
 import { loadKibritciLogoDataUrl } from '../lib/kibritciBrand';
-import { buildPersonelListForMonth, findPersonelByName, getYoklamaDay, isDayActiveForPersonel, isPersonelVisibleInMonth, normalizeTurkishName, setYoklamaDay } from '../lib/yoklamaUtils';
+import { buildPersonelListForMonth, findPersonelByName, getBoundaryDayInMonth, getYoklamaDay, isDayActiveForPersonel, isPersonelVisibleInMonth, normalizeTurkishName, setYoklamaDay } from '../lib/yoklamaUtils';
 import { importAllLegacyExcelMonths, importLegacyExcelMonth, aiMonthlyDataToLegacyMonth, resolveStubPersonelFromLegacyId } from '../lib/legacyYoklamaImport';
 import { LEGACY_EXCEL_MONTHS } from '../data/legacyExcelYoklama';
 import { fetchApiJson } from '../lib/apiClient';
@@ -734,12 +734,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       let yokGun = 0;
       let mesaiToplam = 0;
       let hakedisGun = 0;
-      const hireDay = p.iseGirisTarihi?.startsWith(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-`)
-        ? Number(p.iseGirisTarihi.split('-')[2])
-        : null;
-      const exitDay = p.istenCikisTarihi?.startsWith(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-`)
-        ? Number(p.istenCikisTarihi.split('-')[2])
-        : null;
+      const hireDay = getBoundaryDayInMonth(p.iseGirisTarihi, selectedYear, selectedMonth);
+      const exitDay = getBoundaryDayInMonth(p.istenCikisTarihi, selectedYear, selectedMonth);
       const dailyWage = Number(p.maas || 0) / Math.max(daysInMonth, 1);
 
       for (let c = 1; c <= 6; c++) {
@@ -1599,6 +1595,14 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
             <span className="flex items-center space-x-1"><span className="w-4 h-4 bg-amber-100 text-amber-800 rounded font-bold text-center inline-block">R</span> <span>Raporlu (R)</span></span>
             <span className="flex items-center space-x-1"><span className="w-4 h-4 bg-orange-100 text-orange-800 rounded font-bold text-center inline-block">P</span> <span>Pazar (P)</span></span>
             <span className="flex items-center space-x-1"><span className="w-4 h-4 bg-purple-100 text-purple-800 rounded font-bold text-center inline-block">T</span> <span>Tatil (T)</span></span>
+            <span className="flex items-center space-x-1">
+              <span className="w-4 h-4 bg-emerald-50 text-emerald-800 rounded font-bold text-center inline-block ring-2 ring-emerald-500">G</span>
+              <span className="text-emerald-800 font-semibold">İşe giriş günü</span>
+            </span>
+            <span className="flex items-center space-x-1">
+              <span className="w-4 h-4 bg-rose-50 text-rose-800 rounded font-bold text-center inline-block ring-2 ring-rose-500">Ç</span>
+              <span className="text-rose-800 font-semibold">İşten çıkış günü</span>
+            </span>
           </div>
 
           <span className="text-slate-800 font-bold bg-slate-50 px-2.5 py-0.5 rounded-full border border-slate-200">
@@ -1669,6 +1673,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                     const rowCells = daysArray.map(day => {
                       const dayData = getYoklamaDay(personYoklama, selectedYear, selectedMonth, day) || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 };
                       const isActiveDay = isDayActiveForEmployee(p, day);
+                      const isHireDay = getBoundaryDayInMonth(p.iseGirisTarihi, selectedYear, selectedMonth) === day;
+                      const isExitDay = getBoundaryDayInMonth(p.istenCikisTarihi, selectedYear, selectedMonth) === day;
                       
                       if (isActiveDay && dayData.durum === 'Geldi') {
                         totalGeldi++;
@@ -1686,6 +1692,16 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                           tdClass += " bg-orange-100/60 border-x border-orange-200";
                         }
                       }
+                      if (isHireDay) tdClass += " bg-emerald-50/80";
+                      if (isExitDay) tdClass += " bg-rose-50/80";
+
+                      const boundaryRing = isExitDay
+                        ? 'ring-2 ring-rose-500 ring-offset-1'
+                        : isHireDay
+                          ? 'ring-2 ring-emerald-500 ring-offset-1'
+                          : isHoliday
+                            ? (isOfficial ? 'ring-1 ring-purple-300' : 'ring-1 ring-orange-300')
+                            : '';
 
                       return (
                         <td key={day} className={`${tdClass} relative`}>
@@ -1693,12 +1709,17 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                             type="button"
                             disabled={!isActiveDay || !isEditMode}
                             onClick={() => isActiveDay && isEditMode && handleCellClick(p.id, day)}
+                            title={
+                              isExitDay
+                                ? `İşten çıkış: ${p.istenCikisTarihi}`
+                                : isHireDay
+                                  ? `İşe giriş: ${p.iseGirisTarihi}`
+                                  : undefined
+                            }
                             className={`w-7 h-7 rounded-md border font-bold text-[9px] flex items-center justify-center transition shadow-sm ${
                               isActiveDay
-                                ? `${isEditMode ? 'hover:scale-105 active:scale-95 cursor-pointer' : 'cursor-default opacity-90 hover:opacity-100'} ${getStatusColor(dayData.durum)} ${
-                                    isHoliday ? (isOfficial ? 'ring-1 ring-purple-300' : 'ring-1 ring-orange-300') : ''
-                                  }`
-                                : 'bg-violet-100 border-violet-300 text-violet-700 opacity-95 cursor-not-allowed'
+                                ? `${isEditMode ? 'hover:scale-105 active:scale-95 cursor-pointer' : 'cursor-default opacity-90 hover:opacity-100'} ${getStatusColor(dayData.durum)} ${boundaryRing}`
+                                : `bg-violet-100 border-violet-300 text-violet-700 opacity-95 cursor-not-allowed ${boundaryRing}`
                             }`}
                           >
                             {isActiveDay ? getStatusAbbreviation(dayData.durum) : '■'}
@@ -1726,9 +1747,13 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                               placeholder="-"
                               onChange={(e) => isActiveDay && isEditMode && handleMesaiChange(p.id, day, parseMesaiInput(e.target.value))}
                               className={`w-7 text-[8px] font-bold font-mono text-center rounded border py-0.5 focus:outline-none ${
-                                isActiveDay
-                                  ? `${isHoliday ? (isOfficial ? 'bg-purple-50 border-purple-200 text-purple-700' : 'bg-orange-50 border-orange-200 text-orange-700') : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600'} `
-                                  : 'bg-slate-900 border-slate-800 text-slate-500'
+                                isExitDay
+                                  ? 'bg-rose-50 border-rose-300 text-rose-800'
+                                  : isHireDay
+                                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                                    : isActiveDay
+                                      ? `${isHoliday ? (isOfficial ? 'bg-purple-50 border-purple-200 text-purple-700' : 'bg-orange-50 border-orange-200 text-orange-700') : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600'} `
+                                      : 'bg-slate-900 border-slate-800 text-slate-500'
                               }`}
                             />
                           </div>
@@ -1748,10 +1773,10 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                           <div className="flex flex-col">
                             <span className="font-semibold text-slate-800">{p.ad} {p.soyad}</span>
                             <span className="text-[9px] text-[#2563EB] font-bold">{p.gorev} · {p.departman}</span>
-                            <div className="text-[8px] text-slate-500 font-mono mt-0.5 space-y-0.5 leading-none">
-                              <div>Giriş: {p.iseGirisTarihi || '-'}</div>
+                            <div className="text-[8px] font-mono mt-0.5 space-y-0.5 leading-none">
+                              <div className="text-emerald-700 font-semibold">Giriş: {p.iseGirisTarihi || '-'}</div>
                               {p.istenCikisTarihi && (
-                                <div className="text-rose-600 font-semibold">Çıkış: {p.istenCikisTarihi}</div>
+                                <div className="text-rose-700 font-semibold">Çıkış: {p.istenCikisTarihi}</div>
                               )}
                             </div>
                           </div>
@@ -2057,6 +2082,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
 
                       const currentMap = draftYoklamalar[bireyselStaffId] || {};
                       const dayData = getYoklamaDay(currentMap, bireyselYear, bireyselMonth, day) || { durum: 'Girilmedi' as YoklamaDurum, mesaiSaati: 0 };
+                      const isHireDay = getBoundaryDayInMonth(selectedEmp.iseGirisTarihi, bireyselYear, bireyselMonth) === day;
+                      const isExitDay = getBoundaryDayInMonth(selectedEmp.istenCikisTarihi, bireyselYear, bireyselMonth) === day;
 
                       // Style maps
                       const statusStyles: Record<string, string> = {
@@ -2072,13 +2099,29 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                       return (
                         <div 
                           key={day}
-                          className="bg-white border border-slate-150 rounded-xl p-3 flex items-center justify-between shadow-xs hover:border-slate-300 transition"
+                          className={`bg-white border rounded-xl p-3 flex items-center justify-between shadow-xs transition ${
+                            isExitDay
+                              ? 'border-rose-400 ring-2 ring-rose-200'
+                              : isHireDay
+                                ? 'border-emerald-400 ring-2 ring-emerald-200'
+                                : 'border-slate-150 hover:border-slate-300'
+                          }`}
                         >
                           <div className="flex items-center space-x-2">
-                            <span className="font-mono font-bold text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded-lg">
+                            <span className={`font-mono font-bold text-xs px-2 py-1 rounded-lg ${
+                              isExitDay
+                                ? 'bg-rose-100 text-rose-800'
+                                : isHireDay
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-slate-100 text-slate-700'
+                            }`}>
                               {day < 10 ? `0${day}` : day}
                             </span>
-                            <span className="text-[10px] text-slate-500 font-medium">Gün</span>
+                            <span className="text-[10px] text-slate-500 font-medium">
+                              Gün
+                              {isHireDay ? ' · İşe giriş' : ''}
+                              {isExitDay ? ' · İşten çıkış' : ''}
+                            </span>
                           </div>
 
                           <div className="flex items-center space-x-3">

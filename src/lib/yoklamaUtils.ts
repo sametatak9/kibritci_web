@@ -177,6 +177,18 @@ function parseFlexibleDateParts(
   return null;
 }
 
+/** Ay içindeki işe giriş veya çıkış günü (1–31); yoksa null. ISO ve TR formatlarını destekler. */
+export function getBoundaryDayInMonth(
+  dateStr: string | undefined | null,
+  year: number,
+  month: number
+): number | null {
+  const parts = parseFlexibleDateParts(dateStr || undefined);
+  if (!parts) return null;
+  if (parts.year === year && parts.month === month) return parts.day;
+  return null;
+}
+
 /** Yoklama kaydı varsa işe giriş/çıkış filtresini uygulama */
 export function isPersonelVisibleInMonth(
   p: Personel,
