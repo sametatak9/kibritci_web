@@ -1357,13 +1357,13 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase">İşe Giriş Tarihi</label>
+                <label className="text-[10px] font-bold text-emerald-700 uppercase">İşe Giriş Tarihi</label>
                 <input
                   type="date"
                   name="iseGirisTarihi"
                   value={formData.iseGirisTarihi}
                   onChange={handleInputChange}
-                  className="w-full text-xs border border-[#e2e8f0] rounded-lg mt-1 p-2 bg-slate-50"
+                  className="w-full text-xs border border-emerald-200 rounded-lg mt-1 p-2 bg-emerald-50/60 text-emerald-950 font-semibold focus:outline-none focus:border-emerald-500"
                 />
               </div>
               <div>
@@ -1745,12 +1745,12 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                         TC: {p.tcNo} · Görev: <span className="text-slate-600 font-bold">{displayPersonelGorev(p)}</span>
                       </p>
                       <div className="flex flex-wrap gap-1.5 mt-2">
-                        <span className="inline-flex items-center gap-1 bg-slate-50 border border-slate-100 text-[#1e4e78] px-2 py-0.5 rounded font-bold font-mono text-[9px]">
+                        <span className="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded font-bold font-mono text-[9px]">
                           <span>📅 İşe Giriş:</span>
                           <span>{p.iseGirisTarihi || '-'}</span>
                         </span>
-                        {!is_aktif_status(p.durum) && p.istenCikisTarihi && (
-                          <span className="inline-flex items-center gap-1 bg-rose-50 border border-rose-100 text-rose-700 px-2 py-0.5 rounded font-black font-mono text-[9px]">
+                        {p.istenCikisTarihi && (
+                          <span className="inline-flex items-center gap-1 bg-rose-50 border border-rose-200 text-rose-700 px-2 py-0.5 rounded font-black font-mono text-[9px]">
                             <span>🚫 İşten Çıkış:</span>
                             <span>{p.istenCikisTarihi}</span>
                           </span>
