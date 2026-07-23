@@ -4,7 +4,10 @@ import {
   Check, X, FileUp, Camera, Printer, Clock, AlertTriangle, Key, Download, ArrowRight, RefreshCw, Barcode,
   Archive, Calendar, Lock, ClipboardList, MessageCircle, Droplets, Fuel, Images
 } from 'lucide-react';
-import EvrakDuvariPanel, { type EvrakDuvariItem } from './EvrakDuvariPanel';
+import EvrakDuvariPanel, {
+  type EvrakDuvariItem,
+  isEvrakBekleyen,
+} from './EvrakDuvariPanel';
 import { Personel, Irsaliye, IrsaliyeItem, Fatura, MicirStabilizeFis, CariKart, StokKart } from '../types/erp';
 import { db, cleanUndefined, ensureFirestoreAuth, withTimeout } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
@@ -17,6 +20,7 @@ import {
   suggestCariFromDb,
   suggestStokFromDb,
   upsertKapiDraftIrsaliye,
+  finalizeKapiIrsaliyeApproval,
 } from '../lib/kapiIrsaliyeUtils';
 import {
   countPaketFotolar,
@@ -72,8 +76,14 @@ import {
   MicirMalzemeTipi,
   resolveMicirKiloKg,
 } from '../lib/micirUtils';
-import { buildMicirKalemler } from '../lib/micirOnayUtils';
+import {
+  approveMicirFis,
+  buildMicirKalemler,
+  isMicirFisPending,
+  rejectMicirFis,
+} from '../lib/micirOnayUtils';
 import { YILDIRIM_TANKER_UNVAN } from '../lib/yildirimTankerUtils';
+import { isFounderEmail } from '../lib/roleClaims';
 
 interface GuvenlikScreenProps {
   personeller: Personel[];
@@ -2040,11 +2050,49 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     [gelenEvraklar, islemTarihi]
   );
 
+  const canApproveEvrakDuvari = useMemo(() => {
+    const y = String(userYetki || '')
+      .trim()
+      .toLocaleUpperCase('tr-TR');
+    if (y === 'YÖNETİCİ' || y === 'KURUCU' || y === 'GÜVENLİK') return true;
+    if (isFounderEmail(currentUser?.email)) return true;
+    // Yetki henüz yüklenmediyse kapı ekranı zaten korumalı — onay açık
+    if (!userYetki) return true;
+    return false;
+  }, [userYetki, currentUser?.email]);
+
   const evrakDuvariItems = useMemo((): EvrakDuvariItem[] => {
     const items: EvrakDuvariItem[] = [];
+    const seenMicirIds = new Set<string>();
+
     (gelenEvraklar || []).forEach((e) => {
-      const src = e.fotoUrl || e.fisGorselUrl || '';
+      const src = pickPrimaryFotoUrl(e) || e.fotoUrl || e.fisGorselUrl || '';
       if (!src) return;
+      const micirFisId = String(e.micirFisId || '').trim();
+      const isMicirKaynak =
+        Boolean(micirFisId) ||
+        String(e.kaynak || '').toUpperCase().includes('MICIR') ||
+        String(e.evrakTuru || '').toUpperCase().includes('MICIR');
+      if (isMicirKaynak && micirFisId) {
+        seenMicirIds.add(micirFisId);
+        const fis = (micirTumKayitlar || []).find((m) => m.id === micirFisId);
+        const durum = fis?.durum || e.durum || 'BEKLEMEDE';
+        items.push({
+          id: `evrak-${e.id}`,
+          src,
+          title: e.evrakNo || fis?.irsaliyeNo || e.fileName || 'Mıcır irsaliye',
+          meta: [e.firma || ENTO_MADEN_UNVAN, e.evrakTuru || 'İRSALİYE', durum]
+            .filter(Boolean)
+            .join(' · '),
+          kategori: 'MICIR/STABILIZE',
+          tarih: e.tarih || e.islemTarihi || fis?.tarih || '',
+          durum,
+          sourceType: 'micirFis',
+          sourceId: micirFisId,
+          actionable: true,
+        });
+        return;
+      }
       items.push({
         id: `evrak-${e.id}`,
         src,
@@ -2052,8 +2100,13 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
         meta: [e.firma, e.evrakTuru, e.durum].filter(Boolean).join(' · '),
         kategori: e.evrakTuru || 'EVRAK',
         tarih: e.tarih || e.islemTarihi || '',
+        durum: e.durum || 'BEKLEMEDE',
+        sourceType: 'gelenEvrak',
+        sourceId: e.id,
+        actionable: true,
       });
     });
+
     const tankerBuckets: Array<{ list: any[]; kategori: string }> = [
       { list: tumSuTankeriLoglar, kategori: 'SU TANKERİ' },
       { list: tumVidanjorLoglar, kategori: 'VİDANJÖR' },
@@ -2064,6 +2117,36 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
       (list || []).forEach((t) => {
         const src = t.fotoUrl || t.fisGorselUrl || '';
         if (!src) return;
+        const micirFisId = String(t.micirFisId || '').trim();
+        if (kategori === 'MICIR/STABILIZE' && micirFisId) {
+          if (seenMicirIds.has(micirFisId)) return;
+          seenMicirIds.add(micirFisId);
+          const fis = (micirTumKayitlar || []).find((m) => m.id === micirFisId);
+          const durum = fis?.durum || t.onayDurumu || 'YONETICI_ONAYINDA';
+          items.push({
+            id: `tanker-${kategori}-${t.id}`,
+            src,
+            title: t.plaka || t.irsaliyeNo || kategori,
+            meta: [
+              t.firma || ENTO_MADEN_UNVAN,
+              malzemeTipiLabel(t.malzemeTipi || fis?.malzemeTipi),
+              formatMicirMiktarLabel(
+                t.tonaj ?? fis?.tonaj,
+                t.kiloKg ?? fis?.kiloKg ?? resolveMicirKiloKg(t)
+              ),
+              durum,
+            ]
+              .filter(Boolean)
+              .join(' · '),
+            kategori,
+            tarih: t.islemTarihi || t.tarih || (t.girisZamani || '').slice(0, 10),
+            durum,
+            sourceType: 'micirFis',
+            sourceId: micirFisId,
+            actionable: true,
+          });
+          return;
+        }
         items.push({
           id: `tanker-${kategori}-${t.id}`,
           src,
@@ -2073,29 +2156,48 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             .join(' · '),
           kategori,
           tarih: t.islemTarihi || t.tarih || (t.girisZamani || '').slice(0, 10),
+          durum: undefined,
+          sourceType: 'tanker',
+          sourceId: t.id,
+          actionable: false,
         });
       });
     });
+
     (micirTumKayitlar || []).forEach((m) => {
       const src = m.fotoUrl || m.fisGorselUrl || '';
       if (!src) return;
-      if (items.some((i) => i.id === `tanker-MICIR/STABILIZE-${m.id}`)) return;
+      if (seenMicirIds.has(m.id)) return;
+      if (items.some((i) => i.id === `tanker-MICIR/STABILIZE-${m.id}` || i.sourceId === m.id)) return;
+      seenMicirIds.add(m.id);
+      const durum = m.durum || 'YONETICI_ONAYINDA';
       items.push({
         id: `micir-${m.id}`,
         src,
         title: m.plaka || m.irsaliyeNo || 'Mıcır irsaliye',
         meta: [
-          m.firma || ENTO_MADEN_UNVAN,
+          m.firmaUnvan || m.firma || ENTO_MADEN_UNVAN,
           malzemeTipiLabel(m.malzemeTipi),
           formatMicirMiktarLabel(m.tonaj, m.kiloKg ?? resolveMicirKiloKg(m)),
+          durum,
         ]
           .filter(Boolean)
           .join(' · '),
         kategori: 'MICIR/STABILIZE',
         tarih: m.islemTarihi || m.tarih || '',
+        durum,
+        sourceType: 'micirFis',
+        sourceId: m.id,
+        actionable: true,
       });
     });
-    return items.sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || '')));
+
+    return items.sort((a, b) => {
+      const ap = isEvrakBekleyen(a.durum) ? 0 : 1;
+      const bp = isEvrakBekleyen(b.durum) ? 0 : 1;
+      if (ap !== bp) return ap - bp;
+      return String(b.tarih || '').localeCompare(String(a.tarih || ''));
+    });
   }, [
     gelenEvraklar,
     tumSuTankeriLoglar,
@@ -2104,6 +2206,164 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
     tumMiciStabilizeLoglar,
     micirTumKayitlar,
   ]);
+
+  const evrakDuvariBekleyenCount = useMemo(
+    () => evrakDuvariItems.filter((i) => i.actionable !== false && isEvrakBekleyen(i.durum)).length,
+    [evrakDuvariItems]
+  );
+
+  const handleEvrakDuvariApprove = async (item: EvrakDuvariItem) => {
+    if (!item.sourceId) return;
+    if (!window.confirm(`«${item.title}» evrakını onaylıyor musunuz?`)) return;
+    const onaylayan = currentUser?.email || 'nobetci_guvenlik';
+    try {
+      if (item.sourceType === 'micirFis') {
+        const fis =
+          (micirTumKayitlar || []).find((m) => m.id === item.sourceId) ||
+          (gelenEvraklar || [])
+            .filter((e) => e.micirFisId === item.sourceId)
+            .map((e) => ({
+              id: item.sourceId!,
+              tarih: e.tarih || islemTarihi,
+              irsaliyeNo: e.evrakNo || '',
+              plaka: e.plaka || '',
+              tonaj: Number(e.tonaj) || 0,
+              kiloKg: Number(e.kiloKg) || 0,
+              malzemeTipi: e.malzemeTipi || 'MICIR',
+              fisGorselUrl: e.fotoUrl || '',
+              firmaUnvan: e.firma || ENTO_MADEN_UNVAN,
+              guvenlikEvrakId: e.id,
+              irsaliyeId: e.irsaliyeId,
+              kapıLogId: e.kapıLogId || e.kapiLogId,
+              durum: e.durum,
+            }))[0];
+        if (!fis?.id) {
+          showStatus('error', 'Mıcır fişi bulunamadı.');
+          return;
+        }
+        if (!isMicirFisPending(fis)) {
+          showStatus('error', 'Bu fiş zaten işlenmiş.');
+          return;
+        }
+        await approveMicirFis({
+          fis: fis as MicirStabilizeFis,
+          correction: {
+            tarih: String(fis.tarih || islemTarihi).slice(0, 10),
+            irsaliyeNo: String(fis.irsaliyeNo || '').trim().toUpperCase(),
+            plaka: String(fis.plaka || '').trim().toUpperCase(),
+            tonaj: Number(fis.tonaj) || 0,
+            kiloKg: resolveMicirKiloKg(fis),
+            malzemeTipi: fis.malzemeTipi === 'STABILIZE' ? 'STABILIZE' : 'MICIR',
+            fisGorselUrl: fis.fisGorselUrl || '',
+            firmaUnvan: fis.firmaUnvan || ENTO_MADEN_UNVAN,
+            cariKartId: fis.cariKartId,
+          },
+          onaylayan,
+          cariKartlar: cariKartlarLive,
+          setCariKartlar: setCariKartlarLive,
+        });
+        showStatus('success', 'Mıcır / stabilize fişi onaylandı (irsaliye + cari işlendi).');
+        void addNotification?.(`Evrak Duvarı: mıcır fişi onaylandı (${fis.irsaliyeNo || fis.id})`);
+        return;
+      }
+
+      if (item.sourceType === 'gelenEvrak') {
+        const e = (gelenEvraklar || []).find((x) => x.id === item.sourceId);
+        if (!e) {
+          showStatus('error', 'Evrak bulunamadı.');
+          return;
+        }
+        const tur = String(e.evrakTuru || 'İRSALİYE').toLocaleUpperCase('tr-TR');
+        if (tur === 'İRSALİYE' || tur === 'IRSALIYE') {
+          const matched = doubleCheckKapiMatch(
+            e.firma || '',
+            e.kalemler || [],
+            cariKartlarLive,
+            stokKartlarLive
+          );
+          const { summary } = await finalizeKapiIrsaliyeApproval({
+            guvenlikEvrakId: e.id,
+            irsaliyeNo: e.evrakNo || e.id,
+            firma: matched.summary.cariUnvan || e.firma || '',
+            tarih: e.tarih || islemTarihi,
+            fotoUrl: pickPrimaryFotoUrl(e) || e.fotoUrl || '',
+            kalemler: matched.kalemler,
+            onaylayan,
+            cariKartlar: cariKartlarLive,
+            stokKartlar: stokKartlarLive,
+            setStokKartlar: setStokKartlarLive,
+          });
+          await updateDoc(doc(db, 'guvenlikGelenEvraklar', e.id), {
+            durum: 'ONAYLANDI',
+            onaylayanYonetici: onaylayan,
+            islenenEvrakTuru: 'İRSALİYE',
+            irsaliyeId: e.id,
+            cariKartId: summary.cariKartId || '',
+            matchSummary: summary,
+            firma: summary.cariUnvan || e.firma || '',
+            kalemler: matched.kalemler,
+            onayTarihi: new Date().toISOString(),
+          });
+          showStatus('success', `İrsaliye onaylandı · ${formatKapiMatchLabel(summary)}`);
+        } else {
+          await updateDoc(doc(db, 'guvenlikGelenEvraklar', e.id), {
+            durum: 'ONAYLANDI',
+            onaylayanYonetici: onaylayan,
+            islenenEvrakTuru: e.evrakTuru || tur,
+            onayTarihi: new Date().toISOString(),
+          });
+          showStatus('success', 'Evrak onaylandı.');
+        }
+        void addNotification?.(`Evrak Duvarı: ${e.evrakNo || e.id} onaylandı`);
+        return;
+      }
+
+      showStatus('error', 'Bu kayıt türü Evrak Duvarı’ndan onaylanamaz.');
+    } catch (err: any) {
+      console.error(err);
+      showStatus('error', err?.message || 'Onay işlemi başarısız.');
+    }
+  };
+
+  const handleEvrakDuvariReject = async (item: EvrakDuvariItem) => {
+    if (!item.sourceId) return;
+    if (!window.confirm(`«${item.title}» evrakını reddetmek istediğinize emin misiniz?`)) return;
+    const onaylayan = currentUser?.email || 'nobetci_guvenlik';
+    try {
+      if (item.sourceType === 'micirFis') {
+        const fis = (micirTumKayitlar || []).find((m) => m.id === item.sourceId);
+        if (!fis?.id) {
+          showStatus('error', 'Mıcır fişi bulunamadı.');
+          return;
+        }
+        await rejectMicirFis({ fis: fis as MicirStabilizeFis, onaylayan });
+        showStatus('success', 'Mıcır / stabilize fişi reddedildi.');
+        return;
+      }
+      if (item.sourceType === 'gelenEvrak') {
+        await updateDoc(doc(db, 'guvenlikGelenEvraklar', item.sourceId), {
+          durum: 'REDDEDİLDİ',
+          onaylayanYonetici: onaylayan,
+          onayTarihi: new Date().toISOString(),
+        });
+        try {
+          await updateDoc(doc(db, 'irsaliyeler', item.sourceId), {
+            onayDurumu: 'REDDEDİLDİ',
+            onaylayanYonetici: onaylayan,
+            onayTarihi: new Date().toISOString(),
+          });
+        } catch {
+          /* taslak yoksa sorun değil */
+        }
+        showStatus('success', 'Evrak reddedildi.');
+        return;
+      }
+      showStatus('error', 'Bu kayıt türü Evrak Duvarı’ndan reddedilemez.');
+    } catch (err: any) {
+      console.error(err);
+      showStatus('error', err?.message || 'Red işlemi başarısız.');
+    }
+  };
   const seciliGunNobetArsivleri = useMemo(
     () => nobetArsivleri.filter((a) => normalizeDateKey(a.tarih) === normalizeDateKey(islemTarihi)),
     [nobetArsivleri, islemTarihi]
@@ -2516,10 +2776,22 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
             >
               <span className="flex items-center space-x-2">
                 <Images size={13} /> <span>11. Evrak Duvarı</span>
-                {evrakDuvariItems.length > 0 && (
-                  <span className="text-[9px] font-mono bg-teal-500/15 text-teal-700 rounded-full px-1.5 py-0.5 ml-1 hidden lg:inline">
-                    {evrakDuvariItems.length}
+                {evrakDuvariBekleyenCount > 0 ? (
+                  <span
+                    className={`text-[9px] font-mono rounded-full px-1.5 py-0.5 ml-1 ${
+                      activeTab === 'evrak_galerisi'
+                        ? 'bg-amber-400 text-slate-900'
+                        : 'bg-amber-500 text-white'
+                    }`}
+                  >
+                    {evrakDuvariBekleyenCount}
                   </span>
+                ) : (
+                  evrakDuvariItems.length > 0 && (
+                    <span className="text-[9px] font-mono bg-teal-500/15 text-teal-700 rounded-full px-1.5 py-0.5 ml-1 hidden lg:inline">
+                      {evrakDuvariItems.length}
+                    </span>
+                  )
                 )}
               </span>
             </button>
@@ -5017,7 +5289,12 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
 
           {activeTab === 'evrak_galerisi' && (
             <div className="animate-in fade-in duration-150">
-              <EvrakDuvariPanel items={evrakDuvariItems} />
+              <EvrakDuvariPanel
+                items={evrakDuvariItems}
+                canApprove={canApproveEvrakDuvari}
+                onApprove={handleEvrakDuvariApprove}
+                onReject={handleEvrakDuvariReject}
+              />
             </div>
           )}
         </div>
