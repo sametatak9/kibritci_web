@@ -110,9 +110,10 @@ export function mergeIdariIntoPersonelList(existing: Personel[]): {
       found.personelGrubu !== 'IDARI' ||
       found.departman !== 'İDARİ' ||
       found.firmaTipi !== 'ANA_FIRMA' ||
-      (found.gorev || '') !== s.gorev ||
       (found.ad || '') !== s.ad ||
-      (found.soyad || '') !== s.soyad;
+      (found.soyad || '') !== s.soyad ||
+      // Görev: yalnızca boşsa seed’den doldur — kullanıcı düzenlemesini ezme
+      (!(found.gorev || '').trim() && !!(s.gorev || '').trim());
 
     if (needsPatch) {
       const patched: Personel = {
@@ -122,7 +123,7 @@ export function mergeIdariIntoPersonelList(existing: Personel[]): {
           s.soyad.startsWith('KAYIT-') && found.soyad && !found.soyad.startsWith('KAYIT-')
             ? found.soyad
             : s.soyad,
-        gorev: s.gorev || found.gorev,
+        gorev: (found.gorev || '').trim() || s.gorev,
         iseGirisTarihi: found.iseGirisTarihi || s.iseGirisTarihi,
         departman: 'İDARİ',
         personelGrubu: 'IDARI',

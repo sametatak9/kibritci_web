@@ -238,6 +238,26 @@ export async function saveYoklamaDocument(
 /**
  * Generic helper to delta-sync live list array states to Firestore
  */
+const PERSONEL_MEDIA_KEYS = ['fotografUrl', 'sigortaEvrakUrl'] as const;
+const MAX_PERSONEL_SYNC_INLINE = 120_000;
+
+/** Personel sync: değişmeyen büyük data URL’leri yazma (timeout/rollback engeli) */
+function leanPersonelSyncPayload<T extends { id: string }>(item: T, oldItem?: T): T {
+  const out: Record<string, unknown> = { ...(item as Record<string, unknown>) };
+  const prev = (oldItem || {}) as Record<string, unknown>;
+  for (const key of PERSONEL_MEDIA_KEYS) {
+    const nextVal = String(out[key] || '');
+    const prevVal = String(prev[key] || '');
+    if (!nextVal.startsWith('data:') || nextVal.length <= MAX_PERSONEL_SYNC_INLINE) continue;
+    if (!oldItem || nextVal === prevVal) {
+      delete out[key];
+    } else {
+      delete out[key];
+    }
+  }
+  return out as T;
+}
+
 export async function syncArrayToFirestore<T extends { id: string }>(
   collectionName: string,
   oldArray: T[],
@@ -288,7 +308,12 @@ export async function syncArrayToFirestore<T extends { id: string }>(
     for (const [id, item] of newMap.entries()) {
       const oldItem = oldMap.get(id);
       if (!oldItem || stableStringify(oldItem) !== stableStringify(item)) {
-        promises.push(saveDocument(collectionName, item));
+        // personeller: büyük foto/PDF’yi değişmediyse tekrar yazma (timeout → rollback)
+        if (collectionName === 'personeller') {
+          promises.push(saveDocument(collectionName, leanPersonelSyncPayload(item, oldItem)));
+        } else {
+          promises.push(saveDocument(collectionName, item));
+        }
       }
     }
 

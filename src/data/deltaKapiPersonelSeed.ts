@@ -191,11 +191,12 @@ export function mergeDeltaKapiIntoPersonelList(existing: Personel[]): {
         !isDeltaKapiFirma(byTcHit) ||
         (byTcHit.ad || '') !== s.ad ||
         (byTcHit.soyad || '') !== s.soyad ||
-        (byTcHit.gorev || '') !== s.gorev ||
         Number(byTcHit.maas || 0) !== Number(s.maas || 0) ||
         (!byTcHit.iseGirisTarihi && !!s.iseGirisTarihi) ||
         (s.istenCikisTarihi && byTcHit.istenCikisTarihi !== s.istenCikisTarihi) ||
-        (s.istenCikisTarihi && byTcHit.durum !== false);
+        (s.istenCikisTarihi && byTcHit.durum !== false) ||
+        // Görev yalnızca boşsa seed’den — kullanıcı düzenlemesini ezme
+        (!(byTcHit.gorev || '').trim() && !!(s.gorev || '').trim());
 
       if (!needsPatch) continue;
 
@@ -204,7 +205,7 @@ export function mergeDeltaKapiIntoPersonelList(existing: Personel[]): {
         ad: s.ad,
         soyad: s.soyad,
         tcNo: tc,
-        gorev: s.gorev,
+        gorev: (byTcHit.gorev || '').trim() || s.gorev,
         maas: s.maas,
         ucretTipi: 'Aylık',
         firmaTipi: 'TASERON',
@@ -231,7 +232,7 @@ export function mergeDeltaKapiIntoPersonelList(existing: Personel[]): {
         tcNo: tc || byNameHit.tcNo || '',
         ad: s.ad,
         soyad: s.soyad,
-        gorev: s.gorev,
+        gorev: (byNameHit.gorev || '').trim() || s.gorev,
         maas: s.maas,
         ucretTipi: 'Aylık',
         firmaTipi: 'TASERON',
