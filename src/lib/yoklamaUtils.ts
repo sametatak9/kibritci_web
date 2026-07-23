@@ -184,6 +184,9 @@ export function isPersonelVisibleInMonth(
   month: number,
   personMap?: PersonelYoklamaMap
 ): boolean {
+  // 1. O ayda herhangi bir kayıtlı yoklama verisi varsa HER ZAMAN göster!
+  if (personMap && personHasYoklamaInMonth(personMap, year, month)) return true;
+
   const durumNorm = normalizeTurkishName(String(p.durum || ''));
   const isAktif = p.durum === true || durumNorm === 'TRUE' || durumNorm === 'AKTIF';
   const hireTarih = p.iseGirisTarihi || (p as any).girisTarihi || (p as any).kayitTarihi;
@@ -202,7 +205,6 @@ export function isPersonelVisibleInMonth(
   } else if (!isAktif && !exitTarih) {
     return false;
   }
-  if (personMap && personHasYoklamaInMonth(personMap, year, month)) return true;
   return true;
 }
 
@@ -214,16 +216,31 @@ export function isDayActiveForPersonel(
   day: number,
   personMap?: PersonelYoklamaMap
 ): boolean {
-  const hire = parseFlexibleDateParts(p.iseGirisTarihi);
+  // 1. Kayıtlı yoklama verisi varsa (Geldi, Yok, İzinli, Raporlu, Pazar, Tatil),
+  // işe giriş/çıkış tarihinden bağımsız olarak HER ZAMAN göster ve aktif kıl!
+  const dayData = personMap ? getYoklamaDay(personMap, year, month, day) : undefined;
+  if (dayData?.durum && dayData.durum !== 'Girilmedi') return true;
+
+  // 2. İşe giriş tarihi kontrolü
+  const hireTarih = p.iseGirisTarihi || (p as any).girisTarihi;
+  const hire = parseFlexibleDateParts(hireTarih);
   if (hire) {
     const hireY = hire.year;
     const hireM = hire.month;
     const hireD = hire.day;
     const currentDateVal = year * 10000 + month * 100 + day;
     const hireDateVal = hireY * 10000 + hireM * 100 + hireD;
-    if (currentDateVal < hireDateVal) return false;
+    if (currentDateVal < hireDateVal) {
+      const sameMonth = hireY === year && hireM === month;
+      if (!sameMonth) {
+        return false;
+      }
+    }
   }
-  const exit = parseFlexibleDateParts(p.istenCikisTarihi);
+
+  // 3. İşten çıkış tarihi kontrolü
+  const exitTarih = p.istenCikisTarihi || (p as any).cikisTarihi;
+  const exit = parseFlexibleDateParts(exitTarih);
   if (exit) {
     const exitY = exit.year;
     const exitM = exit.month;
@@ -233,8 +250,6 @@ export function isDayActiveForPersonel(
     if (currentDateVal > exitDateVal) return false;
   }
 
-  const dayData = personMap ? getYoklamaDay(personMap, year, month, day) : undefined;
-  if (dayData?.durum && dayData.durum !== 'Girilmedi') return true;
   return true;
 }
 
