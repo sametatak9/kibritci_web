@@ -23,6 +23,28 @@ import {
 import { CANONICAL_ANA_FIRMA_ADI } from '../lib/yoklamaUtils';
 import { getPersonelMissingDocs } from '../lib/personelMissingDocs';
 
+const MAX_PERSONEL_INLINE_MEDIA = 120_000;
+
+/** Büyük foto/PDF’leri merge yazımında tekrar gönderme — timeout + rollback engeli */
+function leanPersonelForFirestore(personel: Personel, prev?: Personel): Personel {
+  const out: Personel = { ...personel };
+  const stripIfHugeUnchanged = (key: 'fotografUrl' | 'sigortaEvrakUrl') => {
+    const nextVal = String(out[key] || '');
+    const prevVal = String(prev?.[key] || '');
+    if (!nextVal.startsWith('data:')) return;
+    if (nextVal.length <= MAX_PERSONEL_INLINE_MEDIA) return;
+    if (!prev || nextVal === prevVal) {
+      delete out[key];
+    } else {
+      // Yeni ama çok büyük — eskiyi koru
+      delete out[key];
+    }
+  };
+  stripIfHugeUnchanged('fotografUrl');
+  stripIfHugeUnchanged('sigortaEvrakUrl');
+  return out;
+}
+
 interface PersonelScreenProps {
   personeller: Personel[];
   setPersoneller: React.Dispatch<React.SetStateAction<Personel[]>>;
@@ -417,12 +439,9 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     return raw || 'DÜZ İŞÇİ';
   };
 
-  useEffect(() => {
-    const needsNormalize = personeller.some((p) => normalizePersonelGorev(p.gorev) !== String(p.gorev || '').trim());
-    if (!needsNormalize) return;
-
-    setPersoneller((prev) => prev.map((p) => ({ ...p, gorev: normalizePersonelGorev(p.gorev) })));
-  }, [personeller, setPersoneller]);
+  // NOT: Tüm kadroyu normalize edip setPersoneller ile senkronlamak
+  // büyük fotoğraflı kayıtlarda timeout + rollback yapıyordu; kaldırıldı.
+  // Görev normalizasyonu yalnızca kayıt / SGK parse anında uygulanır.
 
   const appendTaseronCariHistory = (
     cariKartId: string,
@@ -443,7 +462,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     setCariIslemGecmisi((prev) => [islem, ...prev]);
   };
 
-  const finalizePersonelSave = (
+  const finalizePersonelSave = async (
     normalizedPayload: Omit<Personel, 'id'> | Personel,
     isEdit: boolean,
     taseronCariId?: string,
@@ -451,24 +470,46 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   ) => {
     const withRules = {
       ...normalizedPayload,
-      gorev: resolveAkvizyonGorev(normalizedPayload.firmaAdi, normalizedPayload.gorev),
+      gorev: normalizePersonelGorev(
+        resolveAkvizyonGorev(normalizedPayload.firmaAdi, normalizedPayload.gorev)
+      ),
       firmaTipi: isAkvizyonFirmaAdi(normalizedPayload.firmaAdi)
         ? ('TASERON' as const)
         : normalizedPayload.firmaTipi,
     };
     let savedPersonel: Personel;
-        if (isEdit && 'id' in withRules) {
+    if (isEdit && 'id' in withRules) {
       savedPersonel = withRules as Personel;
-      setPersoneller((prev) => prev.map((p) => (p.id === savedPersonel.id ? savedPersonel : p)));
-      alert('Personel bilgileri başarıyla güncellendi.');
     } else {
       savedPersonel = {
         ...(withRules as Omit<Personel, 'id'>),
         id: `p_${Date.now()}`,
       };
-      setPersoneller((prev) => [savedPersonel, ...prev]);
-      alert('Yeni personel başarıyla kaydedildi.');
     }
+
+    try {
+      // Doğrudan Firestore’a yaz — büyük görselleri tekrar gönderme (timeout/rollback engeli)
+      const prev = isEdit ? personeller.find((p) => p.id === savedPersonel.id) : undefined;
+      const lean = leanPersonelForFirestore(savedPersonel, prev);
+      await saveDocument('personeller', lean as Personel);
+    } catch (err: any) {
+      console.error(err);
+      alert(
+        'Personel kaydı veritabanına yazılamadı: ' +
+          (err?.message === 'FIRESTORE_TIMEOUT'
+            ? 'zaman aşımı (büyük fotoğraf kaydı engellemiş olabilir)'
+            : err?.message || 'bilinmeyen hata')
+      );
+      return;
+    }
+
+    setPersoneller((prev) => {
+      if (isEdit) {
+        return prev.map((p) => (p.id === savedPersonel.id ? savedPersonel : p));
+      }
+      return [savedPersonel, ...prev];
+    });
+    alert(isEdit ? 'Personel bilgileri başarıyla güncellendi.' : 'Yeni personel başarıyla kaydedildi.');
 
     if (savedPersonel.firmaTipi === 'TASERON' && taseronCariId) {
       appendTaseronCariHistory(taseronCariId, savedPersonel, isEdit ? 'edit' : 'create', historyNote);
@@ -478,13 +519,13 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     handleClearForm();
   };
 
-  const resolveTaseronCariOnSave = (
+  const resolveTaseronCariOnSave = async (
     firmaAdi: string,
     pending: PendingPersonelSave
-  ): boolean => {
+  ): Promise<boolean> => {
     if (taseronKaynak && taseronKaynak !== TASERON_MANUEL_KEY) {
       const selected = taseronCariList.find((c) => c.id === taseronKaynak);
-      finalizePersonelSave(
+      await finalizePersonelSave(
         { ...pending.normalizedPayload, firmaAdi: selected?.unvan || firmaAdi },
         pending.isEdit,
         taseronKaynak
@@ -496,7 +537,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
       (c) => normalizeCardName(c.unvan) === normalizeCardName(firmaAdi)
     );
     if (exact) {
-      finalizePersonelSave(
+      await finalizePersonelSave(
         { ...pending.normalizedPayload, firmaAdi: exact.unvan },
         pending.isEdit,
         exact.id
@@ -526,7 +567,7 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   const handleMergeTaseronCari = (selectedCari: CariKart) => {
     if (!taseronResolveModal || taseronResolveModal.kind !== 'merge') return;
     const { pending, manualName } = taseronResolveModal;
-    finalizePersonelSave(
+    void finalizePersonelSave(
       { ...pending.normalizedPayload, firmaAdi: selectedCari.unvan },
       pending.isEdit,
       selectedCari.id,
@@ -541,12 +582,12 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     const { pending, manualName } = taseronResolveModal;
     if (!setCariKartlar) {
       alert('Cari kart oluşturulamıyor. Personel yalnızca elle yazılan firma adıyla kaydedilecek.');
-      finalizePersonelSave({ ...pending.normalizedPayload, firmaAdi: manualName }, pending.isEdit);
+      void finalizePersonelSave({ ...pending.normalizedPayload, firmaAdi: manualName }, pending.isEdit);
       return;
     }
     const newCari = createTaseronCariKart(manualName);
     setCariKartlar((prev) => [newCari, ...prev]);
-    finalizePersonelSave(
+    void finalizePersonelSave(
       { ...pending.normalizedPayload, firmaAdi: newCari.unvan },
       pending.isEdit,
       newCari.id,
@@ -559,10 +600,10 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
   const handleSkipTaseronCariCreate = () => {
     if (!taseronResolveModal) return;
     const { pending, manualName } = taseronResolveModal;
-    finalizePersonelSave({ ...pending.normalizedPayload, firmaAdi: manualName }, pending.isEdit);
+    void finalizePersonelSave({ ...pending.normalizedPayload, firmaAdi: manualName }, pending.isEdit);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.ad || !formData.soyad || !formData.tcNo) {
       alert("Lütfen en az Ad, Soyad ve TC Kimlik No alanlarını doldurun.");
@@ -600,7 +641,9 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
       ...formData,
       tcNo: normalizedTc,
       ibanNo: inputIban && inputIban !== 'TR' ? inputIban : prevIban,
-      gorev: resolveAkvizyonGorev(firmaFields.firmaAdi, (formData as any).gorev),
+      gorev: normalizePersonelGorev(
+        resolveAkvizyonGorev(firmaFields.firmaAdi, (formData as any).gorev)
+      ),
       firmaTipi: firmaFields.firmaTipi,
       firmaAdi: firmaFields.firmaAdi,
     };
@@ -609,12 +652,12 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     const pending: PendingPersonelSave = { normalizedPayload, isEdit };
 
     if (firmaFields.firmaTipi === 'TASERON') {
-      const proceeded = resolveTaseronCariOnSave(firmaFields.firmaAdi, pending);
+      const proceeded = await resolveTaseronCariOnSave(firmaFields.firmaAdi, pending);
       if (!proceeded) return;
       return;
     }
 
-    finalizePersonelSave(normalizedPayload, isEdit);
+    await finalizePersonelSave(normalizedPayload, isEdit);
   };
 
   const handleDelete = (id: string) => {
