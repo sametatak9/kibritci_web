@@ -125,7 +125,14 @@ export const MicirFisOnayPanel: React.FC<MicirFisOnayPanelProps> = ({
       setEditing(null);
     } catch (err: any) {
       console.error(err);
-      alert('Onay başarısız: ' + (err?.message || ''));
+      const msg = String(err?.message || '');
+      if (msg === 'FIRESTORE_TIMEOUT' || msg.includes('zaman aşımı')) {
+        alert(
+          'Onay zaman aşımına uğradı. Büyük fotoğraf kaydı engellemiş olabilir.\n\nSayfayı yenileyip tekrar deneyin. Kayıt kısmen oluştuysa bekleyen listeden düşmüş olabilir — İrsaliyeler sekmesini kontrol edin.'
+        );
+      } else {
+        alert('Onay başarısız: ' + (msg || 'bilinmeyen hata'));
+      }
     } finally {
       setSaving(false);
     }

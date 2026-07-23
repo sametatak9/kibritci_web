@@ -3979,9 +3979,20 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                                   let compressed = rawBase64;
                                   if (file.type.startsWith('image/')) {
                                     try {
-                                      compressed = await compressImage(rawBase64);
+                                      // Kapı mıcır onayında büyük foto timeout/rollback yapıyordu
+                                      compressed = await compressImage(rawBase64, 720, 720, 0.52, 4000);
                                     } catch (err) {
                                       console.error('Image compression failed', err);
+                                    }
+                                  } else if (
+                                    file.type.includes('pdf') ||
+                                    rawBase64.startsWith('data:application/pdf')
+                                  ) {
+                                    if (rawBase64.length > 140_000) {
+                                      alert(
+                                        'PDF çok büyük. Lütfen irsaliyeyi fotoğraf olarak çekip yükleyin.'
+                                      );
+                                      return;
                                     }
                                   }
                                   setTankerFotoUrl(compressed);
