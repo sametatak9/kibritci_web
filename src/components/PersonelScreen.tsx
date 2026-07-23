@@ -341,12 +341,13 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
           : p
       )
     );
+    // Yalnızca görev/firmaTipi — maaş vb. alanları eski snapshot ile ezme
     toFix.forEach((p) => {
       void saveDocument('personeller', {
-        ...p,
+        id: p.id,
         gorev: AKVIZYON_GOREV,
         firmaTipi: 'TASERON',
-      });
+      } as Personel);
     });
   }, [personeller, setPersoneller]);
 

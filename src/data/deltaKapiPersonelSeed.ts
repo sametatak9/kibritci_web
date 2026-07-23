@@ -162,7 +162,8 @@ export function ensureDeltaKapiCari(existing: CariKart[]): CariKart | null {
 /**
  * Mevcut listeye DELTA KAPI taşeron personelini TC ile birleştirir.
  * - TC yoksa ekler
- * - TC varsa firma/görev/maaş/giriş-çıkış alanlarını bağlar (mükerrer oluşturmaz)
+ * - TC varsa firma / eksik görev-maaş / giriş-çıkış alanlarını bağlar (mükerrer oluşturmaz)
+ * - Kullanıcının girdiği görev ve maaş değerlerini seed ile ezmez
  * - TC yok ama isim eşleşirse mevcut kaydı DELTA KAPI'ye bağlar
  */
 export function mergeDeltaKapiIntoPersonelList(existing: Personel[]): {
@@ -191,12 +192,12 @@ export function mergeDeltaKapiIntoPersonelList(existing: Personel[]): {
         !isDeltaKapiFirma(byTcHit) ||
         (byTcHit.ad || '') !== s.ad ||
         (byTcHit.soyad || '') !== s.soyad ||
-        Number(byTcHit.maas || 0) !== Number(s.maas || 0) ||
         (!byTcHit.iseGirisTarihi && !!s.iseGirisTarihi) ||
         (s.istenCikisTarihi && byTcHit.istenCikisTarihi !== s.istenCikisTarihi) ||
         (s.istenCikisTarihi && byTcHit.durum !== false) ||
-        // Görev yalnızca boşsa seed’den — kullanıcı düzenlemesini ezme
-        (!(byTcHit.gorev || '').trim() && !!(s.gorev || '').trim());
+        // Görev / maaş yalnızca boşsa seed’den — kullanıcı düzenlemesini ezme
+        (!(byTcHit.gorev || '').trim() && !!(s.gorev || '').trim()) ||
+        (!(Number(byTcHit.maas) > 0) && Number(s.maas) > 0);
 
       if (!needsPatch) continue;
 
@@ -206,8 +207,9 @@ export function mergeDeltaKapiIntoPersonelList(existing: Personel[]): {
         soyad: s.soyad,
         tcNo: tc,
         gorev: (byTcHit.gorev || '').trim() || s.gorev,
-        maas: s.maas,
-        ucretTipi: 'Aylık',
+        // Mevcut maaş/ücret tipini koru; yalnızca 0/boşsa seed doldurur
+        maas: Number(byTcHit.maas) > 0 ? Number(byTcHit.maas) : s.maas,
+        ucretTipi: byTcHit.ucretTipi || 'Aylık',
         firmaTipi: 'TASERON',
         firmaAdi: FIRMA,
         personelGrubu: byTcHit.personelGrubu || 'SAHA',
@@ -227,14 +229,26 @@ export function mergeDeltaKapiIntoPersonelList(existing: Personel[]): {
 
     const byNameHit = byName.get(nameKey(s.ad, s.soyad));
     if (byNameHit) {
+      const needsPatch =
+        !isDeltaKapiFirma(byNameHit) ||
+        digits(byNameHit.tcNo) !== tc ||
+        (byNameHit.ad || '') !== s.ad ||
+        (byNameHit.soyad || '') !== s.soyad ||
+        (!byNameHit.iseGirisTarihi && !!s.iseGirisTarihi) ||
+        (s.istenCikisTarihi && byNameHit.istenCikisTarihi !== s.istenCikisTarihi) ||
+        (!(byNameHit.gorev || '').trim() && !!(s.gorev || '').trim()) ||
+        (!(Number(byNameHit.maas) > 0) && Number(s.maas) > 0);
+
+      if (!needsPatch) continue;
+
       const patched: Personel = {
         ...byNameHit,
         tcNo: tc || byNameHit.tcNo || '',
         ad: s.ad,
         soyad: s.soyad,
         gorev: (byNameHit.gorev || '').trim() || s.gorev,
-        maas: s.maas,
-        ucretTipi: 'Aylık',
+        maas: Number(byNameHit.maas) > 0 ? Number(byNameHit.maas) : s.maas,
+        ucretTipi: byNameHit.ucretTipi || 'Aylık',
         firmaTipi: 'TASERON',
         firmaAdi: FIRMA,
         personelGrubu: byNameHit.personelGrubu || 'SAHA',
