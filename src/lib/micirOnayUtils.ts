@@ -26,6 +26,17 @@ export type MicirFisCorrection = {
   cariKartId?: string;
 };
 
+/** Büyük data URL’leri tekrar yazma — Firestore timeout / rollback kök nedeni */
+const MAX_INLINE_IMAGE_CHARS = 120_000;
+
+function leanImageUrl(url?: string | null): string {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith('data:') && raw.length > MAX_INLINE_IMAGE_CHARS) return '';
+  return raw;
+}
+
 export function isMicirFisPending(f?: Pick<MicirStabilizeFis, 'durum'> | null): boolean {
   return !f?.durum || f.durum === 'YONETICI_ONAYINDA';
 }
@@ -78,11 +89,11 @@ export async function ensureEntoMadenCari(
 }
 
 /**
- * Yönetici onayında:
- * 1) micirStabilizeFisleri güncellenir (ONAYLANDI)
- * 2) irsaliyeler sekmesine irsaliye yazılır
- * 3) cariIslemGecmisi ile Ento Maden cari kart altına bağlanır
- * 4) guvenlikGelenEvraklar ONAYLANDI yapılır
+ * Yönetici onayında (yalın yazım — büyük foto tekrar yazılmaz):
+ * 1) micirStabilizeFisleri → ONAYLANDI (görsel dokunulmaz)
+ * 2) irsaliyeler sekmesine irsaliye
+ * 3) cariIslemGecmisi → Ento Maden
+ * 4) guvenlikGelenEvraklar → ONAYLANDI
  */
 export async function approveMicirFis(options: {
   fis: MicirStabilizeFis;
@@ -119,6 +130,9 @@ export async function approveMicirFis(options: {
   if (!correction.irsaliyeNo?.trim()) {
     throw new Error('İrsaliye no zorunludur.');
   }
+  if (!plakaOk(correction.plaka)) {
+    throw new Error('Plaka zorunludur.');
+  }
   if (!kiloKg || kiloKg <= 0 || !tonaj || tonaj <= 0) {
     throw new Error('Kilo / tonaj zorunludur.');
   }
@@ -128,42 +142,52 @@ export async function approveMicirFis(options: {
   const kalemler = buildMicirKalemler(fis.id, tonaj, correction.malzemeTipi, kiloKg);
   const malzemeAdi = malzemeTipiLabel(correction.malzemeTipi);
   const miktarLabel = formatMicirMiktarLabel(tonaj, kiloKg);
+  const existingImage = String(fis.fisGorselUrl || '').trim();
+  const correctionImage = leanImageUrl(correction.fisGorselUrl);
+  // Mevcut büyük görseli tekrar setDoc etme — merge ile alan güncelle
+  const imageForIrsaliye = correctionImage || leanImageUrl(existingImage);
 
-  const updatedFis: MicirStabilizeFis = {
-    ...fis,
+  const fisPatch: MicirStabilizeFis = {
+    id: fis.id,
     tarih: correction.tarih,
     irsaliyeNo: correction.irsaliyeNo.trim().toUpperCase(),
     plaka: correction.plaka.trim().toUpperCase(),
     tonaj,
     kiloKg,
     malzemeTipi: correction.malzemeTipi,
-    fisGorselUrl: correction.fisGorselUrl || fis.fisGorselUrl || '',
     firmaUnvan,
     cariKartId,
     irsaliyeId,
     guvenlikEvrakId,
+    kapıLogId: fis.kapıLogId,
+    kaydeden: fis.kaydeden,
     durum: 'ONAYLANDI',
     onaylayanYonetici: onaylayan,
     onayTarihi: now,
+    olusturulma: fis.olusturulma || now,
     guncellenme: now,
   };
+  // Sadece küçük / yeni görsel varsa yaz; aksi halde eski data URL Firestore’da kalsın
+  if (correctionImage) {
+    fisPatch.fisGorselUrl = correctionImage;
+  }
 
   const irsaliye: Irsaliye = {
     id: irsaliyeId,
     irsaliyeId,
-    irsaliyeNo: updatedFis.irsaliyeNo,
+    irsaliyeNo: fisPatch.irsaliyeNo,
     firma: firmaUnvan,
     cariKartId,
-    tarih: updatedFis.tarih,
+    tarih: fisPatch.tarih,
     onayDurumu: 'ONAYLANDI' as Irsaliye['onayDurumu'],
-    fisEvrakUrl: updatedFis.fisGorselUrl || '',
+    fisEvrakUrl: imageForIrsaliye,
     kaynak: 'MICIR_STABILIZE_FIS',
-    plaka: updatedFis.plaka,
-    fisNo: updatedFis.irsaliyeNo,
+    plaka: fisPatch.plaka,
+    fisNo: fisPatch.irsaliyeNo,
     micirFisId: fis.id,
-    tonaj: updatedFis.tonaj,
-    kiloKg: updatedFis.kiloKg,
-    malzemeTipi: updatedFis.malzemeTipi,
+    tonaj: fisPatch.tonaj,
+    kiloKg: fisPatch.kiloKg,
+    malzemeTipi: fisPatch.malzemeTipi,
     guvenlikEvrakId,
     kalemler,
     onaylayanYonetici: onaylayan,
@@ -176,33 +200,34 @@ export async function approveMicirFis(options: {
     islemTipi: 'IRSALIYE',
     islemId: irsaliyeId,
     islemBaslik: `${malzemeAdi} İrsaliyesi · ${firmaUnvan}`,
-    islemDetay: `${updatedFis.irsaliyeNo} · ${updatedFis.plaka} · ${miktarLabel} · ${malzemeAdi}`,
-    tarih: updatedFis.tarih,
-    belgeNo: updatedFis.irsaliyeNo,
+    islemDetay: `${fisPatch.irsaliyeNo} · ${fisPatch.plaka} · ${miktarLabel} · ${malzemeAdi}`,
+    tarih: fisPatch.tarih,
+    belgeNo: fisPatch.irsaliyeNo,
   };
 
-  await saveDocument('micirStabilizeFisleri', updatedFis);
+  // Sıralı yalın yazımlar — büyük foto yok, timeout / rollback riski düşük
+  await saveDocument('micirStabilizeFisleri', fisPatch);
   await saveDocument('irsaliyeler', irsaliye);
   await saveDocument('cariIslemGecmisi', cariIslem);
   await saveDocument('guvenlikGelenEvraklar', {
     id: guvenlikEvrakId,
-    evrakNo: updatedFis.irsaliyeNo,
+    evrakNo: fisPatch.irsaliyeNo,
     evrakTuru: 'İRSALİYE',
     firma: firmaUnvan,
-    tarih: updatedFis.tarih,
-    fotoUrl: updatedFis.fisGorselUrl || '',
-    fileName: `micir_${updatedFis.irsaliyeNo}.jpg`,
+    tarih: fisPatch.tarih,
+    // fotoUrl yeniden yazılmaz (kapıda zaten var)
+    fileName: `micir_${fisPatch.irsaliyeNo}.jpg`,
     fileType: 'image/jpeg',
     durum: 'ONAYLANDI',
-    aciklama: `Kapı ${malzemeAdi} irsaliyesi onaylandı · Plaka ${updatedFis.plaka} · ${miktarLabel}`,
+    aciklama: `Kapı ${malzemeAdi} irsaliyesi onaylandı · Plaka ${fisPatch.plaka} · ${miktarLabel}`,
     kaynak: 'MICIR_STABILIZE_FIS',
     micirFisId: fis.id,
     irsaliyeId,
     cariKartId,
-    plaka: updatedFis.plaka,
-    tonaj: updatedFis.tonaj,
-    kiloKg: updatedFis.kiloKg,
-    malzemeTipi: updatedFis.malzemeTipi,
+    plaka: fisPatch.plaka,
+    tonaj: fisPatch.tonaj,
+    kiloKg: fisPatch.kiloKg,
+    malzemeTipi: fisPatch.malzemeTipi,
     kalemler,
     onaylayanYonetici: onaylayan,
     onayTarihi: now,
@@ -220,16 +245,24 @@ export async function approveMicirFis(options: {
     });
   }
 
-  options.setIrsaliyeler?.((prev) => {
-    const others = prev.filter((x) => x.id !== irsaliyeId && x.irsaliyeId !== irsaliyeId);
-    return [irsaliye, ...others];
-  });
+  const updatedFis: MicirStabilizeFis = {
+    ...fis,
+    ...fisPatch,
+    fisGorselUrl: correctionImage || existingImage,
+  };
+
+  // irsaliyeler: onSnapshot zaten günceller — WithSync büyük listede rollback yapmasın
+  // cariIslemGecmisi: snapshot yok, yerel ekle (yalın kayıt)
   options.setCariIslemGecmisi?.((prev) => {
     const others = prev.filter((x) => x.id !== cariIslem.id);
     return [cariIslem, ...others];
   });
 
   return { irsaliye, fis: updatedFis, cariIslem };
+}
+
+function plakaOk(plaka?: string): boolean {
+  return String(plaka || '').trim().length > 0;
 }
 
 export async function rejectMicirFis(options: {
@@ -239,15 +272,14 @@ export async function rejectMicirFis(options: {
 }): Promise<MicirStabilizeFis> {
   const now = new Date().toISOString();
   const guvenlikEvrakId = options.fis.guvenlikEvrakId || `EVR-MIC-${options.fis.id}`;
-  const updated: MicirStabilizeFis = {
-    ...options.fis,
+  await saveDocument('micirStabilizeFisleri', {
+    id: options.fis.id,
     durum: 'REDDEDILDI',
     onaylayanYonetici: options.onaylayan,
     onayTarihi: now,
     redNedeni: options.redNedeni || '',
     guncellenme: now,
-  };
-  await saveDocument('micirStabilizeFisleri', updated);
+  });
   await saveDocument('guvenlikGelenEvraklar', {
     id: guvenlikEvrakId,
     durum: 'REDDEDILDI',
@@ -265,5 +297,12 @@ export async function rejectMicirFis(options: {
       guncellenme: now,
     });
   }
-  return updated;
+  return {
+    ...options.fis,
+    durum: 'REDDEDILDI',
+    onaylayanYonetici: options.onaylayan,
+    onayTarihi: now,
+    redNedeni: options.redNedeni || '',
+    guncellenme: now,
+  };
 }
