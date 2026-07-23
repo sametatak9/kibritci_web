@@ -9,7 +9,7 @@ import {
 import { formatPersonelMissingDocs } from './personelMissingDocs';
 import { createExcelWorkbook } from './exceljsLoader';
 
-export type PersonelExcelScope = 'taseron' | 'all';
+export type PersonelExcelScope = 'taseron' | 'all' | 'ana_firma' | 'custom';
 
 function isAktif(p: Personel): boolean {
   return p.durum === true || String(p.durum).toLowerCase() === 'true';
@@ -34,6 +34,10 @@ function sortByFirmaThenName(a: Personel, b: Personel): number {
   return `${a.ad} ${a.soyad}`.localeCompare(`${b.ad} ${b.soyad}`, 'tr');
 }
 
+function isAnaFirmaPersonel(p: Personel): boolean {
+  return !isTaseronPersonel(p);
+}
+
 /** Taşeron firma personeli. */
 export function collectTaseronPersoneller(
   personeller: Personel[],
@@ -55,32 +59,65 @@ export function collectTumFirmalarPersoneller(
     .sort(sortByFirmaThenName);
 }
 
+/** Yalnızca ana firma (Kibritçi İnşaat) personeli. */
+export function collectAnaFirmaPersoneller(
+  personeller: Personel[],
+  options?: { onlyActive?: boolean }
+): Personel[] {
+  return personeller
+    .filter((p) => isAnaFirmaPersonel(p))
+    .filter((p) => (options?.onlyActive ? isAktif(p) : true))
+    .sort(sortByFirmaThenName);
+}
+
 export async function exportPersonelExcel(options: {
   personeller: Personel[];
   scope?: PersonelExcelScope;
+  /** scope=custom iken doğrudan bu liste kullanılır */
+  rows?: Personel[];
+  title?: string;
+  sheetName?: string;
   onlyActive?: boolean;
   kampKayitlari?: KampKaydi[];
   kampOdalari?: KampOdasi[];
   fileNamePrefix?: string;
 }): Promise<number> {
   const scope: PersonelExcelScope = options.scope || 'taseron';
-  const rows =
-    scope === 'all'
-      ? collectTumFirmalarPersoneller(options.personeller, { onlyActive: options.onlyActive })
-      : collectTaseronPersoneller(options.personeller, { onlyActive: options.onlyActive });
+  let rows: Personel[];
+  if (scope === 'custom' && options.rows) {
+    rows = [...options.rows].sort(sortByFirmaThenName);
+  } else if (scope === 'all') {
+    rows = collectTumFirmalarPersoneller(options.personeller, { onlyActive: options.onlyActive });
+  } else if (scope === 'ana_firma') {
+    rows = collectAnaFirmaPersoneller(options.personeller, { onlyActive: options.onlyActive });
+  } else {
+    rows = collectTaseronPersoneller(options.personeller, { onlyActive: options.onlyActive });
+  }
 
   if (rows.length === 0) {
     throw new Error(
       scope === 'all'
         ? 'Dışa aktarılacak personel bulunamadı.'
-        : 'Dışa aktarılacak taşeron personeli bulunamadı.'
+        : scope === 'ana_firma'
+          ? 'Dışa aktarılacak ana firma personeli bulunamadı.'
+          : scope === 'custom'
+            ? 'Seçili filtrede dışa aktarılacak personel yok.'
+            : 'Dışa aktarılacak taşeron personeli bulunamadı.'
     );
   }
 
   const includeKamp = Boolean(options.kampKayitlari?.length || options.kampOdalari?.length);
   const workbook = await createExcelWorkbook();
   workbook.creator = 'Kibritçi ERP';
-  const sheetName = scope === 'all' ? 'Tüm Firmalar' : 'Taşeron Personel';
+  const sheetName =
+    options.sheetName ||
+    (scope === 'all'
+      ? 'Tüm Firmalar'
+      : scope === 'ana_firma'
+        ? 'Ana Firma'
+        : scope === 'custom'
+          ? 'Seçili Personel'
+          : 'Taşeron Personel');
   const sheet = workbook.addWorksheet(sheetName, {
     views: [{ state: 'frozen', ySplit: 3 }],
   });
@@ -89,9 +126,14 @@ export async function exportPersonelExcel(options: {
   sheet.mergeCells(1, 1, 1, colCount);
   const title = sheet.getCell(1, 1);
   title.value =
-    scope === 'all'
+    options.title ||
+    (scope === 'all'
       ? `${CANONICAL_ANA_FIRMA_ADI} — Tüm Firmalar Personel Listesi (Ana Firma Dahil)`
-      : `${CANONICAL_ANA_FIRMA_ADI} — Tüm Taşeron Firma Personeli`;
+      : scope === 'ana_firma'
+        ? `${CANONICAL_ANA_FIRMA_ADI} — Ana Firma Personel Listesi`
+        : scope === 'custom'
+          ? `${CANONICAL_ANA_FIRMA_ADI} — Seçili Firma Personel Listesi`
+          : `${CANONICAL_ANA_FIRMA_ADI} — Tüm Taşeron Firma Personeli`);
   title.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
   title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E4E78' } };
   title.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -195,7 +237,13 @@ export async function exportPersonelExcel(options: {
   const day = new Date().toISOString().slice(0, 10);
   const prefix =
     options.fileNamePrefix ||
-    (scope === 'all' ? 'Tum_Firmalar_Personel' : 'Taseron_Firma_Personel');
+    (scope === 'all'
+      ? 'Tum_Firmalar_Personel'
+      : scope === 'ana_firma'
+        ? 'Ana_Firma_Personel'
+        : scope === 'custom'
+          ? 'Secili_Firma_Personel'
+          : 'Taseron_Firma_Personel');
   const activeSuffix = options.onlyActive ? '_Aktif' : '';
   a.download = `${prefix}${activeSuffix}_${day}.xlsx`;
   a.click();
@@ -223,4 +271,36 @@ export async function exportTumFirmalarPersonelExcel(options: {
   fileNamePrefix?: string;
 }): Promise<number> {
   return exportPersonelExcel({ ...options, scope: 'all' });
+}
+
+/** Yalnızca ana firma personeli. */
+export async function exportAnaFirmaPersonelExcel(options: {
+  personeller: Personel[];
+  onlyActive?: boolean;
+  kampKayitlari?: KampKaydi[];
+  kampOdalari?: KampOdasi[];
+  fileNamePrefix?: string;
+}): Promise<number> {
+  return exportPersonelExcel({ ...options, scope: 'ana_firma' });
+}
+
+/** Ekrandaki seçili / filtrelenmiş listeyi Excel olarak indir. */
+export async function exportSeciliPersonelExcel(options: {
+  rows: Personel[];
+  title?: string;
+  fileNamePrefix?: string;
+  onlyActive?: boolean;
+  kampKayitlari?: KampKaydi[];
+  kampOdalari?: KampOdasi[];
+}): Promise<number> {
+  return exportPersonelExcel({
+    personeller: options.rows,
+    rows: options.rows,
+    scope: 'custom',
+    title: options.title,
+    fileNamePrefix: options.fileNamePrefix,
+    onlyActive: options.onlyActive,
+    kampKayitlari: options.kampKayitlari,
+    kampOdalari: options.kampOdalari,
+  });
 }
