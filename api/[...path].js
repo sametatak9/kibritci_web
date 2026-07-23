@@ -538,6 +538,73 @@ function registerApiRoutes(app2) {
   app2.get("/api/auth/claims-status", (_req, res) => {
     res.json({ adminConfigured: isFirebaseAdminConfigured() });
   });
+  const PUBLIC_SA_SHARE_COLLECTION = "publicSatinAlmaPaylasimlari";
+  function makePublicShareToken() {
+    return `po_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 14)}${Math.random().toString(36).slice(2, 10)}`;
+  }
+  function buildPublicShareUrl(req, token) {
+    const host = req.get?.("x-forwarded-host") || req.get?.("host") || req.headers.host || "kibritci-erp.onrender.com";
+    const proto = (req.get?.("x-forwarded-proto") || req.protocol || "https").split(",")[0].trim() || "https";
+    return `${proto}://${host}/?view_po=${encodeURIComponent(token)}`;
+  }
+  app2.post("/api/public/satin-alma-share", async (req, res) => {
+    if (!isFirebaseAdminConfigured()) {
+      return res.status(503).json({ error: "Firebase Admin yap\u0131land\u0131r\u0131lmam\u0131\u015F" });
+    }
+    try {
+      const idToken = await readBearerToken(req);
+      if (!idToken) return res.status(401).json({ error: "Authorization Bearer token gerekli" });
+      const decoded = await verifyIdToken(idToken);
+      const shareIn = req.body?.share || req.body || {};
+      const saId = String(shareIn.saId || "").trim();
+      if (!saId) return res.status(400).json({ error: "saId zorunlu" });
+      const token = makePublicShareToken();
+      const payload = {
+        kind: "satin_alma_po",
+        saDocId: String(shareIn.saDocId || ""),
+        saId,
+        tarih: String(shareIn.tarih || ""),
+        talepEden: String(shareIn.talepEden || ""),
+        cariFirma: String(shareIn.cariFirma || ""),
+        aciklama: String(shareIn.aciklama || ""),
+        onayDurumu: String(shareIn.onayDurumu || ""),
+        kalemler: Array.isArray(shareIn.kalemler) ? shareIn.kalemler : [],
+        eImzalar: Array.isArray(shareIn.eImzalar) ? shareIn.eImzalar : [],
+        createdAt: String(shareIn.createdAt || (/* @__PURE__ */ new Date()).toISOString()),
+        createdBy: decoded.email || shareIn.createdBy || null
+      };
+      const admin2 = getFirebaseAdmin();
+      await admin2.firestore().collection(PUBLIC_SA_SHARE_COLLECTION).doc(token).set(payload);
+      return res.json({
+        success: true,
+        token,
+        url: buildPublicShareUrl(req, token)
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Payla\u015F\u0131m olu\u015Fturulamad\u0131";
+      return res.status(500).json({ error: message });
+    }
+  });
+  app2.get("/api/public/satin-alma-share/:token", async (req, res) => {
+    if (!isFirebaseAdminConfigured()) {
+      return res.status(503).json({ error: "Firebase Admin yap\u0131land\u0131r\u0131lmam\u0131\u015F" });
+    }
+    try {
+      const token = String(req.params.token || "").trim();
+      if (!token || token.length < 8) {
+        return res.status(400).json({ error: "Ge\xE7ersiz payla\u015F\u0131m kodu" });
+      }
+      const admin2 = getFirebaseAdmin();
+      const snap = await admin2.firestore().collection(PUBLIC_SA_SHARE_COLLECTION).doc(token).get();
+      if (!snap.exists) {
+        return res.status(404).json({ error: "Payla\u015F\u0131m bulunamad\u0131" });
+      }
+      return res.json({ id: snap.id, ...snap.data() });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Payla\u015F\u0131m okunamad\u0131";
+      return res.status(500).json({ error: message });
+    }
+  });
   app2.post("/api/auth/founder-bootstrap", async (req, res) => {
     if (!isFirebaseAdminConfigured()) {
       return res.status(503).json({

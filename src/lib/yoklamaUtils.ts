@@ -208,7 +208,7 @@ export function isPersonelVisibleInMonth(
   return true;
 }
 
-/** Kayıtlı yoklama varsa hücreyi her zaman göster (harfiyen) */
+/** Kayıtlı yoklama varsa veya ay içinde aktifse hücreyi aktif kıl */
 export function isDayActiveForPersonel(
   p: Personel,
   year: number,
@@ -221,24 +221,21 @@ export function isDayActiveForPersonel(
   const dayData = personMap ? getYoklamaDay(personMap, year, month, day) : undefined;
   if (dayData?.durum && dayData.durum !== 'Girilmedi') return true;
 
-  // 2. İşe giriş tarihi kontrolü
+  // 2. İşe giriş tarihi kontrolü:
+  // Eğer işe giriş tarihi bulunulan aydan SONRAKİ bir aydaysa (ör. Gelecek ay işe girecekse) kapat.
+  // Ancak bulunulan ay veya önceki aylarda işe girmişse ayın TÜM günleri (1-31) açık ve girilebilir olmalıdır.
   const hireTarih = p.iseGirisTarihi || (p as any).girisTarihi;
   const hire = parseFlexibleDateParts(hireTarih);
   if (hire) {
     const hireY = hire.year;
     const hireM = hire.month;
-    const hireD = hire.day;
-    const currentDateVal = year * 10000 + month * 100 + day;
-    const hireDateVal = hireY * 10000 + hireM * 100 + hireD;
-    if (currentDateVal < hireDateVal) {
-      const sameMonth = hireY === year && hireM === month;
-      if (!sameMonth) {
-        return false;
-      }
+    if (hireY > year || (hireY === year && hireM > month)) {
+      return false;
     }
   }
 
-  // 3. İşten çıkış tarihi kontrolü
+  // 3. İşten çıkış tarihi kontrolü:
+  // Eğer işten çıkış verilmişse ve bulunulan gün çıkış tarihinden SONRAKİ bir günse kapat.
   const exitTarih = p.istenCikisTarihi || (p as any).cikisTarihi;
   const exit = parseFlexibleDateParts(exitTarih);
   if (exit) {
