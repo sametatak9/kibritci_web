@@ -167,7 +167,8 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
   const [yeniAd, setYeniAd] = useState('');
   const [yeniSoyad, setYeniSoyad] = useState('');
   const [yeniGorev, setYeniGorev] = useState('');
-  const [yeniKimlikFoto, setYeniKimlikFoto] = useState<string | null>(null);
+  const [yeniKimlikFotolar, setYeniKimlikFotolar] = useState<string[]>([]);
+  const MAX_KIMLIK_FOTO = 2;
   const [personelGirisListesi, setPersonelGirisListesi] = useState<any[]>([]);
 
   // 4. FAALİYET EDİT STATES
@@ -2201,55 +2202,75 @@ ${satirlar
                         />
                       </div>
 
-                      {/* ID Photo (Kimlik Fotoğrafı) Upload */}
+                      {/* ID Photo (Kimlik Fotoğrafı) Upload — 2 foto: Ön / Arka */}
                       <div className="space-y-1">
-                        <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">Kimlik Belgesi Fotoğrafı (Çek / Yükle)</label>
-                        
-                        <div className="flex items-center space-x-3">
-                          <label className="bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition w-24 h-20 shrink-0 text-slate-500 hover:text-slate-800">
-                            <Camera size={20} />
-                            <span className="text-[8px] font-bold mt-1 text-center leading-none">Kimlik Çek</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              capture="environment"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  const r = new FileReader();
-                                  r.onload = async (event) => {
-                                    if (event.target?.result) {
-                                      const rawBase64 = event.target.result as string;
-                                      const compressed = await compressImage(rawBase64);
-                                      setYeniKimlikFoto(compressed);
-                                    }
-                                  };
-                                  r.readAsDataURL(file);
-                                }
-                              }}
-                              className="hidden"
-                            />
-                          </label>
+                        <label className="font-bold text-slate-500 uppercase text-[8px] tracking-wider block">
+                          Kimlik Belgesi Fotoğrafları — Ön / Arka ({yeniKimlikFotolar.length}/{MAX_KIMLIK_FOTO})
+                        </label>
 
-                          <div className="flex-1 border border-slate-150 rounded-2xl bg-slate-50 h-20 relative flex items-center justify-center overflow-hidden">
-                            {yeniKimlikFoto ? (
-                              <>
-                                <img src={yeniKimlikFoto} alt="Kimlik Belgesi" className="w-full h-full object-cover" />
-                                <button
-                                  type="button"
-                                  onClick={() => setYeniKimlikFoto(null)}
-                                  className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 text-[8px] font-bold"
-                                >
-                                  ✕
-                                </button>
-                              </>
-                            ) : (
-                              <div className="text-center p-2 text-slate-400">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {yeniKimlikFotolar.length < MAX_KIMLIK_FOTO && (
+                            <label className="bg-slate-100 hover:bg-slate-200 border-2 border-dashed border-slate-300 rounded-2xl p-3 flex flex-col items-center justify-center cursor-pointer transition w-24 h-20 shrink-0 text-slate-500 hover:text-slate-800">
+                              <Camera size={20} />
+                              <span className="text-[8px] font-bold mt-1 text-center leading-none">
+                                {yeniKimlikFotolar.length === 0 ? 'Ön Yüz Çek' : 'Arka Yüz Çek'}
+                              </span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                multiple
+                                onChange={(e) => {
+                                  const files: File[] = e.target.files ? Array.from(e.target.files) : [];
+                                  if (files.length === 0) return;
+                                  const slots = MAX_KIMLIK_FOTO - yeniKimlikFotolar.length;
+                                  files.slice(0, slots).forEach((file) => {
+                                    const r = new FileReader();
+                                    r.onload = async (event) => {
+                                      if (event.target?.result) {
+                                        const rawBase64 = event.target.result as string;
+                                        const compressed = await compressImage(rawBase64);
+                                        setYeniKimlikFotolar((prev) =>
+                                          prev.length >= MAX_KIMLIK_FOTO ? prev : [...prev, compressed]
+                                        );
+                                      }
+                                    };
+                                    r.readAsDataURL(file);
+                                  });
+                                  e.target.value = '';
+                                }}
+                                className="hidden"
+                              />
+                            </label>
+                          )}
+
+                          {yeniKimlikFotolar.map((foto, idx) => (
+                            <div
+                              key={idx}
+                              className="w-24 h-20 border border-slate-150 rounded-2xl bg-slate-50 relative flex items-center justify-center overflow-hidden shrink-0"
+                            >
+                              <img src={foto} alt={idx === 0 ? 'Kimlik Ön' : 'Kimlik Arka'} className="w-full h-full object-cover" />
+                              <span className="absolute bottom-0.5 left-0.5 bg-black/60 text-white text-[7px] font-bold px-1 rounded">
+                                {idx === 0 ? 'ÖN' : 'ARKA'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setYeniKimlikFotolar((prev) => prev.filter((_, i) => i !== idx))}
+                                className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 text-[8px] font-bold"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+
+                          {yeniKimlikFotolar.length === 0 && (
+                            <div className="flex-1 min-w-[80px] border border-slate-150 rounded-2xl bg-slate-50 h-20 flex items-center justify-center text-center p-2 text-slate-400">
+                              <div>
                                 <ImageIcon size={14} className="mx-auto text-slate-300 mb-0.5" />
                                 <span className="text-[7.5px] block leading-none">Fotoğraf Çekilmedi</span>
                               </div>
-                            )}
-                          </div>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -2262,8 +2283,8 @@ ${satirlar
                           showStatus('error', 'Lütfen Adı, Soyadı ve Görevi alanlarını doldurunuz!');
                           return;
                         }
-                        if (!yeniKimlikFoto) {
-                          showStatus('error', 'Lütfen Personel Kimlik Fotoğrafını çekiniz veya yükleyiniz!');
+                        if (yeniKimlikFotolar.length === 0) {
+                          showStatus('error', 'Lütfen en az bir Kimlik Fotoğrafı (ön yüz) çekiniz veya yükleyiniz!');
                           return;
                         }
 
@@ -2274,7 +2295,8 @@ ${satirlar
                             ad: yeniAd,
                             soyad: yeniSoyad,
                             gorev: yeniGorev,
-                            kimlikFotoUrl: yeniKimlikFoto,
+                            kimlikFotoUrl: yeniKimlikFotolar[0],
+                            kimlikFotoUrls: yeniKimlikFotolar,
                             durum: 'BEKLEMEDE',
                             tarih: new Date().toISOString(),
                             gonderenFormen: currentUser?.email || 'Bilinmeyen Formen'
@@ -2291,7 +2313,7 @@ ${satirlar
                           setYeniAd('');
                           setYeniSoyad('');
                           setYeniGorev('');
-                          setYeniKimlikFoto(null);
+                          setYeniKimlikFotolar([]);
                           showStatus('success', '🎉 Giriş talebi başarıyla oluşturuldu! Muhasebe, İdari İşler ve Şantiye Şefi paneline iletildi.');
                         } catch (err) {
                           console.error(err);
