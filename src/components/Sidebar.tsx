@@ -58,8 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { key: "personel_kartlari", label: "Personel Detay Kartları", icon: Users },
         { key: "yoklama", label: "Yoklama ve Puantaj", icon: CalendarCheck2 },
         { key: "faaliyet_personel", label: "Faaliyeti Olan Personeller", icon: Camera },
-        { key: "maas", label: "Maaş Hesaplama", icon: CreditCard },
-        { key: "maas_odeme", label: "Maaş Ödeme", icon: Banknote },
+        { key: "maas", label: "Maaş Hesaplama & Ödeme", icon: CreditCard },
         { key: "personel_izin", label: "Personel İzin Formu", icon: FileText },
       ]
     },
@@ -72,7 +71,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { key: "fatura_giris", label: "Fatura Girişi", icon: CreditCard },
         { key: "taseron_kesinti", label: "Taşeron Yönetimi", icon: Wallet },
         { key: "cari_stok", label: "Cari ve Stok Kartları", icon: Package },
-        { key: "evrak_aktarimi", label: "AI Belge Aktarımı", icon: BookOpen },
         { key: "kibar_hakedis", label: "ZER YAPI Hakediş", icon: CreditCard },
       ]
     },
@@ -96,8 +94,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       group: "RAPOR VE İLETİŞİM",
       items: [
-        { key: "sohbet", label: "Sohbet & Haberleşme", icon: MessageSquare },
-        { key: "eposta", label: "E-Posta Merkezi", icon: Mail },
         { key: "onay_islemleri", label: "Onay Havuzu & İmzalar", icon: ShieldCheck },
       ]
     },
@@ -173,14 +169,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }
 
         if (item.key === 'onay_islemleri') {
-          return isYonetici;
-        }
-
-        if (item.key === 'evrak_aktarimi') {
-          return isYonetici;
-        }
-
-        if (item.key === 'maas_odeme') {
           return isYonetici;
         }
 

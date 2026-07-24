@@ -19,7 +19,7 @@ import { DashboardScreen } from './components/DashboardScreen';
 import { PersonelScreen } from './components/PersonelScreen';
 import { YoklamaScreen } from './components/YoklamaScreen';
 import { FaaliyetPersonelScreen } from './components/FaaliyetPersonelScreen';
-import { MaasScreen } from './components/MaasScreen';
+import { MaasMerkeziScreen } from './components/MaasMerkeziScreen';
 import { PersonelIzinScreen } from './components/PersonelIzinScreen';
 import { SatinAlmaScreen } from './components/SatinAlmaScreen';
 import { IrsaliyeGirisScreen } from './components/IrsaliyeGirisScreen';
@@ -31,7 +31,6 @@ import { KasaScreen } from './components/KasaScreen';
 import { IdariScreen } from './components/IdariScreen';
 import { CariStokScreen } from './components/CariStokScreen';
 import { OnayIslemleriScreen } from './components/OnayIslemleriScreen';
-import { SohbetScreen } from './components/SohbetScreen';
 import { FormenScreen } from './components/FormenScreen';
 import { queueArrayStateSync } from './lib/collectionSyncQueue';
 import { GuvenlikScreen } from './components/GuvenlikScreen';
@@ -42,7 +41,6 @@ import { LojistikScreen } from './components/LojistikScreen';
 import { ProfilScreen } from './components/ProfilScreen';
 import { DepocuScreen } from './components/DepocuScreen';
 import { ImalatTerminaliScreen } from './components/ImalatTerminaliScreen';
-import { EvrakAktarimiScreen } from './components/EvrakAktarimiScreen';
 import { MobileManagerScreen } from './components/MobileManagerScreen';
 import { KibarHakedisScreen } from './components/KibarHakedisScreen';
 import { SahaKolajScreen } from './components/SahaKolajScreen';
@@ -121,7 +119,6 @@ import { syncAuthClaimsFromServer } from './lib/authClaimsClient';
 import { LoginScreen } from './components/LoginScreen';
 import { YetkiVermeScreen } from './components/YetkiVermeScreen';
 import { OperatorScreen } from './components/OperatorScreen';
-import { MaasOdeScreen } from './components/MaasOdeScreen';
 import { PublicGirisKayitScreen } from './components/PublicGirisKayitScreen';
 import { PublicSatinAlmaShareScreen } from './components/PublicSatinAlmaShareScreen';
 import { fetchSatinAlmaPublicShare } from './lib/satinAlmaPublicShare';
@@ -162,6 +159,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>(() => {
     return readLastTab();
   });
+  const [maasSubTab, setMaasSubTab] = useState<'hesapla' | 'odeme'>('hesapla');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [signatureStyle, setSignatureStyle] = useState(() => localStorage.getItem('kibritci_sig_style') || 'cursive');
@@ -1987,7 +1985,8 @@ export default function App() {
       }
       return next;
     });
-    setActiveTab('maas_odeme');
+    setMaasSubTab('odeme');
+    setActiveTab('maas');
     alert(`Maaş hesap taslakları ${payload.month}. ay / ${payload.year} dönemi için Maaş Ödeme ekranına aktarıldı.`);
   };
 
@@ -2861,15 +2860,19 @@ export default function App() {
               )}
 
               {activeTab === "maas" && (
-                <MaasScreen 
-                  personeller={personeller} 
-                  yoklamalar={yoklamalar} 
+                <MaasMerkeziScreen
+                  subTab={maasSubTab}
+                  setSubTab={setMaasSubTab}
+                  isYonetici={isYonetici}
+                  personeller={personeller}
+                  yoklamalar={yoklamalar}
                   maasOdemeleri={maasOdemeleri}
+                  setMaasOdemeleri={setMaasOdemeleriWithSync}
+                  currentUser={currentUser}
                   initialMonth={payrollPeriod.month}
                   initialYear={payrollPeriod.year}
                   onPeriodChange={handlePayrollPeriodChange}
                   onSaveHesapTaslaklari={handleSaveMaasHesapTaslaklari}
-                  onOpenMaasOdeme={() => handleTabNavigation('maas_odeme')}
                 />
               )}
 
@@ -2996,8 +2999,8 @@ export default function App() {
                 />
               )}
 
-              {/* Combined Idari Panels: arac, kamp, saha, tutanak, eposta */}
-              {["arac", "kamp", "saha", "tutanak", "eposta"].includes(activeTab) && (
+              {/* Combined Idari Panels: arac, kamp, saha, tutanak */}
+              {["arac", "kamp", "saha", "tutanak"].includes(activeTab) && (
                 <IdariScreen 
                   currentSubTab={activeTab}
                   araclar={araclar}
@@ -3055,13 +3058,6 @@ export default function App() {
                   stokKartlar={stokKartlar}
                   setStokKartlar={setStokKartlarWithSync}
                   setStokIslemGecmisi={setStokIslemGecmisiWithSync}
-                />
-              )}
-
-              {activeTab === "sohbet" && (
-                <SohbetScreen 
-                  currentUser={currentUser}
-                  kullanicilar={kullanicilar}
                 />
               )}
 
@@ -3202,31 +3198,6 @@ export default function App() {
                 />
               )}
 
-              {activeTab === "evrak_aktarimi" && (
-                isYonetici ? (
-                  <EvrakAktarimiScreen
-                    cariKartlar={cariKartlar}
-                    setCariKartlar={setCariKartlarWithSync}
-                    stokKartlar={stokKartlar}
-                    setStokKartlar={setStokKartlarWithSync}
-                    setCariIslemGecmisi={setCariIslemGecmisiWithSync}
-                    faturalar={faturalar}
-                    currentUser={currentUser}
-                    setFaturalar={setFaturalarWithSync}
-                    setIrsaliyeler={setIrsaliyelerWithSync}
-                    setKasaHareketleri={setKasaHareketleriWithSync}
-                    yoklamalar={yoklamalar}
-                    setYoklamalar={setYoklamalarWithSync}
-                    sahaFaaliyetleri={sahaFaaliyetleri}
-                    setSahaFaaliyetleri={setSahaFaaliyetleriWithSync}
-                    personeller={personeller}
-                    saveYoklamalarNow={saveYoklamalarNow}
-                    saveSahaFaaliyetNow={saveSahaFaaliyetNow}
-                  />
-                ) : renderAccessDenied()
-              )}
-
-
               {activeTab === "yetki_verme" && (
                 isPrivilegedAdmin ? (
                   <YetkiVermeScreen 
@@ -3266,20 +3237,6 @@ export default function App() {
                 ) : renderAccessDenied()
               )}
 
-              {activeTab === "maas_odeme" && (
-                isYonetici ? (
-                  <MaasOdeScreen
-                    personeller={personeller}
-                    yoklamalar={yoklamalar}
-                    maasOdemeleri={maasOdemeleri}
-                    setMaasOdemeleri={setMaasOdemeleriWithSync}
-                    currentUser={currentUser}
-                    initialMonth={payrollPeriod.month}
-                    initialYear={payrollPeriod.year}
-                    onPeriodChange={handlePayrollPeriodChange}
-                  />
-                ) : renderAccessDenied()
-              )}
             </>
           )}
 
