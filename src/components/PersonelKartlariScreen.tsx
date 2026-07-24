@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { 
   Users, User, Phone, Mail, MapPin, Calendar, CreditCard, 
   Truck, Tent, Clock, ClipboardList, Sparkles, ChevronRight, Activity, FileSpreadsheet
@@ -31,6 +31,34 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
   const [selectedPersId, setSelectedPersId] = useState<string>(personeller[0]?.id || "");
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [firmaFilter, setFirmaFilter] = useState<string>('HEPSI');
+  const [durumFilter, setDurumFilter] = useState<'AKTIF' | 'HEPSI'>('AKTIF');
+
+  const isPersonelAktif = (p: Personel) => p.durum === true || String(p.durum) === 'true';
+  const getFirmaLabel = (p: Personel): string =>
+    p.firmaTipi === 'TASERON' ? (p.firmaAdi?.trim() || 'Taşeron (Diğer)') : 'Kibritçi İnşaat';
+
+  const firmaOptions = useMemo(() => {
+    const set = new Set<string>();
+    personeller.forEach((p) => set.add(getFirmaLabel(p)));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'tr'));
+  }, [personeller]);
+
+  const filteredPersoneller = useMemo(() => {
+    return personeller.filter((p) => {
+      if (durumFilter === 'AKTIF' && !isPersonelAktif(p)) return false;
+      if (firmaFilter !== 'HEPSI' && getFirmaLabel(p) !== firmaFilter) return false;
+      return true;
+    });
+  }, [personeller, durumFilter, firmaFilter]);
+
+  // Seçili personel filtre dışında kalırsa listenin ilkine geç
+  useEffect(() => {
+    if (!filteredPersoneller.some((p) => p.id === selectedPersId)) {
+      setSelectedPersId(filteredPersoneller[0]?.id || '');
+    }
+  }, [filteredPersoneller, selectedPersId]);
+
   const selectedPersonnel = personeller.find(p => p.id === selectedPersId);
 
   // Remaining receivables math
@@ -270,16 +298,39 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
         </div>
         
         {/* Dropdown selector */}
-        <div className="flex items-center space-x-2">
-          <span className="text-xs font-bold text-slate-500">Personel Seçin:</span>
+        <div className="flex items-center flex-wrap gap-2">
+          <select
+            value={firmaFilter}
+            onChange={(e) => setFirmaFilter(e.target.value)}
+            className="text-xs font-bold border border-[#e2e8f0] rounded-xl p-2.5 bg-slate-50 outline-none"
+            title="Firma filtresi"
+          >
+            <option value="HEPSI">🏢 Tüm Firmalar</option>
+            {firmaOptions.map((f) => (
+              <option key={f} value={f}>{f}</option>
+            ))}
+          </select>
+          <select
+            value={durumFilter}
+            onChange={(e) => setDurumFilter(e.target.value as 'AKTIF' | 'HEPSI')}
+            className="text-xs font-bold border border-[#e2e8f0] rounded-xl p-2.5 bg-slate-50 outline-none"
+            title="Durum filtresi"
+          >
+            <option value="AKTIF">Sadece Aktif</option>
+            <option value="HEPSI">Tümü</option>
+          </select>
           <select
             value={selectedPersId}
             onChange={(e) => setSelectedPersId(e.target.value)}
             className="text-xs font-bold border border-[#e2e8f0] rounded-xl p-2.5 bg-slate-50  outline-none"
           >
-            {personeller.map(p => (
-              <option key={p.id} value={p.id}>{p.ad} {p.soyad} ({p.gorev})</option>
-            ))}
+            {filteredPersoneller.length === 0 ? (
+              <option value="">Personel bulunamadı</option>
+            ) : (
+              filteredPersoneller.map(p => (
+                <option key={p.id} value={p.id}>{p.ad} {p.soyad} ({p.gorev})</option>
+              ))
+            )}
           </select>
           <select
             value={selectedMonth}
@@ -317,60 +368,27 @@ export const PersonelKartlariScreen: React.FC<PersonelKartlariScreenProps> = ({
           {/* LEFT 40%: General Info & Financials */}
           <div className="w-full lg:w-[400px] shrink-0 space-y-6">
             
-            {/* General Card Profile */}
-            <div className="bg-white border border-[#e2e8f0] rounded-2xl p-5 shadow-sm space-y-4 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-slate-900/5 rounded-full -mr-8 -mt-8"></div>
-              
-              <div className="flex items-center space-x-4">
-                <div className="w-14 h-14 bg-gradient-to-tr from-slate-100 to-slate-900 rounded-2xl flex items-center justify-center text-white text-lg font-black shadow-md border border-slate-800/20">
-                  {selectedPersonnel.ad[0]}{selectedPersonnel.soyad[0]}
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[9px] font-bold text-slate-800 uppercase tracking-widest bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
-                      {selectedPersonnel.gorev}
-                    </span>
-                    {selectedPersonnel.firmaTipi === 'TASERON' ? (
-                      <span className="text-[9px] font-bold text-purple-700 uppercase tracking-widest bg-purple-50 border border-purple-150 rounded px-1.5 py-0.5">
-                        Taşeron Personel
-                      </span>
-                    ) : (
-                      <span className="text-[9px] font-bold text-emerald-700 uppercase tracking-widest bg-emerald-50 border border-emerald-150 rounded px-1.5 py-0.5">
-                        Kibritçi İnşaat Personeli
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="font-display font-bold text-sm text-slate-900 mt-1">{selectedPersonnel.ad} {selectedPersonnel.soyad}</h3>
-                  {selectedPersonnel.firmaTipi === 'TASERON' && (
-                    <p className="text-[10px] font-semibold text-purple-700">
-                      Firma: {selectedPersonnel.firmaAdi || '-'}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="border-t border-slate-100 pt-3.5 space-y-2.5 text-xs text-slate-650 font-medium">
-                <div className="flex items-center space-x-2.5">
-                  <Phone size={14} className="text-slate-400" />
-                  <span>{selectedPersonnel.telefonNo || "Telefon Yok"}</span>
-                </div>
-                <div className="flex items-center space-x-2.5">
-                  <Mail size={14} className="text-slate-400" />
-                  <span>{selectedPersonnel.eposta || "E-posta Belirtilmemiş"}</span>
-                </div>
-                <div className="flex items-center space-x-2.5">
-                  <Calendar size={14} className="text-slate-400" />
-                  <span>Giriş: {selectedPersonnel.iseGirisTarihi}</span>
-                </div>
-                <div className="flex items-center space-x-2.5">
-                  <MapPin size={14} className="text-slate-400" />
-                  <span className="truncate">{selectedPersonnel.ilce} / {selectedPersonnel.il}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Kimlik kartı — mevcut profil kartının altına ek */}
+            {/* Kimlik kartı — tek personel kartı (tasarımsal tekrar kaldırıldı) */}
             <PersonelIdCard personel={selectedPersonnel} />
+
+            {/* İletişim & ek detaylar (kimlik kartında olmayan alanlar) */}
+            <div className="bg-white border border-[#e2e8f0] rounded-2xl p-4 shadow-sm space-y-2.5 text-xs text-slate-650 font-medium">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">📇 İletişim &amp; Detay</h4>
+              <div className="flex items-center space-x-2.5">
+                <Mail size={14} className="text-slate-400 shrink-0" />
+                <span className="truncate">{selectedPersonnel.eposta || "E-posta Belirtilmemiş"}</span>
+              </div>
+              <div className="flex items-center space-x-2.5">
+                <MapPin size={14} className="text-slate-400 shrink-0" />
+                <span className="truncate">{[selectedPersonnel.ilce, selectedPersonnel.il].filter(Boolean).join(' / ') || 'Adres yok'}</span>
+              </div>
+              {selectedPersonnel.istenCikisTarihi && (
+                <div className="flex items-center space-x-2.5">
+                  <Calendar size={14} className="text-rose-400 shrink-0" />
+                  <span className="text-rose-600">İşten Çıkış: {selectedPersonnel.istenCikisTarihi}</span>
+                </div>
+              )}
+            </div>
 
             {/* Financial Card Info */}
             {(() => {
