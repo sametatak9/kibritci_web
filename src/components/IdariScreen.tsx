@@ -1566,19 +1566,38 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
             </div>
           )}
 
-          {getSahaFaaliyetFotoUrl(sf) && (
-            <div className="mt-3 space-y-1">
-              <span className="text-[9px] font-bold text-slate-400 block uppercase">📷 İMALAT SAHA FOTOĞRAFI:</span>
-              <div className="relative border rounded-xl overflow-hidden max-w-sm max-h-48 bg-slate-50">
-                <img
-                  src={getSahaFaaliyetFotoUrl(sf)}
-                  alt="Saha İmalat Görseli"
-                  referrerPolicy="no-referrer"
-                  className="max-h-48 max-w-full object-contain"
-                />
+          {(() => {
+            const fotolar = getFaaliyetFotolar(sf);
+            if (fotolar.length === 0) return null;
+            return (
+              <div className="mt-3 space-y-1">
+                <span className="text-[9px] font-bold text-slate-400 block uppercase">
+                  📷 İMALAT SAHA FOTOĞRAFI ({fotolar.length}) — büyütmek için tıklayın
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {fotolar.map((url, i) => (
+                    <button
+                      key={`${sf.id}-foto-${i}`}
+                      type="button"
+                      onClick={() => setExpandedFoto(url)}
+                      className="relative border rounded-xl overflow-hidden bg-slate-50 w-28 h-28 cursor-zoom-in hover:ring-2 hover:ring-[#2563EB] transition group"
+                      title="Büyütmek için tıklayın"
+                    >
+                      <img
+                        src={url}
+                        alt={`Saha İmalat Görseli ${i + 1}`}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover"
+                      />
+                      <span className="absolute bottom-0.5 right-0.5 bg-black/60 text-white rounded p-0.5 opacity-80 group-hover:opacity-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6"/><path d="M8 11h6"/></svg>
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           <div className="flex justify-end gap-2 pt-2 border-t mt-3 text-[10px]">
             <button
