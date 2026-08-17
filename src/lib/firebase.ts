@@ -373,6 +373,10 @@ function leanPersonelSyncPayload<T extends { id: string }>(item: T, oldItem?: T)
   for (const key of PERSONEL_MEDIA_KEYS) {
     const nextVal = String(out[key] || '');
     const prevVal = String(prev[key] || '');
+    if (nextVal === '__media_cache__') {
+      delete out[key];
+      continue;
+    }
     if (!nextVal.startsWith('data:') || nextVal.length <= MAX_PERSONEL_SYNC_INLINE) continue;
     if (!oldItem || nextVal === prevVal) {
       delete out[key];

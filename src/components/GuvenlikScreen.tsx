@@ -10,6 +10,7 @@ import EvrakDuvariPanel, {
 } from './EvrakDuvariPanel';
 import { Personel, Irsaliye, IrsaliyeItem, Fatura, MicirStabilizeFis, CariKart, StokKart, SatinAlmaTalebi } from '../types/erp';
 import { db, cleanUndefined, ensureFirestoreAuth, withTimeout, saveDocument } from '../lib/firebase';
+import { personelFotoSrc } from '../lib/personelMediaCache';
 import { compressImage } from '../lib/imageCompress';
 import { fetchApiJson } from '../lib/apiClient';
 import { collection, doc, setDoc, onSnapshot, addDoc, getDocs, deleteDoc, updateDoc, getDoc } from 'firebase/firestore';
@@ -4501,8 +4502,8 @@ export const GuvenlikScreen: React.FC<GuvenlikScreenProps> = ({
                         }`}
                       >
                         <div className="flex items-start space-x-2.5">
-                          {item.fotografUrl ? (
-                            <img src={item.fotografUrl} alt={item.ad} className="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0" />
+                          {personelFotoSrc(item) ? (
+                            <img src={personelFotoSrc(item)} alt={item.ad} className="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0" />
                           ) : (
                             <div className={`w-10 h-10 rounded-xl border flex items-center justify-center font-bold shrink-0 text-xs ${
                               taseron ? 'bg-amber-100 border-amber-200 text-amber-700' : 'bg-white border-slate-200 text-slate-500'

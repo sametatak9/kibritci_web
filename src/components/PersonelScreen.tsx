@@ -4,6 +4,7 @@ import { CariKart, CariKartIslem, KampKaydi, KampOdasi, Personel, SahaFaaliyeti,
 import { fetchApiJson } from '../lib/apiClient';
 import { compressImage } from '../lib/imageCompress';
 import { saveDocument } from '../lib/firebase';
+import { personelFotoSrc } from '../lib/personelMediaCache';
 import { kibritciLogoHtml } from '../lib/kibritciBrand';
 import { findNearDuplicateCariNames, normalizeCardName } from '../lib/duplicateNameUtils';
 import { normalizeTurkishName } from '../lib/yoklamaUtils';
@@ -70,6 +71,10 @@ function leanPersonelForFirestore(personel: Personel, prev?: Personel): Personel
   const stripIfHugeUnchanged = (key: 'fotografUrl' | 'sigortaEvrakUrl') => {
     const nextVal = String(out[key] || '');
     const prevVal = String(prev?.[key] || '');
+    if (nextVal === '__media_cache__') {
+      delete out[key];
+      return;
+    }
     if (!nextVal.startsWith('data:')) return;
     if (nextVal.length <= MAX_PERSONEL_INLINE_MEDIA) return;
     if (!prev || nextVal === prevVal) {
@@ -2672,9 +2677,9 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0">
-                      {p.fotografUrl || (p as Personel & { fotograf_url?: string }).fotograf_url ? (
+                      {personelFotoSrc(p) ? (
                         <img
-                          src={p.fotografUrl || (p as Personel & { fotograf_url?: string }).fotograf_url}
+                          src={personelFotoSrc(p)}
                           alt=""
                           className="w-full h-full object-cover"
                         />
