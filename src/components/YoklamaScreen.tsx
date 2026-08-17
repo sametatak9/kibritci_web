@@ -1214,8 +1214,8 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
       return;
     }
     const etiket = resolvedOvertimeEtiket();
-    if (overtimeEtiket === '__CUSTOM__' && !etiket) {
-      alert('Özel meslek grubu yazın veya listeden bir etiket seçin.');
+    if (!etiket) {
+      alert('Listeden bir meslek grubu seçin veya «Yeni etiket yaz» ile girin.');
       return;
     }
 
@@ -1242,17 +1242,16 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
         if (!dayData || dayData.durum === 'Girilmedi') continue;
         updated[pid] = setYoklamaDay(updated[pid], selectedYear, selectedMonth, overtimeDay, {
           ...dayData,
-          isEtiketi: etiket || undefined,
+          isEtiketi: etiket,
         });
       }
       return updated;
     });
 
-    const label = etiket || 'etiket kaldırıldı';
-    alert(`${overtimeDay}. gün yoklamasına ${eligibleIds.length} kişi için «${label}» işlendi. Kaydet ile veritabanına gönderin.`);
-    if (etiket) rememberEtiket(etiket);
+    alert(`${overtimeDay}. gün yoklamasına ${eligibleIds.length} kişi için «${etiket}» işlendi. Kaydet ile veritabanına gönderin.`);
+    rememberEtiket(etiket);
     if (addNotification) {
-      addNotification(`${overtimeDay}. gün yoklaması meslek grubu: ${label} (${eligibleIds.length} kişi).`);
+      addNotification(`${overtimeDay}. gün yoklaması meslek grubu: ${etiket} (${eligibleIds.length} kişi).`);
     }
   };
 
@@ -1974,7 +1973,9 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
                 onChange={(e) => setOvertimeEtiket(e.target.value)}
                 className="text-[11px] font-bold bg-white border border-slate-200 rounded p-1 max-w-[220px]"
               >
-                <option value="">— Etiket yok / kaldır —</option>
+                <option value="" disabled>
+                  Meslek seçin
+                </option>
                 {etiketKatalogu.map((etiket) => (
                   <option key={etiket} value={etiket}>
                     {etiket}

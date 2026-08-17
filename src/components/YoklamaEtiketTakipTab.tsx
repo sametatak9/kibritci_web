@@ -208,8 +208,8 @@ export const YoklamaEtiketTakipTab: React.FC<{
       bulkMeslek === '__CUSTOM__'
         ? normalizeYoklamaEtiketi(bulkMeslekYazi)
         : normalizeYoklamaEtiketi(bulkMeslek);
-    if (bulkMeslek === '__CUSTOM__' && !etiket) {
-      alert('Yeni meslek grubu yazın.');
+    if (!etiket) {
+      alert('Listeden bir meslek grubu seçin veya yeni etiket yazın.');
       return;
     }
     const targets = gorunen.filter((p) => dayOf(p).durum === 'Geldi');
@@ -420,7 +420,9 @@ export const YoklamaEtiketTakipTab: React.FC<{
             onChange={(e) => setBulkMeslek(e.target.value)}
             className="text-[11px] font-bold bg-white border border-slate-200 rounded-lg p-1.5 max-w-[200px]"
           >
-            <option value="">— Etiket yok / kaldır —</option>
+            <option value="" disabled>
+              Meslek seçin
+            </option>
             {etiketKatalogu.map((item) => (
               <option key={item} value={item}>
                 {item}

@@ -164,6 +164,20 @@ export async function fetchYoklamaMonthShards(
   return merged;
 }
 
+async function persistNearbyMonthShards(map: AylikYoklamaMap): Promise<string[]> {
+  const near = new Set(surroundingYearMonths(new Date(), 1));
+  const months = listYoklamaYearMonths(map).filter((ym) => near.has(ym));
+  const targets = months.length > 0 ? months : [...near];
+  const written: string[] = [];
+  for (const ym of targets) {
+    const slice = sliceYoklamaMapToYearMonth(map, ym);
+    if (Object.keys(slice).length === 0) continue;
+    await writeMonthShard(ym, slice);
+    written.push(ym);
+  }
+  return written;
+}
+
 async function writeMonthShard(yearMonth: string, slice: AylikYoklamaMap): Promise<void> {
   if (Object.keys(slice).length === 0) return;
   const docRef = doc(db, 'yoklamalar', yoklamaMonthDocId(yearMonth));
@@ -542,10 +556,28 @@ export async function persistYoklamaDocument(
   }
 
   try {
-    await writeYoklamaMap(payload);
-    // Ay shard'ları — sonraki PC yüklemeleri mega-belgeye muhtaç kalmasın
+    let shardMonths: string[] = [];
+    try {
+      shardMonths = await persistNearbyMonthShards(payload);
+    } catch (shardErr) {
+      console.warn('[yoklama] ay belgesi yazımı kısmi:', shardErr);
+    }
+
+    try {
+      await writeYoklamaMap(payload);
+    } catch (megaErr) {
+      if (shardMonths.length === 0) {
+        const msg = formatFirestoreWriteError(megaErr, 'Yoklama yazılamadı');
+        return { ok: false, error: `Yoklama yazılamadı: ${msg}` };
+      }
+      console.warn(
+        '[yoklama] mega-belge yazılamadı; etiketler ay belgesine kaydedildi',
+        shardMonths,
+        megaErr
+      );
+    }
+
     scheduleYoklamaMonthShardSync(payload);
-    // Arşiv kritik yolda bekletmesin (timeout zincirini kısaltır)
     if (remoteNonEmpty) {
       void archiveYoklamaSnapshot(remote, kaynak, 'Kayıt sonrası otomatik yedek').catch((e) =>
         console.warn('Yoklama arşivi atlandı:', e)
