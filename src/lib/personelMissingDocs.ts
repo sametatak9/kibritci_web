@@ -1,5 +1,6 @@
 import { Personel } from '../types/erp';
 import { isTaseronPersonel } from './yoklamaUtils';
+import { personelFotoSrc } from './personelMediaCache';
 
 /** Personelde eksik görülen temel alanlar — salt uyarı, kayıt engellemez. */
 export type PersonelMissingField =
@@ -13,8 +14,7 @@ export type PersonelMissingField =
   | 'MYK';
 
 function hasPhoto(p: Personel): boolean {
-  const anyP = p as Personel & { fotograf_url?: string };
-  return Boolean(String(p.fotografUrl || anyP.fotograf_url || '').trim());
+  return Boolean(personelFotoSrc(p));
 }
 
 /** TC numarasının geçerli format olup olmadığını kontrol et (11 haneli, sıfırla başlamayan) */

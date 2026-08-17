@@ -133,7 +133,7 @@ export const DashboardGunlukYoklamaGorev: React.FC<Props> = ({
       </div>
       {personeller.length === 0 && (
         <p className="mb-3 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          Kadro henüz yüklenmedi. Bu sıfırlar silinme anlamına gelmez — Personel ve Yoklama sekmelerini açın veya sayfayı yenileyin.
+          Kadro yükleniyor. Sıfırlar silinme anlamına gelmez — personel listesi gelince yoklama sayıları dolacak.
         </p>
       )}
 

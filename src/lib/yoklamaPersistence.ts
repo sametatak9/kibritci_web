@@ -5,13 +5,14 @@ import {
   getDocFromServer,
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
   setDoc,
   deleteDoc,
 } from 'firebase/firestore';
 import { AylikYoklamaMap } from '../types/erp';
-import { db, cleanUndefined, withTimeout } from './firebase';
+import { auth, db, cleanUndefined, withTimeout } from './firebase';
 import { formatFirestoreWriteError } from './authWriteGuard';
 import {
   countYoklamaDateKeys,
@@ -30,7 +31,10 @@ const MAX_ARCHIVES = 80;
 export const YOKLAMA_SERVER_READ_TIMEOUT_MS = 90_000;
 export const YOKLAMA_CACHE_READ_TIMEOUT_MS = 35_000;
 export const YOKLAMA_WRITE_TIMEOUT_MS = 60_000;
-export const YOKLAMA_MONTH_READ_TIMEOUT_MS = 20_000;
+export const YOKLAMA_MONTH_READ_TIMEOUT_MS = 12_000;
+export const YOKLAMA_MEGA_CACHE_QUICK_MS = 8_000;
+const YOKLAMA_MONTH_CACHE_PREFIX = 'kibritci_yoklama_ay_v1_';
+const YOKLAMA_MONTH_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 /** Arşiv budama en fazla bu kadar saniyede bir çalışır (her kayıtta tam tarama yok) */
 const ARCHIVE_PRUNE_MIN_INTERVAL_MS = 10 * 60 * 1000;
 
@@ -127,7 +131,7 @@ function countFilledInYearMonths(map: AylikYoklamaMap, yearMonths: string[]): nu
   return total;
 }
 
-function surroundingYearMonths(center = new Date(), radius = 2): string[] {
+export function nearbyYoklamaYearMonths(center = new Date(), radius = 2): string[] {
   const out: string[] = [];
   const y = center.getFullYear();
   const m = center.getMonth(); // 0-based
@@ -138,15 +142,98 @@ function surroundingYearMonths(center = new Date(), radius = 2): string[] {
   return out;
 }
 
-async function fetchMonthShard(yearMonth: string): Promise<AylikYoklamaMap> {
-  const docRef = doc(db, 'yoklamalar', yoklamaMonthDocId(yearMonth));
+function surroundingYearMonths(center = new Date(), radius = 2): string[] {
+  return nearbyYoklamaYearMonths(center, radius);
+}
+
+export function readCachedYoklamaMonth(yearMonth: string): AylikYoklamaMap {
+  if (typeof localStorage === 'undefined' || !yearMonth) return {};
   try {
-    const snap = await withTimeout(getDoc(docRef), YOKLAMA_MONTH_READ_TIMEOUT_MS);
-    if (!snap.exists()) return {};
-    return parseYoklamaDataJson(snap.data() as Record<string, unknown>);
+    const raw = localStorage.getItem(`${YOKLAMA_MONTH_CACHE_PREFIX}${yearMonth}`);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as { savedAt?: number; map?: AylikYoklamaMap };
+    if (!parsed?.map || typeof parsed.map !== 'object') return {};
+    if (Date.now() - Number(parsed.savedAt || 0) > YOKLAMA_MONTH_CACHE_MAX_AGE_MS) return {};
+    return parsed.map;
   } catch {
     return {};
   }
+}
+
+export function readCachedYoklamaMonths(yearMonths: string[]): AylikYoklamaMap {
+  let merged: AylikYoklamaMap = {};
+  for (const ym of yearMonths) {
+    const part = readCachedYoklamaMonth(ym);
+    if (Object.keys(part).length === 0) continue;
+    merged = mergeYoklamaMaps(merged, part) as AylikYoklamaMap;
+  }
+  return merged;
+}
+
+export function writeCachedYoklamaMonth(yearMonth: string, map: AylikYoklamaMap): void {
+  if (typeof localStorage === 'undefined' || !yearMonth) return;
+  const slice = sliceYoklamaMapToYearMonth(map, yearMonth);
+  if (countYoklamaFilledDays(slice) < 1) return;
+  try {
+    localStorage.setItem(
+      `${YOKLAMA_MONTH_CACHE_PREFIX}${yearMonth}`,
+      JSON.stringify({ savedAt: Date.now(), map: slice })
+    );
+  } catch {
+    try {
+      localStorage.removeItem(`${YOKLAMA_MONTH_CACHE_PREFIX}${yearMonth}`);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+export function cacheYoklamaMonthsFromMap(map: AylikYoklamaMap, yearMonths?: string[]): void {
+  const months = yearMonths?.length ? yearMonths : listYoklamaYearMonths(map);
+  for (const ym of months) writeCachedYoklamaMonth(ym, map);
+}
+
+async function fetchMonthShardFromApi(yearMonth: string): Promise<AylikYoklamaMap> {
+  const user = auth.currentUser;
+  if (!user || user.isAnonymous) return {};
+  try {
+    const token = await user.getIdToken();
+    const res = await fetch(`/api/yoklama-ay/${encodeURIComponent(yearMonth)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return {};
+    const json = (await res.json()) as { map?: AylikYoklamaMap };
+    if (!json.map || typeof json.map !== 'object') return {};
+    return json.map;
+  } catch {
+    return {};
+  }
+}
+
+async function fetchMonthShard(yearMonth: string): Promise<AylikYoklamaMap> {
+  const cached = readCachedYoklamaMonth(yearMonth);
+  const [apiMap, docMap] = await Promise.all([
+    fetchMonthShardFromApi(yearMonth),
+    (async () => {
+      const docRef = doc(db, 'yoklamalar', yoklamaMonthDocId(yearMonth));
+      try {
+        const snap = await withTimeout(() => getDoc(docRef), YOKLAMA_MONTH_READ_TIMEOUT_MS, 0);
+        if (!snap.exists()) return {} as AylikYoklamaMap;
+        return parseYoklamaDataJson(snap.data() as Record<string, unknown>);
+      } catch {
+        return {} as AylikYoklamaMap;
+      }
+    })(),
+  ]);
+  let merged = cached;
+  for (const part of [docMap, apiMap]) {
+    if (Object.keys(part).length === 0) continue;
+    merged = mergeYoklamaMaps(merged, part) as AylikYoklamaMap;
+  }
+  if (countYoklamaFilledDays(merged) > 0) {
+    writeCachedYoklamaMonth(yearMonth, merged);
+  }
+  return merged;
 }
 
 /** Küçük ay belgelerini paralel oku — PC timeout'ta ana belgeye gerek kalmaz */
@@ -162,6 +249,30 @@ export async function fetchYoklamaMonthShards(
     merged = mergeYoklamaMaps(merged, part) as AylikYoklamaMap;
   }
   return merged;
+}
+
+/** Yakın ay belgelerini canlı dinle — mega-belgeyi açılışta indirmez. */
+export function subscribeYoklamaMonthShards(
+  yearMonths: string[],
+  onData: (map: AylikYoklamaMap, yearMonth: string) => void
+): () => void {
+  const unique = [...new Set(yearMonths.filter(Boolean))];
+  const unsubs = unique.map((ym) =>
+    onSnapshot(
+      doc(db, 'yoklamalar', yoklamaMonthDocId(ym)),
+      (snap) => {
+        if (!snap.exists()) return;
+        const map = parseYoklamaDataJson(snap.data() as Record<string, unknown>);
+        if (Object.keys(map).length === 0) return;
+        writeCachedYoklamaMonth(ym, map);
+        onData(map, ym);
+      },
+      (err) => {
+        console.warn('[yoklama] ay shard dinleme hatası', ym, err);
+      }
+    )
+  );
+  return () => unsubs.forEach((u) => u());
 }
 
 async function writeMonthShard(yearMonth: string, slice: AylikYoklamaMap): Promise<void> {
@@ -252,8 +363,8 @@ export async function fetchYoklamaMapFromServerWithRetry(retries = 3): Promise<{
 }
 
 /**
- * PC dostu yükleme: önce cache (getDoc), sonra ay shard'ları, en son mega-belge sunucu.
- * Zaman aşımında boş dönmek yerine eldeki en dolu haritayı verir.
+ * PC dostu yükleme: önce ay shard + yerel özet, mega-belge yalnızca gerekirse.
+ * Mega-belge cache okuması UI'yi 35sn bekletmesin diye kısa timeout kullanır.
  */
 export async function fetchYoklamaMapPreferFast(opts?: {
   yearMonths?: string[];
@@ -268,30 +379,12 @@ export async function fetchYoklamaMapPreferFast(opts?: {
     : surroundingYearMonths(new Date(), 2);
   const allowServerForce = opts?.allowServerForce !== false;
 
-  let best: AylikYoklamaMap = {};
-  let bestFilled = 0;
+  let best: AylikYoklamaMap = readCachedYoklamaMonths(yearMonths);
+  let bestFilled = countYoklamaFilledDays(best);
   let dataJson: string | null = null;
-  let source: 'cache' | 'month_shards' | 'server' | 'merged' = 'cache';
+  let source: 'cache' | 'month_shards' | 'server' | 'merged' = bestFilled > 0 ? 'cache' : 'month_shards';
 
-  // 1) Cache / local — PC'de IndexedDB çoğu zaman dolu; getDocFromServer'a gerek yok
-  try {
-    const cached = await fetchYoklamaMapWithRetry(2);
-    const filled = countYoklamaFilledDays(cached);
-    if (filled > bestFilled) {
-      best = cached;
-      bestFilled = filled;
-      source = 'cache';
-      try {
-        dataJson = JSON.stringify(cached);
-      } catch {
-        dataJson = null;
-      }
-    }
-  } catch (err) {
-    console.warn('[yoklama] cache okuma başarısız:', err);
-  }
-
-  // 2) Ay shard'ları (küçük belgeler — timeout riski düşük)
+  // 1) Küçük ay belgeleri + API — mega-belgeyi bekletmeden
   try {
     const shards = await fetchYoklamaMonthShards(yearMonths);
     const shardFilled = countYoklamaFilledDays(shards);
@@ -310,12 +403,61 @@ export async function fetchYoklamaMapPreferFast(opts?: {
     console.warn('[yoklama] ay shard okuma atlandı:', err);
   }
 
-  // 3) Genel cache dolu ama istenen aylar boşsa (PC’de sık: eski aylar var, Temmuz yok)
-  //    veya cache zayıfsa → sunucu. Timeout olursa eldeki cache ile devam (throw yok).
   const requestedFilled = countFilledInYearMonths(best, yearMonths);
+  const shardsGoodEnough = requestedFilled >= 5 || (bestFilled >= 30 && requestedFilled > 0);
+
+  // 2) İstenen aylar dolduysa mega-belgeyi UI yolundan çıkar (arka plan)
+  if (shardsGoodEnough) {
+    cacheYoklamaMonthsFromMap(best, yearMonths);
+    try {
+      dataJson = JSON.stringify(best);
+    } catch {
+      dataJson = null;
+    }
+    if (allowServerForce) {
+      void fetchYoklamaMapFromServer()
+        .then((server) => {
+          scheduleYoklamaMonthShardSync(server.map);
+          cacheYoklamaMonthsFromMap(server.map, yearMonths);
+        })
+        .catch(() => undefined);
+    }
+    if (bestFilled >= 30) {
+      scheduleYoklamaMonthShardSync(best);
+    }
+    return { map: best, dataJson, source };
+  }
+
+  // 3) Shard zayıfsa kısa timeout ile cache mega-belge
+  try {
+    const cached = await withTimeout(
+      () => getDoc(doc(db, 'yoklamalar', YOKLAMA_DOC_ID)),
+      YOKLAMA_MEGA_CACHE_QUICK_MS,
+      0
+    );
+    if (cached.exists()) {
+      const map = parseYoklamaDataJson(cached.data() as Record<string, unknown>);
+      const filled = countYoklamaFilledDays(map);
+      if (filled > bestFilled) {
+        best = bestFilled > 0 ? (mergeYoklamaMaps(best, map) as AylikYoklamaMap) : map;
+        bestFilled = countYoklamaFilledDays(best);
+        source = bestFilled > filled ? 'merged' : 'cache';
+        const raw = cached.data() as Record<string, unknown>;
+        dataJson = typeof raw.dataJson === 'string' ? raw.dataJson : JSON.stringify(best);
+      } else if (filled > 0 && bestFilled > 0) {
+        best = mergeYoklamaMaps(best, map) as AylikYoklamaMap;
+        bestFilled = countYoklamaFilledDays(best);
+        source = 'merged';
+      }
+    }
+  } catch (err) {
+    console.warn('[yoklama] mega-belge cache hızlı okuma atlandı:', err);
+  }
+
+  const requestedAfterCache = countFilledInYearMonths(best, yearMonths);
   const needServer =
     allowServerForce &&
-    (bestFilled < 30 || !hasSubstantialYoklamaData(best) || requestedFilled < 5);
+    (bestFilled < 30 || !hasSubstantialYoklamaData(best) || requestedAfterCache < 5);
 
   if (needServer) {
     try {
@@ -341,18 +483,12 @@ export async function fetchYoklamaMapPreferFast(opts?: {
             );
       }
     }
-  } else if (allowServerForce && bestFilled >= 30) {
-    // Arka plan sessiz yenileme — UI’yi bekletmez / toast atmaz
-    void fetchYoklamaMapFromServer()
-      .then((server) => {
-        scheduleYoklamaMonthShardSync(server.map);
-      })
-      .catch(() => undefined);
   }
 
   if (bestFilled >= 30) {
     scheduleYoklamaMonthShardSync(best);
   }
+  cacheYoklamaMonthsFromMap(best, yearMonths);
 
   return { map: best, dataJson, source };
 }
@@ -543,6 +679,7 @@ export async function persistYoklamaDocument(
 
   try {
     await writeYoklamaMap(payload);
+    cacheYoklamaMonthsFromMap(payload);
     // Ay shard'ları — sonraki PC yüklemeleri mega-belgeye muhtaç kalmasın
     scheduleYoklamaMonthShardSync(payload);
     // Arşiv kritik yolda bekletmesin (timeout zincirini kısaltır)

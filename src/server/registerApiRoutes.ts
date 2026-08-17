@@ -574,6 +574,123 @@ app.post('/api/auth/admin/bootstrap-all-claims', async (req, res) => {
   }
 });
 
+function canReadErpFastLoad(decoded: { email?: string; firebase?: { sign_in_provider?: string } }): boolean {
+  const email = String(decoded.email || '').trim();
+  const provider = String(decoded.firebase?.sign_in_provider || '');
+  return Boolean(email) && provider !== 'anonymous';
+}
+
+/** Foto/PDF'siz kadro özeti — yoklama ve personel listesini açılışta hızlandırır. */
+app.get('/api/personel-ozet', async (req, res) => {
+  if (!isFirebaseAdminConfigured()) {
+    return res.status(503).json({ error: 'Firebase Admin yapılandırılmamış' });
+  }
+  try {
+    const idToken = await readBearerToken(req);
+    if (!idToken) return res.status(401).json({ error: 'Authorization Bearer token gerekli' });
+    const decoded = await verifyIdToken(idToken);
+    if (!canReadErpFastLoad(decoded)) {
+      return res.status(403).json({ error: 'ERP oturumu gerekli' });
+    }
+
+    const { PERSONEL_LEAN_FIELDS, toLeanPersonelRecord } = await import('../lib/personelLeanFields');
+    const admin = getFirebaseAdmin();
+    const snap = await admin
+      .firestore()
+      .collection('personeller')
+      .select(...PERSONEL_LEAN_FIELDS)
+      .get();
+    const personeller = snap.docs.map((d) =>
+      toLeanPersonelRecord(d.id, (d.data() || {}) as Record<string, unknown>)
+    );
+    return res.json({
+      success: true,
+      count: personeller.length,
+      personeller,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Personel özeti okunamadı';
+    console.error('[personel-ozet]', err);
+    return res.status(500).json({ error: message });
+  }
+});
+
+/** Tek ay yoklama haritası — mega-belge yerine küçük ay belgesi. */
+app.get('/api/yoklama-ay/:yearMonth', async (req, res) => {
+  if (!isFirebaseAdminConfigured()) {
+    return res.status(503).json({ error: 'Firebase Admin yapılandırılmamış' });
+  }
+  try {
+    const idToken = await readBearerToken(req);
+    if (!idToken) return res.status(401).json({ error: 'Authorization Bearer token gerekli' });
+    const decoded = await verifyIdToken(idToken);
+    if (!canReadErpFastLoad(decoded)) {
+      return res.status(403).json({ error: 'ERP oturumu gerekli' });
+    }
+
+    const yearMonth = String(req.params.yearMonth || '').trim();
+    if (!/^\d{4}-\d{2}$/.test(yearMonth)) {
+      return res.status(400).json({ error: 'yearMonth YYYY-MM olmalı' });
+    }
+
+    const { countYoklamaFilledDays, countYoklamaPersons } = await import('../lib/yoklamaGuard');
+    const YOKLAMA_DOC_ID = 'global_yoklama_map';
+    const monthDocId = `ay_${yearMonth}`;
+    const parseMap = (raw: Record<string, unknown> | undefined) => {
+      if (!raw) return {};
+      if (typeof raw.dataJson === 'string') {
+        try {
+          return JSON.parse(raw.dataJson) as Record<string, unknown>;
+        } catch {
+          return {};
+        }
+      }
+      return (raw.data as Record<string, unknown>) || {};
+    };
+    const sliceMonth = (map: Record<string, unknown>, ym: string) => {
+      const prefix = `${ym}-`;
+      const out: Record<string, unknown> = {};
+      for (const [personId, days] of Object.entries(map || {})) {
+        if (!days || typeof days !== 'object') continue;
+        const sliced: Record<string, unknown> = {};
+        for (const [dayKey, val] of Object.entries(days as Record<string, unknown>)) {
+          if (dayKey.startsWith(prefix)) sliced[dayKey] = val;
+        }
+        if (Object.keys(sliced).length > 0) out[personId] = sliced;
+      }
+      return out;
+    };
+
+    const admin = getFirebaseAdmin();
+    const col = admin.firestore().collection('yoklamalar');
+    const shardSnap = await col.doc(monthDocId).get();
+    let map = shardSnap.exists ? parseMap((shardSnap.data() || {}) as Record<string, unknown>) : {};
+    let source: 'month_shard' | 'mega_slice' = 'month_shard';
+
+    if (countYoklamaFilledDays(map as any) < 1) {
+      const megaSnap = await col.doc(YOKLAMA_DOC_ID).get();
+      if (megaSnap.exists) {
+        const mega = parseMap((megaSnap.data() || {}) as Record<string, unknown>);
+        map = sliceMonth(mega, yearMonth);
+        source = 'mega_slice';
+      }
+    }
+
+    return res.json({
+      success: true,
+      yearMonth,
+      source,
+      personCount: countYoklamaPersons(map as import('../types/erp').AylikYoklamaMap),
+      filledDayCount: countYoklamaFilledDays(map as import('../types/erp').AylikYoklamaMap),
+      map,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Yoklama ayı okunamadı';
+    console.error('[yoklama-ay]', err);
+    return res.status(500).json({ error: message });
+  }
+});
+
 app.post("/api/pending-signup", (req, res) => {
   try {
     const { email, password, ad, soyad, tcNo } = req.body || {};

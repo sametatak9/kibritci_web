@@ -133,12 +133,13 @@ import {
   excludeYolHarcamaFromKasaLedger,
   yolHarcamaIdFromKasaDocId,
 } from './lib/yolHarcamaUtils';
-import { collection, onSnapshot, doc, getDoc, query, orderBy, limit } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, query, orderBy, limit, getDocsFromCache } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { syncAuthClaimsFromServer } from './lib/authClaimsClient';
 import { assertErpWriteAuth, formatFirestoreWriteError } from './lib/authWriteGuard';
 import {
   countYoklamaFilledDays,
+  mergeYoklamaMaps,
 } from './lib/yoklamaGuard';
 import {
   enqueueSahaFaaliyetSave,
@@ -146,7 +147,21 @@ import {
   removeSahaFaaliyetSafe,
   type SahaFaaliyetSaveSource,
 } from './lib/sahaFaaliyetPersistence';
-import { fetchYoklamaMapPreferFast, scheduleYoklamaMonthShardSync } from './lib/yoklamaPersistence';
+import {
+  cacheYoklamaMonthsFromMap,
+  fetchYoklamaMapPreferFast,
+  fetchYoklamaMonthShards,
+  nearbyYoklamaYearMonths,
+  readCachedYoklamaMonths,
+  scheduleYoklamaMonthShardSync,
+  subscribeYoklamaMonthShards,
+} from './lib/yoklamaPersistence';
+import {
+  fetchPersonelOzetFromApi,
+  mergePersonelLists,
+  readCachedPersonelOzet,
+  writeCachedPersonelOzet,
+} from './lib/personelFastLoad';
 import { LoginScreen } from './components/LoginScreen';
 const YetkiVermeScreen = lazy(() => import('./components/YetkiVermeScreen').then(m => ({ default: m.YetkiVermeScreen })));
 const OperatorScreen = lazy(() => import('./components/OperatorScreen').then(m => ({ default: m.OperatorScreen })));
@@ -1176,49 +1191,96 @@ function App() {
     const dashboardSnapshots = new Set<string>();
     const markDashboardSnapshot = (name: string) => {
       dashboardSnapshots.add(name);
-      if (dashboardSnapshots.size >= 4) setDashboardDataReady(true);
+      if (name === 'personeller' || dashboardSnapshots.has('personeller')) {
+        setDashboardDataReady(true);
+      }
     };
     const markDashboardSnapshotError = (name: string) => (error: unknown) => {
       console.warn(`${name} canlı verisi yüklenemedi:`, error);
       markDashboardSnapshot(name);
     };
+    const dashboardReadyFailsafe = window.setTimeout(() => setDashboardDataReady(true), 8000);
 
-    const unsubIrsaliyeler = onSnapshot(collection(db, 'irsaliyeler'), (snapshot) => {
-      const list: Irsaliye[] = [];
-      snapshot.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() } as any);
-      });
-      setIrsaliyeler(list);
-      markDashboardSnapshot('irsaliyeler');
-    }, markDashboardSnapshotError('irsaliyeler'));
+    const nowFast = new Date();
+    const yoklamaYm = `${nowFast.getFullYear()}-${String(nowFast.getMonth() + 1).padStart(2, '0')}`;
+    const yoklamaPrev = new Date(nowFast.getFullYear(), nowFast.getMonth() - 1, 1);
+    const yoklamaPrevYm = `${yoklamaPrev.getFullYear()}-${String(yoklamaPrev.getMonth() + 1).padStart(2, '0')}`;
+    const yoklamaFastMonths = nearbyYoklamaYearMonths(nowFast, 1);
 
-    const unsubFaturalar = onSnapshot(collection(db, 'faturalar'), (snapshot) => {
-      const list: Fatura[] = [];
-      snapshot.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() } as any);
-      });
-      setFaturalar(list);
-      markDashboardSnapshot('faturalar');
-    }, markDashboardSnapshotError('faturalar'));
+    const cachedPersonel = readCachedPersonelOzet();
+    if (cachedPersonel.length >= 5) {
+      setPersoneller(cachedPersonel);
+      setDashboardDataReady(true);
+    }
+    const cachedYoklama = readCachedYoklamaMonths([yoklamaPrevYm, yoklamaYm]);
+    if (countYoklamaFilledDays(cachedYoklama) > 0) {
+      setYoklamalar(cachedYoklama);
+    }
 
-    const unsubSatinAlma = onSnapshot(collection(db, 'satinAlmaTalepleri'), (snapshot) => {
-      const list: SatinAlmaTalebi[] = [];
-      snapshot.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() } as any);
-      });
-      setSatinAlmaTalepleri(list);
-      markDashboardSnapshot('satinAlmaTalepleri');
-    }, markDashboardSnapshotError('satinAlmaTalepleri'));
+    void fetchPersonelOzetFromApi().then((list) => {
+      if (!list || list.length < 5) return;
+      setPersoneller((prev) => mergePersonelLists(prev, list));
+      writeCachedPersonelOzet(list);
+      setDashboardDataReady(true);
+    });
 
-    // İkincil koleksiyonlar: ilk boyamayı hızlandırmak için kısa gecikmeyle bağlanır (salt okuma)
+    void getDocsFromCache(collection(db, 'personeller'))
+      .then((snapshot) => {
+        const list: Personel[] = [];
+        snapshot.forEach((docSnap) => {
+          list.push({ ...(docSnap.data() as Record<string, unknown>), id: docSnap.id } as Personel);
+        });
+        if (list.length < 5) return;
+        setPersoneller((prev) => mergePersonelLists(prev, list));
+        writeCachedPersonelOzet(list);
+        setDashboardDataReady(true);
+      })
+      .catch(() => undefined);
+
+    // İkincil koleksiyonlar: kadro/yoklama bant genişliğini yemesin
     const deferredUnsubs: Array<() => void> = [];
+    let secondaryStarted = false;
     let deferredStarted = false;
     let deferredTimer: ReturnType<typeof setTimeout> | null = null;
     let deferredIdleId: number | null = null;
+    let secondaryTimer: ReturnType<typeof setTimeout> | null = null;
 
     const attachDeferredListeners = () => {
       if (deferredStarted) return;
       deferredStarted = true;
+
+      deferredUnsubs.push(
+        onSnapshot(collection(db, 'irsaliyeler'), (snapshot) => {
+          const list: Irsaliye[] = [];
+          snapshot.forEach((docSnap) => {
+            list.push({ id: docSnap.id, ...docSnap.data() } as any);
+          });
+          setIrsaliyeler(list);
+          markDashboardSnapshot('irsaliyeler');
+        }, markDashboardSnapshotError('irsaliyeler'))
+      );
+
+      deferredUnsubs.push(
+        onSnapshot(collection(db, 'faturalar'), (snapshot) => {
+          const list: Fatura[] = [];
+          snapshot.forEach((docSnap) => {
+            list.push({ id: docSnap.id, ...docSnap.data() } as any);
+          });
+          setFaturalar(list);
+          markDashboardSnapshot('faturalar');
+        }, markDashboardSnapshotError('faturalar'))
+      );
+
+      deferredUnsubs.push(
+        onSnapshot(collection(db, 'satinAlmaTalepleri'), (snapshot) => {
+          const list: SatinAlmaTalebi[] = [];
+          snapshot.forEach((docSnap) => {
+            list.push({ id: docSnap.id, ...docSnap.data() } as any);
+          });
+          setSatinAlmaTalepleri(list);
+          markDashboardSnapshot('satinAlmaTalepleri');
+        }, markDashboardSnapshotError('satinAlmaTalepleri'))
+      );
 
       deferredUnsubs.push(
         onSnapshot(collection(db, 'evrakBaglantiGruplari'), (snapshot) => {
@@ -1278,16 +1340,6 @@ function App() {
           });
           setKampOdalari(list);
           if (list.length > 0) markProductionLive();
-        })
-      );
-
-      deferredUnsubs.push(
-        onSnapshot(collection(db, 'kampKayitlari'), (snapshot) => {
-          const list: KampKaydi[] = [];
-          snapshot.forEach((doc) => {
-            list.push({ id: doc.id, ...doc.data() } as any);
-          });
-          setKampKayitlari(list);
         })
       );
 
@@ -1403,16 +1455,136 @@ function App() {
           setHazirTutanaklar(list);
         })
       );
+
+      deferredUnsubs.push(
+        onSnapshot(collection(db, 'kullanicilar'), (snapshot) => {
+          const raw = parseKullanicilarSnapshot(snapshot.docs) as Kullanici[];
+          setKullanicilar(dedupeKullanicilarByEmail(raw) as Kullanici[]);
+          const needsRepair =
+            hasDuplicateKullaniciEmails(raw) ||
+            raw.some((u) => {
+              const key = u.email?.trim().toLowerCase();
+              return key && ((u as any)._docId || u.id) !== key;
+            });
+          if (needsRepair) {
+            repairKullaniciDocIdsIfNeeded(raw).catch((err) => {
+              console.warn('Kullanıcı belgeleri onarılamadı:', err);
+            });
+          }
+        })
+      );
+
+      deferredUnsubs.push(
+        onSnapshot(collection(db, 'stokKartlar'), (snapshot) => {
+          const list: StokKart[] = [];
+          snapshot.forEach((docSnap) => {
+            list.push({ ...docSnap.data(), id: docSnap.id } as StokKart);
+          });
+          setStokKartlar(list);
+        })
+      );
+
+      deferredUnsubs.push(
+        onSnapshot(collection(db, 'cariKartlar'), (snapshot) => {
+          let list: CariKart[] = [];
+          snapshot.forEach((docSnap) => {
+            list.push({ ...docSnap.data(), id: docSnap.id } as CariKart);
+          });
+
+          if (!cariDedupRanRef.current) {
+            const plans = planCariKartDedup(list);
+            if (plans.length > 0) {
+              cariDedupRanRef.current = true;
+              list = applyCariDedupPlansInMemory(list, plans);
+              void (async () => {
+                for (const plan of plans) {
+                  try {
+                    await applyCariDedupPlan(plan);
+                  } catch (e) {
+                    console.warn('Cari mükerrer birleştirme atlandı:', plan.key, e);
+                  }
+                }
+                console.log(`Cari mükerrer birleştirme (snapshot): ${plans.length} grup`);
+              })();
+            }
+          }
+
+          setCariKartlar(list);
+
+          if (!kuterCariSeedRef.current) {
+            kuterCariSeedRef.current = true;
+            void import('./data/kuterPersonelSeed').then(({ ensureKuterCari }) => {
+              const cari = ensureKuterCari(list);
+              if (!cari) return;
+              void saveDocument('cariKartlar', cari).catch((e) =>
+                console.warn('Kuter cari snapshot senkronu atlandı:', e)
+              );
+            });
+          }
+
+          if (!deltaKapiCariSeedRef.current) {
+            deltaKapiCariSeedRef.current = true;
+            void import('./data/deltaKapiPersonelSeed').then(({ ensureDeltaKapiCari }) => {
+              const cari = ensureDeltaKapiCari(list);
+              if (!cari) return;
+              void saveDocument('cariKartlar', cari).catch((e) =>
+                console.warn('DELTA KAPI cari snapshot senkronu atlandı:', e)
+              );
+            });
+          }
+
+          if (!yeditepeCariSeedRef.current) {
+            yeditepeCariSeedRef.current = true;
+            void import('./data/yeditepePersonelSeed').then(({ ensureYeditepeCari }) => {
+              const cari = ensureYeditepeCari(list);
+              if (!cari) return;
+              void saveDocument('cariKartlar', cari).catch((e) =>
+                console.warn('YEDİTEPE cari snapshot senkronu atlandı:', e)
+              );
+            });
+          }
+        })
+      );
+
+      const qNotif = query(collection(db, 'bildirimler'), orderBy('tarih', 'desc'), limit(30));
+      deferredUnsubs.push(
+        onSnapshot(qNotif, (snapshot) => {
+          const list: any[] = [];
+          snapshot.forEach((docSnap) => {
+            list.push({ id: docSnap.id, ...docSnap.data() });
+          });
+          setBildirimler(list);
+        })
+      );
     };
 
-    deferredTimer = setTimeout(attachDeferredListeners, 280);
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      deferredIdleId = (
-        window as Window & {
-          requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => number;
+    const attachSecondaryListeners = () => {
+      if (secondaryStarted) return;
+      secondaryStarted = true;
+      attachDeferredListeners();
+    };
+
+    secondaryTimer = setTimeout(attachSecondaryListeners, 2500);
+
+    const unsubKampKayit = onSnapshot(collection(db, 'kampKayitlari'), (snapshot) => {
+      const list: KampKaydi[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as any);
+      });
+      setKampKayitlari(list);
+    });
+
+    const unsubYoklamaShards = subscribeYoklamaMonthShards(yoklamaFastMonths, (map) => {
+      setYoklamalar((prev) => {
+        const merged = mergeYoklamaMaps(prev, map) as AylikYoklamaMap;
+        const prevFilled = countYoklamaFilledDays(prev);
+        const nextFilled = countYoklamaFilledDays(merged);
+        if (prevFilled >= 80 && nextFilled < Math.max(30, prevFilled * 0.25)) {
+          return prev;
         }
-      ).requestIdleCallback(attachDeferredListeners, { timeout: 900 });
-    }
+        return merged;
+      });
+    });
 
     const unsubPersonel = onSnapshot(collection(db, 'personeller'), (snapshot) => {
       const fromCache = Boolean(snapshot.metadata?.fromCache);
@@ -1426,17 +1598,11 @@ function App() {
       if (fromCache && list.length === 0) {
         return;
       }
-      setPersoneller((prev) => {
-        if (prev.length >= 20 && list.length < Math.max(5, Math.floor(prev.length * 0.25))) {
-          console.warn('[personel] Zayıf snapshot yok sayıldı', {
-            fromCache,
-            prev: prev.length,
-            next: list.length,
-          });
-          return prev;
-        }
-        return list;
-      });
+      setPersoneller((prev) => mergePersonelLists(prev, list));
+      if (list.length >= 5) {
+        writeCachedPersonelOzet(list);
+        attachSecondaryListeners();
+      }
       markDashboardSnapshot('personeller');
       if (list.length < 20) return;
       markProductionLive();
@@ -1517,77 +1683,70 @@ function App() {
       }
     }, markDashboardSnapshotError('personeller'));
 
-    const unsubYoklamalar = onSnapshot(
-      doc(db, 'yoklamalar', 'global_yoklama_map'),
-      (snap) => {
-        if (!snap.exists()) return;
-        const raw = snap.data() as Record<string, unknown>;
-        const rawJson = typeof raw.dataJson === 'string' ? raw.dataJson : null;
-        // Aynı payload tekrar parse/render edilmesin (kasma)
-        if (rawJson && rawJson === yoklamaJsonSeenRef.current) return;
+    let unsubYoklamalar: (() => void) | null = null;
+    const yoklamaMegaTimer = window.setTimeout(() => {
+      unsubYoklamalar = onSnapshot(
+        doc(db, 'yoklamalar', 'global_yoklama_map'),
+        (snap) => {
+          if (!snap.exists()) return;
+          const raw = snap.data() as Record<string, unknown>;
+          const rawJson = typeof raw.dataJson === 'string' ? raw.dataJson : null;
+          if (rawJson && rawJson === yoklamaJsonSeenRef.current) return;
 
-        const data = parseYoklamaSnapshotData(raw) as AylikYoklamaMap;
-        const nextFilled = countYoklamaFilledDays(data);
-        const fromCache = Boolean(snap.metadata?.fromCache);
+          const data = parseYoklamaSnapshotData(raw) as AylikYoklamaMap;
+          const nextFilled = countYoklamaFilledDays(data);
+          const fromCache = Boolean(snap.metadata?.fromCache);
 
-        setYoklamalar((prev) => {
-          const prevFilled = countYoklamaFilledDays(prev);
-          // Masaüstü IndexedDB bazen eski/zayıf paket döndürür — dolu haritayı ezme
+          setYoklamalar((prev) => {
+            const prevFilled = countYoklamaFilledDays(prev);
+            if (
+              fromCache &&
+              prevFilled >= 80 &&
+              nextFilled < Math.max(30, prevFilled * 0.25)
+            ) {
+              console.warn('[yoklama] Cache snapshot küçülmesi yok sayıldı', {
+                prevFilled,
+                nextFilled,
+              });
+              return prev;
+            }
+            const merged = prevFilled > 0 ? (mergeYoklamaMaps(prev, data) as AylikYoklamaMap) : data;
+            cacheYoklamaMonthsFromMap(merged, yoklamaFastMonths);
+            return merged;
+          });
           if (
-            fromCache &&
-            prevFilled >= 80 &&
-            nextFilled < Math.max(30, prevFilled * 0.25)
+            !(
+              fromCache &&
+              countYoklamaFilledDays(data) < 30 &&
+              (yoklamaJsonSeenRef.current?.length || 0) > 50_000
+            )
           ) {
-            console.warn('[yoklama] Cache snapshot küçülmesi yok sayıldı', {
-              prevFilled,
-              nextFilled,
-            });
-            return prev;
+            if (rawJson) yoklamaJsonSeenRef.current = rawJson;
           }
-          return data;
-        });
-        // Ref'i yalnızca kabul edilen (veya ilk) paket için güncelle — zayıf cache ezmesin
-        if (
-          !(
-            fromCache &&
-            countYoklamaFilledDays(data) < 30 &&
-            (yoklamaJsonSeenRef.current?.length || 0) > 50_000
-          )
-        ) {
-          if (rawJson) yoklamaJsonSeenRef.current = rawJson;
+          if (hasSubstantialYoklamaData(data)) markProductionLive();
+        },
+        (err) => {
+          console.warn('Yoklama canlı dinleme hatası:', err);
         }
-        if (hasSubstantialYoklamaData(data)) markProductionLive();
-      },
-      (err) => {
-        console.warn('Yoklama canlı dinleme hatası:', err);
-      }
-    );
+      );
+    }, 4000);
 
-    // Açılış: PC'de getDocFromServer mega-belgeyi timeout'a düşürüyordu.
-    // Cache + ay shard öncelikli; sunucu sadece zayıfsa (PreferFast içinde).
     void (async () => {
       try {
-        await new Promise((r) => setTimeout(r, 600));
-        const now = new Date();
-        const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        const prevYm = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
         const { map, dataJson, source } = await fetchYoklamaMapPreferFast({
-          yearMonths: [prevYm, ym],
+          yearMonths: yoklamaFastMonths,
           allowServerForce: true,
         });
         const serverFilled = countYoklamaFilledDays(map);
         setYoklamalar((prevMap) => {
           const prevFilled = countYoklamaFilledDays(prevMap);
           if (serverFilled >= prevFilled || prevFilled < 30) {
+            cacheYoklamaMonthsFromMap(map, yoklamaFastMonths);
             return map;
           }
-          console.warn('[yoklama] Yüklenen paket zayıf, mevcut daha dolu korunuyor', {
-            prevFilled,
-            serverFilled,
-            source,
-          });
-          return prevMap;
+          const merged = mergeYoklamaMaps(prevMap, map) as AylikYoklamaMap;
+          cacheYoklamaMonthsFromMap(merged, yoklamaFastMonths);
+          return merged;
         });
         if (dataJson && (serverFilled >= 30 || !yoklamaJsonSeenRef.current)) {
           yoklamaJsonSeenRef.current = dataJson;
@@ -1601,101 +1760,10 @@ function App() {
       }
     })();
 
-    const unsubKullanicilar = onSnapshot(collection(db, 'kullanicilar'), (snapshot) => {
-      const raw = parseKullanicilarSnapshot(snapshot.docs) as Kullanici[];
-      setKullanicilar(dedupeKullanicilarByEmail(raw) as Kullanici[]);
-      const needsRepair =
-        hasDuplicateKullaniciEmails(raw) ||
-        raw.some((u) => {
-          const key = u.email?.trim().toLowerCase();
-          return key && ((u as any)._docId || u.id) !== key;
-        });
-      if (needsRepair) {
-        repairKullaniciDocIdsIfNeeded(raw).catch((err) => {
-          console.warn('Kullanıcı belgeleri onarılamadı:', err);
-        });
-      }
-    });
-
-    const unsubStoklar = onSnapshot(collection(db, 'stokKartlar'), (snapshot) => {
-      const list: StokKart[] = [];
-      snapshot.forEach((docSnap) => {
-        list.push({ ...docSnap.data(), id: docSnap.id } as StokKart);
-      });
-      setStokKartlar(list);
-    });
-
-    const unsubCari = onSnapshot(collection(db, 'cariKartlar'), (snapshot) => {
-      let list: CariKart[] = [];
-      snapshot.forEach((docSnap) => {
-        // data.id, Firestore yolunu ezmesin (silme hedefi yanlış id olmasın)
-        list.push({ ...docSnap.data(), id: docSnap.id } as CariKart);
-      });
-
-      if (!cariDedupRanRef.current) {
-        const plans = planCariKartDedup(list);
-        if (plans.length > 0) {
-          cariDedupRanRef.current = true;
-          list = applyCariDedupPlansInMemory(list, plans);
-          void (async () => {
-            for (const plan of plans) {
-              try {
-                await applyCariDedupPlan(plan);
-              } catch (e) {
-                console.warn('Cari mükerrer birleştirme atlandı:', plan.key, e);
-              }
-            }
-            console.log(`Cari mükerrer birleştirme (snapshot): ${plans.length} grup`);
-          })();
-        }
-      }
-
-      setCariKartlar(list);
-
-      if (!kuterCariSeedRef.current) {
-        kuterCariSeedRef.current = true;
-        void import('./data/kuterPersonelSeed').then(({ ensureKuterCari }) => {
-          const cari = ensureKuterCari(list);
-          if (!cari) return;
-          void saveDocument('cariKartlar', cari).catch((e) =>
-            console.warn('Kuter cari snapshot senkronu atlandı:', e)
-          );
-        });
-      }
-
-      if (!deltaKapiCariSeedRef.current) {
-        deltaKapiCariSeedRef.current = true;
-        void import('./data/deltaKapiPersonelSeed').then(({ ensureDeltaKapiCari }) => {
-          const cari = ensureDeltaKapiCari(list);
-          if (!cari) return;
-          void saveDocument('cariKartlar', cari).catch((e) =>
-            console.warn('DELTA KAPI cari snapshot senkronu atlandı:', e)
-          );
-        });
-      }
-
-      if (!yeditepeCariSeedRef.current) {
-        yeditepeCariSeedRef.current = true;
-        void import('./data/yeditepePersonelSeed').then(({ ensureYeditepeCari }) => {
-          const cari = ensureYeditepeCari(list);
-          if (!cari) return;
-          void saveDocument('cariKartlar', cari).catch((e) =>
-            console.warn('YEDİTEPE cari snapshot senkronu atlandı:', e)
-          );
-        });
-      }
-    });
-
-    const qNotif = query(collection(db, 'bildirimler'), orderBy('tarih', 'desc'), limit(30));
-    const unsubNotif = onSnapshot(qNotif, (snapshot) => {
-      const list: any[] = [];
-      snapshot.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() });
-      });
-      setBildirimler(list);
-    });
-
     return () => {
+      window.clearTimeout(dashboardReadyFailsafe);
+      window.clearTimeout(yoklamaMegaTimer);
+      if (secondaryTimer) clearTimeout(secondaryTimer);
       if (deferredTimer) clearTimeout(deferredTimer);
       if (
         deferredIdleId != null &&
@@ -1707,15 +1775,10 @@ function App() {
         ).cancelIdleCallback(deferredIdleId);
       }
       deferredUnsubs.forEach((u) => u());
-      unsubIrsaliyeler();
-      unsubFaturalar();
-      unsubSatinAlma();
       unsubPersonel();
-      unsubYoklamalar();
-      unsubKullanicilar();
-      unsubNotif();
-      unsubStoklar();
-      unsubCari();
+      unsubKampKayit();
+      unsubYoklamaShards();
+      unsubYoklamalar?.();
     };
   }, [dbStatus, currentUser]);
 
@@ -2777,12 +2840,21 @@ function App() {
       markProductionLive();
       scheduleYoklamaMonthShardSync(map);
     }
+    cacheYoklamaMonthsFromMap(map, months);
     console.info('[yoklama] yenileme kaynağı:', source);
     return {
       personCount: Object.keys(map || {}).length,
       filledDayCount: countYoklamaFilledDays(map),
       map,
     };
+  };
+
+  const ensureYoklamaMonthLoaded = async (yearMonth: string) => {
+    const ym = String(yearMonth || '').trim();
+    if (!/^\d{4}-\d{2}$/.test(ym)) return;
+    const shards = await fetchYoklamaMonthShards([ym]);
+    if (Object.keys(shards).length === 0) return;
+    setYoklamalar((prev) => mergeYoklamaMaps(prev, shards) as AylikYoklamaMap);
   };
 
   const setYoklamalarWithSync = (updater: AylikYoklamaMap | ((y: AylikYoklamaMap) => AylikYoklamaMap)) => {
@@ -3827,6 +3899,7 @@ function App() {
                   setYoklamalar={setYoklamalarWithSync}
                   saveYoklamalarNow={saveYoklamalarNow}
                   reloadYoklamalarFromServer={reloadYoklamalarFromServer}
+                  ensureYoklamaMonthLoaded={ensureYoklamaMonthLoaded}
                   addNotification={addNotification}
                   sahaFaaliyetleri={sahaFaaliyetleri}
                   onOpenFaaliyetPersonel={() => handleTabNavigation('faaliyet_personel')}

@@ -140,6 +140,7 @@ interface YoklamaScreenProps {
     filledDayCount: number;
     map: AylikYoklamaMap;
   }>;
+  ensureYoklamaMonthLoaded?: (yearMonth: string) => Promise<void>;
   addNotification?: (mesaj: string) => void;
   sahaFaaliyetleri?: SahaFaaliyeti[];
   onOpenFaaliyetPersonel?: () => void;
@@ -152,6 +153,7 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
   setYoklamalar,
   saveYoklamalarNow,
   reloadYoklamalarFromServer,
+  ensureYoklamaMonthLoaded,
   addNotification,
   sahaFaaliyetleri = [],
   onOpenFaaliyetPersonel,
@@ -223,6 +225,16 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
     setAktifListeStart(r.start);
     setAktifListeEnd(r.end);
   }, [selectedYear, selectedMonth]);
+
+  const requestedYoklamaMonthRef = useRef<string>('');
+  useEffect(() => {
+    if (!ensureYoklamaMonthLoaded) return;
+    const ym = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+    if (countFilledDaysInMonth(yoklamalar, selectedYear, selectedMonth) > 0) return;
+    if (requestedYoklamaMonthRef.current === ym) return;
+    requestedYoklamaMonthRef.current = ym;
+    void ensureYoklamaMonthLoaded(ym);
+  }, [selectedYear, selectedMonth, ensureYoklamaMonthLoaded, yoklamalar]);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'kampGunlukFaaliyetleri'), (snap) => {
@@ -2019,6 +2031,15 @@ export const YoklamaScreen: React.FC<YoklamaScreenProps> = ({
             </button>
           </div>
         </div>
+
+      {personeller.length === 0 && (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 shrink-0">
+          <p className="text-[11px] font-extrabold text-sky-950">Personel kadrosu yükleniyor…</p>
+          <p className="text-[10px] text-sky-900/80 font-semibold mt-0.5">
+            Yoklama isimleri kadro geldikten sonra dolar. Bu ekranda Kaydet’e basmayın.
+          </p>
+        </div>
+      )}
 
       {yoklamaLoadStats.thisMonth === 0 && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0">

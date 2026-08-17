@@ -60,6 +60,7 @@ import { normalizeGorev } from '../lib/gorevUtils';
 import { formatDateLabelTr, todayDateKey } from '../lib/dateKeyUtils';
 import { isKampciGorev, normalizeTurkishName } from '../lib/yoklamaUtils';
 import { db } from '../lib/firebase';
+import { personelFotoSrc } from '../lib/personelMediaCache';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { tesisatciToSaha, mermerciToSaha, seramikToSaha, soforToSaha, operatorToSaha } from '../lib/mobilFaaliyetAdapter';
 import { GunlukFaaliyetProgramScreen } from './GunlukFaaliyetProgramScreen';
@@ -1240,9 +1241,9 @@ export const FaaliyetPersonelScreen: React.FC<FaaliyetPersonelScreenProps> = ({
                   >
                     <div className="flex justify-between gap-2 items-start">
                       <div className="min-w-0 flex items-start gap-2.5">
-                        {p.fotografUrl ? (
+                        {personelFotoSrc(p) ? (
                           <img
-                            src={p.fotografUrl}
+                            src={personelFotoSrc(p)}
                             alt=""
                             className="w-9 h-9 rounded-xl object-cover border border-slate-200 shrink-0"
                           />
@@ -1310,9 +1311,9 @@ export const FaaliyetPersonelScreen: React.FC<FaaliyetPersonelScreenProps> = ({
               <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm">
                 <div className="flex flex-wrap justify-between gap-3 items-start">
                   <div className="flex items-start gap-3 min-w-0">
-                    {selectedPerson.fotografUrl ? (
+                    {personelFotoSrc(selectedPerson) ? (
                       <img
-                        src={selectedPerson.fotografUrl}
+                        src={personelFotoSrc(selectedPerson)}
                         alt=""
                         className="w-14 h-14 rounded-2xl object-cover border border-slate-200 shrink-0"
                       />

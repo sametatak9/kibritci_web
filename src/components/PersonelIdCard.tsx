@@ -1,6 +1,7 @@
 import React from 'react';
 import { Phone, CreditCard, BadgeCheck, Building2 } from 'lucide-react';
 import { Personel } from '../types/erp';
+import { personelFotoSrc } from '../lib/personelMediaCache';
 
 type Props = {
   personel: Personel;
@@ -12,6 +13,7 @@ export const PersonelIdCard: React.FC<Props> = ({ personel, className = '' }) =>
   const initials = `${personel.ad?.[0] || ''}${personel.soyad?.[0] || ''}`.toUpperCase();
   const aktif = personel.durum === true || String(personel.durum) === 'true';
   const taseron = personel.firmaTipi === 'TASERON';
+  const fotoSrc = personelFotoSrc(personel);
 
   return (
     <div
@@ -20,9 +22,9 @@ export const PersonelIdCard: React.FC<Props> = ({ personel, className = '' }) =>
       <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-[#0F6C5C]/8 pointer-events-none" />
       <div className="relative flex items-start gap-3">
         <div className="w-14 h-14 rounded-2xl bg-[#0F6C5C] text-white font-black text-lg flex items-center justify-center shrink-0 shadow-sm">
-          {personel.fotografUrl ? (
+          {fotoSrc ? (
             <img
-              src={personel.fotografUrl}
+              src={fotoSrc}
               alt=""
               className="w-full h-full object-cover rounded-2xl"
             />
