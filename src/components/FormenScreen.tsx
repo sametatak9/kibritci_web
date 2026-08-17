@@ -629,8 +629,8 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
 
   const handleBulkEtiketApply = () => {
     const etiket = resolvedBulkEtiket();
-    if (bulkEtiket === '__CUSTOM__' && !etiket) {
-      showStatus('error', 'Özel meslek grubu yazın veya listeden bir etiket seçin.');
+    if (!etiket) {
+      showStatus('error', 'Listeden bir meslek grubu seçin veya yeni etiket yazın.');
       return;
     }
     const targets = presentIds.length > 0 ? presentIds : [];
@@ -643,17 +643,14 @@ export const FormenScreen: React.FC<FormenScreenProps> = ({
     setPersonelEtiketleri((prev) => {
       const copy = { ...prev };
       for (const id of targets) {
-        if (etiket) copy[id] = etiket;
-        else delete copy[id];
+        copy[id] = etiket;
       }
       return copy;
     });
-    if (etiket) void rememberYoklamaMeslekEtiketleri([etiket], kayitliEtiketler);
+    void rememberYoklamaMeslekEtiketleri([etiket], kayitliEtiketler);
     showStatus(
       'success',
-      etiket
-        ? `${targets.length} Geldi personeline «${etiket}» işlendi. Kaydet ile yoklamaya yazılır.`
-        : `${targets.length} kişiden etiket kaldırıldı.`
+      `${targets.length} Geldi personeline «${etiket}» işlendi. Kaydet ile yoklamaya yazılır.`
     );
   };
 

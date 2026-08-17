@@ -49,7 +49,9 @@ export function YoklamaMeslekEtiketBar({
           onChange={(e) => onEtiketChange(e.target.value)}
           className="text-[11px] font-bold bg-white border border-slate-200 rounded-lg p-1.5 max-w-[200px]"
         >
-          <option value="">— Etiket yok / kaldır —</option>
+          <option value="" disabled>
+            Meslek seçin
+          </option>
           {katalog.map((item) => (
             <option key={item} value={item}>
               {item}
