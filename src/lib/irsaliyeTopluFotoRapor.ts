@@ -14,7 +14,10 @@ import {
   malzemeTipiLabel,
   resolveMicirMalzemeTipiFromIrsaliye,
 } from './micirUtils';
+import { buildGecmisTumunuRaporHtml, type GecmisRaporLog } from './gecmisTumunuRaporHtml';
 import { openHtmlReportWindow } from './reportEmail';
+
+export type { GecmisRaporLog } from './gecmisTumunuRaporHtml';
 
 export type IrsaliyeFotoKaynak = {
   url: string;
@@ -210,6 +213,59 @@ function renderFotoBlock(f: IrsaliyeFotoKaynak, idx: number): string {
   </figure>`;
 }
 
+const IRSALIYE_FOTO_RAPOR_EXTRA_CSS = `
+      .ir-foto-card{break-inside:avoid;page-break-inside:avoid;margin:0 0 18px;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;background:#fff}
+      .ir-foto-head{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;background:#f8fafc;border-bottom:1px solid #e2e8f0}
+      .ir-foto-sira{flex:none;width:28px;height:28px;border-radius:999px;background:#1e3a5f;color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center}
+      .ir-foto-head h2{margin:0;font-size:14px;font-weight:900;color:#0f172a}
+      .ir-foto-head p{margin:3px 0 0;font-size:11px;color:#475569;line-height:1.45}
+      .ir-foto-kalem{font-family:ui-monospace,monospace;font-size:10px!important;color:#334155}
+      .ir-foto-grid{display:grid;grid-template-columns:1fr;gap:14px;padding:12px 14px}
+      .ir-foto-label{margin:0 0 6px;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#64748b}
+      .ir-foto-btn{display:block;width:100%;padding:0;border:1px solid #cbd5e1;border-radius:10px;overflow:hidden;background:#0f172a;cursor:zoom-in}
+      .ir-foto-btn img{display:block;width:100%;max-height:620px;object-fit:contain;background:#0f172a}
+      .ir-foto-pdf{display:inline-block;padding:10px 12px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:12px;font-weight:800;text-decoration:none}
+      .ir-foto-yok{margin:0;padding:16px 14px;font-size:12px;color:#b45309;background:#fffbeb;font-style:italic}
+      #ir-foto-lightbox[hidden]{display:none!important}
+      #ir-foto-lightbox{position:fixed;inset:0;z-index:50;background:rgba(15,23,42,.92);display:flex;align-items:center;justify-content:center;padding:24px}
+      #ir-foto-lightbox img{max-width:96vw;max-height:90vh;object-fit:contain;border-radius:12px;background:#111}
+      #ir-foto-lightbox-close{position:absolute;top:16px;right:16px;border:0;background:#fff;color:#0f172a;font-weight:900;font-size:13px;border-radius:999px;padding:8px 14px;cursor:pointer}
+      @media print{
+        #ir-foto-lightbox{display:none!important}
+        .ir-foto-card{page-break-after:always}
+        .ir-foto-card:last-of-type{page-break-after:auto}
+        .ir-foto-btn img{max-height:170mm}
+      }
+    `;
+
+function lightboxHtml(): string {
+  return `
+    <div id="ir-foto-lightbox" hidden>
+      <button type="button" id="ir-foto-lightbox-close">Kapat</button>
+      <img id="ir-foto-lightbox-img" alt="Büyük fotoğraf" />
+    </div>
+    <script>
+      (function () {
+        var box = document.getElementById('ir-foto-lightbox');
+        var img = document.getElementById('ir-foto-lightbox-img');
+        var closeBtn = document.getElementById('ir-foto-lightbox-close');
+        function closeLb() { if (box) box.hidden = true; }
+        document.addEventListener('click', function (e) {
+          var btn = e.target && e.target.closest ? e.target.closest('.ir-foto-btn') : null;
+          if (!btn || !box || !img) return;
+          var url = btn.getAttribute('data-foto-url');
+          if (!url) return;
+          img.src = url;
+          box.hidden = false;
+        });
+        if (closeBtn) closeBtn.addEventListener('click', closeLb);
+        if (box) box.addEventListener('click', function (e) { if (e.target === box) closeLb(); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeLb(); });
+      })();
+    </script>
+  `;
+}
+
 function renderKayit(k: IrsaliyeFotoRaporKaydi, sira: number): string {
   const ir = k.irsaliye;
   const h = irsaliyeHizmetMiktari(ir);
@@ -263,59 +319,14 @@ export function buildSeciliIrsaliyeFotoRaporHtml(input: {
       <p class="text-[11px] text-slate-500 mt-2 mb-0">Fotoğrafa tıklayınca büyür. Yazdır / PDF için üstteki e-posta çubuğundaki yazdırı kullanın.</p>
     </div>
     ${kayitlar.map((k, i) => renderKayit(k, i + 1)).join('')}
-    <div id="ir-foto-lightbox" hidden>
-      <button type="button" id="ir-foto-lightbox-close">Kapat</button>
-      <img id="ir-foto-lightbox-img" alt="Büyük fotoğraf" />
-    </div>
-    <script>
-      (function () {
-        var box = document.getElementById('ir-foto-lightbox');
-        var img = document.getElementById('ir-foto-lightbox-img');
-        var closeBtn = document.getElementById('ir-foto-lightbox-close');
-        function closeLb() { if (box) box.hidden = true; }
-        document.addEventListener('click', function (e) {
-          var btn = e.target && e.target.closest ? e.target.closest('.ir-foto-btn') : null;
-          if (!btn || !box || !img) return;
-          var url = btn.getAttribute('data-foto-url');
-          if (!url) return;
-          img.src = url;
-          box.hidden = false;
-        });
-        if (closeBtn) closeBtn.addEventListener('click', closeLb);
-        if (box) box.addEventListener('click', function (e) { if (e.target === box) closeLb(); });
-        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeLb(); });
-      })();
-    </script>
+    ${lightboxHtml()}
   `;
   return wrapCorporateReportHtml(body, {
     title: 'Seçilen İrsaliyeler — Fotoğraflı Rapor',
     docCode: 'IRSALIYE-FOTO-RAPOR',
     orientation: 'portrait',
     autoPrint: false,
-    extraCss: `
-      .ir-foto-card{break-inside:avoid;page-break-inside:avoid;margin:0 0 18px;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;background:#fff}
-      .ir-foto-head{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;background:#f8fafc;border-bottom:1px solid #e2e8f0}
-      .ir-foto-sira{flex:none;width:28px;height:28px;border-radius:999px;background:#1e3a5f;color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center}
-      .ir-foto-head h2{margin:0;font-size:14px;font-weight:900;color:#0f172a}
-      .ir-foto-head p{margin:3px 0 0;font-size:11px;color:#475569;line-height:1.45}
-      .ir-foto-kalem{font-family:ui-monospace,monospace;font-size:10px!important;color:#334155}
-      .ir-foto-grid{display:grid;grid-template-columns:1fr;gap:14px;padding:12px 14px}
-      .ir-foto-label{margin:0 0 6px;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#64748b}
-      .ir-foto-btn{display:block;width:100%;padding:0;border:1px solid #cbd5e1;border-radius:10px;overflow:hidden;background:#0f172a;cursor:zoom-in}
-      .ir-foto-btn img{display:block;width:100%;max-height:620px;object-fit:contain;background:#0f172a}
-      .ir-foto-pdf{display:inline-block;padding:10px 12px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:12px;font-weight:800;text-decoration:none}
-      .ir-foto-yok{margin:0;padding:16px 14px;font-size:12px;color:#b45309;background:#fffbeb;font-style:italic}
-      #ir-foto-lightbox[hidden]{display:none!important}
-      #ir-foto-lightbox{position:fixed;inset:0;z-index:50;background:rgba(15,23,42,.92);display:flex;align-items:center;justify-content:center;padding:24px}
-      #ir-foto-lightbox img{max-width:96vw;max-height:90vh;object-fit:contain;border-radius:12px;background:#111}
-      #ir-foto-lightbox-close{position:absolute;top:16px;right:16px;border:0;background:#fff;color:#0f172a;font-weight:900;font-size:13px;border-radius:999px;padding:8px 14px;cursor:pointer}
-      @media print{
-        #ir-foto-lightbox{display:none!important}
-        .ir-foto-card{page-break-after:always}
-        .ir-foto-card:last-of-type{page-break-after:auto}
-        .ir-foto-btn img{max-height:170mm}
-      }
-    `,
+    extraCss: IRSALIYE_FOTO_RAPOR_EXTRA_CSS,
   });
 }
 
@@ -342,4 +353,37 @@ export async function openSeciliIrsaliyeFotoRaporu(input: {
   const foto = kayitlar.reduce((n, k) => n + k.fotolar.length, 0);
   const eksik = kayitlar.filter((k) => k.fotolar.length === 0).length;
   return { kayit: kayitlar.length, foto, eksik };
+}
+
+export async function openGecmisTumunuRapor(input: {
+  logs: GecmisRaporLog[];
+  irsaliyeler: Irsaliye[];
+  cariUnvan?: string;
+  filterLabel?: string;
+}): Promise<{ kayit: number; foto: number; irsaliye: number }> {
+  const logs = input.logs || [];
+  if (!logs.length) {
+    throw new Error('Rapor için kayıt bulunamadı.');
+  }
+  const irsaliyeIds = logs.filter((l) => l.collection === 'irsaliyeler').map((l) => l.id);
+  const fotoKayitlar = irsaliyeIds.length
+    ? await loadSeciliIrsaliyeFotoKayitlari({
+        ids: irsaliyeIds,
+        irsaliyeler: input.irsaliyeler,
+      })
+    : [];
+  const fotoByIrsaliyeId = new Map(fotoKayitlar.map((k) => [k.irsaliye.id, k.fotolar]));
+  const html = buildGecmisTumunuRaporHtml({
+    logs,
+    fotoByIrsaliyeId,
+    cariUnvan: input.cariUnvan,
+    filterLabel: input.filterLabel,
+  });
+  const filterLabel = String(input.filterLabel || 'Tümü').trim() || 'Tümü';
+  const w = openHtmlReportWindow(html, `${filterLabel} — Toplu Rapor`);
+  if (!w) {
+    throw new Error('Pop-up engellendi. Tarayıcıda pencere izni verin.');
+  }
+  const foto = fotoKayitlar.reduce((n, k) => n + k.fotolar.length, 0);
+  return { kayit: logs.length, foto, irsaliye: irsaliyeIds.length };
 }

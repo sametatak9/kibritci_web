@@ -57,7 +57,7 @@ import {
   planSelectedBirlesimReset,
   type TaslakBirlesimPaketi,
 } from '../lib/taslakBirlesimRapor';
-import { openSeciliIrsaliyeFotoRaporu } from '../lib/irsaliyeTopluFotoRapor';
+import { openGecmisTumunuRapor, openSeciliIrsaliyeFotoRaporu } from '../lib/irsaliyeTopluFotoRapor';
 import {
   irsaliyeNoChainSortKey,
   isEntoMadenFirma,
@@ -1010,6 +1010,41 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
     } catch (err: any) {
       console.error(err);
       alert('Fotoğraflı rapor açılamadı: ' + (err?.message || err));
+    } finally {
+      setFotoRaporBusy(false);
+    }
+  };
+
+  const handleTumunuRapor = async (override?: {
+    logs?: HistoryLog[];
+    filterLabel?: string;
+  }) => {
+    const logs = override?.logs ?? filteredHistory;
+    const filterLabel =
+      override?.filterLabel ?? (historyFilter === 'ALL' ? 'Tümü' : historyFilter);
+    if (!logs.length) {
+      alert('Raporlanacak kayıt yok. Tümü veya başka bir sekmeyi açın.');
+      return;
+    }
+    if (logs.length > 80) {
+      const ok = window.confirm(
+        `Ekrandaki ${logs.length} kayıt tek raporda açılacak. Devam edilsin mi?`
+      );
+      if (!ok) return;
+    }
+    setFotoRaporBusy(true);
+    try {
+      const cardName =
+        csTab === 'cari' ? selectedCari?.unvan : selectedStok?.stokAdi;
+      await openGecmisTumunuRapor({
+        logs,
+        irsaliyeler,
+        cariUnvan: cardName,
+        filterLabel,
+      });
+    } catch (err: any) {
+      console.error(err);
+      alert('Toplu rapor açılamadı: ' + (err?.message || err));
     } finally {
       setFotoRaporBusy(false);
     }
@@ -2476,7 +2511,7 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
                   <p className="text-[11px] text-slate-500 mt-1">
                     {selectedCari ? (
                       <>
-                        İrsaliyeleri işaretleyin: tümünü seçin, fotoğraflı rapor alın veya tek faturaya dönüştürün
+                        Tümünü Raporla ile listedeki her kaydı (lojman, irsaliye, kart…) tek raporda açın; irsaliyeleri işaretleyip fotoğraflı rapor veya fatura da alabilirsiniz
                         {' · '}
                         {historyList.filter((h) => h.collection === 'irsaliyeler').length} irsaliye
                         {' · '}
@@ -2527,6 +2562,18 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
                         : `Tümünü seç (${visibleIrsaliyeIds.length})`}
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => void handleTumunuRapor()}
+                    disabled={fotoRaporBusy || filteredHistory.length === 0}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-bold bg-slate-900 text-white cursor-pointer disabled:opacity-60"
+                    title="Tümü (veya açık sekme) içindeki bütün kayıtları antetli raporda açar; irsaliyelerin fotoğraflarını da ekler"
+                  >
+                    <Printer size={12} />
+                    {fotoRaporBusy
+                      ? 'Rapor hazırlanıyor…'
+                      : `Tümünü Raporla (${filteredHistory.length})`}
+                  </button>
                   {selectedIrsaliyeIds.size > 0 && (
                     <>
                       <button
@@ -2679,6 +2726,18 @@ export const CariStokScreen: React.FC<CariStokScreenProps> = ({
                   }`}
                 >
                   Tümü ({historyList.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void handleTumunuRapor({ logs: historyList, filterLabel: 'Tümü' })
+                  }
+                  disabled={fotoRaporBusy || historyList.length === 0}
+                  className="inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-lg border border-slate-900 bg-white text-slate-900 cursor-pointer disabled:opacity-50"
+                  title="Tümü sekmesindeki bütün kayıtları (ör. 31) tek raporda aç"
+                >
+                  <Printer size={11} />
+                  Tümünü raporla
                 </button>
                 <button
                   type="button"
