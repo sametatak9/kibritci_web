@@ -220,11 +220,20 @@ function valueAboveLabel(text: string, label: string): string {
   const lines = String(text || '').split(/\n/);
   for (let i = 0; i < lines.length; i++) {
     if (!numbered.test(lines[i]) && !standalone.test(lines[i])) continue;
-    for (let j = i - 1; j >= 0 && j >= i - 3; j--) {
-      const prev = firstChunk(lines[j].replace(/^\s*\d{1,2}\s*$/, '').trim());
+    const nextImmediate = (lines[i + 1] || '').trim();
+    const ilFollows = /^(İl|Il)\s*$/i.test(nextImmediate);
+    let skippedGeo = false;
+    for (let j = i - 1; j >= 0 && j >= i - 4; j--) {
+      const rawPrev = lines[j];
+      const prev = firstChunk(rawPrev.replace(/^\s*\d{1,2}\s*$/, '').trim());
       if (!prev || /^\d+$/.test(prev)) continue;
       if (/bildirge|sosyal g[uü]venlik|kimlik\/adres|hizmet bilgileri/i.test(prev)) continue;
       if (/^\d{1,2}[ \t]+\S/.test(prev)) continue;
+      const hadTwoCols = /\s{2,}\S/.test(rawPrev);
+      if (ilFollows && !skippedGeo && !hadTwoCols && /^[A-ZÇĞİÖŞÜÂÎÛ]{3,14}$/i.test(prev)) {
+        skippedGeo = true;
+        continue;
+      }
       return prev;
     }
   }
@@ -258,9 +267,9 @@ function dateAfterLabels(text: string, labels: string[]): string {
 
 function extractEBildirgeTc(text: string): string {
   const src = String(text || '');
-  const afterKimlik = src.split(/K[İI]ML[İI]K NUMARASI/i)[1]?.slice(0, 500) || '';
+  const afterKimlik = src.split(/K[İI]ML[İI]K NUMARASI/i)[1]?.slice(0, 600) || '';
   const spacedLine = (chunk: string) =>
-    chunk.match(/(?:^|\n)[ \t]*(\d(?:[ \t]+\d){10})[ \t]*(?:\n|$)/) ||
+    chunk.match(/(?:^|\n)[ \t]*(\d(?:[ \t]+\d){10})(?:[ \t]+[A-ZX])?[ \t]*(?:\n|$)/i) ||
     chunk.match(/(\d(?:[ \t]{2,}\d){10})/);
   const boxed = spacedLine(afterKimlik) || spacedLine(src);
   const packed = afterKimlik.match(/\b\d{11}\b/) || src.match(/\b\d{11}\b/);
@@ -269,6 +278,10 @@ function extractEBildirgeTc(text: string): string {
 }
 
 function extractEBildirgeFirma(text: string): string {
+  const isAddr = (s: string) =>
+    /adresi|mahalle|cadde|sokak|bulvar|osb\b|blok|[iı]stanbul|ankara|no:\s*\d/i.test(s);
+  const isCo = (s: string) =>
+    /in[sş]aat|elektr|taahh[uü]t|ticaret|ltd|l[iı]mited|[sş]irket|m[uü]hendisl/i.test(s);
   const label = /Ad[ıi]-Soyad[ıi]\/[ÜU]nv\.?[^\n]*/i.exec(String(text || ''));
   if (label && label.index != null) {
     const following = String(text || '')
@@ -276,18 +289,17 @@ function extractEBildirgeFirma(text: string): string {
       .split(/\n/)
       .map((ln) => ln.trim())
       .filter(Boolean);
-    for (const ln of following.slice(0, 5)) {
+    for (const ln of following.slice(0, 6)) {
       if (/^\d{1,2}$/.test(ln)) continue;
-      const cleaned = ln
-        .replace(/^\s*\d{1,2}\s+/, '')
-        .split(/\s{2,}/)[0]
-        .replace(/\s+(MAHALLE|MAHALLES[İI]|CADDE|SOKAK|BULVAR|[İI]STANBUL|ANKARA).*$/i, '')
-        .trim();
-      if (cleaned.length >= 6 && !/^\d+$/.test(cleaned) && !/adresi/i.test(cleaned)) return cleaned;
+      if (/adresi|ünv\.?/i.test(ln) && !isCo(ln)) continue;
+      const cleaned = ln.replace(/^\s*\d{1,2}\s+/, '').split(/\s{2,}/)[0].trim();
+      if (cleaned.length < 6 || /^\d+$/.test(cleaned)) continue;
+      if (isAddr(cleaned) && !isCo(cleaned)) continue;
+      return isCo(cleaned) ? cleaned : cleaned.replace(/\s+(MAHALLE|MAHALLES[İI]|CADDE|SOKAK|BULVAR|[İI]STANBUL|ANKARA).*$/i, '').trim();
     }
   }
   const caps = String(text || '').match(
-    /\n\s*\d{0,2}\s*([A-ZÇĞİÖŞÜÂÎÛ][A-ZÇĞİÖŞÜÂÎÛ0-9 /.'-]{10,}(?:İNŞAAT|INSAAT|ELEKTR[İI]K|TAAHH[ÜU]T|M[ÜU]HEND[İI]SL[İI]K|LTD|T[İI]CARET)[A-ZÇĞİÖŞÜÂÎÛ0-9 /.'-]*)/
+    /\n\s*\d{0,2}\s*([A-ZÇĞİÖŞÜÂÎÛ][A-ZÇĞİÖŞÜÂÎÛ0-9 /.'-]{10,}(?:İNŞAAT|INSAAT|ELEKTR[İI]K|TAAHH[ÜU]T|M[ÜU]HEND[İI]SL[İI]K|LTD|T[İI]CARET|ŞİRKET[İI]|SIRKETI)[A-ZÇĞİÖŞÜÂÎÛ0-9 /.'-]*)/
   );
   return caps?.[1]?.split(/\s{2,}/)[0]?.trim() || '';
 }
@@ -323,13 +335,16 @@ export function parseSgkEBildirgeText(raw: string): Partial<TaseronGrupParse> {
     valueAboveLabel(text, 'Soyadi')
   );
 
-  const meslekJunk = /bildirge|hizmet bilgileri|kimlik\/adres|n[uü]fusa kay[ıi]tl[ıi]/i;
+  const meslekJunk = /bildirge|hizmet bilgileri|kimlik\/adres|n[uü]fusa kay[ıi]tl[ıi]|evet hay[ıi]r/i;
+  const stripMeslekCode = (raw: string) =>
+    String(raw || '')
+      .replace(/^\d{4}\.\d{2}\s*-?\s*/, '')
+      .replace(/\s*-\d{4}\.\d{2}\s*$/, '')
+      .trim();
   const pickMeslek = (...cands: string[]) => {
     for (const raw of cands) {
-      const t = String(raw || '')
-        .replace(/\s*-\d{4}\.\d{2}\s*$/, '')
-        .trim();
-      if (t.length >= 4 && !meslekJunk.test(t)) return t;
+      const t = stripMeslekCode(raw);
+      if (t.length >= 4 && !meslekJunk.test(t) && !/^\d/.test(t)) return t;
     }
     return '';
   };
@@ -344,8 +359,14 @@ export function parseSgkEBildirgeText(raw: string): Partial<TaseronGrupParse> {
     yon === 'cikis'
       ? dateAfterLabels(text, ['İşten Ayrılış Tarihi', 'Isten Ayrilis Tarihi', 'Sigortalının İşten Ayrılış Tarihi']) ||
         dateAfterLabels(text, ['İşe Giriş Tarihi', 'Ise Giris Tarihi'])
-      : dateAfterLabels(text, ['İşe Giriş Tarihi', 'Ise Giris Tarihi', 'Sigortalının İşe Giriş Tarihi']) ||
-        dateAfterLabels(text, ['İşten Ayrılış Tarihi', 'Isten Ayrilis Tarihi']);
+      : dateAfterLabels(text, [
+          'İşe Giriş Tarihi',
+          'Ise Giris Tarihi',
+          'Sigortalının İşe Giriş Tarihi',
+          'işe başladığı tarih',
+          'ise basladigi tarih',
+          'Sigortalının işe başladığı tarih',
+        ]) || dateAfterLabels(text, ['İşten Ayrılış Tarihi', 'Isten Ayrilis Tarihi']);
 
   const firmaAdi = extractEBildirgeFirma(text);
 

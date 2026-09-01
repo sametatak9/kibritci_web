@@ -1042,11 +1042,20 @@ function valueAboveLabel(text, label) {
   const lines = String(text || "").split(/\n/);
   for (let i = 0; i < lines.length; i++) {
     if (!numbered.test(lines[i]) && !standalone.test(lines[i])) continue;
-    for (let j = i - 1; j >= 0 && j >= i - 3; j--) {
-      const prev = firstChunk(lines[j].replace(/^\s*\d{1,2}\s*$/, "").trim());
+    const nextImmediate = (lines[i + 1] || "").trim();
+    const ilFollows = /^(İl|Il)\s*$/i.test(nextImmediate);
+    let skippedGeo = false;
+    for (let j = i - 1; j >= 0 && j >= i - 4; j--) {
+      const rawPrev = lines[j];
+      const prev = firstChunk(rawPrev.replace(/^\s*\d{1,2}\s*$/, "").trim());
       if (!prev || /^\d+$/.test(prev)) continue;
       if (/bildirge|sosyal g[uü]venlik|kimlik\/adres|hizmet bilgileri/i.test(prev)) continue;
       if (/^\d{1,2}[ \t]+\S/.test(prev)) continue;
+      const hadTwoCols = /\s{2,}\S/.test(rawPrev);
+      if (ilFollows && !skippedGeo && !hadTwoCols && /^[A-ZÇĞİÖŞÜÂÎÛ]{3,14}$/i.test(prev)) {
+        skippedGeo = true;
+        continue;
+      }
       return prev;
     }
   }
@@ -1070,25 +1079,30 @@ function dateAfterLabels(text, labels) {
 }
 function extractEBildirgeTc(text) {
   const src = String(text || "");
-  const afterKimlik = src.split(/K[İI]ML[İI]K NUMARASI/i)[1]?.slice(0, 500) || "";
-  const spacedLine = (chunk) => chunk.match(/(?:^|\n)[ \t]*(\d(?:[ \t]+\d){10})[ \t]*(?:\n|$)/) || chunk.match(/(\d(?:[ \t]{2,}\d){10})/);
+  const afterKimlik = src.split(/K[İI]ML[İI]K NUMARASI/i)[1]?.slice(0, 600) || "";
+  const spacedLine = (chunk) => chunk.match(/(?:^|\n)[ \t]*(\d(?:[ \t]+\d){10})(?:[ \t]+[A-ZX])?[ \t]*(?:\n|$)/i) || chunk.match(/(\d(?:[ \t]{2,}\d){10})/);
   const boxed = spacedLine(afterKimlik) || spacedLine(src);
   const packed = afterKimlik.match(/\b\d{11}\b/) || src.match(/\b\d{11}\b/);
   const tcNo = digitsTc((boxed?.[1] || packed?.[0] || "").replace(/\s+/g, ""));
   return tcNo.length === 11 ? tcNo : "";
 }
 function extractEBildirgeFirma(text) {
+  const isAddr = (s) => /adresi|mahalle|cadde|sokak|bulvar|osb\b|blok|[iı]stanbul|ankara|no:\s*\d/i.test(s);
+  const isCo = (s) => /in[sş]aat|elektr|taahh[uü]t|ticaret|ltd|l[iı]mited|[sş]irket|m[uü]hendisl/i.test(s);
   const label = /Ad[ıi]-Soyad[ıi]\/[ÜU]nv\.?[^\n]*/i.exec(String(text || ""));
   if (label && label.index != null) {
     const following = String(text || "").slice(label.index + label[0].length).split(/\n/).map((ln) => ln.trim()).filter(Boolean);
-    for (const ln of following.slice(0, 5)) {
+    for (const ln of following.slice(0, 6)) {
       if (/^\d{1,2}$/.test(ln)) continue;
-      const cleaned = ln.replace(/^\s*\d{1,2}\s+/, "").split(/\s{2,}/)[0].replace(/\s+(MAHALLE|MAHALLES[İI]|CADDE|SOKAK|BULVAR|[İI]STANBUL|ANKARA).*$/i, "").trim();
-      if (cleaned.length >= 6 && !/^\d+$/.test(cleaned) && !/adresi/i.test(cleaned)) return cleaned;
+      if (/adresi|ünv\.?/i.test(ln) && !isCo(ln)) continue;
+      const cleaned = ln.replace(/^\s*\d{1,2}\s+/, "").split(/\s{2,}/)[0].trim();
+      if (cleaned.length < 6 || /^\d+$/.test(cleaned)) continue;
+      if (isAddr(cleaned) && !isCo(cleaned)) continue;
+      return isCo(cleaned) ? cleaned : cleaned.replace(/\s+(MAHALLE|MAHALLES[İI]|CADDE|SOKAK|BULVAR|[İI]STANBUL|ANKARA).*$/i, "").trim();
     }
   }
   const caps = String(text || "").match(
-    /\n\s*\d{0,2}\s*([A-ZÇĞİÖŞÜÂÎÛ][A-ZÇĞİÖŞÜÂÎÛ0-9 /.'-]{10,}(?:İNŞAAT|INSAAT|ELEKTR[İI]K|TAAHH[ÜU]T|M[ÜU]HEND[İI]SL[İI]K|LTD|T[İI]CARET)[A-ZÇĞİÖŞÜÂÎÛ0-9 /.'-]*)/
+    /\n\s*\d{0,2}\s*([A-ZÇĞİÖŞÜÂÎÛ][A-ZÇĞİÖŞÜÂÎÛ0-9 /.'-]{10,}(?:İNŞAAT|INSAAT|ELEKTR[İI]K|TAAHH[ÜU]T|M[ÜU]HEND[İI]SL[İI]K|LTD|T[İI]CARET|ŞİRKET[İI]|SIRKETI)[A-ZÇĞİÖŞÜÂÎÛ0-9 /.'-]*)/
   );
   return caps?.[1]?.split(/\s{2,}/)[0]?.trim() || "";
 }
@@ -1113,11 +1127,12 @@ function parseSgkEBildirgeText(raw) {
     valueAboveLabel(text, "Soyad\u0131"),
     valueAboveLabel(text, "Soyadi")
   );
-  const meslekJunk = /bildirge|hizmet bilgileri|kimlik\/adres|n[uü]fusa kay[ıi]tl[ıi]/i;
+  const meslekJunk = /bildirge|hizmet bilgileri|kimlik\/adres|n[uü]fusa kay[ıi]tl[ıi]|evet hay[ıi]r/i;
+  const stripMeslekCode = (raw2) => String(raw2 || "").replace(/^\d{4}\.\d{2}\s*-?\s*/, "").replace(/\s*-\d{4}\.\d{2}\s*$/, "").trim();
   const pickMeslek = (...cands) => {
     for (const raw2 of cands) {
-      const t = String(raw2 || "").replace(/\s*-\d{4}\.\d{2}\s*$/, "").trim();
-      if (t.length >= 4 && !meslekJunk.test(t)) return t;
+      const t = stripMeslekCode(raw2);
+      if (t.length >= 4 && !meslekJunk.test(t) && !/^\d/.test(t)) return t;
     }
     return "";
   };
@@ -1127,7 +1142,14 @@ function parseSgkEBildirgeText(raw) {
     valueAboveLabel(text, "Meslek Ad\u0131 ve Kodu"),
     valueAboveLabel(text, "Meslek Adi ve Kodu")
   );
-  const tarih = yon === "cikis" ? dateAfterLabels(text, ["\u0130\u015Ften Ayr\u0131l\u0131\u015F Tarihi", "Isten Ayrilis Tarihi", "Sigortal\u0131n\u0131n \u0130\u015Ften Ayr\u0131l\u0131\u015F Tarihi"]) || dateAfterLabels(text, ["\u0130\u015Fe Giri\u015F Tarihi", "Ise Giris Tarihi"]) : dateAfterLabels(text, ["\u0130\u015Fe Giri\u015F Tarihi", "Ise Giris Tarihi", "Sigortal\u0131n\u0131n \u0130\u015Fe Giri\u015F Tarihi"]) || dateAfterLabels(text, ["\u0130\u015Ften Ayr\u0131l\u0131\u015F Tarihi", "Isten Ayrilis Tarihi"]);
+  const tarih = yon === "cikis" ? dateAfterLabels(text, ["\u0130\u015Ften Ayr\u0131l\u0131\u015F Tarihi", "Isten Ayrilis Tarihi", "Sigortal\u0131n\u0131n \u0130\u015Ften Ayr\u0131l\u0131\u015F Tarihi"]) || dateAfterLabels(text, ["\u0130\u015Fe Giri\u015F Tarihi", "Ise Giris Tarihi"]) : dateAfterLabels(text, [
+    "\u0130\u015Fe Giri\u015F Tarihi",
+    "Ise Giris Tarihi",
+    "Sigortal\u0131n\u0131n \u0130\u015Fe Giri\u015F Tarihi",
+    "i\u015Fe ba\u015Flad\u0131\u011F\u0131 tarih",
+    "ise basladigi tarih",
+    "Sigortal\u0131n\u0131n i\u015Fe ba\u015Flad\u0131\u011F\u0131 tarih"
+  ]) || dateAfterLabels(text, ["\u0130\u015Ften Ayr\u0131l\u0131\u015F Tarihi", "Isten Ayrilis Tarihi"]);
   const firmaAdi = extractEBildirgeFirma(text);
   return {
     yon,
@@ -1988,17 +2010,17 @@ Provide the output strictly conforming to the response schema.
       const promptText = `
 This is ONE official Turkish SGK e-Bildirge PDF (JasperReports / iText) from the Arnavutk\xF6y \u0130\u015Fe Giri\u015F WhatsApp group.
 Titles are exactly:
-- "S\u0130GORTALI \u0130\u015EE G\u0130R\u0130\u015E B\u0130LD\u0130RGES\u0130" \u2192 yon=giris. Date = \u0130\u015Fe Giri\u015F Tarihi.
-- "S\u0130GORTALI \u0130\u015ETEN AYRILI\u015E B\u0130LD\u0130RGES\u0130" \u2192 yon=cikis. Date = Sigortal\u0131n\u0131n \u0130\u015Ften Ayr\u0131l\u0131\u015F Tarihi (DD.MM.YYYY).
+- "S\u0130GORTALI \u0130\u015EE G\u0130R\u0130\u015E B\u0130LD\u0130RGES\u0130" \u2192 yon=giris. Date = field 16 "Sigortal\u0131n\u0131n i\u015Fe ba\u015Flad\u0131\u011F\u0131 tarih" (DD.MM.YYYY).
+- "S\u0130GORTALI \u0130\u015ETEN AYRILI\u015E B\u0130LD\u0130RGES\u0130" \u2192 yon=cikis. Date = field 15 "Sigortal\u0131n\u0131n \u0130\u015Ften Ayr\u0131l\u0131\u015F Tarihi" (DD.MM.YYYY).
 Never a weekly roster. Prefer the TITLE if both dates appear.
 
 Extract:
 - "yon": giris | cikis from the title as above.
-- "firmaAdi": field 22 "\u0130\u015Fverenin/\u0130\u015Fyerinin/\u0130lgili Kurulu\u015Fun Ad\u0131-Soyad\u0131/\xDCnv." \u2014 the subcontractor unvan (e.g. KUTER ELEKTR\u0130K TAAHH\xDCT...). NOT the address line. NOT Kibrit\xE7i unless Kibrit\xE7i is that unvan.
-- "isGorev": field 14 "Meslek Ad\u0131 ve Kodu" \u2014 the job name without the numeric code (e.g. "Di\u011Fer Elektrik Tesisat\xE7\u0131lar\u0131" from "Di\u011Fer Elektrik Tesisat\xE7\u0131lar\u0131-7411.02").
-- "ad": field 1 Ad\u0131.
-- "soyad": field 2 Soyad\u0131.
-- "tcNo": 11-digit T.C. (boxes may be spaced: 2 6 5 4 \u2026 \u2192 concatenate).
+- "firmaAdi": "\u0130\u015Fverenin/\u0130\u015Fyerinin/\u0130lgili Kurulu\u015Fun Ad\u0131-Soyad\u0131/\xDCnv." \u2014 the subcontractor unvan (field 22 on ayr\u0131l\u0131\u015F, field 24 on giri\u015F). NOT the address line. NOT Kibrit\xE7i unless Kibrit\xE7i is that unvan.
+- "isGorev": "Meslek Ad\u0131 ve Kodu" \u2014 the job name without the numeric code. Ayr\u0131l\u0131\u015F field 14 is often "Di\u011Fer Elektrik Tesisat\xE7\u0131lar\u0131-7411.02". Giri\u015F field 17 is often "8189.13 -Kablo \u0130zolasyon Eleman\u0131" (code may be a prefix).
+- "ad": field 1 Ad\u0131 (not the N\xFCfusa kay\u0131tl\u0131 / il value to the right).
+- "soyad": field 2 Soyad\u0131 (not the \u0130l / \u0130l\xE7e to the right or below).
+- "tcNo": 11-digit T.C. (boxes may be spaced; ignore a trailing X checkbox).
 - "tarih": YYYY-MM-DD as specified by yon.
 
 File name hint (may be empty): ${String(fileName || "")}

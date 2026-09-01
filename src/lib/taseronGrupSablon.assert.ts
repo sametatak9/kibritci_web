@@ -114,6 +114,34 @@ assert(eBildirgeGiris.tarih === '2026-09-01', `e-bildirge giriş tarih: ${eBildi
 assert(eBildirgeGiris.firmaAdi && eBildirgeGiris.firmaAdi.includes('YURT'), `e-bildirge giriş firma: ${eBildirgeGiris.firmaAdi}`);
 assert(eBildirgeGiris.tcNo === '12345678901', `e-bildirge giriş tc: ${eBildirgeGiris.tcNo}`);
 
+const eBildirgeGirisTm = parseSgkEBildirgeText(`
+SİGORTALI İŞE GİRİŞ BİLDİRGESİ
+(T.C.KİMLİK NUMARASI)
+1      2      3      4      5      6      7      8      9      0      1    X
+AYŞE
+1 Adı    NÜFUSA KAYITLI OLDUĞU YER
+DEMİR
+BATMAN
+2 Soyadı
+İl
+16 Sigortalının işe başladığı tarih    01.09.2026
+Meslek Adı ve Kodu    8189.13 -Kablo İzolasyon Elemanı
+İşverenin/İşyerinin/İlgili Kuruluşun Adı-Soyadı/Ünv.    İşyerinin (Kurumun) Adresi
+YURTMEKANİK İNŞAAT SANAYİ VE TİCARET LİMİTED ŞİRKETİ
+24
+İKİTELLİ OSB HESKOOP M7 BLOK İSTANBUL
+`);
+assert(eBildirgeGirisTm.yon === 'giris', `giriş tm yön: ${eBildirgeGirisTm.yon}`);
+assert(eBildirgeGirisTm.ad === 'AYŞE' || eBildirgeGirisTm.ad === 'AYSE', `giriş tm ad: ${eBildirgeGirisTm.ad}`);
+assert(String(eBildirgeGirisTm.soyad).includes('DEMİR') || String(eBildirgeGirisTm.soyad).includes('DEMIR'), `giriş tm soyad: ${eBildirgeGirisTm.soyad}`);
+assert(eBildirgeGirisTm.soyad !== 'BATMAN', 'giriş tm soyad il değil');
+assert(eBildirgeGirisTm.tarih === '2026-09-01', `giriş tm tarih: ${eBildirgeGirisTm.tarih}`);
+assert(eBildirgeGirisTm.tcNo === '12345678901', `giriş tm tc: ${eBildirgeGirisTm.tcNo}`);
+assert(eBildirgeGirisTm.firmaAdi && eBildirgeGirisTm.firmaAdi.includes('YURT'), `giriş tm firma: ${eBildirgeGirisTm.firmaAdi}`);
+assert(eBildirgeGirisTm.firmaAdi && eBildirgeGirisTm.firmaAdi.includes('TİCARET') || eBildirgeGirisTm.firmaAdi?.includes('TICARET'), `giriş tm unvan: ${eBildirgeGirisTm.firmaAdi}`);
+assert(eBildirgeGirisTm.isGorev && eBildirgeGirisTm.isGorev.includes('KABLO'), `giriş tm meslek: ${eBildirgeGirisTm.isGorev}`);
+assert(!/^\d/.test(String(eBildirgeGirisTm.isGorev)), `giriş tm meslek kodu silindi: ${eBildirgeGirisTm.isGorev}`);
+
 const eBildirgeTmLayout = parseSgkEBildirgeText(`
 SİGORTALI İŞTEN AYRILIŞ BİLDİRGESİ
 (T.C.KİMLİK NUMARASI)
@@ -122,6 +150,7 @@ ALİ
 1 Adı    NÜFUSA KAYITLI OLDUGU YER
 YILMAZ    MARDİN
 2 Soyadı
+İl
 Diğer Elektrik Tesisatçıları-7411.02
 14
 Meslek Adı ve Kodu

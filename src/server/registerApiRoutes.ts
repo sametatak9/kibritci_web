@@ -981,17 +981,17 @@ app.post("/api/parse-taseron-grup", async (req, res) => {
     const promptText = `
 This is ONE official Turkish SGK e-Bildirge PDF (JasperReports / iText) from the Arnavutköy İşe Giriş WhatsApp group.
 Titles are exactly:
-- "SİGORTALI İŞE GİRİŞ BİLDİRGESİ" → yon=giris. Date = İşe Giriş Tarihi.
-- "SİGORTALI İŞTEN AYRILIŞ BİLDİRGESİ" → yon=cikis. Date = Sigortalının İşten Ayrılış Tarihi (DD.MM.YYYY).
+- "SİGORTALI İŞE GİRİŞ BİLDİRGESİ" → yon=giris. Date = field 16 "Sigortalının işe başladığı tarih" (DD.MM.YYYY).
+- "SİGORTALI İŞTEN AYRILIŞ BİLDİRGESİ" → yon=cikis. Date = field 15 "Sigortalının İşten Ayrılış Tarihi" (DD.MM.YYYY).
 Never a weekly roster. Prefer the TITLE if both dates appear.
 
 Extract:
 - "yon": giris | cikis from the title as above.
-- "firmaAdi": field 22 "İşverenin/İşyerinin/İlgili Kuruluşun Adı-Soyadı/Ünv." — the subcontractor unvan (e.g. KUTER ELEKTRİK TAAHHÜT...). NOT the address line. NOT Kibritçi unless Kibritçi is that unvan.
-- "isGorev": field 14 "Meslek Adı ve Kodu" — the job name without the numeric code (e.g. "Diğer Elektrik Tesisatçıları" from "Diğer Elektrik Tesisatçıları-7411.02").
-- "ad": field 1 Adı.
-- "soyad": field 2 Soyadı.
-- "tcNo": 11-digit T.C. (boxes may be spaced: 2 6 5 4 … → concatenate).
+- "firmaAdi": "İşverenin/İşyerinin/İlgili Kuruluşun Adı-Soyadı/Ünv." — the subcontractor unvan (field 22 on ayrılış, field 24 on giriş). NOT the address line. NOT Kibritçi unless Kibritçi is that unvan.
+- "isGorev": "Meslek Adı ve Kodu" — the job name without the numeric code. Ayrılış field 14 is often "Diğer Elektrik Tesisatçıları-7411.02". Giriş field 17 is often "8189.13 -Kablo İzolasyon Elemanı" (code may be a prefix).
+- "ad": field 1 Adı (not the Nüfusa kayıtlı / il value to the right).
+- "soyad": field 2 Soyadı (not the İl / İlçe to the right or below).
+- "tcNo": 11-digit T.C. (boxes may be spaced; ignore a trailing X checkbox).
 - "tarih": YYYY-MM-DD as specified by yon.
 
 File name hint (may be empty): ${String(fileName || '')}
