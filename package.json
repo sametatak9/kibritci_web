@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test:taseron-grup": "tsx src/lib/taseronGrupSablon.assert.ts && tsx src/lib/pdfTextLayout.assert.ts",
+    "test:taseron-grup": "tsx src/lib/taseronGrupSablon.assert.ts && tsx src/lib/pdfTextLayout.assert.ts && tsx src/lib/sgkAnaFirmaIntake.assert.ts",
     "test:gemini": "tsx scratch/test_gemini.ts",
     "migrate:firestore:audit": "node scripts/migrate-firestore.mjs --audit-only",
     "migrate:firestore:dry-run": "node scripts/migrate-firestore.mjs --dry-run",

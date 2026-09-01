@@ -108,6 +108,10 @@ import {
   TASERON_GRUP_WP_HAT,
 } from '../lib/taseronGrupSablon';
 import {
+  attachAnaFirmaSgkEvrakPreservingYoklama,
+  findAnaFirmaPersonelByTc,
+} from '../lib/sgkAnaFirmaIntake';
+import {
   anaFirmaSgkEngel,
   buildAnaFirmaPersonelFromSgkTalep,
   digitsTc,
@@ -1486,6 +1490,66 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
         );
         return;
       }
+      if (isSgkGrupTalep(item)) {
+        const allPersoneller = await loadPersonellerForDedup(personeller || []);
+        const tc = digitsTc(item.tcNo);
+        const taseronHit =
+          tc.length === 11
+            ? allPersoneller.find((p) => isTaseronPersonelRecord(p) && digitsTc(p.tcNo) === tc)
+            : undefined;
+        const anaHit = findAnaFirmaPersonelByTc(allPersoneller, item.tcNo);
+        if (taseronHit && !anaHit) {
+          alert(
+            `Bu TC taşeron kartında (${taseronHit.ad} ${taseronHit.soyad}). Ana Firma SGK yolu taşeron/yoklama kadrosuna dokunmaz.`
+          );
+          return;
+        }
+        if (anaHit) {
+          const preserved = attachAnaFirmaSgkEvrakPreservingYoklama(anaHit, {
+            evrakUrl: evrakUrl || undefined,
+            tcNo: item.tcNo,
+            ad: item.ad,
+            soyad: item.soyad,
+            nitelik: item.nitelik || item.taseronIsGorev,
+            iseGirisTarihi: item.iseGirisTarihi,
+          });
+          await saveDocument('personeller', preserved);
+          setPersoneller?.((prev) => prev.map((p) => (p.id === preserved.id ? preserved : p)));
+          await updateDoc(doc(db, 'personelGirisTalepleri', item.id), {
+            durum: 'ONAYLANDI',
+            girisEvrakPdfUrl: evrakUrl || item.girisEvrakPdfUrl || '',
+            personelId: preserved.id,
+            onaylayan: currentUser?.email,
+            onayTarihi: new Date().toISOString(),
+          });
+          setActivePdfUploadId(null);
+          setUploadedPdfBase64(null);
+          alert(
+            'Ana Firma SGK evrakı işlendi. Mevcut kartın görevi, durumu, firması ve yoklaması değişmedi (yalnızca evrak bağlandı).'
+          );
+          return;
+        }
+        const candidate = buildAnaFirmaPersonelFromSgkTalep(sgkItem, item.personelId || `p_${Date.now()}`);
+        await saveDocument('personeller', candidate);
+        setPersoneller?.((prev) =>
+          prev.some((p) => p.id === candidate.id) ? prev.map((p) => (p.id === candidate.id ? candidate : p)) : [...prev, candidate]
+        );
+        await updateDoc(doc(db, 'personelGirisTalepleri', item.id), {
+          durum: 'ONAYLANDI',
+          girisEvrakPdfUrl: evrakUrl || item.girisEvrakPdfUrl || '',
+          personelId: candidate.id,
+          onaylayan: currentUser?.email,
+          onayTarihi: new Date().toISOString(),
+        });
+        setActivePdfUploadId(null);
+        setUploadedPdfBase64(null);
+        alert(
+          candidate.gorev
+            ? 'Ana Firma kaydı yazıldı (grup bildirimindeki yoklama görevi).'
+            : 'Ana Firma kaydı görev boş (arafta) açıldı. SGK meslek nitelik olarak durur; yoklama grubuna düşmez. Formen/Kampçı görevi sonra seçilir.'
+        );
+        return;
+      }
       const isGoturuKayit = isGoturuPersonelTalep(item);
       const firmaTipi = item.firmaTipi === 'TASERON' || isGoturuKayit ? 'TASERON' : 'ANA_FIRMA';
       const firmaAdi = item.firmaAdi || (isGoturuKayit ? GOTURU_FIRMA_ADI : undefined);
@@ -1653,7 +1717,14 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
         );
         return;
       }
+      const resolvedSgkAna = isSgkGrupTalep(item)
+        ? findAnaFirmaPersonelByTc(personeller || [], item.tcNo) ||
+          (personeller || []).find(
+            (p) => p.id && p.id === item.personelId && !isTaseronPersonelRecord(p)
+          )
+        : undefined;
       const resolved =
+        resolvedSgkAna ||
         personeller.find((p) => p.id && p.id === item.personelId) ||
         (tc.length === 11
           ? personeller.find((p) => digitsTc(p.tcNo) === tc)
@@ -1662,8 +1733,10 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           ? personeller.find((p) => normalizePersonName(p.ad, p.soyad) === isimNeedle)
           : undefined);
       const personelId = resolved?.id || item.personelId;
-      if (isSgkGrupTalep(item) && !personelId) {
-        alert('Personel kartı bulunamadı. Ana Firma çıkışı yazılmadı. TC veya ad soyad eşleşmesini kontrol edin.');
+      if (isSgkGrupTalep(item) && !resolvedSgkAna?.id) {
+        alert(
+          'Ana Firma kartı TC ile bulunamadı. Çıkış yazılmadı; yoklama günleri ve görev değişmedi. Taşeron kart bu yoldan pasif edilmez.'
+        );
         return;
       }
 
@@ -4645,6 +4718,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
               {!isGoturuOnayTab && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-950 leading-relaxed">
                   <strong>Taşeron grup ({TASERON_GRUP_WP_HAT}):</strong> PDF Onay kuyruğuna düşer; kadro ancak bu ekranda Onay ile yazılır veya TC ile pasife alınır.
+                  <strong> Kibritçi PDF (aynı hat):</strong> SGK_GRUP. Mevcut kartın görevi/yoklaması ezilmez; kart yoksa görev boş (arafta) açılır.
                   <strong> Ana Firma (Grup Köprüsü):</strong> onay ancak grup bildirimi + SGK evrakı varsa açılır.
                   <strong> Formen / kampçı / götürü:</strong> BEKLEMEDE talep grup bildirimi olmadan onaylanabilir — saha yolu ayrıdır.
                 </div>

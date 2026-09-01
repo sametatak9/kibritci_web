@@ -1,6 +1,7 @@
 /** SGK WhatsApp grubu — sabit bildirim metinleri ve kuyruk eşleştirme. */
 
 import type { Personel } from '../types/erp';
+import { CANONICAL_ANA_FIRMA_ADI } from './yoklamaUtils';
 
 export const SGK_GRUP_ADI = 'SGK Giriş / Çıkış';
 
@@ -250,7 +251,7 @@ export function buildAnaFirmaPersonelFromSgkTalep(item: SgkTalepKayit, fallbackI
     il: item.il || '',
     ilce: item.ilce || '',
     departman: 'ŞANTİYE',
-    gorev: String(item.gorev || 'İŞÇİ').toLocaleUpperCase('tr-TR'),
+    gorev: String(item.gorev || '').trim().toLocaleUpperCase('tr-TR'),
     nitelik: item.nitelik ? String(item.nitelik).toLocaleUpperCase('tr-TR') : undefined,
     iseGirisTarihi: String(item.iseGirisTarihi || new Date().toISOString()).slice(0, 10),
     cinsiyet: item.cinsiyet || 'Belirtilmedi',
@@ -262,6 +263,7 @@ export function buildAnaFirmaPersonelFromSgkTalep(item: SgkTalepKayit, fallbackI
     ibanNo: item.ibanNo || '',
     durum: true,
     firmaTipi: 'ANA_FIRMA',
+    firmaAdi: CANONICAL_ANA_FIRMA_ADI,
     kaynak: 'SGK_GRUP',
     onayDurumu: 'ONAYLANDI',
     fotografUrl: item.kimlikFotoUrl,
@@ -360,8 +362,10 @@ export function buildSgkTalepPatchFromParse(
       ? parsed.iseGirisTarihi || bildirim?.iseGirisTarihi || ''
       : parsed.cikisTarihi || parsed.iseGirisTarihi || bildirim?.cikisTarihi || ''
   ).slice(0, 10);
-  const gorev = String(bildirim?.gorev || parsed.gorev || '').toLocaleUpperCase('tr-TR');
-  const nitelik = String(bildirim?.nitelik || '').toLocaleUpperCase('tr-TR');
+  const gorev = String(bildirim?.gorev || '').toLocaleUpperCase('tr-TR');
+  const nitelik = String(bildirim?.nitelik || parsed.nitelik || parsed.isGorev || '').toLocaleUpperCase(
+    'tr-TR'
+  );
   return {
     durum: 'BEKLEMEDE',
     kaynak: 'SGK_GRUP',
