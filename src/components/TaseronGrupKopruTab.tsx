@@ -8,6 +8,7 @@ import { compressImage } from '../lib/imageCompress';
 import { buildWhatsAppUrl } from '../lib/mobilOnayUtils';
 import { muhasebeInputClass } from './evrakUi/MuhasebeBelgeForm';
 import { isTaseronPersonelRecord } from '../lib/taseronUtils';
+import { isKibritciSgkIsveren } from '../lib/sgkAnaFirmaIntake';
 import {
   buildTaseronCikisTalepDoc,
   buildTaseronCikisWhatsAppText,
@@ -231,6 +232,12 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
       setErr('Firma adı zorunlu. Hangi taşeron şirket olduğu gruptaki mesajda / PDF’de okunmalı.');
       return;
     }
+    if (isKibritciSgkIsveren(parsed.firmaAdi)) {
+      setErr(
+        'Bu PDF işvereni KİBRİTÇİ İNŞAAT. Taşeron kuyruğuna yazılmaz. Aynı hattı kullanın; program Ana Firma SGK kuyruğuna (görev boş / arafta, yoklama ezilmez) yönlendirir. Takip: Grup Köprüsü → SGK işe giriş / Onay → Personel oluşturma.'
+      );
+      return;
+    }
     if (!parsed.tarih) {
       setErr('Tarih zorunlu (işe giriş veya işten çıkış).');
       return;
@@ -310,6 +317,7 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
         (alt yazı örn. {TASERON_GRUP_OTOMASYON.altYaziOrnek}). Cloud API bağlıysa kayıt{' '}
         <em>Onay kuyruğuna</em> düşer — personel kartı otomatik açılmaz / çıkarılmaz. Ünvan kurulu taşeron
         ada hizalanır (YURTMEKANİK → YURT MEKANİK). Çıkışta yalnızca programdaki TC pasife alınır.
+        İşveren KİBRİTÇİ ise bu sekme yazmaz; Ana Firma SGK kuyruğuna gider (görev boş / arafta).
       </div>
       <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-[12px] text-slate-700 leading-relaxed space-y-1">
         <p>

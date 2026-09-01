@@ -528,6 +528,9 @@ export const GrupKopruScreen: React.FC<GrupKopruScreenProps> = ({
         ve SGK evrakı geldikten sonra Onay → Personel oluşturma kuyruğuna düşer. Kadro buradan yazılmaz;
         tek insan kontrolü Onay sekmesindedir. Çıkış da aynı: önce gruba personel + tarih, evrak gelince onaya düşer.
         WhatsApp grubunu program dinleyemez; sabit metni siz atarsınız, dönen evrakı buraya bırakırsınız.
+        {' '}Aynı şirket hattı <strong>0501 683 3400</strong>’a KİBRİTÇİ işverenli PDF iletilirse program
+        bunu taşeron sanmaz: mevcut SGK bildirimine evrak yapıştırır veya görev boş (arafta) kuyruk açar.
+        Formen/Kampçı yoklamasına düşmez; mevcut görevi ezmez. Kadro yine Onay’dadır.
       </div>
       ) : null}
 

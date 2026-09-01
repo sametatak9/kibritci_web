@@ -21,6 +21,16 @@ import {
 } from '../lib/taseronGrupSablon';
 import { generateGeminiWithFallback } from './geminiGenerate';
 import { getFirebaseAdmin, isFirebaseAdminConfigured } from './firebaseAdmin';
+import {
+  anaFirmaWpCikisKuyrukHazir,
+  anaFirmaWpGirisKuyrukHazir,
+  buildAnaFirmaWpCikisTalepDoc,
+  buildAnaFirmaWpGirisTalepDoc,
+  findAnaFirmaPersonelByTc,
+  findOpenAnaFirmaSgkTalep,
+  isKibritciSgkIsveren,
+} from '../lib/sgkAnaFirmaIntake';
+import { buildSgkTalepPatchFromParse, type SgkTalepKayit } from '../lib/sgkGrupSablon';
 
 const GEMINI_PROMPT = `
 This is ONE official Turkish SGK e-Bildirge PDF (JasperReports / iText) from the Arnavutköy İşe Giriş WhatsApp group.
@@ -139,11 +149,89 @@ async function loadKuruluFromAdmin(): Promise<{ cariKartlar: CariKart[]; persone
   };
 }
 
+export async function enqueueAnaFirmaSgkParse(opts: {
+  parsed: TaseronGrupParse;
+  evrakDataUrl?: string;
+  gonderen: string;
+}): Promise<{ id: string; duplicate?: boolean; skipped?: string; kanal?: string }> {
+  if (!isFirebaseAdminConfigured()) {
+    throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON yok — kuyruk sunucudan yazılamaz.');
+  }
+  const parsed = opts.parsed;
+  if (!isKibritciSgkIsveren(parsed.firmaAdi)) {
+    return { id: '', skipped: 'işveren Kibritçi değil' };
+  }
+  const { personeller } = await loadKuruluFromAdmin();
+  const db = getFirebaseAdmin().firestore();
+  const col = parsed.yon === 'cikis' ? 'personelCikisTalepleri' : 'personelGirisTalepleri';
+  const pendingSnap = await db.collection(col).get();
+  const pending = pendingSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as SgkTalepKayit[];
+  const open = findOpenAnaFirmaSgkTalep(pending, parsed);
+  const gonderen = opts.gonderen || 'otomasyon';
+  if (open?.id) {
+    const patch = stripUndefined(
+      buildSgkTalepPatchFromParse(
+        {
+          ad: parsed.ad,
+          soyad: parsed.soyad,
+          tcNo: parsed.tcNo,
+          iseGirisTarihi: parsed.tarih,
+          cikisTarihi: parsed.tarih,
+          nitelik: parsed.isGorev,
+        },
+        opts.evrakDataUrl || '',
+        parsed.yon === 'cikis' ? 'cikis' : 'giris',
+        open
+      )
+    );
+    await db.collection(col).doc(String(open.id)).update(patch);
+    return { id: String(open.id), duplicate: true, kanal: 'ANA_FIRMA' };
+  }
+  if (parsed.yon === 'cikis') {
+    if (!anaFirmaWpCikisKuyrukHazir(parsed)) {
+      return { id: '', skipped: 'Ana Firma çıkış için 11 haneli TC + tarih gerekli', kanal: 'ANA_FIRMA' };
+    }
+    const mevcut = findAnaFirmaPersonelByTc(personeller, parsed.tcNo);
+    const id = `CIKIS-SGK-WP-${Date.now()}`;
+    const doc = stripUndefined(
+      buildAnaFirmaWpCikisTalepDoc({
+        id,
+        parsed,
+        evrakUrl: opts.evrakDataUrl,
+        gonderen,
+        mevcut,
+      })
+    );
+    await db.collection(col).doc(id).set(doc);
+    return { id, kanal: 'ANA_FIRMA' };
+  }
+  if (!anaFirmaWpGirisKuyrukHazir(parsed)) {
+    return { id: '', skipped: 'Ana Firma giriş için ad/soyad/tarih/Kibritçi işveren gerekli', kanal: 'ANA_FIRMA' };
+  }
+  const mevcut = findAnaFirmaPersonelByTc(personeller, parsed.tcNo);
+  const id = `GIRIS-SGK-WP-${Date.now()}`;
+  const doc = stripUndefined(
+    buildAnaFirmaWpGirisTalepDoc({
+      id,
+      parsed,
+      evrakUrl: opts.evrakDataUrl,
+      gonderen,
+      mevcut,
+      bildirimGorev: mevcut?.gorev,
+    })
+  );
+  await db.collection(col).doc(id).set(doc);
+  return { id, kanal: 'ANA_FIRMA' };
+}
+
 export async function enqueueTaseronGrupParse(opts: {
   parsed: TaseronGrupParse;
   evrakDataUrl?: string;
   gonderen: string;
-}): Promise<{ id: string; duplicate?: boolean; skipped?: string }> {
+}): Promise<{ id: string; duplicate?: boolean; skipped?: string; kanal?: string }> {
+  if (isKibritciSgkIsveren(opts.parsed.firmaAdi)) {
+    return enqueueAnaFirmaSgkParse(opts);
+  }
   if (!isFirebaseAdminConfigured()) {
     throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON yok — kuyruk sunucudan yazılamaz.');
   }
@@ -152,6 +240,9 @@ export async function enqueueTaseronGrupParse(opts: {
     ...opts.parsed,
     firmaAdi: resolveTaseronGrupFirmaAdi(opts.parsed.firmaAdi, cariKartlar, personeller),
   };
+  if (isKibritciSgkIsveren(parsed.firmaAdi)) {
+    return enqueueAnaFirmaSgkParse({ ...opts, parsed: { ...opts.parsed, firmaAdi: parsed.firmaAdi } });
+  }
   if (!taseronGrupKuyrukHazir(parsed)) {
     return { id: '', skipped: 'ad/soyad/firma/tarih eksik' };
   }
@@ -193,7 +284,7 @@ export function taseronGrupOtomasyonSozlesme() {
     intakeSecretConfigured: isTaseronGrupIntakeConfigured(),
     whatsappConfigured: isWhatsAppTaseronWebhookConfigured(),
     adminConfigured: isFirebaseAdminConfigured(),
-    not: `Mevcut WhatsApp grubu dinlenmez. PDF ${TASERON_GRUP_OTOMASYON.hat} hattına iletilir; kuyruk yazılır, kadro Onay’da kurulur/çıkarılır.`,
+    not: `PDF ${TASERON_GRUP_OTOMASYON.hat} hattına iletilir. İşveren Kibritçi ise SGK_GRUP (görev boş/arafta, yoklama ezilmez); değilse TASERON_GRUP. Kadro yalnızca Onay’da.`,
   };
 }
 
