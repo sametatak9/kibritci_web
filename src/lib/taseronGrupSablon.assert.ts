@@ -18,7 +18,10 @@ import {
   parseTaseronGrupWhatsAppText,
   resolveTaseronGrupFirmaAdi,
   TASERON_GRUP_KAYNAK,
+  assembleTaseronGrupFromParts,
   findTaseronPersonelByTc,
+  TASERON_GRUP_OTOMASYON,
+  taseronGrupKuyrukHazir,
 } from './taseronGrupSablon';
 import { TASERON_PERSONEL_GOREV } from './taseronUtils';
 import type { CariKart, Personel } from '../types/erp';
@@ -258,5 +261,22 @@ assert(
   !findTaseronPersonelByTc([anaFirmaAday], parsed.tcNo),
   'çıkış Ana Firma TC ile pasif etmez'
 );
+
+assert(TASERON_GRUP_OTOMASYON.grupDinleme === false, 'grup dinlenmez');
+const assembled = assembleTaseronGrupFromParts({
+  fromPdf: {
+    yon: 'giris',
+    ad: 'AYŞE',
+    soyad: 'DEMİR',
+    firmaAdi: 'YURTMEKANİK İNŞAAT SANAYİ VE TİCARET LİMİTED ŞİRKETİ',
+    tarih: '2026-09-01',
+    tcNo: '12345678901',
+  },
+  fileName: 'AYSE DEMIR İŞE GİRİŞ BİLDİRGESİ.pdf',
+  caption: 'Yurt mekanik giriş',
+});
+assert(assembled.yon === 'giris', 'otomasyon yön');
+assert(assembled.ad === 'AYŞE' || assembled.ad === 'AYSE', `otomasyon ad: ${assembled.ad}`);
+assert(taseronGrupKuyrukHazir(assembled), 'otomasyon kuyruk hazır');
 
 console.log('taseronGrupSablon.assert: ok');

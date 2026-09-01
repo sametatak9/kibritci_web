@@ -404,6 +404,49 @@ export function taseronGrupParseHasIdentity(p?: Partial<TaseronGrupParse> | null
   return Boolean(String(p?.ad || '').trim() && String(p?.soyad || '').trim() && p?.yon);
 }
 
+/** Otomasyonun konuştuğu dil — mevcut WhatsApp grubu dinlenmez; bu sözleşmeye PDF gelir. */
+export const TASERON_GRUP_OTOMASYON = {
+  grupAdi: TASERON_GRUP_ADI,
+  kaynak: TASERON_GRUP_KAYNAK,
+  birim: 'tek mesaj = tek PDF = tek kişi',
+  girisDosya: 'AD SOYAD İŞE GİRİŞ BİLDİRGESİ.pdf',
+  cikisDosya: '11haneliTC_ayrilis.pdf',
+  altYaziOrnek: 'Yurt mekanik giriş',
+  endpoint: 'POST /api/taseron-grup-intake',
+  whatsappWebhook: '/api/webhooks/whatsapp-taseron-grup',
+  kadro: 'yazılmaz — Onay kuyruğu',
+  grupDinleme: false,
+} as const;
+
+export function taseronGrupKuyrukHazir(p?: Partial<TaseronGrupParse> | null): boolean {
+  return Boolean(
+    taseronGrupParseHasIdentity(p) && String(p?.firmaAdi || '').trim() && String(p?.tarih || '').trim()
+  );
+}
+
+/** PDF gövdesi + dosya adı + WhatsApp alt yazısı + (opsiyonel) yapay zeka. PDF ünvanı öncelikli. */
+export function assembleTaseronGrupFromParts(opts: {
+  fromPdf?: Partial<TaseronGrupParse> | null;
+  fileName?: string;
+  caption?: string;
+  fromGemini?: Partial<TaseronGrupParse> | null;
+}): TaseronGrupParse {
+  const fromMsg = parseTaseronGrupMessageMeta({ fileName: opts.fileName, caption: opts.caption });
+  const fromCaption = opts.caption ? parseTaseronGrupWhatsAppText(opts.caption) : {};
+  const merged = mergeTaseronGrupParse(opts.fromPdf, opts.fromGemini, fromCaption, fromMsg);
+  return normalizeTaseronGrupParse(
+    {
+      ...merged,
+      yon: fromMsg.yon || merged.yon,
+      firmaAdi: merged.firmaAdi || fromMsg.firmaAdi,
+      ad: merged.ad || fromMsg.ad,
+      soyad: merged.soyad || fromMsg.soyad,
+      tcNo: merged.tcNo || fromMsg.tcNo,
+    },
+    { fileName: opts.fileName, fallbackYon: fromMsg.yon }
+  );
+}
+
 /**
  * Gruptan kopyalanan sabit metni veya etiketli satırları okur.
  * Haftalık isim listesi beklenmez — tek kişi.

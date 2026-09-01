@@ -27,6 +27,7 @@ import {
   taseronIsGorevOf,
   TASERON_GRUP_ADI,
   TASERON_GRUP_KAYNAK,
+  TASERON_GRUP_OTOMASYON,
   type TaseronGrupParse,
   type TaseronGrupYon,
 } from '../lib/taseronGrupSablon';
@@ -195,7 +196,7 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fileBase64: base64, mimeType: mime, fileName: file.name }),
+            body: JSON.stringify({ fileBase64: base64, mimeType: mime, fileName: file.name, caption: wpPaste }),
           }
         );
         if (!res.success || !res.data) throw new Error(res.error || 'Evrak okunamadı.');
@@ -307,6 +308,13 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
         TC, meslek ve işveren ünvanı okunur. Ünvan, kurulu taşeron cari / kart isimleriyle eşleşir
         (ör. YURTMEKANİK → YURT MEKANİK). Çıkışta yalnızca programdaki TC pasife alınır; TC yoksa kadroya
         dokunulmaz. <em>Tek mesaj = tek kuyruk kaydı</em>. Kadro bu ekrandan yazılmaz.
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-[12px] text-slate-700 leading-relaxed">
+        <strong>Otomasyon dili:</strong> Mevcut grup dinlenemez. Program şunu anlar: bir PDF + isteğe bağlı alt yazı
+        ({TASERON_GRUP_OTOMASYON.altYaziOrnek}). Resmi kanal{' '}
+        <code className="text-[11px] bg-slate-100 px-1 rounded">{TASERON_GRUP_OTOMASYON.endpoint}</code> veya şirket
+        WhatsApp Business numarasına iletme ({TASERON_GRUP_OTOMASYON.whatsappWebhook}). Gelen kayıt Onay kuyruğuna
+        düşer; kadro yine onayda yazılır.
       </div>
 
       {err ? <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{err}</p> : null}
