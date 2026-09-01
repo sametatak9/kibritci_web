@@ -3,16 +3,23 @@ export const RETIRED_PORTAL_TABS = [
   'imalat_terminali',
   'temizlik_kirim',
   'parsel_temizlik_tespit',
+  'personel_kartlari',
 ] as const;
 
 export function isRetiredPortalTab(tab: string): boolean {
   return (RETIRED_PORTAL_TABS as readonly string[]).includes(tab);
 }
 
+/** Eski kısayol / favori sekmeleri nereye düşer. Personel Kartı = Personel Yönetimi. */
+export function replacementTabForRetired(tab: string): string {
+  if (tab === 'personel_kartlari') return 'personel';
+  if (isRetiredPortalTab(tab)) return 'ana_sayfa';
+  return tab;
+}
+
 export const PORTAL_PAGES = [
   { key: "ana_sayfa", label: "Ana Sayfa Dashboard", group: "BAŞLANGIÇ" },
   { key: "personel", label: "Personel Yönetimi", group: "PERSONEL" },
-  { key: "personel_kartlari", label: "Personel Kartı", group: "PERSONEL" },
   { key: "yoklama", label: "Yoklama ve Puantaj", group: "PERSONEL" },
   { key: "faaliyet_personel", label: "Faaliyeti Olan Personeller", group: "PERSONEL" },
   { key: "maas", label: "Maaş Hesaplama & Ödeme", group: "PERSONEL" },

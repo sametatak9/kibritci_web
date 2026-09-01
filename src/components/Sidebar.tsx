@@ -65,7 +65,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       group: "PERSONEL",
       items: [
         { key: "personel", label: "Personel Yönetimi", icon: Users },
-        { key: "personel_kartlari", label: "Personel Kartı", icon: Users },
         { key: "yoklama", label: "Yoklama ve Puantaj", icon: CalendarCheck2 },
         { key: "faaliyet_personel", label: "Faaliyeti Olan Personeller", icon: Camera },
         { key: "maas", label: "Maaş Hesaplama & Ödeme", icon: CreditCard },

@@ -4,6 +4,7 @@ import {
   FileText, Package, Wallet, Tent, Truck, Settings, MessageSquare, ShoppingCart, Home, BookOpen
 } from 'lucide-react';
 import { readFavoriteTabs, FAVORITES_STORAGE_KEY } from '../lib/navPreferences';
+import { isRetiredPortalTab, replacementTabForRetired } from '../lib/yetkiUtils';
 
 type Props = {
   onNavigate: (tab: string) => void;
@@ -14,7 +15,6 @@ const TAB_META: Record<string, { label: string; icon: React.ElementType }> = {
   onay_islemleri: { label: 'Onay Havuzu', icon: ShieldCheck },
   guvenlik_ekrani: { label: 'Güvenlik', icon: ShieldCheck },
   personel: { label: 'Personel', icon: Users },
-  personel_kartlari: { label: 'Personel Kartları', icon: Users },
   yoklama: { label: 'Yoklama', icon: ClipboardList },
   faaliyet_personel: { label: 'Faaliyet Personel', icon: Camera },
   maas: { label: 'Maaş', icon: CreditCard },
@@ -42,7 +42,9 @@ const TAB_META: Record<string, { label: string; icon: React.ElementType }> = {
 };
 
 export const DashboardFavoriteTabsStrip: React.FC<Props> = ({ onNavigate }) => {
-  const [favorites, setFavorites] = useState<string[]>(() => readFavoriteTabs());
+  const [favorites, setFavorites] = useState<string[]>(() =>
+    readFavoriteTabs().filter((k) => !isRetiredPortalTab(k))
+  );
 
   useEffect(() => {
     const sync = () => setFavorites(readFavoriteTabs());
@@ -89,7 +91,7 @@ export const DashboardFavoriteTabsStrip: React.FC<Props> = ({ onNavigate }) => {
             <button
               key={`${FAVORITES_STORAGE_KEY}-${key}`}
               type="button"
-              onClick={() => onNavigate(key)}
+              onClick={() => onNavigate(isRetiredPortalTab(key) ? replacementTabForRetired(key) : key)}
               className="inline-flex items-center gap-1.5 min-h-[38px] px-3 py-2 rounded-xl border border-orange-100 bg-orange-50/40 hover:bg-orange-50 hover:border-orange-200 text-[11px] font-bold text-slate-800 transition cursor-pointer"
             >
               <Icon size={14} className="text-orange-600" />

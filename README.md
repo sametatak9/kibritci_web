@@ -15,6 +15,8 @@ Canlı: [kibritci-web.vercel.app](https://kibritci-web.vercel.app)
 
 Personel ve yoklama kayıtları Render diskinde değildi. Aynı Firebase projesine bağlanan her Vercel deploy'u mevcut kadroyu ve yoklamayı görür. Seed / import scriptleri canlı veriye **çalıştırılmaz**.
 
+Kenar çubuğundaki **Personel Kartı** sekmesi kaldırıldı (Grup Köprüsü + Personel Yönetimi yeterli). Eski kısayollar Personel Yönetimi’ne düşer.
+
 ## Yerel çalıştırma
 
 **Gereksinim:** Node.js 20–22 (`nvm` kullanıyorsanız `.node-version` yeter).

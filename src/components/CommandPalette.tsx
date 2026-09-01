@@ -11,6 +11,7 @@ import {
   readRecentTabs,
   toggleFavoriteTab,
 } from '../lib/navPreferences';
+import { isRetiredPortalTab } from '../lib/yetkiUtils';
 
 interface CommandPaletteProps {
   onSelect: (route: string) => void;
@@ -21,7 +22,6 @@ const ROUTES = [
   { key: 'onay_islemleri', label: 'Onay Havuzu & İmzalar', icon: ShieldCheck },
   { key: 'guvenlik_ekrani', label: 'Güvenlik & Kapı Kontrol', icon: ShieldCheck },
   { key: 'personel', label: 'Personel Yönetimi', icon: Users },
-  { key: 'personel_kartlari', label: 'Personel Kartı', icon: Users },
   { key: 'yoklama', label: 'Yoklama & Puantaj', icon: ClipboardList },
   { key: 'faaliyet_personel', label: 'Faaliyeti Olan Personeller', icon: Camera },
   { key: 'maas', label: 'Maaş Hesaplama', icon: CreditCard },
@@ -91,7 +91,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ onSelect }) => {
 
   const filtered = useMemo(() => {
     const kw = query.toLocaleLowerCase('tr-TR').trim();
-    let list = ROUTES.filter((r) => r.label.toLocaleLowerCase('tr-TR').includes(kw));
+    let list = ROUTES.filter(
+      (r) => !isRetiredPortalTab(r.key) && r.label.toLocaleLowerCase('tr-TR').includes(kw)
+    );
     // Favoriler üste
     list = [...list].sort((a, b) => {
       const af = favorites.includes(a.key) ? 0 : 1;
@@ -106,7 +108,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ onSelect }) => {
     if (query.trim()) return [];
     return recents
       .map((key) => ROUTES.find((r) => r.key === key))
-      .filter(Boolean) as typeof ROUTES;
+      .filter((r): r is (typeof ROUTES)[number] => Boolean(r) && !isRetiredPortalTab(r.key));
   }, [recents, query]);
 
   useEffect(() => {

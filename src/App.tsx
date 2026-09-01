@@ -34,7 +34,6 @@ const EvrakBaglamaScreen = lazy(() => import('./components/EvrakBaglamaScreen').
 const EvrakEtiketleriScreen = lazy(() => import('./components/EvrakEtiketleriScreen').then(m => ({ default: m.EvrakEtiketleriScreen })));
 const GrupKopruScreen = lazy(() => import('./components/GrupKopruScreen').then(m => ({ default: m.GrupKopruScreen })));
 const TaseronKesintiScreen = lazy(() => import('./components/TaseronKesintiScreen').then(m => ({ default: m.TaseronKesintiScreen })));
-const PersonelKartlariScreen = lazy(() => import('./components/PersonelKartlariScreen').then(m => ({ default: m.PersonelKartlariScreen })));
 const KasaScreen = lazy(() => import('./components/KasaScreen').then(m => ({ default: m.KasaScreen })));
 const IdariScreen = lazy(() => import('./components/IdariScreen').then(m => ({ default: m.IdariScreen })));
 const CariStokScreen = lazy(() => import('./components/CariStokScreen').then(m => ({ default: m.CariStokScreen })));
@@ -120,6 +119,7 @@ import {
   canAccessUyelikAdminPanel,
   isIdariIslerRole,
   isRetiredPortalTab,
+  replacementTabForRetired,
 } from './lib/yetkiUtils';
 import {
   IRSALIYE_FATURA_TAB,
@@ -215,7 +215,7 @@ function App() {
           writeWorkspacePane('karsilastir');
           return IRSALIYE_FATURA_TAB;
         }
-        if (isRetiredPortalTab(tab)) return 'ana_sayfa';
+        if (isRetiredPortalTab(tab)) return replacementTabForRetired(tab);
         return canonicalizePortalTab(tab);
       };
       const direct = localStorage.getItem(LAST_TAB_STORAGE_KEY);
@@ -3013,7 +3013,7 @@ function App() {
       setWorkspacePane(pane);
     }
     const resolved = canonicalizePortalTab(targetTab);
-    const tab = isRetiredPortalTab(resolved) ? 'ana_sayfa' : resolved;
+    const tab = isRetiredPortalTab(resolved) ? replacementTabForRetired(resolved) : resolved;
     try {
       persistLastTab(tab);
     } catch {
@@ -4104,19 +4104,6 @@ function App() {
                   setCariIslemGecmisi={setCariIslemGecmisiWithSync}
                   addNotification={addNotification}
                   currentUser={currentUser}
-                />
-              )}
-
-              {activeTab === "personel_kartlari" && (
-                <PersonelKartlariScreen 
-                  personeller={personeller}
-                  yoklamalar={yoklamalar}
-                  araclar={araclar}
-                  kampKayitlari={kampKayitlari}
-                  kampOdalari={kampOdalari}
-                  hazirTutanaklar={hazirTutanaklar}
-                  kasaHareketleri={kasaHareketleri}
-                  sahaFaaliyetleri={sahaFaaliyetleri}
                 />
               )}
 
