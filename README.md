@@ -39,13 +39,14 @@ Zorunlu değil (istemci `firebase-applet-config.json` ile `kibritci-erp`'ye bağ
 
 Akvizyon nöbet kapanışı: her gün 18:00 UTC (21:00 İstanbul) → `GET /api/cron/akvizyon-nobet-kapat`.
 
-## Grup Köprüsü (SGK + Arnavutköy fatura)
+## Grup Köprüsü (SGK + Taşeron grup + Arnavutköy fatura)
 
 WhatsApp grubunu program dinleyemez (resmi API mevcut gruba bot olarak giremez). Köprü şöyle işler:
 
 1. **SGK giriş:** Kimlik + görev (yoklama) + giriş tarihi forma yazılır, sabit metin gruba atılır, `personelGirisTalepleri` kuyruğu açılır. SGK evrakı gelince buraya bırakılır; grup bildirimi yoksa işlem durur. **Personel kartı Grup Köprüsü'nden yazılmaz.** Evrak, talebe bağlanır ve **Onay → Personel oluşturma** kuyruğuna düşer. Tek insan onayı orada `upsertPersonelAvoidDuplicate` ile Ana Firma kaydını açar.
 2. **SGK çıkış:** Personel + çıkış tarihi gruba bildirilir (`personelCikisTalepleri`). Çıkış evrakı talebe bağlanır; kart ancak Onay → Personel giriş-çıkış'ta pasife alınır.
-3. **Arnavutköy fatura:** WhatsApp grubunu program dinlemez; faturayı buraya bırakın. Yükleme → yapay zeka okuma → açık irsaliye önerisi (firma / ünvan) → kaydet. Kayıt **Fatura Girişi** arşivine düşer (`Arnavutköy köprü` süzgeci). İsteğe bağlı aynı anda **Evrak Etiketleri** grubuna (mevcut veya yeni ad) fatura + eşleşen irsaliyeler eklenir. Personel yazılmaz.
+3. **Taşeron grup:** Ayrı WhatsApp grubu. Her yeni grup mesajı = bir işe giriş **veya** bir işten çıkış (haftalık yapıştırma listesi değil). Standart PDF Grup Köprüsü → **Taşeron grup** sekmesine bırakılır; parser firma + yapılan iş (nitelik) + ad/TC + yön okur. Onaylayınca **tek** `personelGirisTalepleri` veya `personelCikisTalepleri` kaydı (`kaynak: TASERON_GRUP`) açılır. Kadro bu ekrandan yazılmaz. Onay’da taşeron kartı `gorev: TAŞERON PERSONEL` (`withTaseronPersonelGorev`) ile açılır; PDF’deki iş `nitelik` olur. Çıkış onaylanana kadar kart pasife alınmaz. Haftalık **Taşeron Liste Güncelle** ayrı kalır.
+4. **Arnavutköy fatura:** WhatsApp grubunu program dinlemez; faturayı buraya bırakın. Yükleme → yapay zeka okuma → açık irsaliye önerisi (firma / ünvan) → kaydet. Kayıt **Fatura Girişi** arşivine düşer (`Arnavutköy köprü` süzgeci). İsteğe bağlı aynı anda **Evrak Etiketleri** grubuna (mevcut veya yeni ad) fatura + eşleşen irsaliyeler eklenir. Personel yazılmaz.
 
 ## Evrak bağlama
 
