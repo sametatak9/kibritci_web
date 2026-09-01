@@ -7,6 +7,7 @@ import type {
   Fatura,
   Irsaliye,
   OnayliAnalizRaporu,
+  Personel,
   SatinAlmaTalebi,
   StokKart,
   StokKartIslem,
@@ -55,6 +56,7 @@ interface IrsaliyeFaturaWorkspaceScreenProps {
   prefillFromSa?: SaIrsaliyeFormPrefill | null;
   onPrefillConsumed?: () => void;
   onOpenTCetveli?: () => void;
+  personeller?: Personel[];
 }
 
 export const IrsaliyeFaturaWorkspaceScreen: React.FC<IrsaliyeFaturaWorkspaceScreenProps> = ({
@@ -79,6 +81,7 @@ export const IrsaliyeFaturaWorkspaceScreen: React.FC<IrsaliyeFaturaWorkspaceScre
   prefillFromSa,
   onPrefillConsumed,
   onOpenTCetveli,
+  personeller = [],
 }) => {
   const [pane, setPane] = useState<IrsaliyeFaturaPane>(() => initialPane || readWorkspacePane('irsaliye'));
   const [baglamaPrefill, setBaglamaPrefill] = useState<EvrakBaglamaPrefill | null>(null);
@@ -218,7 +221,9 @@ export const IrsaliyeFaturaWorkspaceScreen: React.FC<IrsaliyeFaturaWorkspaceScre
           </div>
         )}
 
-        {pane === 'isci' && <WhatsAppIsciGirisPanel currentUser={currentUser} />}
+        {pane === 'isci' && (
+          <WhatsAppIsciGirisPanel currentUser={currentUser} personeller={personeller} />
+        )}
       </div>
     </div>
   );

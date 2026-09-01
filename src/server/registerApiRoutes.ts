@@ -868,10 +868,12 @@ app.post("/api/parse-sgk", async (req, res) => {
     };
 
     const promptText = `
-You are an expert HR and financial assistant.
-Analyze this document. It could be either:
-1. A Turkish SGK Job Entry Declaration ("SİGORTALI İŞE GİRİŞ BİLDİRGESİ")
-2. A Bank Transfer/Payment Receipt ("DEKONT" / "ÖDEME DEKONTU" / "EFT / HAVALE DEKONTU")
+You are an expert HR assistant reading Turkish SGK documents.
+
+These SGK forms are FIXED-LAYOUT official PDFs (not arbitrary scans). Read printed field labels exactly:
+1. "SİGORTALI İŞE GİRİŞ BİLDİRGESİ" (job entry)
+2. "SİGORTALI İŞTEN AYRILIŞ BİLDİRGESİ" / "İŞTEN ÇIKIŞ BİLDİRGESİ" (job exit)
+3. A bank transfer receipt ("DEKONT" / "ÖDEME DEKONTU" / "EFT / HAVALE DEKONTU")
 
 Please extract the following fields and map them to our personnel database structure:
 
@@ -885,7 +887,7 @@ If it is a SGK Job Entry Declaration:
 - "cinsiyet": Gender ("Erkek" or "Kadın").
 - "adres": "İKAMETGAH ADRESİ" combining details.
 - "il" & "ilce": Province & District of residence.
-- "gorev": Infer role based on "Meslek Adı" (one of "İŞÇİ", "FORMEN", "USTA", "MÜHENDİS", "MİMAR", "ŞEF", "GÜVENLİK", "DEPOCU").
+- "gorev": Do NOT invent a yoklama görevi. Leave blank unless "Meslek Adı" is clearly printed.
 
 If it is a DEKONT (Payment/Transfer Receipt):
 - "ad" and "soyad": Extract from "Alıcı Adı Soyadı" or "Alıcı" field (the receiver of the money).
@@ -893,7 +895,12 @@ If it is a DEKONT (Payment/Transfer Receipt):
 - "bankaAdi": Extract the Alıcı Bank name (the bank receiving the payment, e.g., "GARANTİ BBVA", "ZİRAAT BANKASI", "VAKIFBANK", etc.).
 - "tcNo": Extract the Alıcı TC Kimlik No if visible, otherwise leave blank.
 - "iseGirisTarihi": Use the transaction date / transfer date of the Dekont in "YYYY-MM-DD" format.
-- "gorev": Default to "İŞÇİ" or infer if possible.
+If it is an SGK İŞTEN AYRILIŞ / ÇIKIŞ BİLDİRGESİ:
+- Same identity fields (tcNo, ad, soyad).
+- "cikisTarihi": "İşten çıkış / ayrılış tarihi" in "YYYY-MM-DD".
+
+If it is a DEKONT (continued):
+- "gorev": leave empty.
 
 Provide the output strictly conforming to the response schema.
 `;
@@ -911,9 +918,10 @@ Provide the output strictly conforming to the response schema.
         adres: { type: Type.STRING, description: "Full residential address" },
         il: { type: Type.STRING, description: "Residence province" },
         ilce: { type: Type.STRING, description: "Residence district" },
-        gorev: { type: Type.STRING, description: "Role: 'İŞÇİ', 'FORMEN', 'USTA', 'MİMAR', 'MÜHENDİS', 'ŞEF', 'GÜVENLİK', or 'DEPOCU'" },
+        gorev: { type: Type.STRING, description: "Printed meslek if present; otherwise empty. Do not invent yoklama görevi." },
         ibanNo: { type: Type.STRING, description: "Alıcı IBAN number starting with TR" },
-        bankaAdi: { type: Type.STRING, description: "Alıcı Bank name" }
+        bankaAdi: { type: Type.STRING, description: "Alıcı Bank name" },
+        cikisTarihi: { type: Type.STRING, description: "SGK işten ayrılış/çıkış tarihi YYYY-MM-DD" }
       },
       required: ["ad", "soyad"]
     };

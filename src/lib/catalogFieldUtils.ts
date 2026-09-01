@@ -73,6 +73,18 @@ export function normalizeCatalogValue(value: string): string {
   return normalizeCardName(value).toLocaleUpperCase('tr-TR');
 }
 
+/** Personel kadrosundaki mevcut görev adları — katalog önerisine eklenir. */
+export function gorevOptionsFromPersoneller(
+  personeller?: Array<{ gorev?: string | null }> | null
+): string[] {
+  const set = new Set<string>();
+  for (const p of personeller || []) {
+    const g = String(p.gorev || '').trim();
+    if (g) set.add(g);
+  }
+  return Array.from(set);
+}
+
 export function mergeCatalogOptions(...lists: Array<string[] | undefined>): string[] {
   const seen = new Set<string>();
   const out: string[] = [];

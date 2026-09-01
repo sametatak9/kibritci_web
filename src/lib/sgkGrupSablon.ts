@@ -13,6 +13,8 @@ export type SgkGirisBildirimi = {
   nitelik?: string;
   girisTarihi: string;
   gonderen?: string;
+  kimlikFotoUrl?: string;
+  kimlikFotoUrls?: string[];
 };
 
 export type SgkCikisBildirimi = {
@@ -38,6 +40,46 @@ function line(label: string, value?: string) {
   return v ? `*${label}:* ${v}` : '';
 }
 
+function isShareableHttpUrl(url?: string | null): boolean {
+  const u = String(url || '').trim();
+  return /^https?:\/\//i.test(u) && !u.startsWith('data:');
+}
+
+/** WhatsApp wa.me metnine konabilecek kimlik HTTPS adresleri (data URL hariç). */
+export function shareableKimlikUrlsForWp(opts: {
+  kimlikFotoUrl?: string | null;
+  kimlikFotoUrls?: Array<string | null | undefined> | null;
+}): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (raw?: string | null) => {
+    const u = String(raw || '').trim();
+    if (!u || seen.has(u) || !isShareableHttpUrl(u)) return;
+    seen.add(u);
+    out.push(u);
+  };
+  for (const u of opts.kimlikFotoUrls || []) push(u);
+  push(opts.kimlikFotoUrl);
+  return out;
+}
+
+function kimlikWpSatirlari(opts: {
+  kimlikFotoUrl?: string | null;
+  kimlikFotoUrls?: Array<string | null | undefined> | null;
+}): string[] {
+  const urls = shareableKimlikUrlsForWp(opts);
+  if (urls.length === 0) {
+    return [
+      '_Kimlik görseli: wa.me dosya ekleyemez. Görsel Storage linki yok — kimliği gruba ayrıca ekleyin._',
+    ];
+  }
+  const labels = ['Ön yüz', 'Arka yüz'];
+  return [
+    '*Kimlik görseli (tıklayınca açılır):*',
+    ...urls.map((u, i) => `${labels[i] || `Görsel ${i + 1}`}: ${u}`),
+  ];
+}
+
 /** Gruba atılacak sabit işe giriş metni. Ana Firma kaydı bu metin olmadan açılamaz. */
 export function buildSgkGirisWhatsAppText(b: SgkGirisBildirimi): string {
   const body = [
@@ -51,7 +93,7 @@ export function buildSgkGirisWhatsAppText(b: SgkGirisBildirimi): string {
     line('Giriş tarihi', trDate(b.girisTarihi)),
     line('Gönderen', b.gonderen),
     `----------------------------------------`,
-    `_Kimlik görseli bu mesajla birlikte gruba eklenir._`,
+    ...kimlikWpSatirlari(b),
     `_SGK işe giriş bildirgesi gelince Grup Köprüsü’ne bırakılır; Ana Firma kaydı yalnızca Onay → Personel oluşturma’da tek kontrolle açılır._`,
   ]
     .filter(Boolean)
@@ -314,9 +356,9 @@ export function buildSgkTalepPatchFromParse(
   const soyad = String(parsed.soyad || bildirim?.soyad || '').toLocaleUpperCase('tr-TR');
   const tcNo = digitsTc(parsed.tcNo || bildirim?.tcNo);
   const evrakTarihi = String(
-    parsed.iseGirisTarihi ||
-      (kind === 'giris' ? bildirim?.iseGirisTarihi : bildirim?.cikisTarihi) ||
-      ''
+    kind === 'giris'
+      ? parsed.iseGirisTarihi || bildirim?.iseGirisTarihi || ''
+      : parsed.cikisTarihi || parsed.iseGirisTarihi || bildirim?.cikisTarihi || ''
   ).slice(0, 10);
   const gorev = String(bildirim?.gorev || parsed.gorev || '').toLocaleUpperCase('tr-TR');
   const nitelik = String(bildirim?.nitelik || '').toLocaleUpperCase('tr-TR');

@@ -5,7 +5,9 @@ import type { CariKart, EvrakEtiketGrubu, Fatura, FaturaItem, Irsaliye, Personel
 import { db, cleanUndefined } from '../lib/firebase';
 import { fetchApiJson } from '../lib/apiClient';
 import { compressImage } from '../lib/imageCompress';
-import { buildWhatsAppUrl } from '../lib/mobilOnayUtils';
+import { gorevOptionsFromPersoneller } from '../lib/catalogFieldUtils';
+import { buildWhatsAppUrl, shareWhatsAppTextOrFiles } from '../lib/mobilOnayUtils';
+import { dataUrlToFile, isShareableHttpUrl, uploadPersonelKimlikFoto } from '../lib/personelKimlikFotoStorage';
 import { submitPersonelCikisTalebi } from '../lib/personelCikisTalebiUtils';
 import { resolveCariKartId } from '../lib/evrakCariStokSync';
 import { linkIrsaliyelerToFatura } from '../lib/evrakDonusum';
@@ -25,6 +27,8 @@ import { eslesmeNedenLabel, suggestIrsaliyelerForFaturaUnvan } from '../lib/fatu
 import { assignDocsToEtiketGrubu } from '../lib/evrakEtiketUtils';
 import { EvrakPageShell, EvrakSectionHeader } from './evrakUi/EvrakScreenChrome';
 import { muhasebeInputClass } from './evrakUi/MuhasebeBelgeForm';
+import { GorevFromDbField } from './GorevFromDbField';
+import { KimlikFotoOnizleme } from './KimlikFotoOnizleme';
 
 type SubTab = 'giris' | 'cikis' | 'fatura';
 
@@ -83,6 +87,7 @@ export const GrupKopruScreen: React.FC<GrupKopruScreenProps> = ({
   const [nitelik, setNitelik] = useState('');
   const [girisTarihi, setGirisTarihi] = useState(new Date().toISOString().slice(0, 10));
   const [kimlikUrl, setKimlikUrl] = useState<string | null>(null);
+  const [kimlikUploading, setKimlikUploading] = useState(false);
   const [copied, setCopied] = useState<'giris' | 'cikis' | ''>('');
 
   const [cikisPersonelId, setCikisPersonelId] = useState('');
@@ -117,6 +122,7 @@ export const GrupKopruScreen: React.FC<GrupKopruScreenProps> = ({
   }, []);
 
   const gonderen = currentUser?.email || 'şantiye';
+  const gorevExtra = useMemo(() => gorevOptionsFromPersoneller(personeller), [personeller]);
   const girisMetin = useMemo(
     () =>
       buildSgkGirisWhatsAppText({
@@ -127,8 +133,10 @@ export const GrupKopruScreen: React.FC<GrupKopruScreenProps> = ({
         nitelik,
         girisTarihi,
         gonderen,
+        kimlikFotoUrl: kimlikUrl || undefined,
+        kimlikFotoUrls: kimlikUrl ? [kimlikUrl] : undefined,
       }),
-    [ad, soyad, tcNo, gorev, nitelik, girisTarihi, gonderen]
+    [ad, soyad, tcNo, gorev, nitelik, girisTarihi, gonderen, kimlikUrl]
   );
 
   const cikisPersonel = personeller.find((p) => p.id === cikisPersonelId);
@@ -167,8 +175,23 @@ export const GrupKopruScreen: React.FC<GrupKopruScreenProps> = ({
 
   const handleKimlik = async (file?: File | null) => {
     if (!file) return;
-    const { dataUrl } = await fileToBase64(file);
-    setKimlikUrl(dataUrl);
+    setKimlikUploading(true);
+    try {
+      const { dataUrl } = await fileToBase64(file);
+      setKimlikUrl(dataUrl);
+      try {
+        const uploaded = await uploadPersonelKimlikFoto({
+          talepId: `pending-sgk-${Date.now()}`,
+          dataUrl,
+          slot: 'on',
+        });
+        if (isShareableHttpUrl(uploaded)) setKimlikUrl(uploaded);
+      } catch (uploadErr) {
+        console.warn('Kimlik Storage yüklemesi atlandı, önizleme yerel tutuldu:', uploadErr);
+      }
+    } finally {
+      setKimlikUploading(false);
+    }
   };
 
   const kaydetGirisBildirimi = async () => {
@@ -196,6 +219,20 @@ export const GrupKopruScreen: React.FC<GrupKopruScreenProps> = ({
     setBusy(true);
     try {
       const id = `GIRIS-SGK-${Date.now()}`;
+      let persistedKimlik = kimlikUrl;
+      if (persistedKimlik && !isShareableHttpUrl(persistedKimlik)) {
+        try {
+          persistedKimlik = await uploadPersonelKimlikFoto({
+            talepId: id,
+            dataUrl: persistedKimlik,
+            slot: 'on',
+          });
+          if (isShareableHttpUrl(persistedKimlik)) setKimlikUrl(persistedKimlik);
+        } catch (uploadErr) {
+          console.warn('Kimlik Storage (kuyruk yazımı) atlandı:', uploadErr);
+          persistedKimlik = kimlikUrl;
+        }
+      }
       await setDoc(doc(db, 'personelGirisTalepleri', id), {
         id,
         ad: ad.trim().toLocaleUpperCase('tr-TR'),
@@ -205,8 +242,8 @@ export const GrupKopruScreen: React.FC<GrupKopruScreenProps> = ({
         nitelik: nitelik.trim().toLocaleUpperCase('tr-TR'),
         iseGirisTarihi: girisTarihi,
         tarih: new Date().toISOString(),
-        kimlikFotoUrl: kimlikUrl,
-        kimlikFotoUrls: [kimlikUrl],
+        kimlikFotoUrl: persistedKimlik,
+        kimlikFotoUrls: [persistedKimlik],
         durum: 'WP_GÖNDERİLDİ',
         kaynak: 'SGK_GRUP',
         firmaTipi: 'ANA_FIRMA',
@@ -542,21 +579,27 @@ export const GrupKopruScreen: React.FC<GrupKopruScreenProps> = ({
                 Giriş tarihi *
                 <input type="date" className={input} value={girisTarihi} onChange={(e) => setGirisTarihi(e.target.value)} />
               </label>
-              <label className="text-[10px] font-bold uppercase text-slate-500 col-span-2">
-                Görevi (yoklama) *
-                <input className={input} value={gorev} onChange={(e) => setGorev(e.target.value)} placeholder="Örn. DÜZ İŞÇİ" />
-              </label>
+              <div className="col-span-2">
+                <GorevFromDbField
+                  value={gorev}
+                  onChange={setGorev}
+                  extraOptions={gorevExtra}
+                  inputClassName={input}
+                />
+              </div>
               <label className="text-[10px] font-bold uppercase text-slate-500 col-span-2">
                 Niteliği (SGK meslek)
                 <input className={input} value={nitelik} onChange={(e) => setNitelik(e.target.value)} placeholder="Örn. ALÇI SIVA USTASI" />
               </label>
             </div>
-            <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
-              <Upload className="w-3.5 h-3.5" />
-              Kimlik görseli *
-              <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => void handleKimlik(e.target.files?.[0])} />
-              {kimlikUrl ? <span className="text-emerald-700 font-medium">yüklendi</span> : <span className="text-slate-400 font-medium">yok</span>}
-            </label>
+            <KimlikFotoOnizleme
+              urls={kimlikUrl ? [kimlikUrl] : []}
+              max={1}
+              uploading={kimlikUploading}
+              accept="image/*,application/pdf"
+              onRemove={() => setKimlikUrl(null)}
+              onPick={(files) => void handleKimlik(files[0])}
+            />
             <pre className="text-[10px] bg-slate-50 border border-slate-100 rounded-xl p-3 whitespace-pre-wrap font-mono text-slate-700 max-h-40 overflow-auto">
               {girisMetin}
             </pre>
@@ -565,7 +608,18 @@ export const GrupKopruScreen: React.FC<GrupKopruScreenProps> = ({
                 {copied === 'giris' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 Sabit metni kopyala
               </button>
-              <a href={buildWhatsAppUrl(girisMetin)} target="_blank" rel="noreferrer" className="text-xs font-bold px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 inline-flex items-center gap-1">
+              <a
+                href={buildWhatsAppUrl(girisMetin)}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => {
+                  const file = kimlikUrl ? dataUrlToFile(kimlikUrl, 'kimlik.jpg') : null;
+                  if (!file) return;
+                  e.preventDefault();
+                  void shareWhatsAppTextOrFiles(girisMetin, [file]);
+                }}
+                className="text-xs font-bold px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 inline-flex items-center gap-1"
+              >
                 <MessageCircle className="w-3.5 h-3.5" /> WhatsApp’ta aç
               </a>
               <button type="button" disabled={busy} onClick={() => void kaydetGirisBildirimi()} className="text-xs font-bold px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 cursor-pointer disabled:opacity-50">

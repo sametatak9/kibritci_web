@@ -1,9 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Camera, ImageIcon, MessageCircle, Send, UserPlus, Loader2 } from 'lucide-react';
+import { MessageCircle, Send, UserPlus, Loader2 } from 'lucide-react';
 import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
-import { buildWhatsAppUrl } from '../lib/mobilOnayUtils';
+import { gorevOptionsFromPersoneller } from '../lib/catalogFieldUtils';
+import { buildWhatsAppUrl, shareWhatsAppTextOrFiles } from '../lib/mobilOnayUtils';
+import {
+  dataUrlToFile,
+  uploadPersonelKimlikFotolar,
+} from '../lib/personelKimlikFotoStorage';
 import { sgkDurumEtiketi } from '../lib/sgkGrupSablon';
 import {
   buildKampAnaFirmaGirisTalepDoc,
@@ -11,6 +16,9 @@ import {
   kampAnaFirmaSgkWhatsAppText,
 } from '../lib/kampAnaFirmaGiris';
 import { CANONICAL_ANA_FIRMA_ADI } from '../lib/yoklamaUtils';
+import type { Personel } from '../types/erp';
+import { GorevFromDbField } from './GorevFromDbField';
+import { KimlikFotoOnizleme } from './KimlikFotoOnizleme';
 
 const MAX_KIMLIK_FOTO = 2;
 
@@ -39,6 +47,8 @@ function wpMetin(t: {
   nitelik?: string;
   girisTarihi?: string;
   gonderen?: string;
+  kimlikFotoUrl?: string;
+  kimlikFotoUrls?: string[];
 }) {
   return kampAnaFirmaSgkWhatsAppText({
     ad: t.ad,
@@ -48,14 +58,20 @@ function wpMetin(t: {
     nitelik: t.nitelik,
     girisTarihi: t.girisTarihi || new Date().toISOString().slice(0, 10),
     gonderen: t.gonderen,
+    kimlikFotoUrl: t.kimlikFotoUrl,
+    kimlikFotoUrls: t.kimlikFotoUrls,
   });
 }
 
 interface WhatsAppIsciGirisPanelProps {
   currentUser?: { email?: string };
+  personeller?: Personel[];
 }
 
-export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ currentUser }) => {
+export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({
+  currentUser,
+  personeller = [],
+}) => {
   const [liste, setListe] = useState<GirisTalep[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +91,8 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
     tcNo?: string;
     nitelik?: string;
     girisTarihi: string;
+    kimlikFotoUrl?: string;
+    kimlikFotoUrls?: string[];
   } | null>(null);
   const [status, setStatus] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
@@ -101,6 +119,8 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
     () => liste.filter((r) => r.durum !== 'ONAYLANDI' && r.durum !== 'REDDEDİLDİ').length,
     [liste]
   );
+
+  const gorevExtra = useMemo(() => gorevOptionsFromPersoneller(personeller), [personeller]);
 
   const onPickFiles = (files: File[]) => {
     const slots = MAX_KIMLIK_FOTO - fotolar.length;
@@ -146,6 +166,12 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
     try {
       const requestID = `GIRIS-WP-SGK-${Date.now()}`;
       const gonderen = currentUser?.email || 'Muhasebe';
+      let kimlikler = fotolar;
+      try {
+        kimlikler = await uploadPersonelKimlikFotolar({ talepId: requestID, dataUrls: fotolar });
+      } catch (uploadErr) {
+        console.warn('Kimlik Storage yüklemesi atlandı, kuyruk yine yazılacak:', uploadErr);
+      }
       await setDoc(
         doc(db, 'personelGirisTalepleri', requestID),
         buildKampAnaFirmaGirisTalepDoc(requestID, {
@@ -156,8 +182,8 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
           nitelik: yeniNitelik,
           girisTarihi: yeniGirisTarihi,
           gonderen,
-          kimlikFotoUrl: fotolar[0],
-          kimlikFotoUrls: fotolar,
+          kimlikFotoUrl: kimlikler[0],
+          kimlikFotoUrls: kimlikler,
           kaynakPanel: 'IRSALIYE_FATURA_WHATSAPP',
         })
       );
@@ -169,6 +195,8 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
         tcNo: yeniTcNo.replace(/\D/g, '') || undefined,
         nitelik: yeniNitelik.trim() || undefined,
         girisTarihi: yeniGirisTarihi,
+        kimlikFotoUrl: kimlikler[0],
+        kimlikFotoUrls: kimlikler,
       });
       setYeniAd('');
       setYeniSoyad('');
@@ -231,15 +259,12 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
                 />
               </label>
             </div>
-            <label className="block">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Görev / yoklama niteliği</span>
-              <input
-                value={yeniGorev}
-                onChange={(e) => setYeniGorev(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold"
-                placeholder="Örn. Demirci ustası, düz işçi"
-              />
-            </label>
+            <GorevFromDbField
+              value={yeniGorev}
+              onChange={setYeniGorev}
+              extraOptions={gorevExtra}
+              inputClassName="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold"
+            />
             <div className="grid grid-cols-2 gap-2">
               <label className="block">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">TC Kimlik</span>
@@ -272,50 +297,12 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
               />
             </label>
 
-            <div>
-              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
-                Kimlik fotoğrafı — ön / arka ({fotolar.length}/{MAX_KIMLIK_FOTO})
-              </span>
-              <div className="mt-1.5 flex flex-wrap gap-2">
-                {fotolar.length < MAX_KIMLIK_FOTO && (
-                  <label className="w-24 h-20 rounded-2xl border-2 border-dashed border-slate-300 bg-white flex flex-col items-center justify-center text-slate-500 cursor-pointer hover:border-emerald-500">
-                    <Camera size={18} />
-                    <span className="text-[8px] font-bold mt-1">{fotolar.length === 0 ? 'Ön yüz' : 'Arka yüz'}</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className="hidden"
-                      onChange={(e) => {
-                        const files = e.target.files ? Array.from(e.target.files) as File[] : [];
-                        if (files.length) onPickFiles(files);
-                        e.target.value = '';
-                      }}
-                    />
-                  </label>
-                )}
-                {fotolar.map((src, idx) => (
-                  <div key={idx} className="relative w-24 h-20 rounded-2xl overflow-hidden border border-slate-200">
-                    <img src={src} alt={idx === 0 ? 'Ön' : 'Arka'} className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => setFotolar((prev) => prev.filter((_, i) => i !== idx))}
-                      className="absolute top-1 right-1 bg-rose-600 text-white rounded-full w-5 h-5 text-[10px] font-bold"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-                {fotolar.length === 0 && (
-                  <div className="flex-1 min-w-[120px] h-20 rounded-2xl bg-white/70 border border-slate-200 flex items-center justify-center text-slate-400">
-                    <div className="text-center">
-                      <ImageIcon size={16} className="mx-auto mb-1" />
-                      <span className="text-[10px]">Foto yok</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            <KimlikFotoOnizleme
+              urls={fotolar}
+              max={MAX_KIMLIK_FOTO}
+              onRemove={(idx) => setFotolar((prev) => prev.filter((_, i) => i !== idx))}
+              onPick={onPickFiles}
+            />
 
             {status && (
               <p className={`text-[11px] font-semibold ${status.type === 'ok' ? 'text-emerald-700' : 'text-rose-700'}`}>
@@ -338,6 +325,18 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
                 <p className="text-[11px] font-bold text-emerald-800">
                   {sonTalep.ad} {sonTalep.soyad} kuyruğa yazıldı. Kart açılmadı. SGK grubuna:
                 </p>
+                {(sonTalep.kimlikFotoUrls || []).length > 0 && (
+                  <div className="flex gap-2">
+                    {(sonTalep.kimlikFotoUrls || []).map((src, i) => (
+                      <img
+                        key={i}
+                        src={src}
+                        alt={`Kimlik ${i + 1}`}
+                        className="w-20 h-16 object-cover rounded-lg border border-emerald-200"
+                      />
+                    ))}
+                  </div>
+                )}
                 <pre className="text-[10px] whitespace-pre-wrap bg-slate-50 rounded-xl p-2 font-mono text-slate-700">
                   {wpMetin({ ...sonTalep, gonderen: currentUser?.email })}
                 </pre>
@@ -345,6 +344,17 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
                   href={buildWhatsAppUrl(wpMetin({ ...sonTalep, gonderen: currentUser?.email }))}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={(e) => {
+                    const files = (sonTalep.kimlikFotoUrls || [])
+                      .map((u, i) => dataUrlToFile(u, `kimlik_${i + 1}.jpg`))
+                      .filter((f): f is File => Boolean(f));
+                    if (!files.length) return;
+                    e.preventDefault();
+                    void shareWhatsAppTextOrFiles(
+                      wpMetin({ ...sonTalep, gonderen: currentUser?.email }),
+                      files
+                    );
+                  }}
                   className="w-full inline-flex items-center justify-center gap-2 bg-[#075E54] text-white font-bold text-xs py-2.5 rounded-xl"
                 >
                   <Send size={14} />
@@ -384,6 +394,8 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
                 nitelik: item.nitelik,
                 girisTarihi: item.iseGirisTarihi,
                 gonderen: item.gonderenFormen,
+                kimlikFotoUrl: item.kimlikFotoUrl,
+                kimlikFotoUrls: item.kimlikFotoUrls,
               });
               return (
                 <article key={item.id} className="rounded-xl border border-slate-100 bg-slate-50/80 p-3 space-y-1.5">
