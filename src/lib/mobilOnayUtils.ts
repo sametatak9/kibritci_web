@@ -127,31 +127,6 @@ export async function shareWhatsAppText(text: string): Promise<'opened' | 'copie
   return 'copied';
 }
 
-/**
- * wa.me dosya ekleyemez. Destekleyen tarayıcıda Web Share ile görsel + metin,
- * aksi halde metin (içinde HTTPS kimlik URL’si olmalı).
- */
-export async function shareWhatsAppTextOrFiles(
-  text: string,
-  files?: File[]
-): Promise<'shared' | 'opened' | 'copied'> {
-  const usable = (files || []).filter((f) => f && f.size > 0);
-  const nav = typeof navigator !== 'undefined' ? navigator : undefined;
-  if (usable.length && nav?.share && typeof nav.canShare === 'function') {
-    try {
-      if (nav.canShare({ files: usable })) {
-        await nav.share({ text, files: usable });
-        return 'shared';
-      }
-    } catch (err) {
-      const name = (err as { name?: string })?.name;
-      if (name === 'AbortError') return 'shared';
-    }
-  }
-  const fallback = await shareWhatsAppText(text);
-  return fallback;
-}
-
 export function isLegacySahaRecord(id?: string): boolean {
   if (!id) return false;
   return id.startsWith('SF-MAY26-') || id.startsWith('SF-NISAN') || id.startsWith('sf_demo');
