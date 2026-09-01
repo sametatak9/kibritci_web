@@ -10,13 +10,19 @@ import { ensureKampFaaliyetFotoPersisted } from '../lib/sahaFaaliyetFotoStorage'
 import { createKampYerleske, createKampKat, katsForYerleske, createKampOdasi, deleteKampOdasi, updateKampOdasi } from '../lib/kampYapisi';
 import { assignKampResident, evictKampResident, reactivateEvictedKampStays, detectMassKampEvictionDate, isPersonelAktifDurum } from '../lib/kampPlacementUtils';
 import { buildKampciGunlukOzet } from '../lib/gunlukAkisUtils';
-import { buildWhatsAppUrl } from '../lib/mobilOnayUtils';
+import { buildWhatsAppUrl, shareWhatsAppTextOrFiles } from '../lib/mobilOnayUtils';
 import { sgkDurumEtiketi } from '../lib/sgkGrupSablon';
 import {
   buildKampAnaFirmaGirisTalepDoc,
   findOpenAnaFirmaGirisTalebi,
   kampAnaFirmaSgkWhatsAppText,
 } from '../lib/kampAnaFirmaGiris';
+import { gorevOptionsFromPersoneller } from '../lib/catalogFieldUtils';
+import {
+  dataUrlToFile,
+  isShareableHttpUrl,
+  uploadPersonelKimlikFoto,
+} from '../lib/personelKimlikFotoStorage';
 import { KampHaftalikYoklamaTab } from './KampHaftalikYoklamaTab';
 import { KampGunlukYoklamaTab } from './KampGunlukYoklamaTab';
 import { KampVidanjorTab } from './KampVidanjorTab';
@@ -64,6 +70,8 @@ import {
 } from '../lib/personelMatchUtils';
 import { vibrateVidanjorAlert } from '../lib/vidanjorUtils';
 import { resolveGeldiRolPersonelIds } from '../lib/mobilRolEtiketUtils';
+import { GorevFromDbField } from './GorevFromDbField';
+import { KimlikFotoOnizleme } from './KimlikFotoOnizleme';
 interface KampciScreenProps {
   kampOdalari: KampOdasi[];
   setKampOdalari: React.Dispatch<React.SetStateAction<KampOdasi[]>>;
@@ -209,6 +217,7 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   const katlar = kampKatlari;
 
   const taseronCariler = useMemo(() => getTaseronCariKartlar(cariKartlar), [cariKartlar]);
+  const gorevExtra = useMemo(() => gorevOptionsFromPersoneller(personeller), [personeller]);
   const [kampFirmaTalepleri, setKampFirmaTalepleri] = useState<KampFirmaTalep[]>([]);
   const pendingFirmaTalepleri = useMemo(
     () => kampFirmaTalepleri.filter((t) => t.durum === 'ONAY BEKLİYOR'),
@@ -650,6 +659,8 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
     girisTarihi?: string;
     nitelik?: string;
     firmaTipi: 'ANA_FIRMA' | 'TASERON';
+    kimlikFotoUrl?: string;
+    kimlikFotoUrls?: string[];
   } | null>(null);
   const [girisTalepleriList, setGirisTalepleriList] = useState<any[]>([]);
   const [allGirisTalepleri, setAllGirisTalepleri] = useState<any[]>([]);
@@ -1609,6 +1620,19 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
         }
 
         const requestID = `GIRIS-KAMP-SGK-${Date.now()}`;
+        let persistedKimlik = yeniKimlikFoto;
+        if (persistedKimlik && !isShareableHttpUrl(persistedKimlik)) {
+          try {
+            persistedKimlik = await uploadPersonelKimlikFoto({
+              talepId: requestID,
+              dataUrl: persistedKimlik,
+              slot: 'on',
+            });
+          } catch (uploadErr) {
+            console.warn('Kimlik Storage yüklemesi atlandı, kuyruk yine yazılacak:', uploadErr);
+            persistedKimlik = yeniKimlikFoto;
+          }
+        }
         await setDoc(
           doc(db, 'personelGirisTalepleri', requestID),
           buildKampAnaFirmaGirisTalepDoc(requestID, {
@@ -1621,8 +1645,8 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
             gonderen: email,
             gonderenKampci: email,
             telefonNo: yeniTelefonNo.trim(),
-            kimlikFotoUrl: yeniKimlikFoto,
-            kimlikFotoUrls: [yeniKimlikFoto],
+            kimlikFotoUrl: persistedKimlik,
+            kimlikFotoUrls: [persistedKimlik],
             kaynakPanel: 'KAMPÇI',
           })
         );
@@ -1635,6 +1659,8 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
           girisTarihi: yeniIseGirisTarihi,
           nitelik: yeniNitelik.trim() || undefined,
           firmaTipi: 'ANA_FIRMA',
+          kimlikFotoUrl: persistedKimlik,
+          kimlikFotoUrls: persistedKimlik ? [persistedKimlik] : undefined,
         });
         setYeniAd('');
         setYeniSoyad('');
@@ -3398,8 +3424,22 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
               </div>
             </div>
             <div>
-              <label className="text-[9px] font-extrabold text-slate-500 uppercase block mb-1">Görev / Branş</label>
-              <input value={yeniGorev} onChange={(e) => setYeniGorev(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none" placeholder="Örn: Kamp Görevlisi, Aşçı" />
+              {girisFirmaTipi === 'TASERON' ? (
+                <>
+                  <label className="text-[9px] font-extrabold text-slate-500 uppercase block mb-1">Görev / Branş</label>
+                  <p className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-600 rounded-xl p-3">
+                    Taşeron görevi otomatik atanır (kadroyu değiştirmez).
+                  </p>
+                </>
+              ) : (
+                <GorevFromDbField
+                  value={yeniGorev}
+                  onChange={setYeniGorev}
+                  extraOptions={gorevExtra}
+                  label="Görev / Branş"
+                  inputClassName="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none"
+                />
+              )}
             </div>
             {girisFirmaTipi === 'ANA_FIRMA' && (
               <>
@@ -3418,31 +3458,20 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                 </div>
               </>
             )}
-            <div>
-              <label className="text-[9px] font-extrabold text-slate-500 uppercase block mb-1">Kimlik Fotoğrafı</label>
-              <div className="flex gap-3">
-                <label className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer w-24 h-20 shrink-0 text-slate-500">
-                  <Camera size={20} />
-                  <span className="text-[8px] font-bold mt-1">Çek</span>
-                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const r = new FileReader();
-                    r.onload = async (ev) => {
-                      if (ev.target?.result) setYeniKimlikFoto(await compressImage(ev.target.result as string));
-                    };
-                    r.readAsDataURL(file);
-                  }} />
-                </label>
-                <div className="flex-1 border border-slate-200 rounded-xl bg-slate-50 h-20 overflow-hidden flex items-center justify-center">
-                  {yeniKimlikFoto ? (
-                    <img src={yeniKimlikFoto} alt="Kimlik" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-[10px] text-slate-400 italic">Fotoğraf yok</span>
-                  )}
-                </div>
-              </div>
-            </div>
+            <KimlikFotoOnizleme
+              urls={yeniKimlikFoto ? [yeniKimlikFoto] : []}
+              max={1}
+              onRemove={() => setYeniKimlikFoto(null)}
+              onPick={(files) => {
+                const file = files[0];
+                if (!file) return;
+                const r = new FileReader();
+                r.onload = async (ev) => {
+                  if (ev.target?.result) setYeniKimlikFoto(await compressImage(ev.target.result as string));
+                };
+                r.readAsDataURL(file);
+              }}
+            />
 
             <button type="button" onClick={handleSubmitKampGirisTalebi} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-3 rounded-xl cursor-pointer flex items-center justify-center gap-2">
               <UserPlus size={14} />
@@ -3466,6 +3495,8 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                       nitelik: sonGirisTalebi.nitelik,
                       girisTarihi: sonGirisTalebi.girisTarihi || yeniIseGirisTarihi,
                       gonderen: currentUser?.email || 'kampci',
+                      kimlikFotoUrl: sonGirisTalebi.kimlikFotoUrl,
+                      kimlikFotoUrls: sonGirisTalebi.kimlikFotoUrls,
                     })}
                   </pre>
                 )}
@@ -3480,6 +3511,8 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                           nitelik: sonGirisTalebi.nitelik,
                           girisTarihi: sonGirisTalebi.girisTarihi || new Date().toISOString().slice(0, 10),
                           gonderen: currentUser?.email || 'kampci',
+                          kimlikFotoUrl: sonGirisTalebi.kimlikFotoUrl,
+                          kimlikFotoUrls: sonGirisTalebi.kimlikFotoUrls,
                         })
                       : `*KİBRİTÇİ ERP - KAMP PERSONEL İŞE GİRİŞ*\n*Ad Soyad:* ${sonGirisTalebi.ad} ${sonGirisTalebi.soyad}\n*Görev:* ${sonGirisTalebi.gorev}\n*Tarih:* ${new Date().toLocaleDateString('tr-TR')}\n*Gönderen Kampçı:* ${currentUser?.email || '-'}\n*Kayıt Linki:* ${window.location.origin}/?view_giris=${sonGirisTalebi.id}`
                   )}
@@ -3541,6 +3574,8 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                             nitelik: item.nitelik,
                             girisTarihi: item.iseGirisTarihi || String(item.tarih || '').slice(0, 10),
                             gonderen: item.gonderenKampci || item.gonderenFormen || currentUser?.email,
+                            kimlikFotoUrl: item.kimlikFotoUrl,
+                            kimlikFotoUrls: item.kimlikFotoUrls,
                           })
                         )}
                         target="_blank"

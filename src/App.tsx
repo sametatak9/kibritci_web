@@ -3995,6 +3995,7 @@ function App() {
                   setOnayliAnalizRaporlari={setOnayliAnalizRaporlariWithSync}
                   currentUser={currentUser}
                   addNotification={addNotification}
+                  personeller={personeller}
                   prefillFromSa={irsaliyeSaPrefill}
                   onPrefillConsumed={() => setIrsaliyeSaPrefill(null)}
                   onOpenTCetveli={() => handleTabNavigation('t_cetveli')}
