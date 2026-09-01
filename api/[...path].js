@@ -382,7 +382,7 @@ var init_akvizyonNobetAutoArchive = __esm({
 var import_express = __toESM(require("express"));
 
 // src/server/registerApiRoutes.ts
-var import_genai3 = require("@google/genai");
+var import_genai4 = require("@google/genai");
 
 // src/server/gemini.ts
 var import_genai = require("@google/genai");
@@ -867,6 +867,10 @@ async function deletePortalAuthUser(email) {
   );
 }
 
+// src/server/taseronGrupIntake.ts
+var import_node_crypto = require("node:crypto");
+var import_genai3 = require("@google/genai");
+
 // src/lib/pdfTextLayout.ts
 var import_node_zlib = require("node:zlib");
 function inflatePdfStream(body) {
@@ -946,19 +950,88 @@ function extractPdfTextLayout(bytes) {
 }
 
 // src/lib/sgkGrupSablon.ts
+function normalizePersonName(ad, soyad) {
+  return `${ad || ""} ${soyad || ""}`.toLocaleLowerCase("tr-TR").replace(/[ıİ]/g, "i").replace(/[şŞ]/g, "s").replace(/[çÇ]/g, "c").replace(/[ğĞ]/g, "g").replace(/[üÜ]/g, "u").replace(/[öÖ]/g, "o").replace(/\s+/g, " ").trim();
+}
 function digitsTc(raw) {
   return String(raw || "").replace(/\D/g, "");
+}
+function fullNameOf(x) {
+  return normalizePersonName(x.ad, x.soyad) || normalizePersonName(x.personelIsim || "");
+}
+function namesMatchExact(a, b) {
+  const na = fullNameOf(a);
+  const nb = fullNameOf(b);
+  if (!na || !nb) return false;
+  if (na.split(" ").filter(Boolean).length < 2) return false;
+  if (nb.split(" ").filter(Boolean).length < 2) return false;
+  return na === nb;
+}
+function isPendingPersonelOnayDurum(durum) {
+  const d = String(durum || "");
+  return d === "BEKLEMEDE" || d === "WP_G\xD6NDER\u0130LD\u0130" || d === "GRUP_BILDIRILDI";
 }
 
 // src/lib/firmaCanonicalUtils.ts
 init_guvenlikHelpers();
 init_yoklamaUtils();
+function isPlaceholderTaseronUnvan(unvan) {
+  const u = String(unvan || "").trim();
+  if (!u) return true;
+  const norm = u.toLocaleLowerCase("tr-TR");
+  if (/^[-–—.]+$/.test(norm)) return true;
+  if (/^(belirtilmedi|belirsiz|yok|tanimsiz|tanimlanmadi|bilinmiyor|test|deneme)$/i.test(norm)) {
+    return true;
+  }
+  const key = firmaAnahtar(u);
+  if (!key || key.length <= 2) return true;
+  if (/^[a]+$/i.test(key.replace(/\s/g, ""))) return true;
+  return false;
+}
+function isExplicitAnaFirmaUnvan(name) {
+  const raw = String(name || "").trim();
+  if (!raw) return false;
+  return isAnaFirmaFirmaAdi(raw);
+}
 
 // src/lib/taseronUtils.ts
 init_guvenlikHelpers();
 init_yoklamaUtils();
+var TASERON_PERSONEL_GOREV = "TA\u015EERON PERSONEL";
+function isTaseronPersonelRecord(p) {
+  return p.firmaTipi === "TASERON" || isTaseronPersonel(p);
+}
+function shouldHideFromTaseronEnvanter(unvan) {
+  return isPlaceholderTaseronUnvan(unvan) || isExplicitAnaFirmaUnvan(unvan);
+}
+function getTaseronCariKartlar(cariKartlar) {
+  return cariKartlar.filter(
+    (c) => (c.kartTipi === "TASERON" || String(c.tur || "").toUpperCase() === "TASERON") && c.durum !== "PASIF" && !shouldHideFromTaseronEnvanter(c.unvan)
+  );
+}
+function normFirma(s) {
+  return String(s || "").trim().toLocaleLowerCase("tr-TR").replace(/\s+/g, " ");
+}
+function firmaAnahtar(s) {
+  return normFirma(s).replace(/ı/g, "i").replace(/İ/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ö/g, "o").replace(/ç/g, "c").replace(/\b(limited|ltd\.?|şti\.?|sti\.?|a\.?\s*ş\.?|as\.?|san\.?|tic\.?|ve|insaat|inşaat|sirketi|sirket)\b/gi, " ").replace(/[.,/\\\-_'"()]/g, " ").replace(/\s+/g, " ").trim();
+}
+function firmaEslesir(a, b) {
+  if (!a?.trim() || !b?.trim()) return false;
+  if (normFirma(a) === normFirma(b)) return true;
+  const ka = firmaAnahtar(a);
+  const kb = firmaAnahtar(b);
+  if (!ka || !kb) return false;
+  if (ka === kb) return true;
+  if (ka.length >= 4 && kb.length >= 4 && (ka.includes(kb) || kb.includes(ka))) return true;
+  return false;
+}
 
 // src/lib/taseronGrupSablon.ts
+var TASERON_GRUP_ADI = "Arnavutk\xF6y \u0130\u015Fe Giri\u015F";
+var TASERON_GRUP_KAYNAK = "TASERON_GRUP";
+function isTaseronGrupTalep(item) {
+  return String(item?.kaynak || "") === TASERON_GRUP_KAYNAK;
+}
 function inferTaseronYonFromText(raw) {
   const t = String(raw || "").toLocaleLowerCase("tr-TR").replace(/ı/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ö/g, "o").replace(/ç/g, "c");
   if (!t.trim()) return null;
@@ -978,6 +1051,19 @@ function parseIsoOrTrDate(raw) {
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
   const tr = s.match(/(\d{1,2})[./](\d{1,2})[./](\d{4})/);
   if (tr) return `${tr[3]}-${tr[2].padStart(2, "0")}-${tr[1].padStart(2, "0")}`;
+  return "";
+}
+function labeledValue(text, labels) {
+  const lines = String(text || "").split(/\r?\n/);
+  for (const label of labels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`^${escaped}\\s*:\\s*(.+)$`, "i");
+    for (const ln of lines) {
+      const clean = ln.replace(/\*/g, "").trim();
+      const m = clean.match(re);
+      if (m?.[1]) return m[1].replace(/^[_ ]+|[_ ]+$/g, "").trim();
+    }
+  }
   return "";
 }
 function splitAdSoyad(full) {
@@ -1176,6 +1262,395 @@ function mergeTaseronGrupParse(...parts) {
 }
 function taseronGrupParseHasIdentity(p) {
   return Boolean(String(p?.ad || "").trim() && String(p?.soyad || "").trim() && p?.yon);
+}
+var TASERON_GRUP_OTOMASYON = {
+  grupAdi: TASERON_GRUP_ADI,
+  kaynak: TASERON_GRUP_KAYNAK,
+  birim: "tek mesaj = tek PDF = tek ki\u015Fi",
+  girisDosya: "AD SOYAD \u0130\u015EE G\u0130R\u0130\u015E B\u0130LD\u0130RGES\u0130.pdf",
+  cikisDosya: "11haneliTC_ayrilis.pdf",
+  altYaziOrnek: "Yurt mekanik giri\u015F",
+  endpoint: "POST /api/taseron-grup-intake",
+  whatsappWebhook: "/api/webhooks/whatsapp-taseron-grup",
+  kadro: "yaz\u0131lmaz \u2014 Onay kuyru\u011Fu",
+  grupDinleme: false
+};
+function taseronGrupKuyrukHazir(p) {
+  return Boolean(
+    taseronGrupParseHasIdentity(p) && String(p?.firmaAdi || "").trim() && String(p?.tarih || "").trim()
+  );
+}
+function assembleTaseronGrupFromParts(opts) {
+  const fromMsg = parseTaseronGrupMessageMeta({ fileName: opts.fileName, caption: opts.caption });
+  const fromCaption = opts.caption ? parseTaseronGrupWhatsAppText(opts.caption) : {};
+  const merged = mergeTaseronGrupParse(opts.fromPdf, opts.fromGemini, fromCaption, fromMsg);
+  return normalizeTaseronGrupParse(
+    {
+      ...merged,
+      yon: fromMsg.yon || merged.yon,
+      firmaAdi: merged.firmaAdi || fromMsg.firmaAdi,
+      ad: merged.ad || fromMsg.ad,
+      soyad: merged.soyad || fromMsg.soyad,
+      tcNo: merged.tcNo || fromMsg.tcNo
+    },
+    { fileName: opts.fileName, fallbackYon: fromMsg.yon }
+  );
+}
+function parseTaseronGrupWhatsAppText(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return {};
+  const eBildirge = parseSgkEBildirgeText(text);
+  const fromMsg = parseTaseronGrupMessageMeta({ caption: text });
+  const adSoyad = labeledValue(text, ["Ad Soyad", "Ad\u0131 Soyad\u0131", "Personel", "Isim", "\u0130sim"]);
+  const split = splitAdSoyad(adSoyad);
+  const ad = eBildirge.ad || labeledValue(text, ["Ad", "Ad\u0131"]) || split.ad || fromMsg.ad || "";
+  const soyad = eBildirge.soyad || labeledValue(text, ["Soyad", "Soyad\u0131"]) || split.soyad || fromMsg.soyad || "";
+  const firmaAdi = eBildirge.firmaAdi || labeledValue(text, ["Firma", "Ta\u015Feron", "Taseron", "\u0130\u015Fveren", "Unvan", "\xDCnvan", "\u015Eirket"]) || fromMsg.firmaAdi || "";
+  const isGorev = eBildirge.isGorev || labeledValue(text, ["Yap\u0131lan i\u015F", "Yapilan is", "\u0130\u015F", "Is", "Nitelik", "Meslek", "G\xF6rev tan\u0131m\u0131"]);
+  const tcNo = digitsTc(
+    eBildirge.tcNo || labeledValue(text, ["TC Kimlik", "TC", "T.C.", "Kimlik No"]) || text.match(/\b\d{11}\b/)?.[0] || fromMsg.tcNo
+  );
+  const yon = eBildirge.yon || inferTaseronYonFromText(text) || fromMsg.yon || void 0;
+  const tarih = eBildirge.tarih || parseIsoOrTrDate(labeledValue(text, ["Giri\u015F tarihi", "Giris tarihi", "\xC7\u0131k\u0131\u015F tarihi", "Cikis tarihi", "Tarih"])) || parseIsoOrTrDate(text);
+  return {
+    yon,
+    ad: ad ? ad.toLocaleUpperCase("tr-TR") : void 0,
+    soyad: soyad ? soyad.toLocaleUpperCase("tr-TR") : void 0,
+    firmaAdi: firmaAdi ? firmaAdi.toLocaleUpperCase("tr-TR") : void 0,
+    isGorev: isGorev ? isGorev.toLocaleUpperCase("tr-TR") : void 0,
+    tcNo: tcNo || void 0,
+    tarih: tarih || void 0
+  };
+}
+function normalizeTaseronGrupParse(parsed, opts) {
+  const ad = String(parsed?.ad || "").trim().toLocaleUpperCase("tr-TR");
+  const soyad = String(parsed?.soyad || "").trim().toLocaleUpperCase("tr-TR");
+  const firmaAdi = String(parsed?.firmaAdi || "").trim().toLocaleUpperCase("tr-TR");
+  const isGorev = String(parsed?.isGorev || "").trim().toLocaleUpperCase("tr-TR");
+  const tcNo = digitsTc(parsed?.tcNo);
+  const tarih = parseIsoOrTrDate(parsed?.tarih) || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const yonRaw = String(parsed?.yon || "").toLocaleLowerCase("tr-TR");
+  const yonFromParse = yonRaw === "cikis" || yonRaw === "\xE7\u0131k\u0131\u015F" ? "cikis" : yonRaw === "giris" || yonRaw === "giri\u015F" ? "giris" : null;
+  const yon = yonFromParse || inferTaseronYonFromText(`${parsed?.isGorev || ""} ${opts?.fileName || ""}`) || opts?.fallbackYon || "giris";
+  return {
+    yon,
+    firmaAdi,
+    isGorev,
+    ad,
+    soyad,
+    tcNo: tcNo || void 0,
+    tarih
+  };
+}
+function taseronGrupKuruluFirmaAdlari(opts) {
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  const add = (raw) => {
+    const u = String(raw || "").trim();
+    if (!u) return;
+    const key = firmaAnahtar(u).replace(/\s+/g, "");
+    if (key.length < 3 || seen.has(key)) return;
+    seen.add(key);
+    out.push(u);
+  };
+  for (const c of getTaseronCariKartlar(opts?.cariKartlar || [])) add(c.unvan);
+  for (const p of (opts?.personeller || []).filter(isTaseronPersonelRecord)) add(p.firmaAdi);
+  return out;
+}
+function taseronGrupFirmaEslesir(a, b) {
+  if (firmaEslesir(a, b)) return true;
+  const ca = firmaAnahtar(a).replace(/\s+/g, "");
+  const cb = firmaAnahtar(b).replace(/\s+/g, "");
+  if (ca.length < 5 || cb.length < 5) return false;
+  return ca === cb || ca.includes(cb) || cb.includes(ca);
+}
+function resolveTaseronGrupFirmaAdi(raw, cariKartlar = [], personeller = []) {
+  const name = String(raw || "").trim().toLocaleUpperCase("tr-TR");
+  if (!name) return "";
+  const kurulu = taseronGrupKuruluFirmaAdlari({ cariKartlar, personeller });
+  const hits = kurulu.filter((u) => taseronGrupFirmaEslesir(u, name));
+  if (hits.length === 0) return name;
+  return hits.slice().sort((a, b) => a.length - b.length || a.localeCompare(b, "tr"))[0];
+}
+function findTaseronPersonelByTc(personeller = [], tcNo) {
+  const tc = digitsTc(tcNo);
+  if (tc.length !== 11) return void 0;
+  return personeller.filter(isTaseronPersonelRecord).find((p) => digitsTc(p.tcNo) === tc);
+}
+function buildTaseronGirisTalepDoc(opts) {
+  const ad = opts.parsed.ad.trim().toLocaleUpperCase("tr-TR");
+  const soyad = opts.parsed.soyad.trim().toLocaleUpperCase("tr-TR");
+  const isGorev = opts.parsed.isGorev.trim().toLocaleUpperCase("tr-TR");
+  const firmaAdi = opts.parsed.firmaAdi.trim().toLocaleUpperCase("tr-TR");
+  const tcNo = digitsTc(opts.parsed.tcNo);
+  const evrak = opts.evrakUrl || "";
+  return {
+    id: opts.id,
+    ad,
+    soyad,
+    personelIsim: `${ad} ${soyad}`.trim(),
+    tcNo: tcNo || "",
+    firmaAdi,
+    firmaTipi: "TASERON",
+    gorev: TASERON_PERSONEL_GOREV,
+    nitelik: isGorev || void 0,
+    taseronIsGorev: isGorev || void 0,
+    iseGirisTarihi: opts.parsed.tarih,
+    tarih: (/* @__PURE__ */ new Date()).toISOString(),
+    durum: "BEKLEMEDE",
+    kaynak: TASERON_GRUP_KAYNAK,
+    grupBildirildi: true,
+    girisEvrakPdfUrl: evrak || void 0,
+    taseronGrupEvrakUrl: evrak || void 0,
+    gonderenFormen: opts.gonderen
+  };
+}
+function buildTaseronCikisTalepDoc(opts) {
+  const ad = opts.parsed.ad.trim().toLocaleUpperCase("tr-TR");
+  const soyad = opts.parsed.soyad.trim().toLocaleUpperCase("tr-TR");
+  const isGorev = opts.parsed.isGorev.trim().toLocaleUpperCase("tr-TR");
+  const firmaAdi = opts.parsed.firmaAdi.trim().toLocaleUpperCase("tr-TR");
+  const tcNo = digitsTc(opts.parsed.tcNo);
+  const evrak = opts.evrakUrl || "";
+  return {
+    id: opts.id,
+    ad,
+    soyad,
+    personelIsim: `${ad} ${soyad}`.trim(),
+    personelId: opts.personelId || "",
+    personelGorev: TASERON_PERSONEL_GOREV,
+    personelMaas: 0,
+    tcNo: tcNo || "",
+    firmaAdi,
+    firmaTipi: "TASERON",
+    nitelik: isGorev || void 0,
+    taseronIsGorev: isGorev || void 0,
+    cikisTarihi: opts.parsed.tarih,
+    cikisNedeni: "Ta\u015Feron grup \u2014 i\u015Ften \xE7\u0131k\u0131\u015F",
+    hedefYoneticiRole: "Y\xD6NET\u0130C\u0130",
+    tarih: (/* @__PURE__ */ new Date()).toISOString(),
+    durum: "BEKLEMEDE",
+    kaynak: TASERON_GRUP_KAYNAK,
+    grupBildirildi: true,
+    cikisEvrakPdfUrl: evrak || void 0,
+    taseronGrupEvrakUrl: evrak || void 0,
+    gonderenFormen: opts.gonderen
+  };
+}
+function findOpenTaseronGrupTalep(kuyruk, opts) {
+  const pending = kuyruk.filter((x) => isTaseronGrupTalep(x) && isPendingPersonelOnayDurum(x.durum));
+  const tc = digitsTc(opts.tcNo);
+  if (tc.length === 11) {
+    const byTc = pending.find((x) => digitsTc(x.tcNo) === tc);
+    if (byTc) return byTc;
+  }
+  return pending.find((x) => namesMatchExact(x, opts));
+}
+
+// src/server/taseronGrupIntake.ts
+var GEMINI_PROMPT = `
+This is ONE official Turkish SGK e-Bildirge PDF (JasperReports / iText) from the Arnavutk\xF6y \u0130\u015Fe Giri\u015F WhatsApp group.
+Titles are exactly:
+- "S\u0130GORTALI \u0130\u015EE G\u0130R\u0130\u015E B\u0130LD\u0130RGES\u0130" \u2192 yon=giris. Date = field 16 "Sigortal\u0131n\u0131n i\u015Fe ba\u015Flad\u0131\u011F\u0131 tarih" (DD.MM.YYYY).
+- "S\u0130GORTALI \u0130\u015ETEN AYRILI\u015E B\u0130LD\u0130RGES\u0130" \u2192 yon=cikis. Date = field 15 "Sigortal\u0131n\u0131n \u0130\u015Ften Ayr\u0131l\u0131\u015F Tarihi" (DD.MM.YYYY).
+Never a weekly roster. Prefer the TITLE if both dates appear.
+
+Extract yon, firmaAdi (i\u015Fveren \xFCnvan\u0131, not address), isGorev (meslek without numeric code),
+ad (field 1), soyad (field 2), tcNo (11 digits), tarih (YYYY-MM-DD).
+`;
+function stripUndefined(obj) {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== void 0));
+}
+function intakeSecretOk(headerVal) {
+  const expected = String(process.env.TASERON_GRUP_INTAKE_SECRET || "").trim();
+  if (!expected) return false;
+  const got = String(Array.isArray(headerVal) ? headerVal[0] : headerVal || "").trim();
+  if (!got || got.length !== expected.length) return false;
+  try {
+    return (0, import_node_crypto.timingSafeEqual)(Buffer.from(got), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
+function isTaseronGrupIntakeConfigured() {
+  return Boolean(String(process.env.TASERON_GRUP_INTAKE_SECRET || "").trim());
+}
+function isWhatsAppTaseronWebhookConfigured() {
+  return Boolean(
+    String(process.env.WHATSAPP_VERIFY_TOKEN || "").trim() && String(process.env.WHATSAPP_ACCESS_TOKEN || "").trim()
+  );
+}
+async function geminiFill(fileBase64, mimeType, fileName) {
+  const { text } = await generateGeminiWithFallback({
+    contents: [
+      { inlineData: { mimeType, data: fileBase64 } },
+      `${GEMINI_PROMPT}
+File name: ${fileName}`
+    ],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: import_genai3.Type.OBJECT,
+        properties: {
+          yon: { type: import_genai3.Type.STRING },
+          firmaAdi: { type: import_genai3.Type.STRING },
+          isGorev: { type: import_genai3.Type.STRING },
+          ad: { type: import_genai3.Type.STRING },
+          soyad: { type: import_genai3.Type.STRING },
+          tcNo: { type: import_genai3.Type.STRING },
+          tarih: { type: import_genai3.Type.STRING }
+        },
+        required: ["yon", "ad", "soyad", "tarih"]
+      }
+    },
+    label: "Ta\u015Feron grup evrak analizi"
+  });
+  return JSON.parse(text);
+}
+async function parseTaseronGrupUpload(opts) {
+  const fileName = String(opts.fileName || "");
+  const caption = String(opts.caption || "");
+  let fromPdf = {};
+  if (/pdf/i.test(opts.mimeType) || /\.pdf$/i.test(fileName)) {
+    try {
+      fromPdf = parseSgkEBildirgeText(extractPdfTextLayout(Buffer.from(opts.fileBase64, "base64")));
+    } catch (e) {
+      console.warn("ta\u015Feron grup PDF metin \xE7\u0131karma atland\u0131:", e);
+    }
+  }
+  const textOnly = assembleTaseronGrupFromParts({ fromPdf, fileName, caption });
+  const textComplete = taseronGrupParseHasIdentity(textOnly) && Boolean(textOnly.firmaAdi && (textOnly.tcNo || textOnly.tarih));
+  if (textComplete) {
+    return { parsed: textOnly, source: "pdf-text" };
+  }
+  try {
+    const fromGemini = await geminiFill(opts.fileBase64, opts.mimeType, fileName);
+    return {
+      parsed: assembleTaseronGrupFromParts({ fromPdf, fromGemini, fileName, caption }),
+      source: "pdf-text+gemini"
+    };
+  } catch (err) {
+    if (taseronGrupParseHasIdentity(textOnly) || textOnly.tcNo) {
+      return { parsed: textOnly, source: "pdf-text" };
+    }
+    throw err;
+  }
+}
+async function loadKuruluFromAdmin() {
+  if (!isFirebaseAdminConfigured()) return { cariKartlar: [], personeller: [] };
+  const db = getFirebaseAdmin().firestore();
+  const [cariSnap, persSnap] = await Promise.all([
+    db.collection("cariKartlar").get(),
+    db.collection("personeller").get()
+  ]);
+  return {
+    cariKartlar: cariSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+    personeller: persSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  };
+}
+async function enqueueTaseronGrupParse(opts) {
+  if (!isFirebaseAdminConfigured()) {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON yok \u2014 kuyruk sunucudan yaz\u0131lamaz.");
+  }
+  const { cariKartlar, personeller } = await loadKuruluFromAdmin();
+  const parsed = {
+    ...opts.parsed,
+    firmaAdi: resolveTaseronGrupFirmaAdi(opts.parsed.firmaAdi, cariKartlar, personeller)
+  };
+  if (!taseronGrupKuyrukHazir(parsed)) {
+    return { id: "", skipped: "ad/soyad/firma/tarih eksik" };
+  }
+  const db = getFirebaseAdmin().firestore();
+  const col = parsed.yon === "cikis" ? "personelCikisTalepleri" : "personelGirisTalepleri";
+  const pendingSnap = await db.collection(col).get();
+  const pending = pendingSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const open = findOpenTaseronGrupTalep(pending, parsed);
+  if (open?.id) {
+    return { id: String(open.id), duplicate: true };
+  }
+  const gonderen = opts.gonderen || "otomasyon";
+  if (parsed.yon === "cikis") {
+    const id2 = `CIKIS-${TASERON_GRUP_KAYNAK}-${Date.now()}`;
+    const hit = findTaseronPersonelByTc(personeller, parsed.tcNo);
+    const doc2 = stripUndefined(
+      buildTaseronCikisTalepDoc({
+        id: id2,
+        parsed,
+        evrakUrl: opts.evrakDataUrl,
+        gonderen,
+        personelId: hit?.id
+      })
+    );
+    await db.collection(col).doc(id2).set(doc2);
+    return { id: id2 };
+  }
+  const id = `GIRIS-${TASERON_GRUP_KAYNAK}-${Date.now()}`;
+  const doc = stripUndefined(
+    buildTaseronGirisTalepDoc({ id, parsed, evrakUrl: opts.evrakDataUrl, gonderen })
+  );
+  await db.collection(col).doc(id).set(doc);
+  return { id };
+}
+function taseronGrupOtomasyonSozlesme() {
+  return {
+    ...TASERON_GRUP_OTOMASYON,
+    intakeSecretConfigured: isTaseronGrupIntakeConfigured(),
+    whatsappConfigured: isWhatsAppTaseronWebhookConfigured(),
+    adminConfigured: isFirebaseAdminConfigured(),
+    not: "Mevcut WhatsApp grubu dinlenmez. Otomasyon bu s\xF6zle\u015Fmeyle PDF g\xF6nderir; kadro Onay\u2019da yaz\u0131l\u0131r."
+  };
+}
+async function downloadWhatsAppMedia(mediaId) {
+  const token = String(process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+  if (!token) throw new Error("WHATSAPP_ACCESS_TOKEN yok");
+  const metaRes = await fetch(`https://graph.facebook.com/v21.0/${encodeURIComponent(mediaId)}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!metaRes.ok) throw new Error(`WhatsApp media meta ${metaRes.status}`);
+  const meta = await metaRes.json();
+  if (!meta.url) throw new Error("WhatsApp media url yok");
+  const binRes = await fetch(meta.url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!binRes.ok) throw new Error(`WhatsApp media indirilemedi ${binRes.status}`);
+  const buf = Buffer.from(await binRes.arrayBuffer());
+  return { base64: buf.toString("base64"), mimeType: meta.mime_type || "application/pdf" };
+}
+async function handleWhatsAppTaseronMessages(messages) {
+  let processed = 0;
+  let queued = 0;
+  let skipped = 0;
+  for (const msg of messages) {
+    const doc = msg.document;
+    const img = msg.type === "image" ? msg.image : void 0;
+    const mediaId = doc?.id || img?.id;
+    if (!mediaId) {
+      skipped += 1;
+      continue;
+    }
+    processed += 1;
+    try {
+      const media = await downloadWhatsAppMedia(mediaId);
+      const fileName = doc?.filename || "";
+      const caption = String(doc?.caption || img?.caption || msg.text?.body || "");
+      const { parsed } = await parseTaseronGrupUpload({
+        fileBase64: media.base64,
+        mimeType: media.mimeType || doc?.mime_type || img?.mime_type || "application/pdf",
+        fileName,
+        caption
+      });
+      const evrakDataUrl = `data:${media.mimeType};base64,${media.base64}`;
+      const result = await enqueueTaseronGrupParse({
+        parsed,
+        evrakDataUrl,
+        gonderen: msg.from ? `wa:${msg.from}` : "whatsapp-otomasyon"
+      });
+      if (result.id && !result.skipped) queued += 1;
+      else skipped += 1;
+    } catch (err) {
+      console.warn("WhatsApp ta\u015Feron mesaj atland\u0131:", err);
+      skipped += 1;
+    }
+  }
+  return { processed, queued, skipped };
 }
 
 // src/server/registerApiRoutes.ts
@@ -1795,18 +2270,18 @@ Please extract:
 Provide the output strictly conforming to the response schema.
 `;
       const responseSchema = {
-        type: import_genai3.Type.OBJECT,
+        type: import_genai4.Type.OBJECT,
         properties: {
-          tarih: { type: import_genai3.Type.STRING, description: "YYYY-MM-DD format\u0131nda yoklama tarihi" },
+          tarih: { type: import_genai4.Type.STRING, description: "YYYY-MM-DD format\u0131nda yoklama tarihi" },
           yoklamaKayitlari: {
-            type: import_genai3.Type.ARRAY,
+            type: import_genai4.Type.ARRAY,
             items: {
-              type: import_genai3.Type.OBJECT,
+              type: import_genai4.Type.OBJECT,
               properties: {
-                adSoyad: { type: import_genai3.Type.STRING },
-                gorev: { type: import_genai3.Type.STRING },
-                durum: { type: import_genai3.Type.STRING, description: "'Geldi', 'Yok', '\u0130zinli', 'Raporlu', 'Pazar', 'Tatil'" },
-                mesaiSaati: { type: import_genai3.Type.NUMBER }
+                adSoyad: { type: import_genai4.Type.STRING },
+                gorev: { type: import_genai4.Type.STRING },
+                durum: { type: import_genai4.Type.STRING, description: "'Geldi', 'Yok', '\u0130zinli', 'Raporlu', 'Pazar', 'Tatil'" },
+                mesaiSaati: { type: import_genai4.Type.NUMBER }
               },
               required: ["adSoyad", "durum"]
             }
@@ -1863,21 +2338,21 @@ Extract:
 Be precise with Turkish names (\u0130, \u015E, \u011E, \xDC, \xD6, \xC7). Each excelId is a distinct person even if names are similar.
 `;
       const responseSchema = {
-        type: import_genai3.Type.OBJECT,
+        type: import_genai4.Type.OBJECT,
         properties: {
-          yil: { type: import_genai3.Type.NUMBER },
-          ay: { type: import_genai3.Type.NUMBER },
+          yil: { type: import_genai4.Type.NUMBER },
+          ay: { type: import_genai4.Type.NUMBER },
           personelKayitlari: {
-            type: import_genai3.Type.ARRAY,
+            type: import_genai4.Type.ARRAY,
             items: {
-              type: import_genai3.Type.OBJECT,
+              type: import_genai4.Type.OBJECT,
               properties: {
-                excelId: { type: import_genai3.Type.NUMBER },
-                adSoyad: { type: import_genai3.Type.STRING },
-                gorev: { type: import_genai3.Type.STRING },
-                calismaGunleri: { type: import_genai3.Type.ARRAY, items: { type: import_genai3.Type.NUMBER } },
-                mesaiGunleri: { type: import_genai3.Type.OBJECT, additionalProperties: { type: import_genai3.Type.NUMBER } },
-                istenCikisTarihi: { type: import_genai3.Type.STRING }
+                excelId: { type: import_genai4.Type.NUMBER },
+                adSoyad: { type: import_genai4.Type.STRING },
+                gorev: { type: import_genai4.Type.STRING },
+                calismaGunleri: { type: import_genai4.Type.ARRAY, items: { type: import_genai4.Type.NUMBER } },
+                mesaiGunleri: { type: import_genai4.Type.OBJECT, additionalProperties: { type: import_genai4.Type.NUMBER } },
+                istenCikisTarihi: { type: import_genai4.Type.STRING }
               },
               required: ["excelId", "adSoyad", "calismaGunleri"]
             }
@@ -1945,21 +2420,21 @@ If it is a DEKONT (Payment/Transfer Receipt):
 Provide the output strictly conforming to the response schema.
 `;
       const sgkResponseSchema = {
-        type: import_genai3.Type.OBJECT,
+        type: import_genai4.Type.OBJECT,
         properties: {
-          tcNo: { type: import_genai3.Type.STRING, description: "11-digit Turkish TC Identification Number or receiver's TC" },
-          ad: { type: import_genai3.Type.STRING, description: "First name" },
-          soyad: { type: import_genai3.Type.STRING, description: "Last name" },
-          babaAdi: { type: import_genai3.Type.STRING, description: "Father's name" },
-          dogumTarihi: { type: import_genai3.Type.STRING, description: "Birthdate in YYYY-MM-DD format" },
-          iseGirisTarihi: { type: import_genai3.Type.STRING, description: "Employment start date or transfer date in YYYY-MM-DD format" },
-          cinsiyet: { type: import_genai3.Type.STRING, description: "Gender: 'Erkek' or 'Kad\u0131n'" },
-          adres: { type: import_genai3.Type.STRING, description: "Full residential address" },
-          il: { type: import_genai3.Type.STRING, description: "Residence province" },
-          ilce: { type: import_genai3.Type.STRING, description: "Residence district" },
-          gorev: { type: import_genai3.Type.STRING, description: "Role: '\u0130\u015E\xC7\u0130', 'FORMEN', 'USTA', 'M\u0130MAR', 'M\xDCHEND\u0130S', '\u015EEF', 'G\xDCVENL\u0130K', or 'DEPOCU'" },
-          ibanNo: { type: import_genai3.Type.STRING, description: "Al\u0131c\u0131 IBAN number starting with TR" },
-          bankaAdi: { type: import_genai3.Type.STRING, description: "Al\u0131c\u0131 Bank name" }
+          tcNo: { type: import_genai4.Type.STRING, description: "11-digit Turkish TC Identification Number or receiver's TC" },
+          ad: { type: import_genai4.Type.STRING, description: "First name" },
+          soyad: { type: import_genai4.Type.STRING, description: "Last name" },
+          babaAdi: { type: import_genai4.Type.STRING, description: "Father's name" },
+          dogumTarihi: { type: import_genai4.Type.STRING, description: "Birthdate in YYYY-MM-DD format" },
+          iseGirisTarihi: { type: import_genai4.Type.STRING, description: "Employment start date or transfer date in YYYY-MM-DD format" },
+          cinsiyet: { type: import_genai4.Type.STRING, description: "Gender: 'Erkek' or 'Kad\u0131n'" },
+          adres: { type: import_genai4.Type.STRING, description: "Full residential address" },
+          il: { type: import_genai4.Type.STRING, description: "Residence province" },
+          ilce: { type: import_genai4.Type.STRING, description: "Residence district" },
+          gorev: { type: import_genai4.Type.STRING, description: "Role: '\u0130\u015E\xC7\u0130', 'FORMEN', 'USTA', 'M\u0130MAR', 'M\xDCHEND\u0130S', '\u015EEF', 'G\xDCVENL\u0130K', or 'DEPOCU'" },
+          ibanNo: { type: import_genai4.Type.STRING, description: "Al\u0131c\u0131 IBAN number starting with TR" },
+          bankaAdi: { type: import_genai4.Type.STRING, description: "Al\u0131c\u0131 Bank name" }
         },
         required: ["ad", "soyad"]
       };
@@ -1982,94 +2457,89 @@ Provide the output strictly conforming to the response schema.
   });
   app2.post("/api/parse-taseron-grup", async (req, res) => {
     try {
-      const { fileBase64, mimeType, fileName } = req.body;
+      const { fileBase64, mimeType, fileName, caption } = req.body;
       if (!fileBase64 || !mimeType) {
         return res.status(400).json({ error: "Missing fileBase64 or mimeType in request body" });
       }
-      const fromFile = parseTaseronGrupMessageMeta({ fileName: String(fileName || "") });
-      let fromPdf = {};
-      if (/pdf/i.test(String(mimeType)) || /\.pdf$/i.test(String(fileName || ""))) {
-        try {
-          const buf = Buffer.from(String(fileBase64), "base64");
-          fromPdf = parseSgkEBildirgeText(extractPdfTextLayout(buf));
-        } catch (pdfErr) {
-          console.warn("ta\u015Feron grup PDF metin \xE7\u0131karma atland\u0131:", pdfErr);
-        }
-      }
-      const fromText = mergeTaseronGrupParse(fromPdf, fromFile);
-      const textComplete = taseronGrupParseHasIdentity(fromText) && Boolean(fromText.firmaAdi && (fromText.tcNo || fromText.tarih));
-      if (textComplete) {
-        return res.json({ success: true, data: fromText, source: "pdf-text" });
-      }
-      const imagePart = {
-        inlineData: {
-          mimeType,
-          data: fileBase64
-        }
-      };
-      const promptText = `
-This is ONE official Turkish SGK e-Bildirge PDF (JasperReports / iText) from the Arnavutk\xF6y \u0130\u015Fe Giri\u015F WhatsApp group.
-Titles are exactly:
-- "S\u0130GORTALI \u0130\u015EE G\u0130R\u0130\u015E B\u0130LD\u0130RGES\u0130" \u2192 yon=giris. Date = field 16 "Sigortal\u0131n\u0131n i\u015Fe ba\u015Flad\u0131\u011F\u0131 tarih" (DD.MM.YYYY).
-- "S\u0130GORTALI \u0130\u015ETEN AYRILI\u015E B\u0130LD\u0130RGES\u0130" \u2192 yon=cikis. Date = field 15 "Sigortal\u0131n\u0131n \u0130\u015Ften Ayr\u0131l\u0131\u015F Tarihi" (DD.MM.YYYY).
-Never a weekly roster. Prefer the TITLE if both dates appear.
-
-Extract:
-- "yon": giris | cikis from the title as above.
-- "firmaAdi": "\u0130\u015Fverenin/\u0130\u015Fyerinin/\u0130lgili Kurulu\u015Fun Ad\u0131-Soyad\u0131/\xDCnv." \u2014 the subcontractor unvan (field 22 on ayr\u0131l\u0131\u015F, field 24 on giri\u015F). NOT the address line. NOT Kibrit\xE7i unless Kibrit\xE7i is that unvan.
-- "isGorev": "Meslek Ad\u0131 ve Kodu" \u2014 the job name without the numeric code. Ayr\u0131l\u0131\u015F field 14 is often "Di\u011Fer Elektrik Tesisat\xE7\u0131lar\u0131-7411.02". Giri\u015F field 17 is often "8189.13 -Kablo \u0130zolasyon Eleman\u0131" (code may be a prefix).
-- "ad": field 1 Ad\u0131 (not the N\xFCfusa kay\u0131tl\u0131 / il value to the right).
-- "soyad": field 2 Soyad\u0131 (not the \u0130l / \u0130l\xE7e to the right or below).
-- "tcNo": 11-digit T.C. (boxes may be spaced; ignore a trailing X checkbox).
-- "tarih": YYYY-MM-DD as specified by yon.
-
-File name hint (may be empty): ${String(fileName || "")}
-WhatsApp caption is applied on the client (e.g. "Yurt mekanik giri\u015F" \u2192 firma + yon).
-Filename patterns from the live group:
-- "AD SOYAD \u0130\u015EE G\u0130R\u0130\u015E B\u0130LD\u0130RGES\u0130.pdf" \u2192 hire
-- "11-digit-TC_ayrilis.pdf" \u2192 exit / ayr\u0131l\u0131\u015F
-
-Output strictly as JSON per schema. Do not invent a weekly list.
-`;
-      const taseronGrupSchema = {
-        type: import_genai3.Type.OBJECT,
-        properties: {
-          yon: { type: import_genai3.Type.STRING, description: "giris or cikis" },
-          firmaAdi: { type: import_genai3.Type.STRING, description: "Subcontractor company title" },
-          isGorev: { type: import_genai3.Type.STRING, description: "Job / work description (nitelik), not yoklama role" },
-          ad: { type: import_genai3.Type.STRING },
-          soyad: { type: import_genai3.Type.STRING },
-          tcNo: { type: import_genai3.Type.STRING },
-          tarih: { type: import_genai3.Type.STRING, description: "YYYY-MM-DD" }
-        },
-        required: ["yon", "firmaAdi", "isGorev", "ad", "soyad", "tarih"]
-      };
-      try {
-        const { text } = await generateGeminiWithFallback({
-          contents: [imagePart, promptText],
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: taseronGrupSchema
-          },
-          label: "Ta\u015Feron grup evrak analizi"
-        });
-        const parsedData = JSON.parse(text);
-        res.json({
-          success: true,
-          data: mergeTaseronGrupParse(fromText, parsedData),
-          source: "pdf-text+gemini"
-        });
-      } catch (geminiErr) {
-        if (taseronGrupParseHasIdentity(fromText) || fromText.tcNo) {
-          return res.json({ success: true, data: fromText, source: "pdf-text" });
-        }
-        throw geminiErr;
-      }
+      const { parsed, source } = await parseTaseronGrupUpload({
+        fileBase64: String(fileBase64),
+        mimeType: String(mimeType),
+        fileName: String(fileName || ""),
+        caption: String(caption || "")
+      });
+      res.json({ success: true, data: parsed, source });
     } catch (error) {
       console.error("Error parsing ta\u015Feron grup PDF/Image:", error);
       const msg = error.message || "Failed to parse ta\u015Feron group document";
       const status = /zaman aşımı|timeout|504/i.test(msg) ? 504 : 500;
       res.status(status).json({ error: msg });
+    }
+  });
+  app2.get("/api/taseron-grup-intake", (_req, res) => {
+    res.json({ success: true, sozlesme: taseronGrupOtomasyonSozlesme() });
+  });
+  app2.post("/api/taseron-grup-intake", async (req, res) => {
+    try {
+      const { fileBase64, mimeType, fileName, caption, writeQueue, gonderen } = req.body || {};
+      if (!fileBase64 || !mimeType) {
+        return res.status(400).json({ error: "Missing fileBase64 or mimeType" });
+      }
+      const { parsed, source } = await parseTaseronGrupUpload({
+        fileBase64: String(fileBase64),
+        mimeType: String(mimeType),
+        fileName: String(fileName || ""),
+        caption: String(caption || "")
+      });
+      if (!writeQueue) {
+        return res.json({ success: true, data: parsed, source, queued: false });
+      }
+      if (!isTaseronGrupIntakeConfigured() || !intakeSecretOk(req.headers["x-intake-secret"])) {
+        return res.status(401).json({ error: "Intake secret gerekli (X-Intake-Secret)." });
+      }
+      const queue = await enqueueTaseronGrupParse({
+        parsed,
+        gonderen: String(gonderen || "otomasyon"),
+        evrakDataUrl: `data:${mimeType};base64,${fileBase64}`
+      });
+      res.json({ success: true, data: parsed, source, queued: Boolean(queue.id), ...queue });
+    } catch (error) {
+      console.error("ta\u015Feron grup intake:", error);
+      const msg = error.message || "Intake ba\u015Far\u0131s\u0131z";
+      const status = /zaman aşımı|timeout|504/i.test(msg) ? 504 : 500;
+      res.status(status).json({ error: msg });
+    }
+  });
+  app2.get("/api/webhooks/whatsapp-taseron-grup", (req, res) => {
+    const mode = String(req.query["hub.mode"] || "");
+    const token = String(req.query["hub.verify_token"] || "");
+    const challenge = String(req.query["hub.challenge"] || "");
+    const expected = String(process.env.WHATSAPP_VERIFY_TOKEN || "").trim();
+    if (mode === "subscribe" && expected && token === expected) {
+      return res.status(200).send(challenge);
+    }
+    res.status(403).json({ error: "WhatsApp verify token uyu\u015Fmad\u0131 veya tan\u0131ml\u0131 de\u011Fil." });
+  });
+  app2.post("/api/webhooks/whatsapp-taseron-grup", async (req, res) => {
+    if (!isWhatsAppTaseronWebhookConfigured()) {
+      return res.status(503).json({
+        error: "WhatsApp otomasyonu yap\u0131land\u0131r\u0131lmam\u0131\u015F. Mevcut grup dinlenemez; WHATSAPP_ACCESS_TOKEN + WHATSAPP_VERIFY_TOKEN gerekir."
+      });
+    }
+    try {
+      const messages = [];
+      const entries = Array.isArray(req.body?.entry) ? req.body.entry : [];
+      for (const entry of entries) {
+        const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+        for (const change of changes) {
+          const batch = change?.value?.messages;
+          if (Array.isArray(batch)) messages.push(...batch);
+        }
+      }
+      const result = await handleWhatsAppTaseronMessages(messages);
+      res.status(200).json({ success: true, ...result });
+    } catch (error) {
+      console.error("WhatsApp ta\u015Feron webhook:", error);
+      res.status(200).json({ success: false, error: error.message || "webhook hata" });
     }
   });
   app2.post("/api/parse-kimlik", async (req, res) => {
@@ -2109,19 +2579,19 @@ Rules:
 Output strictly as JSON per schema.
 `;
       const kimlikSchema = {
-        type: import_genai3.Type.OBJECT,
+        type: import_genai4.Type.OBJECT,
         properties: {
-          tcNo: { type: import_genai3.Type.STRING },
-          ad: { type: import_genai3.Type.STRING },
-          soyad: { type: import_genai3.Type.STRING },
-          babaAdi: { type: import_genai3.Type.STRING },
-          dogumTarihi: { type: import_genai3.Type.STRING },
-          cinsiyet: { type: import_genai3.Type.STRING },
-          seriNo: { type: import_genai3.Type.STRING },
-          kimlikGecerli: { type: import_genai3.Type.BOOLEAN },
-          kimlikTipi: { type: import_genai3.Type.STRING },
-          eksikAlanlar: { type: import_genai3.Type.ARRAY, items: { type: import_genai3.Type.STRING } },
-          uyari: { type: import_genai3.Type.STRING }
+          tcNo: { type: import_genai4.Type.STRING },
+          ad: { type: import_genai4.Type.STRING },
+          soyad: { type: import_genai4.Type.STRING },
+          babaAdi: { type: import_genai4.Type.STRING },
+          dogumTarihi: { type: import_genai4.Type.STRING },
+          cinsiyet: { type: import_genai4.Type.STRING },
+          seriNo: { type: import_genai4.Type.STRING },
+          kimlikGecerli: { type: import_genai4.Type.BOOLEAN },
+          kimlikTipi: { type: import_genai4.Type.STRING },
+          eksikAlanlar: { type: import_genai4.Type.ARRAY, items: { type: import_genai4.Type.STRING } },
+          uyari: { type: import_genai4.Type.STRING }
         },
         required: ["kimlikGecerli", "eksikAlanlar"]
       };
@@ -2153,19 +2623,19 @@ Output strictly as JSON per schema.
         }
       };
       const responseSchema = {
-        type: import_genai3.Type.OBJECT,
+        type: import_genai4.Type.OBJECT,
         properties: {
-          irsaliyeNo: { type: import_genai3.Type.STRING },
-          tarih: { type: import_genai3.Type.STRING },
-          firma: { type: import_genai3.Type.STRING },
+          irsaliyeNo: { type: import_genai4.Type.STRING },
+          tarih: { type: import_genai4.Type.STRING },
+          firma: { type: import_genai4.Type.STRING },
           kalemler: {
-            type: import_genai3.Type.ARRAY,
+            type: import_genai4.Type.ARRAY,
             items: {
-              type: import_genai3.Type.OBJECT,
+              type: import_genai4.Type.OBJECT,
               properties: {
-                urunAdi: { type: import_genai3.Type.STRING },
-                miktar: { type: import_genai3.Type.NUMBER },
-                birim: { type: import_genai3.Type.STRING }
+                urunAdi: { type: import_genai4.Type.STRING },
+                miktar: { type: import_genai4.Type.NUMBER },
+                birim: { type: import_genai4.Type.STRING }
               },
               required: ["urunAdi", "miktar", "birim"]
             }
@@ -2205,29 +2675,29 @@ Output strictly as JSON per schema.
         }
       };
       const responseSchema = {
-        type: import_genai3.Type.OBJECT,
+        type: import_genai4.Type.OBJECT,
         properties: {
-          faturaNo: { type: import_genai3.Type.STRING },
-          tarih: { type: import_genai3.Type.STRING },
-          firma: { type: import_genai3.Type.STRING },
+          faturaNo: { type: import_genai4.Type.STRING },
+          tarih: { type: import_genai4.Type.STRING },
+          firma: { type: import_genai4.Type.STRING },
           kalemler: {
-            type: import_genai3.Type.ARRAY,
+            type: import_genai4.Type.ARRAY,
             items: {
-              type: import_genai3.Type.OBJECT,
+              type: import_genai4.Type.OBJECT,
               properties: {
-                urunAdi: { type: import_genai3.Type.STRING },
-                miktar: { type: import_genai3.Type.NUMBER },
-                birim: { type: import_genai3.Type.STRING },
-                birimFiyat: { type: import_genai3.Type.NUMBER },
-                kdvOran: { type: import_genai3.Type.NUMBER },
-                toplam: { type: import_genai3.Type.NUMBER }
+                urunAdi: { type: import_genai4.Type.STRING },
+                miktar: { type: import_genai4.Type.NUMBER },
+                birim: { type: import_genai4.Type.STRING },
+                birimFiyat: { type: import_genai4.Type.NUMBER },
+                kdvOran: { type: import_genai4.Type.NUMBER },
+                toplam: { type: import_genai4.Type.NUMBER }
               },
               required: ["urunAdi", "miktar", "birim", "birimFiyat", "kdvOran", "toplam"]
             }
           },
-          toplamTutar: { type: import_genai3.Type.NUMBER },
-          kdvTutar: { type: import_genai3.Type.NUMBER },
-          genelToplam: { type: import_genai3.Type.NUMBER }
+          toplamTutar: { type: import_genai4.Type.NUMBER },
+          kdvTutar: { type: import_genai4.Type.NUMBER },
+          genelToplam: { type: import_genai4.Type.NUMBER }
         },
         required: ["faturaNo", "tarih", "firma", "kalemler", "toplamTutar", "kdvTutar", "genelToplam"]
       };
@@ -2257,15 +2727,15 @@ Output strictly as JSON per schema.
         return res.status(400).json({ error: "Missing fatura data in request body" });
       }
       const responseSchema = {
-        type: import_genai3.Type.OBJECT,
+        type: import_genai4.Type.OBJECT,
         properties: {
-          status: { type: import_genai3.Type.STRING, description: "Must be either 'SORUNSUZ ONAY' or 'SORUNLU'" },
+          status: { type: import_genai4.Type.STRING, description: "Must be either 'SORUNSUZ ONAY' or 'SORUNLU'" },
           discrepancies: {
-            type: import_genai3.Type.ARRAY,
-            items: { type: import_genai3.Type.STRING },
+            type: import_genai4.Type.ARRAY,
+            items: { type: import_genai4.Type.STRING },
             description: "List of found differences or discrepancies, empty if none"
           },
-          reportText: { type: import_genai3.Type.STRING, description: "A detailed Turkish summary comparing PO vs Waybills vs Invoice" }
+          reportText: { type: import_genai4.Type.STRING, description: "A detailed Turkish summary comparing PO vs Waybills vs Invoice" }
         },
         required: ["status", "discrepancies", "reportText"]
       };
@@ -2337,15 +2807,15 @@ Provide the response strictly conforming to the requested schema.
     try {
       const { saTalebi, irsaliyeler, fatura, kalemBaglantilari, analizOdak, ozelTalimat } = req.body;
       const responseSchema = {
-        type: import_genai3.Type.OBJECT,
+        type: import_genai4.Type.OBJECT,
         properties: {
-          status: { type: import_genai3.Type.STRING, description: "Must be either 'SORUNSUZ ONAY' or 'SORUNLU'" },
+          status: { type: import_genai4.Type.STRING, description: "Must be either 'SORUNSUZ ONAY' or 'SORUNLU'" },
           discrepancies: {
-            type: import_genai3.Type.ARRAY,
-            items: { type: import_genai3.Type.STRING },
+            type: import_genai4.Type.ARRAY,
+            items: { type: import_genai4.Type.STRING },
             description: "List of found differences or discrepancies, empty if none"
           },
-          reportText: { type: import_genai3.Type.STRING, description: "Detailed Turkish markdown analysis report" }
+          reportText: { type: import_genai4.Type.STRING, description: "Detailed Turkish markdown analysis report" }
         },
         required: ["status", "discrepancies", "reportText"]
       };
@@ -2442,25 +2912,25 @@ Tutanak i\xE7eri\u011Fini resmi, a\u011F\u0131rba\u015Fl\u0131 ve \u015Fantiye m
       let userPrompt = "";
       if (docType === "fatura") {
         responseSchema = {
-          type: import_genai3.Type.OBJECT,
+          type: import_genai4.Type.OBJECT,
           properties: {
-            faturaNo: { type: import_genai3.Type.STRING },
-            tarih: { type: import_genai3.Type.STRING, description: "YYYY-MM-DD format\u0131nda tarih" },
-            cariUnvan: { type: import_genai3.Type.STRING, description: "Faturay\u0131 kesen / satan sat\u0131c\u0131 firma ad\u0131 (cari \xFCnvan)" },
-            toplamTutar: { type: import_genai3.Type.NUMBER, description: "Toplam matrah tutar\u0131 (KDV hari\xE7)" },
-            kdvTutar: { type: import_genai3.Type.NUMBER, description: "Toplam hesaplanan KDV tutar\u0131" },
-            genelToplam: { type: import_genai3.Type.NUMBER, description: "\xD6denecek genel toplam tutar (KDV dahil)" },
+            faturaNo: { type: import_genai4.Type.STRING },
+            tarih: { type: import_genai4.Type.STRING, description: "YYYY-MM-DD format\u0131nda tarih" },
+            cariUnvan: { type: import_genai4.Type.STRING, description: "Faturay\u0131 kesen / satan sat\u0131c\u0131 firma ad\u0131 (cari \xFCnvan)" },
+            toplamTutar: { type: import_genai4.Type.NUMBER, description: "Toplam matrah tutar\u0131 (KDV hari\xE7)" },
+            kdvTutar: { type: import_genai4.Type.NUMBER, description: "Toplam hesaplanan KDV tutar\u0131" },
+            genelToplam: { type: import_genai4.Type.NUMBER, description: "\xD6denecek genel toplam tutar (KDV dahil)" },
             kalemler: {
-              type: import_genai3.Type.ARRAY,
+              type: import_genai4.Type.ARRAY,
               items: {
-                type: import_genai3.Type.OBJECT,
+                type: import_genai4.Type.OBJECT,
                 properties: {
-                  urunAdi: { type: import_genai3.Type.STRING, description: "\xDCr\xFCn veya hizmet ad\u0131" },
-                  miktar: { type: import_genai3.Type.NUMBER, description: "Miktar" },
-                  birim: { type: import_genai3.Type.STRING, description: "Birim (ADET, KG, TON, M3 vb.)" },
-                  birimFiyat: { type: import_genai3.Type.NUMBER, description: "Birim fiyat\u0131" },
-                  kdvOran: { type: import_genai3.Type.NUMBER, description: "KDV oran\u0131 y\xFCzde olarak (\xF6rn: 20)" },
-                  toplam: { type: import_genai3.Type.NUMBER, description: "Kalem toplam\u0131" }
+                  urunAdi: { type: import_genai4.Type.STRING, description: "\xDCr\xFCn veya hizmet ad\u0131" },
+                  miktar: { type: import_genai4.Type.NUMBER, description: "Miktar" },
+                  birim: { type: import_genai4.Type.STRING, description: "Birim (ADET, KG, TON, M3 vb.)" },
+                  birimFiyat: { type: import_genai4.Type.NUMBER, description: "Birim fiyat\u0131" },
+                  kdvOran: { type: import_genai4.Type.NUMBER, description: "KDV oran\u0131 y\xFCzde olarak (\xF6rn: 20)" },
+                  toplam: { type: import_genai4.Type.NUMBER, description: "Kalem toplam\u0131" }
                 },
                 required: ["urunAdi", "miktar", "birim", "birimFiyat", "kdvOran", "toplam"]
               }
@@ -2471,19 +2941,19 @@ Tutanak i\xE7eri\u011Fini resmi, a\u011F\u0131rba\u015Fl\u0131 ve \u015Fantiye m
         userPrompt = "L\xFCtfen ekteki faturay\u0131 (invoice) analiz et. Fatura numaras\u0131n\u0131, tarihini (YYYY-MM-DD format\u0131nda), faturay\u0131 kesen firma \xFCnvan\u0131n\u0131, toplam matrah\u0131, KDV tutar\u0131n\u0131, genel toplam\u0131 ve kalem listesini (urunAdi, miktar, birim, birimFiyat, kdvOran, toplam) \xE7\u0131kar.";
       } else if (docType === "irsaliye") {
         responseSchema = {
-          type: import_genai3.Type.OBJECT,
+          type: import_genai4.Type.OBJECT,
           properties: {
-            irsaliyeNo: { type: import_genai3.Type.STRING },
-            tarih: { type: import_genai3.Type.STRING, description: "YYYY-MM-DD format\u0131nda tarih" },
-            firma: { type: import_genai3.Type.STRING, description: "Sevk eden / g\xF6nderen firma ad\u0131" },
+            irsaliyeNo: { type: import_genai4.Type.STRING },
+            tarih: { type: import_genai4.Type.STRING, description: "YYYY-MM-DD format\u0131nda tarih" },
+            firma: { type: import_genai4.Type.STRING, description: "Sevk eden / g\xF6nderen firma ad\u0131" },
             kalemler: {
-              type: import_genai3.Type.ARRAY,
+              type: import_genai4.Type.ARRAY,
               items: {
-                type: import_genai3.Type.OBJECT,
+                type: import_genai4.Type.OBJECT,
                 properties: {
-                  urunAdi: { type: import_genai3.Type.STRING, description: "Malzeme ad\u0131" },
-                  miktar: { type: import_genai3.Type.NUMBER, description: "Miktar" },
-                  birim: { type: import_genai3.Type.STRING, description: "Birim (ADET, KG, TON vb.)" }
+                  urunAdi: { type: import_genai4.Type.STRING, description: "Malzeme ad\u0131" },
+                  miktar: { type: import_genai4.Type.NUMBER, description: "Miktar" },
+                  birim: { type: import_genai4.Type.STRING, description: "Birim (ADET, KG, TON vb.)" }
                 },
                 required: ["urunAdi", "miktar", "birim"]
               }
@@ -2494,48 +2964,48 @@ Tutanak i\xE7eri\u011Fini resmi, a\u011F\u0131rba\u015Fl\u0131 ve \u015Fantiye m
         userPrompt = "L\xFCtfen ekteki irsaliyeyi (waybill / sevk irsaliyesi) analiz et. \u0130rsaliye numaras\u0131n\u0131, tarihini (YYYY-MM-DD format\u0131nda), sevk eden firma \xFCnvan\u0131n\u0131 ve sevk edilen malzeme listesini (urunAdi, miktar, birim) \xE7\u0131kar.";
       } else if (docType === "makbuz") {
         responseSchema = {
-          type: import_genai3.Type.OBJECT,
+          type: import_genai4.Type.OBJECT,
           properties: {
-            referansId: { type: import_genai3.Type.STRING, description: "Makbuz numaras\u0131, i\u015Flem no veya dekont referans no" },
-            tarih: { type: import_genai3.Type.STRING, description: "YYYY-MM-DD format\u0131nda i\u015Flem tarihi" },
-            aciklama: { type: import_genai3.Type.STRING, description: "\xD6deme a\xE7\u0131klamas\u0131 veya makbuz i\xE7eri\u011Fi" },
-            tutar: { type: import_genai3.Type.NUMBER, description: "\xD6denen / tahsil edilen toplam tutar" },
-            firma: { type: import_genai3.Type.STRING, description: "\xD6demeyi yapan ya da alan muhatap firma/ki\u015Fi ad\u0131" },
-            hareketTipi: { type: import_genai3.Type.STRING, description: "\u0130\u015Flem tipine g\xF6re '\xC7IKI\u015E' (\xF6deme yap\u0131ld\u0131ysa) veya 'G\u0130R\u0130\u015E' (tahsilat/para al\u0131nd\u0131ysa)" }
+            referansId: { type: import_genai4.Type.STRING, description: "Makbuz numaras\u0131, i\u015Flem no veya dekont referans no" },
+            tarih: { type: import_genai4.Type.STRING, description: "YYYY-MM-DD format\u0131nda i\u015Flem tarihi" },
+            aciklama: { type: import_genai4.Type.STRING, description: "\xD6deme a\xE7\u0131klamas\u0131 veya makbuz i\xE7eri\u011Fi" },
+            tutar: { type: import_genai4.Type.NUMBER, description: "\xD6denen / tahsil edilen toplam tutar" },
+            firma: { type: import_genai4.Type.STRING, description: "\xD6demeyi yapan ya da alan muhatap firma/ki\u015Fi ad\u0131" },
+            hareketTipi: { type: import_genai4.Type.STRING, description: "\u0130\u015Flem tipine g\xF6re '\xC7IKI\u015E' (\xF6deme yap\u0131ld\u0131ysa) veya 'G\u0130R\u0130\u015E' (tahsilat/para al\u0131nd\u0131ysa)" }
           },
           required: ["referansId", "tarih", "aciklama", "tutar", "firma", "hareketTipi"]
         };
         userPrompt = "L\xFCtfen ekteki makbuzu, tediye fi\u015Fini, gider makbuzunu veya banka dekontunu analiz et. Referans numaras\u0131n\u0131/makbuz no, tarihini (YYYY-MM-DD), a\xE7\u0131klamas\u0131n\u0131, \xF6denen/al\u0131nan net tutar\u0131, muhatap firma veya ki\u015Fi ad\u0131n\u0131 ve para \xE7\u0131k\u0131\u015F\u0131 ise '\xC7IKI\u015E', para giri\u015Fi ise 'G\u0130R\u0130\u015E' olacak \u015Fekilde hareketTipi alan\u0131n\u0131 \xE7\u0131kar.";
       } else if (docType === "hakedis") {
         responseSchema = {
-          type: import_genai3.Type.OBJECT,
+          type: import_genai4.Type.OBJECT,
           properties: {
-            faturaNo: { type: import_genai3.Type.STRING, description: "Hakedi\u015F kapa\u011F\u0131 no, fatura no veya hakedi\u015F no" },
-            donem: { type: import_genai3.Type.STRING, description: "Hangi d\xF6neme ait oldu\u011Fu (\xF6rn: Haziran 2026, Hakedi\u015F No: 3 vb.)" },
-            tarih: { type: import_genai3.Type.STRING, description: "YYYY-MM-DD format\u0131nda hakedi\u015F onay veya d\xFCzenleme tarihi" },
-            cariUnvan: { type: import_genai3.Type.STRING, description: "Hakedi\u015F sahibi y\xFCklenici / ta\u015Feron / ana firma ad\u0131" },
-            toplamTutar: { type: import_genai3.Type.NUMBER, description: "KDV hari\xE7 hakedi\u015F tutar\u0131 (ara toplam)" },
-            kdvTutar: { type: import_genai3.Type.NUMBER, description: "Hakedi\u015F KDV tutar\u0131" },
-            genelToplam: { type: import_genai3.Type.NUMBER, description: "KDV dahil \xF6denecek hakedi\u015F toplam tutar\u0131" },
-            aciklama: { type: import_genai3.Type.STRING, description: "Hakedi\u015F a\xE7\u0131klamas\u0131, yap\u0131lan i\u015Fler vb. detaylar" }
+            faturaNo: { type: import_genai4.Type.STRING, description: "Hakedi\u015F kapa\u011F\u0131 no, fatura no veya hakedi\u015F no" },
+            donem: { type: import_genai4.Type.STRING, description: "Hangi d\xF6neme ait oldu\u011Fu (\xF6rn: Haziran 2026, Hakedi\u015F No: 3 vb.)" },
+            tarih: { type: import_genai4.Type.STRING, description: "YYYY-MM-DD format\u0131nda hakedi\u015F onay veya d\xFCzenleme tarihi" },
+            cariUnvan: { type: import_genai4.Type.STRING, description: "Hakedi\u015F sahibi y\xFCklenici / ta\u015Feron / ana firma ad\u0131" },
+            toplamTutar: { type: import_genai4.Type.NUMBER, description: "KDV hari\xE7 hakedi\u015F tutar\u0131 (ara toplam)" },
+            kdvTutar: { type: import_genai4.Type.NUMBER, description: "Hakedi\u015F KDV tutar\u0131" },
+            genelToplam: { type: import_genai4.Type.NUMBER, description: "KDV dahil \xF6denecek hakedi\u015F toplam tutar\u0131" },
+            aciklama: { type: import_genai4.Type.STRING, description: "Hakedi\u015F a\xE7\u0131klamas\u0131, yap\u0131lan i\u015Fler vb. detaylar" }
           },
           required: ["faturaNo", "donem", "tarih", "cariUnvan", "toplamTutar", "kdvTutar", "genelToplam", "aciklama"]
         };
         userPrompt = "L\xFCtfen ekteki hakedi\u015F belgesini, hakedi\u015F kapa\u011F\u0131n\u0131 veya hakedi\u015F raporunu analiz et. Hakedi\u015F/fatura numaras\u0131n\u0131, d\xF6nemini (donem), tarihini (YYYY-MM-DD), y\xFCklenici/ta\u015Feron firma \xFCnvan\u0131n\u0131, KDV hari\xE7 toplam\u0131 (toplamTutar), KDV tutar\u0131n\u0131, genel toplam\u0131 ve k\u0131sa i\u015F a\xE7\u0131klamas\u0131n\u0131 \xE7\u0131kar.";
       } else if (docType === "yoklama") {
         responseSchema = {
-          type: import_genai3.Type.OBJECT,
+          type: import_genai4.Type.OBJECT,
           properties: {
-            tarih: { type: import_genai3.Type.STRING, description: "\u0130lgili ay, d\xF6nem veya tarih (\xF6rn: Haziran 2026 veya 2026-06-15)" },
+            tarih: { type: import_genai4.Type.STRING, description: "\u0130lgili ay, d\xF6nem veya tarih (\xF6rn: Haziran 2026 veya 2026-06-15)" },
             yoklamaKayitlari: {
-              type: import_genai3.Type.ARRAY,
+              type: import_genai4.Type.ARRAY,
               items: {
-                type: import_genai3.Type.OBJECT,
+                type: import_genai4.Type.OBJECT,
                 properties: {
-                  adSoyad: { type: import_genai3.Type.STRING, description: "Personel ad\u0131 soyad\u0131 (\xF6rn: 'Ahmet Y\u0131lmaz')" },
-                  durum: { type: import_genai3.Type.STRING, description: "'Geldi', 'Yok', '\u0130zinli', 'Raporlu', 'Pazar', 'Tatil' durumlar\u0131ndan biri" },
-                  gunNo: { type: import_genai3.Type.NUMBER, description: "Hangi g\xFCn oldu\u011Fu (1-31 aras\u0131 tamsay\u0131, \xF6rn: 15. g\xFCn ise 15)" },
-                  mesaiSaati: { type: import_genai3.Type.NUMBER, description: "Varsa fazla mesai saati" }
+                  adSoyad: { type: import_genai4.Type.STRING, description: "Personel ad\u0131 soyad\u0131 (\xF6rn: 'Ahmet Y\u0131lmaz')" },
+                  durum: { type: import_genai4.Type.STRING, description: "'Geldi', 'Yok', '\u0130zinli', 'Raporlu', 'Pazar', 'Tatil' durumlar\u0131ndan biri" },
+                  gunNo: { type: import_genai4.Type.NUMBER, description: "Hangi g\xFCn oldu\u011Fu (1-31 aras\u0131 tamsay\u0131, \xF6rn: 15. g\xFCn ise 15)" },
+                  mesaiSaati: { type: import_genai4.Type.NUMBER, description: "Varsa fazla mesai saati" }
                 },
                 required: ["adSoyad", "durum"]
               }
@@ -2546,16 +3016,16 @@ Tutanak i\xE7eri\u011Fini resmi, a\u011F\u0131rba\u015Fl\u0131 ve \u015Fantiye m
         userPrompt = "L\xFCtfen ekteki personel yoklama listesini, puantaj tablosunu veya \u015Fantiye yoklama tutana\u011F\u0131n\u0131 analiz et. \u0130lgili ay\u0131 veya tarihi tespit et, listedeki t\xFCm personellerin isimlerini ve yoklama/puantaj durumlar\u0131n\u0131 ('Geldi', 'Yok', '\u0130zinli', 'Raporlu', 'Pazar', 'Tatil') yoklamaKayitlari dizisinde \xE7\u0131kar.";
       } else if (docType === "saha_faaliyet") {
         responseSchema = {
-          type: import_genai3.Type.OBJECT,
+          type: import_genai4.Type.OBJECT,
           properties: {
-            tarih: { type: import_genai3.Type.STRING, description: "YYYY-MM-DD format\u0131nda rapor tarihi" },
-            isNiteligi: { type: import_genai3.Type.STRING, description: "\u0130\u015Fin niteli\u011Fi, t\xFCr\xFC (\xF6rn: 'Beton D\xF6k\xFCm\xFC', 'Kal\u0131p \xC7ak\u0131m\u0131', 'Hafriyat ve Kaz\u0131')" },
-            parsel: { type: import_genai3.Type.STRING, description: "Parsel no (\xF6rn: 'Parsel A' veya 'Parsel 3')" },
-            blok: { type: import_genai3.Type.STRING, description: "Blok no (\xF6rn: 'Blok 1' veya 'Blok B')" },
-            aciklama: { type: import_genai3.Type.STRING, description: "G\xFCnl\xFCk \u015Fantiyede yap\u0131lan faaliyet a\xE7\u0131klamalar\u0131 ve detaylar\u0131" },
+            tarih: { type: import_genai4.Type.STRING, description: "YYYY-MM-DD format\u0131nda rapor tarihi" },
+            isNiteligi: { type: import_genai4.Type.STRING, description: "\u0130\u015Fin niteli\u011Fi, t\xFCr\xFC (\xF6rn: 'Beton D\xF6k\xFCm\xFC', 'Kal\u0131p \xC7ak\u0131m\u0131', 'Hafriyat ve Kaz\u0131')" },
+            parsel: { type: import_genai4.Type.STRING, description: "Parsel no (\xF6rn: 'Parsel A' veya 'Parsel 3')" },
+            blok: { type: import_genai4.Type.STRING, description: "Blok no (\xF6rn: 'Blok 1' veya 'Blok B')" },
+            aciklama: { type: import_genai4.Type.STRING, description: "G\xFCnl\xFCk \u015Fantiyede yap\u0131lan faaliyet a\xE7\u0131klamalar\u0131 ve detaylar\u0131" },
             aktifPersonelListesi: {
-              type: import_genai3.Type.ARRAY,
-              items: { type: import_genai3.Type.STRING },
+              type: import_genai4.Type.ARRAY,
+              items: { type: import_genai4.Type.STRING },
               description: "\u015Eantiye sahas\u0131nda aktif g\xF6rev alan personellerin isim listesi"
             }
           },
@@ -2564,79 +3034,79 @@ Tutanak i\xE7eri\u011Fini resmi, a\u011F\u0131rba\u015Fl\u0131 ve \u015Fantiye m
         userPrompt = "L\xFCtfen ekteki G\xFCnl\xFCk Saha Faaliyet Raporunu veya \u015Fantiye g\xFCnl\xFCk faaliyet logunu analiz et. Rapor tarihini (YYYY-MM-DD), yap\u0131lan i\u015Flerin niteli\u011Fini (isNiteligi), parsel ve blok bilgilerini, g\xFCnl\xFCk \xF6zet faaliyet detaylar\u0131n\u0131 ve sahada \xE7al\u0131\u015Fan aktif personellerin isim listesini \xE7\u0131kar.";
       } else if (docType === "auto") {
         responseSchema = {
-          type: import_genai3.Type.OBJECT,
+          type: import_genai4.Type.OBJECT,
           properties: {
-            detectedType: { type: import_genai3.Type.STRING, description: "Tespit edilen d\xF6k\xFCman t\xFCr\xFC: 'fatura', 'irsaliye', 'makbuz', 'hakedis', 'yoklama', or 'saha_faaliyet'" },
-            faturaNo: { type: import_genai3.Type.STRING },
-            irsaliyeNo: { type: import_genai3.Type.STRING },
-            referansId: { type: import_genai3.Type.STRING },
-            tarih: { type: import_genai3.Type.STRING, description: "YYYY-MM-DD format\u0131nda tarih" },
-            donem: { type: import_genai3.Type.STRING, description: "D\xF6nem (\xF6rn: Haziran 2026)" },
-            firma: { type: import_genai3.Type.STRING, description: "Firma / \u015Eah\u0131s / Al\u0131c\u0131 / Sat\u0131c\u0131 / Cari ad\u0131" },
-            cariUnvan: { type: import_genai3.Type.STRING, description: "Cari \xFCnvan veya firma \xFCnvan\u0131" },
-            toplamTutar: { type: import_genai3.Type.NUMBER },
-            kdvTutar: { type: import_genai3.Type.NUMBER },
-            genelToplam: { type: import_genai3.Type.NUMBER },
-            tutar: { type: import_genai3.Type.NUMBER },
-            aciklama: { type: import_genai3.Type.STRING },
-            hareketTipi: { type: import_genai3.Type.STRING, description: "'G\u0130R\u0130\u015E' veya '\xC7IKI\u015E'" },
+            detectedType: { type: import_genai4.Type.STRING, description: "Tespit edilen d\xF6k\xFCman t\xFCr\xFC: 'fatura', 'irsaliye', 'makbuz', 'hakedis', 'yoklama', or 'saha_faaliyet'" },
+            faturaNo: { type: import_genai4.Type.STRING },
+            irsaliyeNo: { type: import_genai4.Type.STRING },
+            referansId: { type: import_genai4.Type.STRING },
+            tarih: { type: import_genai4.Type.STRING, description: "YYYY-MM-DD format\u0131nda tarih" },
+            donem: { type: import_genai4.Type.STRING, description: "D\xF6nem (\xF6rn: Haziran 2026)" },
+            firma: { type: import_genai4.Type.STRING, description: "Firma / \u015Eah\u0131s / Al\u0131c\u0131 / Sat\u0131c\u0131 / Cari ad\u0131" },
+            cariUnvan: { type: import_genai4.Type.STRING, description: "Cari \xFCnvan veya firma \xFCnvan\u0131" },
+            toplamTutar: { type: import_genai4.Type.NUMBER },
+            kdvTutar: { type: import_genai4.Type.NUMBER },
+            genelToplam: { type: import_genai4.Type.NUMBER },
+            tutar: { type: import_genai4.Type.NUMBER },
+            aciklama: { type: import_genai4.Type.STRING },
+            hareketTipi: { type: import_genai4.Type.STRING, description: "'G\u0130R\u0130\u015E' veya '\xC7IKI\u015E'" },
             kalemler: {
-              type: import_genai3.Type.ARRAY,
+              type: import_genai4.Type.ARRAY,
               items: {
-                type: import_genai3.Type.OBJECT,
+                type: import_genai4.Type.OBJECT,
                 properties: {
-                  urunAdi: { type: import_genai3.Type.STRING },
-                  miktar: { type: import_genai3.Type.NUMBER },
-                  birim: { type: import_genai3.Type.STRING },
-                  birimFiyat: { type: import_genai3.Type.NUMBER },
-                  kdvOran: { type: import_genai3.Type.NUMBER },
-                  toplam: { type: import_genai3.Type.NUMBER }
+                  urunAdi: { type: import_genai4.Type.STRING },
+                  miktar: { type: import_genai4.Type.NUMBER },
+                  birim: { type: import_genai4.Type.STRING },
+                  birimFiyat: { type: import_genai4.Type.NUMBER },
+                  kdvOran: { type: import_genai4.Type.NUMBER },
+                  toplam: { type: import_genai4.Type.NUMBER }
                 }
               }
             },
             yoklamaKayitlari: {
-              type: import_genai3.Type.ARRAY,
+              type: import_genai4.Type.ARRAY,
               items: {
-                type: import_genai3.Type.OBJECT,
+                type: import_genai4.Type.OBJECT,
                 properties: {
-                  adSoyad: { type: import_genai3.Type.STRING, description: "Personel ad\u0131 soyad\u0131 (\xF6rn: 'Ahmet Y\u0131lmaz')" },
-                  durum: { type: import_genai3.Type.STRING, description: "'Geldi', 'Yok', '\u0130zinli', 'Raporlu', 'Pazar', 'Tatil' durumlar\u0131ndan biri" },
-                  gunNo: { type: import_genai3.Type.NUMBER, description: "Ay\u0131n hangi g\xFCn\xFC oldu\u011Fu (1-31 aras\u0131 say\u0131, \xF6rn: 15)" },
-                  mesaiSaati: { type: import_genai3.Type.NUMBER, description: "Fazla mesai saati" }
+                  adSoyad: { type: import_genai4.Type.STRING, description: "Personel ad\u0131 soyad\u0131 (\xF6rn: 'Ahmet Y\u0131lmaz')" },
+                  durum: { type: import_genai4.Type.STRING, description: "'Geldi', 'Yok', '\u0130zinli', 'Raporlu', 'Pazar', 'Tatil' durumlar\u0131ndan biri" },
+                  gunNo: { type: import_genai4.Type.NUMBER, description: "Ay\u0131n hangi g\xFCn\xFC oldu\u011Fu (1-31 aras\u0131 say\u0131, \xF6rn: 15)" },
+                  mesaiSaati: { type: import_genai4.Type.NUMBER, description: "Fazla mesai saati" }
                 },
                 required: ["adSoyad", "durum"]
               }
             },
-            isNiteligi: { type: import_genai3.Type.STRING, description: "\u0130\u015Fin niteli\u011Fi (\xF6rn: 'Beton D\xF6k\xFCm\xFC')" },
-            parsel: { type: import_genai3.Type.STRING, description: "\u015Eantiye parseli (\xF6rn: 'Parsel A')" },
-            blok: { type: import_genai3.Type.STRING, description: "\u015Eantiye blok bilgisi (\xF6rn: 'Blok 1')" },
+            isNiteligi: { type: import_genai4.Type.STRING, description: "\u0130\u015Fin niteli\u011Fi (\xF6rn: 'Beton D\xF6k\xFCm\xFC')" },
+            parsel: { type: import_genai4.Type.STRING, description: "\u015Eantiye parseli (\xF6rn: 'Parsel A')" },
+            blok: { type: import_genai4.Type.STRING, description: "\u015Eantiye blok bilgisi (\xF6rn: 'Blok 1')" },
             aktifPersonelListesi: {
-              type: import_genai3.Type.ARRAY,
-              items: { type: import_genai3.Type.STRING },
+              type: import_genai4.Type.ARRAY,
+              items: { type: import_genai4.Type.STRING },
               description: "Sahada g\xF6rev alan personellerin isimleri"
             },
             records: {
-              type: import_genai3.Type.ARRAY,
+              type: import_genai4.Type.ARRAY,
               description: "Ayn\u0131 belgede birden fazla sat\u0131n alma kayd\u0131 varsa, her bir talep i\xE7in ayr\u0131 kay\u0131t dizisi",
               items: {
-                type: import_genai3.Type.OBJECT,
+                type: import_genai4.Type.OBJECT,
                 properties: {
-                  tarih: { type: import_genai3.Type.STRING, description: "YYYY-MM-DD format\u0131nda tarih" },
-                  firma: { type: import_genai3.Type.STRING, description: "Tedarik\xE7i / cari firma" },
-                  cariUnvan: { type: import_genai3.Type.STRING, description: "Firma \xFCnvan\u0131" },
-                  aciklama: { type: import_genai3.Type.STRING, description: "Talep a\xE7\u0131klamas\u0131 veya not" },
-                  onayDurumu: { type: import_genai3.Type.STRING, description: "ONAYLANDI veya B\u0130L\u0130NM\u0130YOR" },
+                  tarih: { type: import_genai4.Type.STRING, description: "YYYY-MM-DD format\u0131nda tarih" },
+                  firma: { type: import_genai4.Type.STRING, description: "Tedarik\xE7i / cari firma" },
+                  cariUnvan: { type: import_genai4.Type.STRING, description: "Firma \xFCnvan\u0131" },
+                  aciklama: { type: import_genai4.Type.STRING, description: "Talep a\xE7\u0131klamas\u0131 veya not" },
+                  onayDurumu: { type: import_genai4.Type.STRING, description: "ONAYLANDI veya B\u0130L\u0130NM\u0130YOR" },
                   kalemler: {
-                    type: import_genai3.Type.ARRAY,
+                    type: import_genai4.Type.ARRAY,
                     items: {
-                      type: import_genai3.Type.OBJECT,
+                      type: import_genai4.Type.OBJECT,
                       properties: {
-                        urunAdi: { type: import_genai3.Type.STRING },
-                        miktar: { type: import_genai3.Type.NUMBER },
-                        birim: { type: import_genai3.Type.STRING },
-                        birimFiyat: { type: import_genai3.Type.NUMBER },
-                        kdvOran: { type: import_genai3.Type.NUMBER },
-                        toplam: { type: import_genai3.Type.NUMBER }
+                        urunAdi: { type: import_genai4.Type.STRING },
+                        miktar: { type: import_genai4.Type.NUMBER },
+                        birim: { type: import_genai4.Type.STRING },
+                        birimFiyat: { type: import_genai4.Type.NUMBER },
+                        kdvOran: { type: import_genai4.Type.NUMBER },
+                        toplam: { type: import_genai4.Type.NUMBER }
                       }
                     }
                   }

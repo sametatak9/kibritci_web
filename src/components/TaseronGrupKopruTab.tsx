@@ -7,14 +7,14 @@ import { fetchApiJson } from '../lib/apiClient';
 import { compressImage } from '../lib/imageCompress';
 import { buildWhatsAppUrl } from '../lib/mobilOnayUtils';
 import { muhasebeInputClass } from './evrakUi/MuhasebeBelgeForm';
-import { getTaseronCariKartlar, isTaseronPersonelRecord } from '../lib/taseronUtils';
+import { isTaseronPersonelRecord } from '../lib/taseronUtils';
 import {
   buildTaseronCikisTalepDoc,
   buildTaseronCikisWhatsAppText,
   buildTaseronGirisTalepDoc,
   buildTaseronGirisWhatsAppText,
-  digitsTc,
   findOpenTaseronGrupTalep,
+  findTaseronPersonelByTc,
   inferTaseronYonFromText,
   isTaseronGrupTalep,
   namesMatchExact,
@@ -23,9 +23,11 @@ import {
   parseTaseronGrupWhatsAppText,
   resolveTaseronGrupFirmaAdi,
   taseronGrupDurumEtiketi,
+  taseronGrupKuruluFirmaAdlari,
   taseronIsGorevOf,
   TASERON_GRUP_ADI,
   TASERON_GRUP_KAYNAK,
+  TASERON_GRUP_OTOMASYON,
   type TaseronGrupParse,
   type TaseronGrupYon,
 } from '../lib/taseronGrupSablon';
@@ -96,7 +98,10 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
   }, []);
 
   const gonderen = currentUser?.email || 'şantiye';
-  const taseronCariler = useMemo(() => getTaseronCariKartlar(cariKartlar), [cariKartlar]);
+  const kuruluFirmalar = useMemo(
+    () => taseronGrupKuruluFirmaAdlari({ cariKartlar, personeller }),
+    [cariKartlar, personeller]
+  );
   const bekleyenGiris = girisTalepler.filter((t) => isTaseronGrupTalep(t) && isPendingPersonelOnayDurum(t.durum));
   const bekleyenCikis = cikisTalepler.filter((t) => isTaseronGrupTalep(t) && isPendingPersonelOnayDurum(t.durum));
 
@@ -125,13 +130,11 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
 
   const eslesenTaseron = useMemo(() => {
     const taseronlar = personeller.filter(isTaseronPersonelRecord);
-    const tc = digitsTc(parsed.tcNo);
-    if (tc.length === 11) {
-      const byTc = taseronlar.find((p) => digitsTc(p.tcNo) === tc);
-      if (byTc) return byTc;
-    }
+    const byTc = findTaseronPersonelByTc(taseronlar, parsed.tcNo);
+    if (parsed.yon === 'cikis') return byTc;
+    if (byTc) return byTc;
     return taseronlar.find((p) => namesMatchExact(p, parsed));
-  }, [personeller, parsed.ad, parsed.soyad, parsed.tcNo]);
+  }, [personeller, parsed.ad, parsed.soyad, parsed.tcNo, parsed.yon]);
 
   const copyText = async () => {
     await navigator.clipboard.writeText(wpText);
@@ -155,7 +158,7 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
       },
       { fileName: usedName, fallbackYon: fromMsg.yon || fallbackYon }
     );
-    next.firmaAdi = resolveTaseronGrupFirmaAdi(next.firmaAdi, cariKartlar);
+    next.firmaAdi = resolveTaseronGrupFirmaAdi(next.firmaAdi, cariKartlar, personeller);
     setParsed(next);
     return next;
   };
@@ -193,7 +196,7 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fileBase64: base64, mimeType: mime, fileName: file.name }),
+            body: JSON.stringify({ fileBase64: base64, mimeType: mime, fileName: file.name, caption: wpPaste }),
           }
         );
         if (!res.success || !res.data) throw new Error(res.error || 'Evrak okunamadı.');
@@ -248,7 +251,7 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
 
     setBusy(true);
     try {
-      const firmaAdi = resolveTaseronGrupFirmaAdi(parsed.firmaAdi, cariKartlar);
+      const firmaAdi = resolveTaseronGrupFirmaAdi(parsed.firmaAdi, cariKartlar, personeller);
       const payload = { ...parsed, firmaAdi };
       if (parsed.yon === 'giris') {
         const id = `GIRIS-${TASERON_GRUP_KAYNAK}-${Date.now()}`;
@@ -293,7 +296,7 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
   const patch = (key: keyof TaseronGrupParse, value: string) => {
     setParsed((prev) => ({
       ...prev,
-      [key]: key === 'yon' ? (value as TaseronGrupYon) : key === 'firmaAdi' ? resolveTaseronGrupFirmaAdi(value, cariKartlar) || value : value,
+      [key]: key === 'yon' ? (value as TaseronGrupYon) : key === 'firmaAdi' ? resolveTaseronGrupFirmaAdi(value, cariKartlar, personeller) || value : value,
     }));
   };
 
@@ -302,8 +305,16 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
       <div className="rounded-xl border border-teal-200 bg-teal-50/80 px-4 py-3 text-[12px] text-teal-950 leading-relaxed">
         <strong>Taşeron grup:</strong> WhatsApp grubu ({TASERON_GRUP_ADI}) dinlenmez. Gruba düşen her SGK
         e-Bildirge PDF’i (SİGORTALI İŞE GİRİŞ / İŞTEN AYRILIŞ BİLDİRGESİ) buraya bırakılır; formdaki ad,
-        TC, meslek ve işveren ünvanı okunur. Alt yazı (ör. Yurt mekanik giriş) firmayı tamamlar.{' '}
-        <em>Tek mesaj = tek kuyruk kaydı</em>. Kadro bu ekrandan yazılmaz.
+        TC, meslek ve işveren ünvanı okunur. Ünvan, kurulu taşeron cari / kart isimleriyle eşleşir
+        (ör. YURTMEKANİK → YURT MEKANİK). Çıkışta yalnızca programdaki TC pasife alınır; TC yoksa kadroya
+        dokunulmaz. <em>Tek mesaj = tek kuyruk kaydı</em>. Kadro bu ekrandan yazılmaz.
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-[12px] text-slate-700 leading-relaxed">
+        <strong>Otomasyon dili:</strong> Mevcut grup dinlenemez. Program şunu anlar: bir PDF + isteğe bağlı alt yazı
+        ({TASERON_GRUP_OTOMASYON.altYaziOrnek}). Resmi kanal{' '}
+        <code className="text-[11px] bg-slate-100 px-1 rounded">{TASERON_GRUP_OTOMASYON.endpoint}</code> veya şirket
+        WhatsApp Business numarasına iletme ({TASERON_GRUP_OTOMASYON.whatsappWebhook}). Gelen kayıt Onay kuyruğuna
+        düşer; kadro yine onayda yazılır.
       </div>
 
       {err ? <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{err}</p> : null}
@@ -381,8 +392,8 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
                 placeholder="PDF / gruptaki taşeron ünvanı"
               />
               <datalist id="taseron-grup-firma">
-                {taseronCariler.map((c) => (
-                  <option key={c.id} value={c.unvan} />
+                {kuruluFirmalar.map((unvan) => (
+                  <option key={unvan} value={unvan} />
                 ))}
               </datalist>
             </label>
@@ -400,8 +411,10 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
           {parsed.yon === 'cikis' ? (
             <p className="text-[11px] text-slate-600">
               {eslesenTaseron
-                ? `Mevcut taşeron kartı bulundu: ${eslesenTaseron.ad} ${eslesenTaseron.soyad} · ${eslesenTaseron.firmaAdi || 'firma yok'}. Onaylanınca pasife alınır; şimdi değil.`
-                : 'Eşleşen taşeron kartı yok. Çıkış yine Onay kuyruğuna düşer; Ana Firma kartına dokunulmaz.'}
+                ? `Programda bu TC var: ${eslesenTaseron.ad} ${eslesenTaseron.soyad} · ${eslesenTaseron.firmaAdi || 'firma yok'}. Onaylanınca taşeron kart pasife alınır; şimdi değil.`
+                : parsed.tcNo
+                  ? 'Bu TC programda taşeron kart olarak yok. Onaylanınca kadroya dokunulmaz; zamanla liste buradan düzelir.'
+                  : 'Çıkış için TC gerekli. PDF’den gelmediyse yazın — TC yoksa program kimseyi çıkarmaz.'}
             </p>
           ) : null}
 

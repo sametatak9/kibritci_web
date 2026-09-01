@@ -8,8 +8,10 @@ import {
   normalizePersonName,
 } from './sgkGrupSablon';
 import {
+  firmaAnahtar,
   firmaEslesir,
   getTaseronCariKartlar,
+  isTaseronPersonelRecord,
   TASERON_PERSONEL_GOREV,
   withTaseronPersonelGorev,
 } from './taseronUtils';
@@ -402,6 +404,49 @@ export function taseronGrupParseHasIdentity(p?: Partial<TaseronGrupParse> | null
   return Boolean(String(p?.ad || '').trim() && String(p?.soyad || '').trim() && p?.yon);
 }
 
+/** Otomasyonun konuştuğu dil — mevcut WhatsApp grubu dinlenmez; bu sözleşmeye PDF gelir. */
+export const TASERON_GRUP_OTOMASYON = {
+  grupAdi: TASERON_GRUP_ADI,
+  kaynak: TASERON_GRUP_KAYNAK,
+  birim: 'tek mesaj = tek PDF = tek kişi',
+  girisDosya: 'AD SOYAD İŞE GİRİŞ BİLDİRGESİ.pdf',
+  cikisDosya: '11haneliTC_ayrilis.pdf',
+  altYaziOrnek: 'Yurt mekanik giriş',
+  endpoint: 'POST /api/taseron-grup-intake',
+  whatsappWebhook: '/api/webhooks/whatsapp-taseron-grup',
+  kadro: 'yazılmaz — Onay kuyruğu',
+  grupDinleme: false,
+} as const;
+
+export function taseronGrupKuyrukHazir(p?: Partial<TaseronGrupParse> | null): boolean {
+  return Boolean(
+    taseronGrupParseHasIdentity(p) && String(p?.firmaAdi || '').trim() && String(p?.tarih || '').trim()
+  );
+}
+
+/** PDF gövdesi + dosya adı + WhatsApp alt yazısı + (opsiyonel) yapay zeka. PDF ünvanı öncelikli. */
+export function assembleTaseronGrupFromParts(opts: {
+  fromPdf?: Partial<TaseronGrupParse> | null;
+  fileName?: string;
+  caption?: string;
+  fromGemini?: Partial<TaseronGrupParse> | null;
+}): TaseronGrupParse {
+  const fromMsg = parseTaseronGrupMessageMeta({ fileName: opts.fileName, caption: opts.caption });
+  const fromCaption = opts.caption ? parseTaseronGrupWhatsAppText(opts.caption) : {};
+  const merged = mergeTaseronGrupParse(opts.fromPdf, opts.fromGemini, fromCaption, fromMsg);
+  return normalizeTaseronGrupParse(
+    {
+      ...merged,
+      yon: fromMsg.yon || merged.yon,
+      firmaAdi: merged.firmaAdi || fromMsg.firmaAdi,
+      ad: merged.ad || fromMsg.ad,
+      soyad: merged.soyad || fromMsg.soyad,
+      tcNo: merged.tcNo || fromMsg.tcNo,
+    },
+    { fileName: opts.fileName, fallbackYon: fromMsg.yon }
+  );
+}
+
 /**
  * Gruptan kopyalanan sabit metni veya etiketli satırları okur.
  * Haftalık isim listesi beklenmez — tek kişi.
@@ -478,14 +523,56 @@ export function normalizeTaseronGrupParse(
   };
 }
 
-/** Gruptaki ünvanı mevcut taşeron cari kartıyla hizalar; yoksa metni büyük harf bırakır. */
-export function resolveTaseronGrupFirmaAdi(raw: string, cariKartlar: CariKart[] = []): string {
+/** Kurulu taşeron unvanları: önce cari, sonra personel kartındaki firmaAdi. */
+export function taseronGrupKuruluFirmaAdlari(opts?: {
+  cariKartlar?: CariKart[];
+  personeller?: Personel[];
+}): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (raw?: string) => {
+    const u = String(raw || '').trim();
+    if (!u) return;
+    const key = firmaAnahtar(u).replace(/\s+/g, '');
+    if (key.length < 3 || seen.has(key)) return;
+    seen.add(key);
+    out.push(u);
+  };
+  for (const c of getTaseronCariKartlar(opts?.cariKartlar || [])) add(c.unvan);
+  for (const p of (opts?.personeller || []).filter(isTaseronPersonelRecord)) add(p.firmaAdi);
+  return out;
+}
+
+/** YURTMEKANİK ≈ YURT MEKANİK; uzun e-Bildirge ünvanı ≈ kurulu kısa ad. */
+export function taseronGrupFirmaEslesir(a: string, b: string): boolean {
+  if (firmaEslesir(a, b)) return true;
+  const ca = firmaAnahtar(a).replace(/\s+/g, '');
+  const cb = firmaAnahtar(b).replace(/\s+/g, '');
+  if (ca.length < 5 || cb.length < 5) return false;
+  return ca === cb || ca.includes(cb) || cb.includes(ca);
+}
+
+/** Gruptaki ünvanı mevcut taşeron cari / kart isimleriyle hizalar; yoksa PDF metnini bırakır. */
+export function resolveTaseronGrupFirmaAdi(
+  raw: string,
+  cariKartlar: CariKart[] = [],
+  personeller: Personel[] = []
+): string {
   const name = String(raw || '')
     .trim()
     .toLocaleUpperCase('tr-TR');
   if (!name) return '';
-  const hit = getTaseronCariKartlar(cariKartlar).find((c) => firmaEslesir(c.unvan, name));
-  return (hit?.unvan || name).trim();
+  const kurulu = taseronGrupKuruluFirmaAdlari({ cariKartlar, personeller });
+  const hits = kurulu.filter((u) => taseronGrupFirmaEslesir(u, name));
+  if (hits.length === 0) return name;
+  return hits.slice().sort((a, b) => a.length - b.length || a.localeCompare(b, 'tr'))[0];
+}
+
+/** Çıkış: yalnızca 11 haneli TC ile taşeron kart. İsimle eşleşme yok. */
+export function findTaseronPersonelByTc(personeller: Personel[] = [], tcNo?: string): Personel | undefined {
+  const tc = digitsTc(tcNo);
+  if (tc.length !== 11) return undefined;
+  return personeller.filter(isTaseronPersonelRecord).find((p) => digitsTc(p.tcNo) === tc);
 }
 
 export function buildTaseronGirisWhatsAppText(b: {

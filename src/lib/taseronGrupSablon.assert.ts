@@ -18,6 +18,10 @@ import {
   parseTaseronGrupWhatsAppText,
   resolveTaseronGrupFirmaAdi,
   TASERON_GRUP_KAYNAK,
+  assembleTaseronGrupFromParts,
+  findTaseronPersonelByTc,
+  TASERON_GRUP_OTOMASYON,
+  taseronGrupKuyrukHazir,
 } from './taseronGrupSablon';
 import { TASERON_PERSONEL_GOREV } from './taseronUtils';
 import type { CariKart, Personel } from '../types/erp';
@@ -172,6 +176,20 @@ const cariKartlar: CariKart[] = [
   { id: 'ck1', unvan: 'KUTER İNŞAAT LTD. ŞTİ.', kartTipi: 'TASERON', durum: 'AKTIF' } as CariKart,
 ];
 assert(resolveTaseronGrupFirmaAdi('Kuter Insaat', cariKartlar).includes('KUTER'), 'cari hizalama');
+assert(
+  resolveTaseronGrupFirmaAdi('YURTMEKANİK İNŞAAT SANAYİ VE TİCARET LİMİTED ŞİRKETİ', [
+    { id: 'ck2', unvan: 'YURT MEKANİK', kartTipi: 'TASERON', durum: 'AKTIF' } as CariKart,
+  ]) === 'YURT MEKANİK',
+  'YURTMEKANİK → kurulu YURT MEKANİK'
+);
+assert(
+  resolveTaseronGrupFirmaAdi(
+    'KUTER ELEKTRİK TAAHHÜT İNŞAAT SANAYİ VE TİCARET',
+    [],
+    [{ id: 'p_k', ad: 'X', soyad: 'Y', firmaTipi: 'TASERON', firmaAdi: 'KUTER İNŞAAT', durum: true } as Personel]
+  ) === 'KUTER İNŞAAT',
+  'PDF ünvanı personel kartındaki kurulu ada hizalanır'
+);
 
 const parsed = normalizeTaseronGrupParse({
   yon: 'giris',
@@ -236,5 +254,29 @@ const anaFirmaAday: Personel = {
   durum: true,
 } as Personel;
 assert(anaFirmaAday.firmaTipi === 'ANA_FIRMA', 'Ana Firma kartı bu modülde yazılmaz');
+
+assert(findTaseronPersonelByTc([existingAktif], parsed.tcNo)?.id === 'p_old', 'çıkış TC eşleşir');
+assert(!findTaseronPersonelByTc([existingAktif], '99999999999'), 'olmayan TC yok');
+assert(
+  !findTaseronPersonelByTc([anaFirmaAday], parsed.tcNo),
+  'çıkış Ana Firma TC ile pasif etmez'
+);
+
+assert(TASERON_GRUP_OTOMASYON.grupDinleme === false, 'grup dinlenmez');
+const assembled = assembleTaseronGrupFromParts({
+  fromPdf: {
+    yon: 'giris',
+    ad: 'AYŞE',
+    soyad: 'DEMİR',
+    firmaAdi: 'YURTMEKANİK İNŞAAT SANAYİ VE TİCARET LİMİTED ŞİRKETİ',
+    tarih: '2026-09-01',
+    tcNo: '12345678901',
+  },
+  fileName: 'AYSE DEMIR İŞE GİRİŞ BİLDİRGESİ.pdf',
+  caption: 'Yurt mekanik giriş',
+});
+assert(assembled.yon === 'giris', 'otomasyon yön');
+assert(assembled.ad === 'AYŞE' || assembled.ad === 'AYSE', `otomasyon ad: ${assembled.ad}`);
+assert(taseronGrupKuyrukHazir(assembled), 'otomasyon kuyruk hazır');
 
 console.log('taseronGrupSablon.assert: ok');
