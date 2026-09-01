@@ -105,6 +105,7 @@ import {
   taseronEvrakUrlOf,
   taseronGrupDurumEtiketi,
   taseronIsGorevOf,
+  TASERON_GRUP_WP_HAT,
 } from '../lib/taseronGrupSablon';
 import {
   anaFirmaSgkEngel,
@@ -4564,7 +4565,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                   <p className="text-slate-500 leading-relaxed text-[11px]">
                     {isGoturuOnayTab
                       ? 'Götürü / Seramik mobil ekranından gönderilen faaliyetler, işçi giriş talepleri, işten çıkarma ve bilgi değişiklik istekleri buraya düşer. Onaylanmadan personel kartı açılmaz veya güncellenmez.'
-                      : 'Saha kapısı talepleri ve SGK grubu (Grup Köprüsü) bildirimleri buraya düşer. Ana Firma kadrosu ancak grup bildirimi + SGK evrakı görüldükten sonra, burada tek onayla yazılır. Onaylanmadan personel kartı açılmaz.'}
+                      : `Saha kapısı talepleri, SGK grubu ve taşeron grup (WhatsApp ${TASERON_GRUP_WP_HAT}) bildirimleri buraya düşer. Onaylanmadan personel kartı açılmaz / çıkarılmaz.`}
                   </p>
                 </div>
               </div>
@@ -4643,7 +4644,8 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
 
               {!isGoturuOnayTab && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-950 leading-relaxed">
-                  <strong>Ana Firma (Grup Köprüsü):</strong> onay ancak grup bildirimi + SGK evrakı varsa açılır; kadro/çıkış yalnızca bu tek tıkla yazılır.
+                  <strong>Taşeron grup ({TASERON_GRUP_WP_HAT}):</strong> PDF Onay kuyruğuna düşer; kadro ancak bu ekranda Onay ile yazılır veya TC ile pasife alınır.
+                  <strong> Ana Firma (Grup Köprüsü):</strong> onay ancak grup bildirimi + SGK evrakı varsa açılır.
                   <strong> Formen / kampçı / götürü:</strong> BEKLEMEDE talep grup bildirimi olmadan onaylanabilir — saha yolu ayrıdır.
                 </div>
               )}

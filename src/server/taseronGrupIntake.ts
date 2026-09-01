@@ -193,7 +193,7 @@ export function taseronGrupOtomasyonSozlesme() {
     intakeSecretConfigured: isTaseronGrupIntakeConfigured(),
     whatsappConfigured: isWhatsAppTaseronWebhookConfigured(),
     adminConfigured: isFirebaseAdminConfigured(),
-    not: 'Mevcut WhatsApp grubu dinlenmez. Otomasyon bu sözleşmeyle PDF gönderir; kadro Onay’da yazılır.',
+    not: `Mevcut WhatsApp grubu dinlenmez. PDF ${TASERON_GRUP_OTOMASYON.hat} hattına iletilir; kuyruk yazılır, kadro Onay’da kurulur/çıkarılır.`,
   };
 }
 
