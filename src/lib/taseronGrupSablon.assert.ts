@@ -13,6 +13,7 @@ import {
   isTaseronGrupTalep,
   normalizeTaseronGrupParse,
   parseIsoOrTrDate,
+  parseTaseronGrupMessageMeta,
   parseTaseronGrupWhatsAppText,
   resolveTaseronGrupFirmaAdi,
   TASERON_GRUP_KAYNAK,
@@ -26,6 +27,7 @@ function assert(cond: unknown, msg: string) {
 
 assert(inferTaseronYonFromText('İŞTEN ÇIKIŞ BİLDİRGESİ') === 'cikis', 'çıkış PDF adı');
 assert(inferTaseronYonFromText('Sigortalı İşe Giriş Bildirgesi') === 'giris', 'giriş PDF adı');
+assert(inferTaseronYonFromText('12345678901_ayrilis.pdf') === 'cikis', 'ayrılış dosya adı');
 assert(parseIsoOrTrDate('01.09.2026') === '2026-09-01', 'TR tarih');
 assert(parseIsoOrTrDate('2026-09-01') === '2026-09-01', 'ISO tarih');
 
@@ -57,6 +59,25 @@ const wpCikis = buildTaseronCikisWhatsAppText({
   cikisTarihi: '2026-09-15',
 });
 assert(inferTaseronYonFromText(wpCikis) === 'cikis', 'çıkış şablon yön');
+
+const fromWpGirisPdf = parseTaseronGrupMessageMeta({
+  fileName: 'SERVET EYGI İŞE GİRİŞ BİLDİRGESİ.pdf',
+  caption: 'Yurt mekanik giriş',
+});
+assert(fromWpGirisPdf.yon === 'giris', `grup PDF yön: ${fromWpGirisPdf.yon}`);
+assert(fromWpGirisPdf.ad === 'SERVET', `grup PDF ad: ${fromWpGirisPdf.ad}`);
+assert(String(fromWpGirisPdf.soyad).includes('EYGI') || String(fromWpGirisPdf.soyad).includes('EYGİ'), `grup PDF soyad: ${fromWpGirisPdf.soyad}`);
+assert(fromWpGirisPdf.firmaAdi && fromWpGirisPdf.firmaAdi.includes('YURT'), `grup alt yazı firma: ${fromWpGirisPdf.firmaAdi}`);
+
+const fromWpCikisPdf = parseTaseronGrupMessageMeta({
+  fileName: '12345678901_ayrilis.pdf',
+});
+assert(fromWpCikisPdf.yon === 'cikis', 'ayrılış yön');
+assert(fromWpCikisPdf.tcNo === '12345678901', 'ayrılış TC dosya adı');
+
+const captionOnly = parseTaseronGrupWhatsAppText('Yurt mekanik giriş');
+assert(captionOnly.yon === 'giris', 'alt yazı yön');
+assert(captionOnly.firmaAdi && captionOnly.firmaAdi.includes('YURT'), `alt yazı firma: ${captionOnly.firmaAdi}`);
 
 const cariKartlar: CariKart[] = [
   { id: 'ck1', unvan: 'KUTER İNŞAAT LTD. ŞTİ.', kartTipi: 'TASERON', durum: 'AKTIF' } as CariKart,

@@ -14,7 +14,7 @@ import {
   withTaseronPersonelGorev,
 } from './taseronUtils';
 
-export const TASERON_GRUP_ADI = 'Taşeron Giriş / Çıkış';
+export const TASERON_GRUP_ADI = 'Arnavutköy İşe Giriş';
 export const TASERON_GRUP_KAYNAK = 'TASERON_GRUP' as const;
 
 export type TaseronGrupYon = 'giris' | 'cikis';
@@ -80,9 +80,10 @@ export function inferTaseronYonFromText(raw?: string): TaseronGrupYon | null {
     .replace(/ç/g, 'c');
   if (!t.trim()) return null;
   const cikisHit =
-    /isten\s*cikis|isten\s*ayril|cikis\s*bildir|isten\s*cikarma|isten\s*cikaril|isden\s*cikis|isten\s*cikis/.test(t) ||
-    (/\bcikis\b/.test(t) && !/ise\s*giris|giris\s*bildir/.test(t));
-  const girisHit = /ise\s*giris|ise\s*baslama|giris\s*bildir|sigortali\s*ise\s*giris|\bgiris\b/.test(t);
+    /isten\s*cikis|isten\s*ayril|cikis\s*bildir|isten\s*cikarma|isten\s*cikaril|isden\s*cikis|isten\s*cikis|_?ayrilis|\bayrilis\b/.test(
+      t
+    ) || (/\bcikis\b/.test(t) && !/ise\s*giris|giris\s*bildir/.test(t));
+  const girisHit = /ise\s*giris|ise\s*baslama|giris\s*bildir|sigortali\s*ise\s*giris|bildirgesi|\bgiris\b/.test(t);
   if (cikisHit && !girisHit) return 'cikis';
   if (girisHit && !cikisHit) return 'giris';
   if (cikisHit) return 'cikis';
@@ -126,6 +127,71 @@ function splitAdSoyad(full: string): { ad: string; soyad: string } {
   };
 }
 
+function stripExt(name: string): string {
+  return String(name || '').replace(/\.(pdf|jpe?g|png|webp|heic)$/i, '').trim();
+}
+
+/**
+ * WhatsApp grubundaki gerçek mesaj: dosya adı + alt yazı.
+ * Ör. "AD SOYAD İŞE GİRİŞ BİLDİRGESİ.pdf" + "Yurt mekanik giriş"
+ * Ör. "11111111111_ayrilis.pdf"
+ */
+export function parseTaseronGrupMessageMeta(opts: {
+  fileName?: string;
+  caption?: string;
+}): Partial<TaseronGrupParse> {
+  const fileName = stripExt(opts.fileName || '');
+  const caption = String(opts.caption || '').trim();
+  const yon = inferTaseronYonFromText(`${fileName} ${caption}`) || undefined;
+  const tcNo = digitsTc(fileName.match(/\d{11}/)?.[0] || caption.match(/\d{11}/)?.[0]);
+
+  const fold = (s: string) =>
+    String(s || '')
+      .toLocaleLowerCase('tr-TR')
+      .replace(/ı/g, 'i')
+      .replace(/ş/g, 's')
+      .replace(/ğ/g, 'g')
+      .replace(/ü/g, 'u')
+      .replace(/ö/g, 'o')
+      .replace(/ç/g, 'c');
+
+  let ad = '';
+  let soyad = '';
+  const girisAd = fold(fileName)
+    .replace(/sigortali\s*/g, '')
+    .replace(/ise\s*giris\s*bildirgesi/g, '')
+    .replace(/ise\s*giris/g, '')
+    .replace(/bildirge(si)?/g, '')
+    .replace(/_?ayrilis.*/g, '')
+    .replace(/_+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (girisAd && !/^\d+$/.test(girisAd) && girisAd.split(/\s+/).length >= 2 && yon !== 'cikis') {
+    const split = splitAdSoyad(girisAd);
+    ad = split.ad;
+    soyad = split.soyad;
+  }
+
+  let firmaAdi = '';
+  if (caption) {
+    const firmaRaw = caption
+      .replace(/\b(i[sş]e\s*giri[sş]|i[sş]ten\s*[cç][ıi]k[ıi][sş]|giri[sş]|[cç][ıi]k[ıi][sş]|ayr[ıi]l[ıi][sş])\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (firmaRaw && !/^\d{11}$/.test(digitsTc(firmaRaw))) {
+      firmaAdi = firmaRaw.toLocaleUpperCase('tr-TR');
+    }
+  }
+
+  return {
+    yon,
+    ad: ad || undefined,
+    soyad: soyad || undefined,
+    firmaAdi: firmaAdi || undefined,
+    tcNo: tcNo || undefined,
+  };
+}
+
 /**
  * Gruptan kopyalanan sabit metni veya etiketli satırları okur.
  * Haftalık isim listesi beklenmez — tek kişi.
@@ -133,14 +199,15 @@ function splitAdSoyad(full: string): { ad: string; soyad: string } {
 export function parseTaseronGrupWhatsAppText(raw: string): Partial<TaseronGrupParse> {
   const text = String(raw || '').trim();
   if (!text) return {};
-  const yon = inferTaseronYonFromText(text) || undefined;
+  const fromMsg = parseTaseronGrupMessageMeta({ caption: text });
   const adSoyad = labeledValue(text, ['Ad Soyad', 'Adı Soyadı', 'Personel', 'Isim', 'İsim']);
   const split = splitAdSoyad(adSoyad);
-  const ad = labeledValue(text, ['Ad', 'Adı']) || split.ad;
-  const soyad = labeledValue(text, ['Soyad', 'Soyadı']) || split.soyad;
-  const firmaAdi = labeledValue(text, ['Firma', 'Taşeron', 'Taseron', 'İşveren', 'Unvan', 'Ünvan', 'Şirket']);
+  const ad = labeledValue(text, ['Ad', 'Adı']) || split.ad || fromMsg.ad || '';
+  const soyad = labeledValue(text, ['Soyad', 'Soyadı']) || split.soyad || fromMsg.soyad || '';
+  const firmaAdi = labeledValue(text, ['Firma', 'Taşeron', 'Taseron', 'İşveren', 'Unvan', 'Ünvan', 'Şirket']) || fromMsg.firmaAdi || '';
   const isGorev = labeledValue(text, ['Yapılan iş', 'Yapilan is', 'İş', 'Is', 'Nitelik', 'Meslek', 'Görev tanımı']);
-  const tcNo = digitsTc(labeledValue(text, ['TC Kimlik', 'TC', 'T.C.', 'Kimlik No']) || text.match(/\b\d{11}\b/)?.[0]);
+  const tcNo = digitsTc(labeledValue(text, ['TC Kimlik', 'TC', 'T.C.', 'Kimlik No']) || text.match(/\b\d{11}\b/)?.[0] || fromMsg.tcNo);
+  const yon = inferTaseronYonFromText(text) || fromMsg.yon || undefined;
   const tarih =
     parseIsoOrTrDate(labeledValue(text, ['Giriş tarihi', 'Giris tarihi', 'Çıkış tarihi', 'Cikis tarihi', 'Tarih'])) ||
     parseIsoOrTrDate(text);

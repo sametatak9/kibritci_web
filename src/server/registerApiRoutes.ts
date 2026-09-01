@@ -969,6 +969,10 @@ Extract:
 - "tarih": employment start date for giris, exit date for cikis, YYYY-MM-DD.
 
 File name hint (may be empty): ${String(fileName || '')}
+WhatsApp caption is applied on the client (e.g. "Yurt mekanik giriş" → firma + yon).
+Filename patterns from the live group:
+- "AD SOYAD İŞE GİRİŞ BİLDİRGESİ.pdf" → hire
+- "11-digit-TC_ayrilis.pdf" → exit / ayrılış
 
 Output strictly as JSON per schema. Do not invent a weekly list.
 `;

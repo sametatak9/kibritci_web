@@ -19,6 +19,7 @@ import {
   isTaseronGrupTalep,
   namesMatchExact,
   normalizeTaseronGrupParse,
+  parseTaseronGrupMessageMeta,
   parseTaseronGrupWhatsAppText,
   resolveTaseronGrupFirmaAdi,
   taseronGrupDurumEtiketi,
@@ -138,8 +139,21 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
     setTimeout(() => setCopied(false), 1600);
   };
 
-  const applyParse = (partial: Partial<TaseronGrupParse>, fallbackYon?: TaseronGrupYon) => {
-    const next = normalizeTaseronGrupParse(partial, { fileName, fallbackYon });
+  const applyParse = (partial: Partial<TaseronGrupParse>, fallbackYon?: TaseronGrupYon, nameOverride?: string) => {
+    const usedName = nameOverride || fileName;
+    const fromMsg = parseTaseronGrupMessageMeta({ fileName: usedName, caption: wpPaste });
+    const next = normalizeTaseronGrupParse(
+      {
+        ...fromMsg,
+        ...partial,
+        yon: fromMsg.yon || partial.yon,
+        firmaAdi: fromMsg.firmaAdi || partial.firmaAdi,
+        ad: partial.ad || fromMsg.ad,
+        soyad: partial.soyad || fromMsg.soyad,
+        tcNo: partial.tcNo || fromMsg.tcNo,
+      },
+      { fileName: usedName, fallbackYon: fromMsg.yon || fallbackYon }
+    );
     next.firmaAdi = resolveTaseronGrupFirmaAdi(next.firmaAdi, cariKartlar);
     setParsed(next);
     return next;
@@ -167,7 +181,11 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
     try {
       const { base64, mime, dataUrl } = await fileToBase64(file);
       setEvrakUrl(dataUrl);
-      const yonGuess = inferTaseronYonFromText(file.name) || parsed.yon || 'giris';
+      const yonGuess =
+        parseTaseronGrupMessageMeta({ fileName: file.name, caption: wpPaste }).yon ||
+        inferTaseronYonFromText(file.name) ||
+        parsed.yon ||
+        'giris';
       try {
         const res = await fetchApiJson<{ success: boolean; data?: Partial<TaseronGrupParse>; error?: string }>(
           '/api/parse-taseron-grup',
@@ -178,7 +196,7 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
           }
         );
         if (!res.success || !res.data) throw new Error(res.error || 'Evrak okunamadı.');
-        const next = applyParse(res.data, yonGuess);
+        const next = applyParse(res.data, yonGuess, file.name);
         setOk(
           `Evrak okundu: ${next.ad} ${next.soyad} · ${next.firmaAdi || 'firma yok'} · ${next.yon === 'cikis' ? 'ÇIKIŞ' : 'GİRİŞ'}. Onaya yazmadan önce kontrol edin.`
         );
@@ -281,10 +299,9 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-teal-200 bg-teal-50/80 px-4 py-3 text-[12px] text-teal-950 leading-relaxed">
-        <strong>Taşeron grup:</strong> Program mevcut WhatsApp grubunu dinleyemez (resmi bot yok). Gruba düşen her
-        standart PDF veya metin buraya bırakılır → firma + yapılan iş okunur → <em>tek mesaj = tek kuyruk kaydı</em>.
-        Haftalık Taşeron Liste Güncelle yapıştırma yolu durur. Kadro bu ekrandan yazılmaz; işten çıkış da Onay’da
-        resmileşir.
+        <strong>Taşeron grup:</strong> WhatsApp grubu ({TASERON_GRUP_ADI}) dinlenmez. Gruba düşen her PDF
+        (işe giriş bildirgesi veya ayrılış) buraya bırakılır; alt yazıdaki firma (ör. Yurt mekanik giriş)
+        okunur. <em>Tek mesaj = tek kuyruk kaydı</em>. Kadro bu ekrandan yazılmaz.
       </div>
 
       {err ? <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{err}</p> : null}
@@ -312,12 +329,12 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
           </label>
 
           <label className="block text-[10px] font-bold uppercase text-slate-500">
-            Grup metnini yapıştır (isteğe bağlı)
+            Grup metni / WhatsApp alt yazı (ör. Yurt mekanik giriş)
             <textarea
               className={`${input} min-h-[72px] font-normal normal-case`}
               value={wpPaste}
               onChange={(e) => setWpPaste(e.target.value)}
-              placeholder="WhatsApp’tan kopyalanan giriş/çıkış metni"
+              placeholder="PDF’nin altındaki kısa yazı veya kopyalanan mesaj"
             />
           </label>
           <button
