@@ -98,8 +98,10 @@ import { loadPersonellerForDedup, upsertPersonelAvoidDuplicate, findPersonelMatc
 import { applyPersonelDuplicateMerge, planManualPersonelMerge } from '../lib/personelDuplicateMerge';
 import {
   buildTaseronGrupPersonelCandidate,
+  findTaseronPersonelByTc,
   isTaseronGrupOnayHazir,
   isTaseronGrupTalep,
+  resolveTaseronGrupFirmaAdi,
   taseronEvrakUrlOf,
   taseronGrupDurumEtiketi,
   taseronIsGorevOf,
@@ -1449,7 +1451,8 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           allPersoneller.filter(isTaseronPersonelRecord),
           { personelId: item.personelId, ad: item.ad, soyad: item.soyad, tcNo: item.tcNo }
         );
-        const candidate = buildTaseronGrupPersonelCandidate(item, existing);
+        const firmaAdi = resolveTaseronGrupFirmaAdi(String(item.firmaAdi || ''), cariKartlar, allPersoneller);
+        const candidate = buildTaseronGrupPersonelCandidate({ ...item, firmaAdi }, existing);
         const { personel: saved, merged } = await upsertPersonelAvoidDuplicate(
           allPersoneller.filter(isTaseronPersonelRecord),
           candidate,
@@ -1601,28 +1604,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
       const tc = digitsTc(item.tcNo);
       const isimNeedle = normalizePersonName(item.ad, item.soyad) || normalizePersonName(item.personelIsim || '');
       if (isTaseronGrupTalep(item)) {
-        const taseronlar = (personeller || []).filter(isTaseronPersonelRecord);
-        const resolvedTaseron =
-          taseronlar.find((p) => p.id && p.id === item.personelId) ||
-          (tc.length === 11 ? taseronlar.find((p) => digitsTc(p.tcNo) === tc) : undefined) ||
-          (isimNeedle
-            ? taseronlar.find((p) => normalizePersonName(p.ad, p.soyad) === isimNeedle)
-            : undefined);
-        const anaHit =
-          (tc.length === 11
-            ? (personeller || []).find((p) => !isTaseronPersonelRecord(p) && digitsTc(p.tcNo) === tc)
-            : undefined) ||
-          (isimNeedle
-            ? (personeller || []).find(
-                (p) => !isTaseronPersonelRecord(p) && normalizePersonName(p.ad, p.soyad) === isimNeedle
-              )
-            : undefined);
-        if (anaHit && !resolvedTaseron) {
-          alert(
-            `Eşleşen kart Ana Firma (${anaHit.ad} ${anaHit.soyad}). Taşeron grup çıkışı Ana Firma’yı pasife almaz.`
-          );
-          return;
-        }
+        const resolvedTaseron = findTaseronPersonelByTc(personeller || [], item.tcNo);
         const personelId = resolvedTaseron?.id || '';
         if (personelId) {
           await updateDoc(doc(db, 'personeller', personelId), {
@@ -1645,7 +1627,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           );
         }
         let kampNot = '';
-        if (personelId || item.personelIsim) {
+        if (personelId) {
           try {
             const result = await evictActiveKampResidentsForPersonel({
               personelId,
@@ -1665,8 +1647,8 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
         }
         alert(
           personelId
-            ? `Taşeron grup çıkışı onaylandı; kart pasife alındı.${kampNot}`
-            : `Taşeron grup çıkışı onaylandı. Eşleşen taşeron kartı yoktu; kadroya dokunulmadı.${kampNot}`
+            ? `Taşeron grup çıkışı onaylandı; TC programda vardı, kart pasife alındı.${kampNot}`
+            : 'Taşeron grup çıkışı onaylandı. Bu TC programda taşeron kart olarak yoktu; kadroya dokunulmadı.'
         );
         return;
       }
@@ -4794,7 +4776,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                               Firma: {item.firmaAdi || '—'} · İş: {taseronIsGorevOf(item) || '—'}
                             </p>
                             <p className="text-[10px] text-slate-600">
-                              Yoklama görevi TAŞERON PERSONEL kalır. Onaylayınca kadro yazılır; Grup Köprüsü yazmaz. Ana Firma’ya dokunulmaz.
+                              Yoklama görevi TAŞERON PERSONEL kalır. Firma adı kurulu taşeron isimleriyle hizalanır. Onaylayınca kadro yazılır; Grup Köprüsü yazmaz. Ana Firma’ya dokunulmaz.
                             </p>
                             {item.tcNo ? <p className="text-[10px] text-slate-600 font-mono">TC {item.tcNo}</p> : null}
                             {item.iseGirisTarihi ? (
@@ -5157,7 +5139,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                                   Firma: {item.firmaAdi || '—'} · İş: {taseronIsGorevOf(item) || '—'}
                                 </p>
                                 <p className="text-[10px] text-slate-600">
-                                  Kart Grup Köprüsü’nden pasife alınmaz. Onaylayınca taşeron kartı kapanır; Ana Firma’ya dokunulmaz.
+                                  Onaylayınca: programda bu TC’li taşeron kart varsa pasife alınır. TC yoksa kadroya dokunulmaz. Ana Firma’ya dokunulmaz.
                                 </p>
                                 {item.tcNo ? <p className="text-[10px] text-slate-600 font-mono">TC {item.tcNo}</p> : null}
                                 {evrakHref ? (
