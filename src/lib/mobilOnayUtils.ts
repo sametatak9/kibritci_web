@@ -110,6 +110,23 @@ export function buildWhatsAppUrl(text: string): string {
   return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
 
+/** Uzun kamp listelerinde URL kesilmesin diye panoya kopyalayıp boş sohbet açar. */
+export async function shareWhatsAppText(text: string): Promise<'opened' | 'copied'> {
+  const url = buildWhatsAppUrl(text);
+  if (url.length <= 1800) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return 'opened';
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return 'opened';
+  }
+  window.open('https://wa.me/', '_blank', 'noopener,noreferrer');
+  return 'copied';
+}
+
 export function isLegacySahaRecord(id?: string): boolean {
   if (!id) return false;
   return id.startsWith('SF-MAY26-') || id.startsWith('SF-NISAN') || id.startsWith('sf_demo');

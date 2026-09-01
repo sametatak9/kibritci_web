@@ -91,3 +91,47 @@ export function generateKampPersonelPdfHtml(
     `
   });
 }
+
+export function generateKampPersonelWhatsAppText(
+  activeResidents: KampKaydi[],
+  personeller: Personel[],
+  kampOdalari: KampOdasi[]
+): string {
+  const grouped: Record<string, { name: string; tc: string; roomNo: string; campus: string }[]> = {};
+
+  activeResidents.forEach((k) => {
+    const p = personeller.find((x) => x.id === k.personelId);
+    const isAnaFirma = k.firmaTipi === 'ANA_FIRMA' ||
+      (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'KİBRİTÇİ İNŞAAT') ||
+      (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'ANA FİRMA') ||
+      (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'ANA FIRMA') ||
+      (p?.firmaTipi === 'ANA_FIRMA');
+    const firmName = isAnaFirma ? 'KİBRİTÇİ İNŞAAT' : (k.calistigiFirma || p?.firmaAdi || 'TAŞERON').trim().toLocaleUpperCase('tr-TR');
+    const name = p ? `${p.ad} ${p.soyad}` : (k.personelIsim || 'Bilinmiyor');
+    const tc = p?.tcNo || '';
+    const room = kampOdalari.find((r) => r.id === (k.odaId || k.roomId));
+    const roomNo = room ? room.odaNo : '';
+    const campus = room ? room.yerleskeAdi : '';
+    if (!grouped[firmName]) grouped[firmName] = [];
+    grouped[firmName].push({ name, tc, roomNo, campus });
+  });
+
+  const stamp = new Date().toLocaleString('tr-TR');
+  const lines = [
+    '*KİBRİTÇİ — KAMP YÖNETİMİ*',
+    '*Sakin listesi*',
+    `Tarih: ${stamp}`,
+    `Toplam: ${activeResidents.length} kişi`,
+  ];
+
+  Object.keys(grouped).sort((a, b) => a.localeCompare(b, 'tr')).forEach((firm) => {
+    const residents = grouped[firm].sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+    lines.push('', `▸ *${firm}* (${residents.length})`);
+    residents.forEach((r, idx) => {
+      const yer = [r.campus, r.roomNo ? `Oda ${r.roomNo}` : ''].filter(Boolean).join(' / ');
+      lines.push(`${idx + 1}. ${r.name}  ${r.tc || '—'}  ${yer}`);
+    });
+  });
+
+  return lines.join('\n');
+}

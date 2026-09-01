@@ -4,6 +4,13 @@ import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { buildWhatsAppUrl } from '../lib/mobilOnayUtils';
+import { sgkDurumEtiketi } from '../lib/sgkGrupSablon';
+import {
+  buildKampAnaFirmaGirisTalepDoc,
+  findOpenAnaFirmaGirisTalebi,
+  kampAnaFirmaSgkWhatsAppText,
+} from '../lib/kampAnaFirmaGiris';
+import { CANONICAL_ANA_FIRMA_ADI } from '../lib/yoklamaUtils';
 
 const MAX_KIMLIK_FOTO = 2;
 
@@ -12,39 +19,36 @@ type GirisTalep = {
   ad?: string;
   soyad?: string;
   gorev?: string;
+  nitelik?: string;
+  tcNo?: string;
+  iseGirisTarihi?: string;
   durum?: string;
   tarih?: string;
   gonderenFormen?: string;
   kimlikFotoUrl?: string;
   kimlikFotoUrls?: string[];
+  kaynak?: string;
+  grupBildirildi?: boolean;
 };
 
-function durumLabel(durum?: string): { text: string; className: string } {
-  if (durum === 'ONAYLANDI') {
-    return { text: 'Onaylandı', className: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
-  }
-  if (durum === 'WP_GÖNDERİLDİ') {
-    return { text: 'WhatsApp gönderildi', className: 'bg-sky-100 text-sky-800 border-sky-200' };
-  }
-  if (durum === 'GİRİŞ_BELGESİ_YÜKLENDİ') {
-    return { text: 'Belge yüklendi', className: 'bg-violet-100 text-violet-800 border-violet-200' };
-  }
-  return { text: 'Beklemede', className: 'bg-amber-100 text-amber-800 border-amber-200' };
-}
-
-function buildWpText(talep: { id: string; ad: string; soyad: string; gorev: string }, gonderen?: string) {
-  const link = `${window.location.origin}/?view_giris=${talep.id}`;
-  return [
-    '*KİBRİTÇİ ERP — İŞÇİ GİRİŞ TALEBİ*',
-    '----------------------------------------',
-    `*Ad Soyad:* ${talep.ad} ${talep.soyad}`,
-    `*Görev:* ${talep.gorev}`,
-    `*Tarih:* ${new Date().toLocaleDateString('tr-TR')}`,
-    `*Gönderen:* ${gonderen || '—'}`,
-    `*Kayıt linki:* ${link}`,
-    '----------------------------------------',
-    '_Sigorta / kadro girişini bu linkten tamamlayın._',
-  ].join('\n');
+function wpMetin(t: {
+  ad: string;
+  soyad: string;
+  gorev: string;
+  tcNo?: string;
+  nitelik?: string;
+  girisTarihi?: string;
+  gonderen?: string;
+}) {
+  return kampAnaFirmaSgkWhatsAppText({
+    ad: t.ad,
+    soyad: t.soyad,
+    tcNo: t.tcNo,
+    gorev: t.gorev,
+    nitelik: t.nitelik,
+    girisTarihi: t.girisTarihi || new Date().toISOString().slice(0, 10),
+    gonderen: t.gonderen,
+  });
 }
 
 interface WhatsAppIsciGirisPanelProps {
@@ -58,9 +62,20 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
   const [yeniAd, setYeniAd] = useState('');
   const [yeniSoyad, setYeniSoyad] = useState('');
   const [yeniGorev, setYeniGorev] = useState('');
+  const [yeniNitelik, setYeniNitelik] = useState('');
+  const [yeniTcNo, setYeniTcNo] = useState('');
+  const [yeniGirisTarihi, setYeniGirisTarihi] = useState(new Date().toISOString().slice(0, 10));
   const [fotolar, setFotolar] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const [sonTalep, setSonTalep] = useState<{ id: string; ad: string; soyad: string; gorev: string } | null>(null);
+  const [sonTalep, setSonTalep] = useState<{
+    id: string;
+    ad: string;
+    soyad: string;
+    gorev: string;
+    tcNo?: string;
+    nitelik?: string;
+    girisTarihi: string;
+  } | null>(null);
   const [status, setStatus] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   useEffect(() => {
@@ -83,7 +98,7 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
   }, []);
 
   const bekleyen = useMemo(
-    () => liste.filter((r) => r.durum !== 'ONAYLANDI').length,
+    () => liste.filter((r) => r.durum !== 'ONAYLANDI' && r.durum !== 'REDDEDİLDİ').length,
     [liste]
   );
 
@@ -103,39 +118,69 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
 
   const handleSave = async () => {
     if (!yeniAd.trim() || !yeniSoyad.trim() || !yeniGorev.trim()) {
-      setStatus({ type: 'err', text: 'Ad, soyad ve görev zorunlu.' });
+      setStatus({ type: 'err', text: 'Ad, soyad ve görev (yoklama niteliği) zorunlu.' });
+      return;
+    }
+    if (!yeniGirisTarihi) {
+      setStatus({ type: 'err', text: 'Giriş tarihi zorunlu. SGK grubuna tarih yazılmadan kuyruk açılamaz.' });
       return;
     }
     if (fotolar.length === 0) {
-      setStatus({ type: 'err', text: 'En az bir kimlik fotoğrafı (ön yüz) ekleyin.' });
+      setStatus({ type: 'err', text: 'En az bir kimlik fotoğrafı (ön yüz) ekleyin. Gruba kimlik gitmeden giriş olmaz.' });
+      return;
+    }
+    const mevcut = findOpenAnaFirmaGirisTalebi(liste, {
+      ad: yeniAd.trim(),
+      soyad: yeniSoyad.trim(),
+      tcNo: yeniTcNo,
+    });
+    if (mevcut) {
+      setStatus({
+        type: 'err',
+        text: `Bu kişi için zaten açık bir grup bildirimi var (${mevcut.ad || ''} ${mevcut.soyad || ''} · ${mevcut.durum}). Evrakı Grup Köprüsü’ne bırakın.`,
+      });
       return;
     }
     setSaving(true);
     setStatus(null);
     try {
-      const requestID = `GIRIS-${Date.now()}`;
-      await setDoc(doc(db, 'personelGirisTalepleri', requestID), {
-        ad: yeniAd.trim(),
-        soyad: yeniSoyad.trim(),
-        gorev: yeniGorev.trim(),
-        kimlikFotoUrl: fotolar[0],
-        kimlikFotoUrls: fotolar,
-        durum: 'BEKLEMEDE',
-        tarih: new Date().toISOString(),
-        gonderenFormen: currentUser?.email || 'Muhasebe',
-        kaynak: 'IRSALIYE_FATURA_WHATSAPP',
-      });
+      const requestID = `GIRIS-WP-SGK-${Date.now()}`;
+      const gonderen = currentUser?.email || 'Muhasebe';
+      await setDoc(
+        doc(db, 'personelGirisTalepleri', requestID),
+        buildKampAnaFirmaGirisTalepDoc(requestID, {
+          ad: yeniAd.trim(),
+          soyad: yeniSoyad.trim(),
+          tcNo: yeniTcNo,
+          gorev: yeniGorev.trim(),
+          nitelik: yeniNitelik,
+          girisTarihi: yeniGirisTarihi,
+          gonderen,
+          kimlikFotoUrl: fotolar[0],
+          kimlikFotoUrls: fotolar,
+          kaynakPanel: 'IRSALIYE_FATURA_WHATSAPP',
+        })
+      );
       setSonTalep({
         id: requestID,
         ad: yeniAd.trim(),
         soyad: yeniSoyad.trim(),
         gorev: yeniGorev.trim(),
+        tcNo: yeniTcNo.replace(/\D/g, '') || undefined,
+        nitelik: yeniNitelik.trim() || undefined,
+        girisTarihi: yeniGirisTarihi,
       });
       setYeniAd('');
       setYeniSoyad('');
       setYeniGorev('');
+      setYeniNitelik('');
+      setYeniTcNo('');
+      setYeniGirisTarihi(new Date().toISOString().slice(0, 10));
       setFotolar([]);
-      setStatus({ type: 'ok', text: 'Talep kaydedildi. WhatsApp ile paylaşabilirsiniz.' });
+      setStatus({
+        type: 'ok',
+        text: 'Grup bildirimi kuyruğa yazıldı. Personel kartı açılmadı. Sabit metni SGK grubuna atın; evrak Grup Köprüsü’ne, kadro Onay’a.',
+      });
     } catch (err) {
       console.error(err);
       setStatus({ type: 'err', text: 'Kayıt yazılamadı. Bağlantıyı kontrol edin.' });
@@ -153,7 +198,7 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
               <MessageCircle size={16} />
               <div>
                 <h2 className="text-sm font-bold leading-tight">WhatsApp işçi girişi</h2>
-                <p className="text-[10px] text-emerald-100">Kimlik foto + ad soyad → link paylaş</p>
+                <p className="text-[10px] text-emerald-100">SGK grubu · {CANONICAL_ANA_FIRMA_ADI} kartı yazılmaz</p>
               </div>
             </div>
             <span className="text-[10px] font-bold bg-white/15 px-2 py-1 rounded-full">
@@ -162,6 +207,10 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
           </header>
 
           <div className="p-4 space-y-3 flex-1 bg-[#ECE5DD]">
+            <p className="text-[11px] text-slate-600 bg-white/80 border border-emerald-100 rounded-xl px-3 py-2 leading-relaxed">
+              Kimlik, görev ve giriş tarihi SGK WhatsApp grubuna gider. Evrak Grup Köprüsü’ne bırakılır;
+              Ana Firma kadrosu yalnızca Onay → Personel oluşturma’da tek kontrolle açılır.
+            </p>
             <div className="grid grid-cols-2 gap-2">
               <label className="block">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Ad</span>
@@ -183,12 +232,43 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
               </label>
             </div>
             <label className="block">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Görev / branş</span>
+              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Görev / yoklama niteliği</span>
               <input
                 value={yeniGorev}
                 onChange={(e) => setYeniGorev(e.target.value)}
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold"
                 placeholder="Örn. Demirci ustası, düz işçi"
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">TC Kimlik</span>
+                <input
+                  value={yeniTcNo}
+                  onChange={(e) => setYeniTcNo(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                  inputMode="numeric"
+                  maxLength={11}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold"
+                  placeholder="11 hane"
+                />
+              </label>
+              <label className="block">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Giriş tarihi</span>
+                <input
+                  type="date"
+                  value={yeniGirisTarihi}
+                  onChange={(e) => setYeniGirisTarihi(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold"
+                />
+              </label>
+            </div>
+            <label className="block">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">SGK meslek (nitelik) — isteğe bağlı</span>
+              <input
+                value={yeniNitelik}
+                onChange={(e) => setYeniNitelik(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold"
+                placeholder="SGK meslek kodu / niteliği"
               />
             </label>
 
@@ -250,32 +330,21 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
               className="w-full bg-[#25D366] hover:bg-[#1ebe5a] disabled:opacity-60 text-white font-black text-sm py-3 rounded-xl flex items-center justify-center gap-2 shadow-sm"
             >
               {saving ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
-              {saving ? 'Kaydediliyor…' : 'Talebi kaydet'}
+              {saving ? 'Kaydediliyor…' : 'SGK grubuna bildir'}
             </button>
 
             {sonTalep && (
               <div className="rounded-2xl bg-white border border-emerald-200 p-3 space-y-2">
                 <p className="text-[11px] font-bold text-emerald-800">
-                  {sonTalep.ad} {sonTalep.soyad} kaydedildi. Muhasebe / idari onay için WhatsApp:
+                  {sonTalep.ad} {sonTalep.soyad} kuyruğa yazıldı. Kart açılmadı. SGK grubuna:
                 </p>
                 <pre className="text-[10px] whitespace-pre-wrap bg-slate-50 rounded-xl p-2 font-mono text-slate-700">
-                  {buildWpText(sonTalep, currentUser?.email)}
+                  {wpMetin({ ...sonTalep, gonderen: currentUser?.email })}
                 </pre>
                 <a
-                  href={buildWhatsAppUrl(buildWpText(sonTalep, currentUser?.email))}
+                  href={buildWhatsAppUrl(wpMetin({ ...sonTalep, gonderen: currentUser?.email }))}
                   target="_blank"
                   rel="noopener noreferrer"
-                  onClick={async () => {
-                    try {
-                      await setDoc(
-                        doc(db, 'personelGirisTalepleri', sonTalep.id),
-                        { durum: 'WP_GÖNDERİLDİ' },
-                        { merge: true }
-                      );
-                    } catch (e) {
-                      console.warn(e);
-                    }
-                  }}
                   className="w-full inline-flex items-center justify-center gap-2 bg-[#075E54] text-white font-bold text-xs py-2.5 rounded-xl"
                 >
                   <Send size={14} />
@@ -289,7 +358,7 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
         <section className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden flex flex-col min-h-[420px]">
           <header className="px-4 py-3 border-b border-slate-100">
             <h3 className="text-sm font-bold text-slate-900">Giriş defteri</h3>
-            <p className="text-[11px] text-slate-500">Aynı koleksiyon: personelGirisTalepleri. Mevcut onay havuzu bozulmaz.</p>
+            <p className="text-[11px] text-slate-500">Aynı koleksiyon: personelGirisTalepleri. Grup Köprüsü ve Onay havuzu bozulmaz.</p>
           </header>
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
             {loading && (
@@ -304,16 +373,18 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
               <p className="text-center text-xs text-slate-400 py-10">Henüz giriş talebi yok.</p>
             )}
             {liste.map((item) => {
-              const badge = durumLabel(item.durum);
-              const wp = buildWpText(
-                {
-                  id: item.id,
-                  ad: item.ad || '—',
-                  soyad: item.soyad || '',
-                  gorev: item.gorev || '—',
-                },
-                item.gonderenFormen
-              );
+              const badge = sgkDurumEtiketi(item.durum, {
+                sgkTalep: item.kaynak === 'SGK_GRUP' || item.grupBildirildi,
+              });
+              const wp = wpMetin({
+                ad: item.ad || '—',
+                soyad: item.soyad || '',
+                gorev: item.gorev || '—',
+                tcNo: item.tcNo,
+                nitelik: item.nitelik,
+                girisTarihi: item.iseGirisTarihi,
+                gonderen: item.gonderenFormen,
+              });
               return (
                 <article key={item.id} className="rounded-xl border border-slate-100 bg-slate-50/80 p-3 space-y-1.5">
                   <div className="flex items-start justify-between gap-2">
@@ -323,8 +394,8 @@ export const WhatsAppIsciGirisPanel: React.FC<WhatsAppIsciGirisPanelProps> = ({ 
                       </h4>
                       <p className="text-[11px] text-slate-500">{item.gorev || 'Görev yok'}</p>
                     </div>
-                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${badge.className}`}>
-                      {badge.text}
+                    <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200">
+                      {badge}
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-400">

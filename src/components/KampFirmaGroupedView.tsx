@@ -1,16 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Building2, Users, Search, Download, Printer, ChevronDown, ChevronUp, 
-  DoorOpen, Layers, Filter, CheckCircle2, FileText, Sparkles 
+  DoorOpen, Layers, Filter, CheckCircle2, FileText, Sparkles, MessageCircle
 } from 'lucide-react';
 import { KampKaydi, KampOdasi, Personel } from '../types/erp';
 import { firmaKrokiColor } from '../lib/kampKrokiUtils';
 import { openHtmlReportWindow } from '../lib/reportEmail';
+import { shareWhatsAppText } from '../lib/mobilOnayUtils';
 import {
   groupKampResidentsByFirma,
   generateFirmaPersonelOdaPdfHtml,
   exportFirmaPersonelOdaExcel,
-  FirmaPersonelOdaGroup,
+  buildFirmaPersonelOdaWhatsAppText,
 } from '../lib/kampFirmaPersonelExport';
 
 interface KampFirmaGroupedViewProps {
@@ -31,6 +32,7 @@ export const KampFirmaGroupedView: React.FC<KampFirmaGroupedViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFirma, setSelectedFirma] = useState<string>(initialFirmaFilter);
   const [exportingExcel, setExportingExcel] = useState(false);
+  const [sharingWp, setSharingWp] = useState(false);
 
   // Group raw data by firm
   const rawGroups = useMemo(() => {
@@ -119,6 +121,21 @@ export const KampFirmaGroupedView: React.FC<KampFirmaGroupedViewProps> = ({
     }
   };
 
+  const handleWhatsApp = async () => {
+    try {
+      setSharingWp(true);
+      const text = buildFirmaPersonelOdaWhatsAppText(rawGroups, selectedFirma || undefined);
+      const mode = await shareWhatsAppText(text);
+      if (mode === 'copied') {
+        alert('Liste WhatsApp limitini aşıyor. Metin panoya kopyalandı — açılan sohbete yapıştırın.');
+      }
+    } catch (err: any) {
+      alert(`WhatsApp açılamadı: ${err?.message || err}`);
+    } finally {
+      setSharingWp(false);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col min-h-0 gap-4 overflow-hidden bg-slate-50/50 p-3 sm:p-4 rounded-2xl border border-slate-200">
       {/* Header Banner */}
@@ -143,6 +160,15 @@ export const KampFirmaGroupedView: React.FC<KampFirmaGroupedViewProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => void handleWhatsApp()}
+              disabled={sharingWp}
+              className="py-2 px-3.5 text-xs font-bold rounded-xl bg-[#25D366] hover:bg-[#1ebe5a] disabled:opacity-50 text-white cursor-pointer transition shadow-sm active:scale-95 flex items-center space-x-1.5"
+            >
+              <MessageCircle size={15} />
+              <span>{sharingWp ? 'Hazırlanıyor...' : 'WhatsApp Paylaş'}</span>
+            </button>
             <button
               type="button"
               onClick={handlePrintPdf}

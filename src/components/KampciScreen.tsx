@@ -8,9 +8,15 @@ import { db, saveDocument } from '../lib/firebase';
 import { compressImage } from '../lib/imageCompress';
 import { ensureKampFaaliyetFotoPersisted } from '../lib/sahaFaaliyetFotoStorage';
 import { createKampYerleske, createKampKat, katsForYerleske, createKampOdasi, deleteKampOdasi, updateKampOdasi } from '../lib/kampYapisi';
-import { assignKampResident, evictKampResident, reactivateEvictedKampStays, detectMassKampEvictionDate } from '../lib/kampPlacementUtils';
+import { assignKampResident, evictKampResident, reactivateEvictedKampStays, detectMassKampEvictionDate, isPersonelAktifDurum } from '../lib/kampPlacementUtils';
 import { buildKampciGunlukOzet } from '../lib/gunlukAkisUtils';
 import { buildWhatsAppUrl } from '../lib/mobilOnayUtils';
+import { sgkDurumEtiketi } from '../lib/sgkGrupSablon';
+import {
+  buildKampAnaFirmaGirisTalepDoc,
+  findOpenAnaFirmaGirisTalebi,
+  kampAnaFirmaSgkWhatsAppText,
+} from '../lib/kampAnaFirmaGiris';
 import { KampHaftalikYoklamaTab } from './KampHaftalikYoklamaTab';
 import { KampGunlukYoklamaTab } from './KampGunlukYoklamaTab';
 import { KampVidanjorTab } from './KampVidanjorTab';
@@ -633,8 +639,20 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
   const [girisSelectedFirma, setGirisSelectedFirma] = useState('');
   const [girisManualFirma, setGirisManualFirma] = useState('');
   const [yeniKimlikFoto, setYeniKimlikFoto] = useState<string | null>(null);
-  const [sonGirisTalebi, setSonGirisTalebi] = useState<{ id: string; ad: string; soyad: string; gorev: string } | null>(null);
+  const [yeniIseGirisTarihi, setYeniIseGirisTarihi] = useState(new Date().toISOString().slice(0, 10));
+  const [yeniNitelik, setYeniNitelik] = useState('');
+  const [sonGirisTalebi, setSonGirisTalebi] = useState<{
+    id: string;
+    ad: string;
+    soyad: string;
+    gorev: string;
+    tcNo?: string;
+    girisTarihi?: string;
+    nitelik?: string;
+    firmaTipi: 'ANA_FIRMA' | 'TASERON';
+  } | null>(null);
   const [girisTalepleriList, setGirisTalepleriList] = useState<any[]>([]);
+  const [allGirisTalepleri, setAllGirisTalepleri] = useState<any[]>([]);
 
   // Real-time Firestore subscriptions for custom collections
   useEffect(() => {
@@ -665,17 +683,21 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
     // 3. Personel giriş talepleri
     const girisColl = collection(db, 'personelGirisTalepleri');
     const unsubGiris = onSnapshot(girisColl, (snap) => {
-      const list: any[] = [];
+      const all: any[] = [];
+      const mine: any[] = [];
       const email = currentUser?.email?.toLowerCase() || '';
       snap.forEach((d) => {
         const data: any = { id: d.id, ...(d.data() as Record<string, any>) };
+        all.push(data);
         const sender = String(data.gonderenKampci || data.gonderenFormen || '').toLowerCase();
         if (sender === email && (data.kaynakPanel === 'KAMPÇI' || data.gonderenKampci)) {
-          list.push(data);
+          mine.push(data);
         }
       });
-      list.sort((a, b) => new Date(b.tarih).getTime() - new Date(a.tarih).getTime());
-      setGirisTalepleriList(list);
+      all.sort((a, b) => new Date(b.tarih).getTime() - new Date(a.tarih).getTime());
+      mine.sort((a, b) => new Date(b.tarih).getTime() - new Date(a.tarih).getTime());
+      setAllGirisTalepleri(all);
+      setGirisTalepleriList(mine);
     });
 
     const firmaColl = collection(db, 'kampFirmaTalepleri');
@@ -1552,11 +1574,90 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
         ? resolveTaseronPersonelGorev({ firmaAdi, firmaTipi: 'TASERON' })
         : yeniGorev.trim();
     try {
-      const requestID = `GIRIS-KAMP-${Date.now()}`;
       const email = currentUser?.email || 'kampci';
+
+      if (firmaTipi === 'ANA_FIRMA') {
+        if (!yeniIseGirisTarihi) {
+          showStatus('error', 'Ana Firma için işe giriş tarihi zorunludur. SGK grubuna tarih yazılmadan kuyruk açılamaz.');
+          return;
+        }
+        const tc = digitsOnly(yeniTcNo);
+        const kadroda = personeller.find(
+          (p) =>
+            digitsOnly(p.tcNo || '') === tc &&
+            !isTaseronPersonel(p) &&
+            isPersonelAktifDurum(p.durum)
+        );
+        if (kadroda) {
+          showStatus(
+            'error',
+            `Bu TC ile Ana Firma kadrosu zaten var (${kadroda.ad} ${kadroda.soyad}). Yeni kart yazılmaz; oda yerleşimini Yerleşim sekmesinden yapın.`
+          );
+          return;
+        }
+        const mevcut = findOpenAnaFirmaGirisTalebi(allGirisTalepleri, {
+          ad: yeniAd.trim(),
+          soyad: yeniSoyad.trim(),
+          tcNo: tc,
+        });
+        if (mevcut) {
+          showStatus(
+            'error',
+            `Bu kişi için zaten açık bir SGK grup bildirimi var (${mevcut.ad || ''} ${mevcut.soyad || ''} · ${mevcut.durum}). Evrakı Grup Köprüsü’ne bırakın; ikinci kuyruk açılmaz.`
+          );
+          return;
+        }
+
+        const requestID = `GIRIS-KAMP-SGK-${Date.now()}`;
+        await setDoc(
+          doc(db, 'personelGirisTalepleri', requestID),
+          buildKampAnaFirmaGirisTalepDoc(requestID, {
+            ad: yeniAd.trim(),
+            soyad: yeniSoyad.trim(),
+            tcNo: tc,
+            gorev: kayitGorev,
+            nitelik: yeniNitelik,
+            girisTarihi: yeniIseGirisTarihi,
+            gonderen: email,
+            gonderenKampci: email,
+            telefonNo: yeniTelefonNo.trim(),
+            kimlikFotoUrl: yeniKimlikFoto,
+            kimlikFotoUrls: [yeniKimlikFoto],
+            kaynakPanel: 'KAMPÇI',
+          })
+        );
+        setSonGirisTalebi({
+          id: requestID,
+          ad: yeniAd.trim(),
+          soyad: yeniSoyad.trim(),
+          gorev: kayitGorev,
+          tcNo: tc,
+          girisTarihi: yeniIseGirisTarihi,
+          nitelik: yeniNitelik.trim() || undefined,
+          firmaTipi: 'ANA_FIRMA',
+        });
+        setYeniAd('');
+        setYeniSoyad('');
+        setYeniGorev('');
+        setYeniNitelik('');
+        setYeniTcNo('');
+        setYeniTelefonNo('');
+        setGirisSelectedFirma('');
+        setGirisManualFirma('');
+        setGirisFirmaTipi('ANA_FIRMA');
+        setYeniKimlikFoto(null);
+        setYeniIseGirisTarihi(new Date().toISOString().slice(0, 10));
+        showStatus(
+          'success',
+          'SGK grup bildirimi kuyruğa yazıldı. Personel kartı açılmadı. Sabit metni WhatsApp grubuna atın; evrak Grup Köprüsü’ne, kadro Onay’a.'
+        );
+        return;
+      }
+
+      const requestID = `GIRIS-KAMP-${Date.now()}`;
       let createdPersonelNote = '';
 
-      // İsim + TC / TC / tel / isim eşleşirse mevcut kaydı kullan; fazladan personel açma
+      // Taşeron: isim + TC / tel eşleşirse mevcut kaydı kullan; fazladan personel açma
       const fullName = `${yeniAd.trim()} ${yeniSoyad.trim()}`;
       const resolved = await resolveOrCreateKampPersonel(
         fullName,
@@ -1627,7 +1728,13 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
         gonderenKampci: email,
         kaynakPanel: 'KAMPÇI',
       });
-      setSonGirisTalebi({ id: requestID, ad: yeniAd.trim(), soyad: yeniSoyad.trim(), gorev: kayitGorev });
+      setSonGirisTalebi({
+        id: requestID,
+        ad: yeniAd.trim(),
+        soyad: yeniSoyad.trim(),
+        gorev: kayitGorev,
+        firmaTipi: 'TASERON',
+      });
       setYeniAd('');
       setYeniSoyad('');
       setYeniGorev('');
@@ -3138,8 +3245,9 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
               <h3 className="font-bold text-sm text-slate-800 mt-0.5">🚪 Girişe Yolla</h3>
             </div>
             <p className="text-xs text-slate-500 leading-relaxed">
-              Kamp alanına gelen personelin TC / telefon sorgu yapın, firmasını seçin ve kimlik fotoğrafıyla kaydedin.
-              Kayıt ilgili firmaya personel olarak işlenir; talep ayrıca onay havuzuna gider.
+              {girisFirmaTipi === 'ANA_FIRMA'
+                ? 'Ana Firma kaydı personel kartına yazılmaz. Kimlik, görev ve giriş tarihi SGK WhatsApp grubuna gider; evrak Grup Köprüsü’ne, kadro yalnızca Onay → Personel oluşturma’da açılır.'
+                : 'Taşeron personel ilgili firmaya işlenir; oda yerleşimi ve onay havuzu aynı kalır.'}
             </p>
 
             <div className="grid grid-cols-2 gap-2">
@@ -3208,7 +3316,12 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                       return;
                     }
                     if (!found) {
-                      showStatus('info', 'Bu TC ile kayıt bulunamadı — yeni personel olarak kaydedilecek.');
+                      showStatus(
+                        'info',
+                        girisFirmaTipi === 'ANA_FIRMA'
+                          ? 'Bu TC ile kadro kartı yok. SGK grubu kuyruğuna yazılır; personel kartı Onay’da açılır.'
+                          : 'Bu TC ile kayıt bulunamadı — yeni personel olarak kaydedilecek.'
+                      );
                       return;
                     }
                     setYeniAd(found.ad || '');
@@ -3246,7 +3359,12 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                     }
                     const found = findPersonelByTel(yeniTelefonNo);
                     if (!found) {
-                      showStatus('info', 'Bu telefon ile kayıt bulunamadı — yeni personel olarak kaydedilecek.');
+                      showStatus(
+                        'info',
+                        girisFirmaTipi === 'ANA_FIRMA'
+                          ? 'Bu telefon ile kadro kartı yok. SGK grubu kuyruğuna yazılır; personel kartı Onay’da açılır.'
+                          : 'Bu telefon ile kayıt bulunamadı — yeni personel olarak kaydedilecek.'
+                      );
                       return;
                     }
                     setYeniAd(found.ad || '');
@@ -3283,6 +3401,23 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
               <label className="text-[9px] font-extrabold text-slate-500 uppercase block mb-1">Görev / Branş</label>
               <input value={yeniGorev} onChange={(e) => setYeniGorev(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none" placeholder="Örn: Kamp Görevlisi, Aşçı" />
             </div>
+            {girisFirmaTipi === 'ANA_FIRMA' && (
+              <>
+                <div>
+                  <label className="text-[9px] font-extrabold text-slate-500 uppercase block mb-1">SGK meslek (nitelik) — isteğe bağlı</label>
+                  <input value={yeniNitelik} onChange={(e) => setYeniNitelik(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none" placeholder="SGK meslek kodu / niteliği" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-extrabold text-slate-500 uppercase block mb-1">İşe giriş tarihi</label>
+                  <input
+                    type="date"
+                    value={yeniIseGirisTarihi}
+                    onChange={(e) => setYeniIseGirisTarihi(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 rounded-xl p-3 outline-none"
+                  />
+                </div>
+              </>
+            )}
             <div>
               <label className="text-[9px] font-extrabold text-slate-500 uppercase block mb-1">Kimlik Fotoğrafı</label>
               <div className="flex gap-3">
@@ -3316,10 +3451,37 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
 
             {sonGirisTalebi && (
               <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl space-y-3">
-                <p className="text-xs text-emerald-800 font-bold">✅ Kayıt oluşturuldu — WhatsApp ile yönetime iletebilirsiniz</p>
+                <p className="text-xs text-emerald-800 font-bold">
+                  {sonGirisTalebi.firmaTipi === 'ANA_FIRMA'
+                    ? '✅ SGK grubu kuyruğuna yazıldı — kart açılmadı. Sabit metni gruba atın.'
+                    : '✅ Kayıt oluşturuldu — WhatsApp ile yönetime iletebilirsiniz'}
+                </p>
+                {sonGirisTalebi.firmaTipi === 'ANA_FIRMA' && (
+                  <pre className="text-[10px] whitespace-pre-wrap bg-white border border-emerald-100 rounded-xl p-2 font-mono text-slate-700">
+                    {kampAnaFirmaSgkWhatsAppText({
+                      ad: sonGirisTalebi.ad,
+                      soyad: sonGirisTalebi.soyad,
+                      tcNo: sonGirisTalebi.tcNo,
+                      gorev: sonGirisTalebi.gorev,
+                      nitelik: sonGirisTalebi.nitelik,
+                      girisTarihi: sonGirisTalebi.girisTarihi || yeniIseGirisTarihi,
+                      gonderen: currentUser?.email || 'kampci',
+                    })}
+                  </pre>
+                )}
                 <a
                   href={buildWhatsAppUrl(
-                    `*KİBRİTÇİ ERP - KAMP PERSONEL İŞE GİRİŞ*\n*Ad Soyad:* ${sonGirisTalebi.ad} ${sonGirisTalebi.soyad}\n*Görev:* ${sonGirisTalebi.gorev}\n*Tarih:* ${new Date().toLocaleDateString('tr-TR')}\n*Gönderen Kampçı:* ${currentUser?.email || '-'}\n*Kayıt Linki:* ${window.location.origin}/?view_giris=${sonGirisTalebi.id}`
+                    sonGirisTalebi.firmaTipi === 'ANA_FIRMA'
+                      ? kampAnaFirmaSgkWhatsAppText({
+                          ad: sonGirisTalebi.ad,
+                          soyad: sonGirisTalebi.soyad,
+                          tcNo: sonGirisTalebi.tcNo,
+                          gorev: sonGirisTalebi.gorev,
+                          nitelik: sonGirisTalebi.nitelik,
+                          girisTarihi: sonGirisTalebi.girisTarihi || new Date().toISOString().slice(0, 10),
+                          gonderen: currentUser?.email || 'kampci',
+                        })
+                      : `*KİBRİTÇİ ERP - KAMP PERSONEL İŞE GİRİŞ*\n*Ad Soyad:* ${sonGirisTalebi.ad} ${sonGirisTalebi.soyad}\n*Görev:* ${sonGirisTalebi.gorev}\n*Tarih:* ${new Date().toLocaleDateString('tr-TR')}\n*Gönderen Kampçı:* ${currentUser?.email || '-'}\n*Kayıt Linki:* ${window.location.origin}/?view_giris=${sonGirisTalebi.id}`
                   )}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -3352,9 +3514,9 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                       </div>
                       <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full ${
                         item.durum === 'ONAYLANDI' ? 'bg-emerald-100 text-emerald-800' :
-                        item.durum === 'WP_GÖNDERİLDİ' ? 'bg-slate-100 text-slate-800' :
+                        item.durum === 'WP_GÖNDERİLDİ' || item.durum === 'GRUP_BILDIRILDI' ? 'bg-sky-100 text-sky-800' :
                         'bg-amber-100 text-amber-800'
-                      }`}>{item.durum || 'BEKLEMEDE'}</span>
+                      }`}>{sgkDurumEtiketi(item.durum, { sgkTalep: item.kaynak === 'SGK_GRUP' || item.grupBildirildi })}</span>
                     </div>
                     {item.durum === 'ONAYLANDI' && (
                       <a
@@ -3366,6 +3528,26 @@ export const KampciScreen: React.FC<KampciScreenProps> = ({
                         className="mt-2 inline-flex text-[10px] font-bold text-emerald-700 hover:underline"
                       >
                         Kapıya WhatsApp ile bildir →
+                      </a>
+                    )}
+                    {(item.kaynak === 'SGK_GRUP' || item.grupBildirildi) && item.durum !== 'ONAYLANDI' && (
+                      <a
+                        href={buildWhatsAppUrl(
+                          kampAnaFirmaSgkWhatsAppText({
+                            ad: item.ad || '',
+                            soyad: item.soyad || '',
+                            tcNo: item.tcNo,
+                            gorev: item.gorev || '',
+                            nitelik: item.nitelik,
+                            girisTarihi: item.iseGirisTarihi || String(item.tarih || '').slice(0, 10),
+                            gonderen: item.gonderenKampci || item.gonderenFormen || currentUser?.email,
+                          })
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-2 inline-flex text-[10px] font-bold text-sky-700 hover:underline"
+                      >
+                        SGK grubuna tekrar gönder →
                       </a>
                     )}
                   </div>

@@ -41,7 +41,8 @@ import {
   applyKampYerlesimFirmaTemizlik,
   planKampYerlesimFirmaTemizlik,
 } from '../lib/kampYerlesimFirmaTemizlik';
-import { generateKampPersonelPdfHtml } from '../lib/kampPersonelPdfExport';
+import { generateKampPersonelPdfHtml, generateKampPersonelWhatsAppText } from '../lib/kampPersonelPdfExport';
+import { shareWhatsAppText } from '../lib/mobilOnayUtils';
 import { openKampKrokiPrintWindow, type KampKrokiPageFormat } from '../lib/kampKrokiPrintHtml';
 import { compressImage } from '../lib/imageCompress';
 import { warnIfDuplicateCari, warnIfDuplicateStok } from '../lib/duplicateNameUtils';
@@ -3055,6 +3056,38 @@ export const IdariScreen: React.FC<IdariScreenProps> = ({
                     className="py-1.5 px-3 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer transition active:scale-95 flex items-center space-x-1"
                   >
                     <span>🖨️ PDF YAZDIR</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const activeTaserons = kampKayitlari.filter(k => k.durum === 'AKTIF').filter(k => {
+                        const p = personeller.find(p => p.id === k.personelId);
+                        const isAnaFirma = k.firmaTipi === 'ANA_FIRMA' ||
+                          (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'KİBRİTÇİ İNŞAAT') ||
+                          (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'ANA FİRMA') ||
+                          (k.calistigiFirma?.trim().toLocaleUpperCase('tr-TR') === 'ANA FIRMA') ||
+                          (p?.firmaTipi === 'ANA_FIRMA');
+                        const firm = isAnaFirma ? 'KİBRİTÇİ İNŞAAT' : (k.calistigiFirma || p?.firmaAdi || 'TAŞERON').trim().toLocaleUpperCase('tr-TR');
+                        if (kampPersonelFirmFilter && firm !== kampPersonelFirmFilter) {
+                          return false;
+                        }
+                        if (!kampPersonelSearch.trim()) return true;
+                        const s = kampPersonelSearch.toLowerCase();
+                        const name = (p ? `${p.ad} ${p.soyad}` : (k.personelIsim || '')).toLowerCase();
+                        const tc = (p?.tcNo || '').toLowerCase();
+                        return name.includes(s) || tc.includes(s);
+                      });
+                      void shareWhatsAppText(
+                        generateKampPersonelWhatsAppText(activeTaserons, personeller, kampOdalari)
+                      ).then((mode) => {
+                        if (mode === 'copied') {
+                          alert('Liste WhatsApp limitini aşıyor. Metin panoya kopyalandı — açılan sohbete yapıştırın.');
+                        }
+                      });
+                    }}
+                    className="py-1.5 px-3 text-xs font-semibold rounded-lg bg-[#25D366] hover:bg-[#1ebe5a] text-white cursor-pointer transition active:scale-95 flex items-center space-x-1"
+                  >
+                    <span>WhatsApp</span>
                   </button>
                   <select
                     value={kampPersonelFirmFilter}

@@ -215,6 +215,41 @@ export function generateFirmaPersonelOdaPdfHtml(
   });
 }
 
+/** Kamp Yönetimi sakin listesi — WhatsApp paylaşım metni (PDF/Excel ile aynı gruplama). */
+export function buildFirmaPersonelOdaWhatsAppText(
+  groups: FirmaPersonelOdaGroup[],
+  selectedFirmaFilter?: string
+): string {
+  const filteredGroups = selectedFirmaFilter
+    ? groups.filter((g) => g.firmaAdi === selectedFirmaFilter)
+    : groups;
+  const toplam = filteredGroups.reduce((s, g) => s + g.toplamPersonel, 0);
+  const stamp = new Date().toLocaleString('tr-TR');
+  const lines: string[] = [
+    '*KİBRİTÇİ — KAMP YÖNETİMİ*',
+    '*Firma / personel / oda listesi*',
+    `Tarih: ${stamp}`,
+    selectedFirmaFilter ? `Filtre: ${selectedFirmaFilter}` : '',
+    `Toplam sakin: ${toplam} · Firma: ${filteredGroups.length}`,
+  ].filter(Boolean);
+
+  if (filteredGroups.length === 0) {
+    lines.push('', 'Aktif konaklama kaydı yok.');
+    return lines.join('\n');
+  }
+
+  for (const g of filteredGroups) {
+    lines.push('', `▸ *${g.firmaAdi}* (${g.toplamPersonel} kişi · ${g.odaSayisi} oda)`);
+    g.personeller.forEach((p, idx) => {
+      const oda = p.odaNo && p.odaNo !== '—' ? `Oda ${p.odaNo}` : 'Oda —';
+      const yer = [p.yerleskeAdi, p.katAdi, oda].filter(Boolean).join(' / ');
+      lines.push(`${idx + 1}. ${p.personelIsim}  ${p.tcNo || '—'}  ${yer}`);
+    });
+  }
+
+  return lines.join('\n');
+}
+
 /**
  * ExcelJS kullanarak Firma Bazlı Kamp Personel Oda Dağılım dosyasını indirir.
  */
