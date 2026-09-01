@@ -28,6 +28,8 @@ import {
   TASERON_GRUP_ADI,
   TASERON_GRUP_KAYNAK,
   TASERON_GRUP_OTOMASYON,
+  TASERON_GRUP_WP_HAT,
+  taseronGrupWpHatE164,
   type TaseronGrupParse,
   type TaseronGrupYon,
 } from '../lib/taseronGrupSablon';
@@ -303,18 +305,31 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-teal-200 bg-teal-50/80 px-4 py-3 text-[12px] text-teal-950 leading-relaxed">
-        <strong>Taşeron grup:</strong> WhatsApp grubu ({TASERON_GRUP_ADI}) dinlenmez. Gruba düşen her SGK
-        e-Bildirge PDF’i (SİGORTALI İŞE GİRİŞ / İŞTEN AYRILIŞ BİLDİRGESİ) buraya bırakılır; formdaki ad,
-        TC, meslek ve işveren ünvanı okunur. Ünvan, kurulu taşeron cari / kart isimleriyle eşleşir
-        (ör. YURTMEKANİK → YURT MEKANİK). Çıkışta yalnızca programdaki TC pasife alınır; TC yoksa kadroya
-        dokunulmaz. <em>Tek mesaj = tek kuyruk kaydı</em>. Kadro bu ekrandan yazılmaz.
+        <strong>Taşeron grup:</strong> WhatsApp grubu ({TASERON_GRUP_ADI}) dinlenmez. Şirket hattı{' '}
+        <strong>{TASERON_GRUP_WP_HAT}</strong>. Gruptaki SGK giriş/çıkış PDF’ini bu numaraya iletin
+        (alt yazı örn. {TASERON_GRUP_OTOMASYON.altYaziOrnek}). Cloud API bağlıysa kayıt{' '}
+        <em>Onay kuyruğuna</em> düşer — personel kartı otomatik açılmaz / çıkarılmaz. Ünvan kurulu taşeron
+        ada hizalanır (YURTMEKANİK → YURT MEKANİK). Çıkışta yalnızca programdaki TC pasife alınır.
       </div>
-      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-[12px] text-slate-700 leading-relaxed">
-        <strong>Otomasyon dili:</strong> Mevcut grup dinlenemez. Program şunu anlar: bir PDF + isteğe bağlı alt yazı
-        ({TASERON_GRUP_OTOMASYON.altYaziOrnek}). Resmi kanal{' '}
-        <code className="text-[11px] bg-slate-100 px-1 rounded">{TASERON_GRUP_OTOMASYON.endpoint}</code> veya şirket
-        WhatsApp Business numarasına iletme ({TASERON_GRUP_OTOMASYON.whatsappWebhook}). Gelen kayıt Onay kuyruğuna
-        düşer; kadro yine onayda yazılır.
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-[12px] text-slate-700 leading-relaxed space-y-1">
+        <p>
+          <strong>Takip:</strong> {TASERON_GRUP_OTOMASYON.takipKuyruk} (bu listedeki bekleyenler) →{' '}
+          {TASERON_GRUP_OTOMASYON.takipOnay} (İşe giriş / İşten çıkış, rozet TASERON_GRUP). Yönetici Onay
+          deyince taşeron kadro yazılır veya TC ile pasife alınır; Red’de kadroya dokunulmaz.
+        </p>
+        <p>
+          Yedek: PDF’yi bu ekrana bırakın. API bağlı değilse {TASERON_GRUP_WP_HAT} yalnızca telefon
+          gelen kutusudur; program çekmez.
+        </p>
+        <a
+          href={`https://wa.me/${taseronGrupWpHatE164()}`}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-emerald-800 font-bold hover:underline"
+        >
+          <MessageCircle className="w-3.5 h-3.5" />
+          WhatsApp’ta {TASERON_GRUP_WP_HAT} aç
+        </a>
       </div>
 
       {err ? <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{err}</p> : null}
@@ -452,8 +467,8 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
         <section className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
           <h3 className="text-sm font-semibold text-slate-900">2 · Bekleyen taşeron grup kuyruğu</h3>
           <p className="text-[11px] text-slate-500">
-            Kaynak: {TASERON_GRUP_KAYNAK}. Onay havuzu bunları ayrı rozetle gösterir. Haftalık liste yapıştırması burayı
-            ezmez.
+            Kaynak: {TASERON_GRUP_KAYNAK}. {TASERON_GRUP_WP_HAT} veya buraya bırakılan PDF burada görünür. Asıl
+            onay / red: kenar çubuğu <strong>Onay Havuzu → Personel oluşturma</strong>. Haftalık liste burayı ezmez.
           </p>
 
           <div>

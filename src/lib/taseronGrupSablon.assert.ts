@@ -21,7 +21,9 @@ import {
   assembleTaseronGrupFromParts,
   findTaseronPersonelByTc,
   TASERON_GRUP_OTOMASYON,
+  TASERON_GRUP_WP_HAT,
   taseronGrupKuyrukHazir,
+  taseronGrupWpHatE164,
 } from './taseronGrupSablon';
 import { TASERON_PERSONEL_GOREV } from './taseronUtils';
 import type { CariKart, Personel } from '../types/erp';
@@ -263,6 +265,10 @@ assert(
 );
 
 assert(TASERON_GRUP_OTOMASYON.grupDinleme === false, 'grup dinlenmez');
+assert(TASERON_GRUP_WP_HAT === '0501 683 3400', 'şirket WP hattı');
+assert(taseronGrupWpHatE164() === '905016833400', 'WP hat E.164');
+assert(TASERON_GRUP_OTOMASYON.kadro.includes('Onay'), 'kadro onayda');
+assert(TASERON_GRUP_OTOMASYON.hat === TASERON_GRUP_WP_HAT, 'otomasyon hat');
 const assembled = assembleTaseronGrupFromParts({
   fromPdf: {
     yon: 'giris',

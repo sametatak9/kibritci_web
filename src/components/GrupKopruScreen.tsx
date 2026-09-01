@@ -519,7 +519,7 @@ export const GrupKopruScreen: React.FC<GrupKopruScreenProps> = ({
         accent="sa"
         eyebrow="WhatsApp köprüsü"
         title="Grup Köprüsü"
-        subtitle={`${SGK_GRUP_ADI}, Taşeron grup ve Arnavutköy muhasebe. WhatsApp dinlenmez; evrak buraya bırakılır.`}
+        subtitle={`${SGK_GRUP_ADI}, Taşeron grup (hat 0501 683 3400 → Onay kuyruğu) ve Arnavutköy muhasebe.`}
       />
 
       {subTab !== 'taseron' ? (

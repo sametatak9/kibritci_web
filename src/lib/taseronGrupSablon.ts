@@ -18,6 +18,14 @@ import {
 
 export const TASERON_GRUP_ADI = 'Arnavutköy İşe Giriş';
 export const TASERON_GRUP_KAYNAK = 'TASERON_GRUP' as const;
+/** Şirket WhatsApp Business hattı — gruptan PDF buraya iletilir; kadro Onay’da yazılır. */
+export const TASERON_GRUP_WP_HAT = '0501 683 3400';
+
+export function taseronGrupWpHatE164(): string {
+  const digits = TASERON_GRUP_WP_HAT.replace(/\D/g, '');
+  if (digits.startsWith('90')) return digits;
+  return `90${digits.replace(/^0/, '')}`;
+}
 
 export type TaseronGrupYon = 'giris' | 'cikis';
 
@@ -408,12 +416,15 @@ export function taseronGrupParseHasIdentity(p?: Partial<TaseronGrupParse> | null
 export const TASERON_GRUP_OTOMASYON = {
   grupAdi: TASERON_GRUP_ADI,
   kaynak: TASERON_GRUP_KAYNAK,
+  hat: TASERON_GRUP_WP_HAT,
   birim: 'tek mesaj = tek PDF = tek kişi',
   girisDosya: 'AD SOYAD İŞE GİRİŞ BİLDİRGESİ.pdf',
   cikisDosya: '11haneliTC_ayrilis.pdf',
   altYaziOrnek: 'Yurt mekanik giriş',
   endpoint: 'POST /api/taseron-grup-intake',
   whatsappWebhook: '/api/webhooks/whatsapp-taseron-grup',
+  takipKuyruk: 'Grup Köprüsü → Taşeron grup',
+  takipOnay: 'Onay Havuzu → Personel oluşturma',
   kadro: 'yazılmaz — Onay kuyruğu',
   grupDinleme: false,
 } as const;
