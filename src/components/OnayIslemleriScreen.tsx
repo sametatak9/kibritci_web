@@ -73,7 +73,10 @@ import {
 } from '../lib/evrakCariStokSync';
 import {
   buildCariIslemFromOperatorFaaliyet,
+  isTaseronPersonelRecord,
   makineEtiketi,
+  resolveTaseronPersonelGorev,
+  withTaseronPersonelGorev,
 } from '../lib/taseronUtils';
 import type { OperatorFaaliyet } from '../types/erp';
 import { pickEvrakDisplayUrl, pickPrimaryFotoUrl } from '../lib/guvenlikEvrakFotolar';
@@ -91,9 +94,16 @@ import {
   markTaseronSayimRejected,
   validateTaseronSayimSession,
 } from '../lib/kampTaseronSayimOnayUtils';
-import { loadPersonellerForDedup, upsertPersonelAvoidDuplicate, findPersonelMatches, pickBestPersonelMatch, formatPersonelMatchLabel } from '../lib/personelMatchUtils';
+import { loadPersonellerForDedup, upsertPersonelAvoidDuplicate, findPersonelMatches, pickBestPersonelMatch, formatPersonelMatchLabel, findPersonelByTcInList, resolvePersonelStrictTcOrExactName } from '../lib/personelMatchUtils';
 import { applyPersonelDuplicateMerge, planManualPersonelMerge } from '../lib/personelDuplicateMerge';
-import { resolveTaseronPersonelGorev, withTaseronPersonelGorev } from '../lib/taseronUtils';
+import {
+  buildTaseronGrupPersonelCandidate,
+  isTaseronGrupOnayHazir,
+  isTaseronGrupTalep,
+  taseronEvrakUrlOf,
+  taseronGrupDurumEtiketi,
+  taseronIsGorevOf,
+} from '../lib/taseronGrupSablon';
 import {
   anaFirmaSgkEngel,
   buildAnaFirmaPersonelFromSgkTalep,
@@ -1406,11 +1416,72 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
       alert(sgkEngel);
       return;
     }
-    if (!isSgkGrupTalep(item) && !evrakUrl) {
+    if (!isSgkGrupTalep(item) && !isTaseronGrupTalep(item) && !evrakUrl) {
       alert('Lütfen personelin İşe Giriş Bildirgesi belgesini (PDF/Görsel) yükleyin!');
       return;
     }
+    if (isTaseronGrupTalep(item) && !isTaseronGrupOnayHazir({ ...item, girisEvrakPdfUrl: evrakUrl || item.girisEvrakPdfUrl })) {
+      alert('Taşeron grup girişi eksik. Grup Köprüsü → Taşeron grup’tan kişi + firma yazılmadan onaylanamaz.');
+      return;
+    }
     try {
+      if (isTaseronGrupTalep(item)) {
+        const allPersoneller = await loadPersonellerForDedup(personeller || []);
+        const tc = digitsTc(item.tcNo);
+        const anaFirmaHit =
+          (tc.length === 11
+            ? findPersonelByTcInList(
+                allPersoneller.filter((p) => !isTaseronPersonelRecord(p)),
+                tc
+              )
+            : undefined) ||
+          resolvePersonelStrictTcOrExactName(
+            allPersoneller.filter((p) => !isTaseronPersonelRecord(p)),
+            { ad: item.ad, soyad: item.soyad, tcNo: item.tcNo }
+          );
+        if (anaFirmaHit) {
+          alert(
+            `Bu kişi Ana Firma kaydında (${anaFirmaHit.ad} ${anaFirmaHit.soyad}). Taşeron grubu Ana Firma kartına dokunmaz. SGK + Onay yolunu kullanın.`
+          );
+          return;
+        }
+        const existing = resolvePersonelStrictTcOrExactName(
+          allPersoneller.filter(isTaseronPersonelRecord),
+          { personelId: item.personelId, ad: item.ad, soyad: item.soyad, tcNo: item.tcNo }
+        );
+        const candidate = buildTaseronGrupPersonelCandidate(item, existing);
+        const { personel: saved, merged } = await upsertPersonelAvoidDuplicate(
+          allPersoneller.filter(isTaseronPersonelRecord),
+          candidate,
+          {
+            rawName: `${item.ad || ''} ${item.soyad || ''}`.trim(),
+            tcNo: item.tcNo || candidate.tcNo,
+            firmaAdi: item.firmaAdi,
+            firmaTipi: 'TASERON',
+            matchMode: 'tc_or_exact',
+          }
+        );
+        setPersoneller?.((prev) =>
+          prev.some((p) => p.id === saved.id)
+            ? prev.map((p) => (p.id === saved.id ? saved : p))
+            : [...prev, saved]
+        );
+        await updateDoc(doc(db, 'personelGirisTalepleri', item.id), {
+          durum: 'ONAYLANDI',
+          girisEvrakPdfUrl: evrakUrl || item.girisEvrakPdfUrl || '',
+          personelId: saved.id,
+          onaylayan: currentUser?.email,
+          onayTarihi: new Date().toISOString(),
+        });
+        setActivePdfUploadId(null);
+        setUploadedPdfBase64(null);
+        alert(
+          merged
+            ? 'Taşeron grup girişi onaylandı. Mevcut taşeron kartı güncellendi (yoklama görevi ezilmedi, mükerrer kart açılmadı).'
+            : 'Taşeron grup girişi onaylandı. TAŞERON PERSONEL kartı yazıldı; gruptaki iş nitelik olarak kaydedildi.'
+        );
+        return;
+      }
       const isGoturuKayit = isGoturuPersonelTalep(item);
       const firmaTipi = item.firmaTipi === 'TASERON' || isGoturuKayit ? 'TASERON' : 'ANA_FIRMA';
       const firmaAdi = item.firmaAdi || (isGoturuKayit ? GOTURU_FIRMA_ADI : undefined);
@@ -1528,7 +1599,77 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
     try {
       const cikisTarihi = String(item.sgkCikisTarihi || item.cikisTarihi || new Date().toISOString()).slice(0, 10);
       const tc = digitsTc(item.tcNo);
-      const isimNeedle = normalizePersonName(item.personelIsim || '');
+      const isimNeedle = normalizePersonName(item.ad, item.soyad) || normalizePersonName(item.personelIsim || '');
+      if (isTaseronGrupTalep(item)) {
+        const taseronlar = (personeller || []).filter(isTaseronPersonelRecord);
+        const resolvedTaseron =
+          taseronlar.find((p) => p.id && p.id === item.personelId) ||
+          (tc.length === 11 ? taseronlar.find((p) => digitsTc(p.tcNo) === tc) : undefined) ||
+          (isimNeedle
+            ? taseronlar.find((p) => normalizePersonName(p.ad, p.soyad) === isimNeedle)
+            : undefined);
+        const anaHit =
+          (tc.length === 11
+            ? (personeller || []).find((p) => !isTaseronPersonelRecord(p) && digitsTc(p.tcNo) === tc)
+            : undefined) ||
+          (isimNeedle
+            ? (personeller || []).find(
+                (p) => !isTaseronPersonelRecord(p) && normalizePersonName(p.ad, p.soyad) === isimNeedle
+              )
+            : undefined);
+        if (anaHit && !resolvedTaseron) {
+          alert(
+            `Eşleşen kart Ana Firma (${anaHit.ad} ${anaHit.soyad}). Taşeron grup çıkışı Ana Firma’yı pasife almaz.`
+          );
+          return;
+        }
+        const personelId = resolvedTaseron?.id || '';
+        if (personelId) {
+          await updateDoc(doc(db, 'personeller', personelId), {
+            durum: false,
+            istenCikisTarihi: cikisTarihi,
+          });
+        }
+        await updateDoc(doc(db, 'personelCikisTalepleri', item.id), {
+          durum: 'ONAYLANDI',
+          onaylayanYonetici: currentUser?.email || 'Sistem Yöneticisi',
+          onayTarihi: new Date().toISOString(),
+          personelId,
+          cikisTarihi,
+        });
+        if (setPersoneller && personelId) {
+          setPersoneller((prev) =>
+            prev.map((p) =>
+              p.id === personelId ? { ...p, durum: false, istenCikisTarihi: cikisTarihi } : p
+            )
+          );
+        }
+        let kampNot = '';
+        if (personelId || item.personelIsim) {
+          try {
+            const result = await evictActiveKampResidentsForPersonel({
+              personelId,
+              personelIsim: item.personelIsim,
+              cikisTarihi,
+              kampOdalari,
+              kampKayitlari,
+            });
+            if (result.evictedCount > 0) {
+              setKampKayitlari?.(result.kampKayitlari);
+              setKampOdalari?.(result.kampOdalari);
+              kampNot = `\nKamp odasından otomatik tahliye: ${result.evictedCount} kayıt.`;
+            }
+          } catch (kampErr) {
+            console.warn('Kamp tahliye atlandı:', kampErr);
+          }
+        }
+        alert(
+          personelId
+            ? `Taşeron grup çıkışı onaylandı; kart pasife alındı.${kampNot}`
+            : `Taşeron grup çıkışı onaylandı. Eşleşen taşeron kartı yoktu; kadroya dokunulmadı.${kampNot}`
+        );
+        return;
+      }
       const resolved =
         personeller.find((p) => p.id && p.id === item.personelId) ||
         (tc.length === 11
@@ -4564,8 +4705,12 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                   girisTalepleriForTab.map((item) => {
                     const isPending = isPendingPersonelOnayDurum(item.durum);
                     const sgkTalep = isSgkGrupTalep(item);
+                    const taseronTalep = isTaseronGrupTalep(item);
                     const sgkHazir = isSgkOnayHazir(item);
-                    const evrakHref = sgkEvrakUrlOf(item) || item.girisEvrakPdfUrl;
+                    const taseronHazir = isTaseronGrupOnayHazir(item);
+                    const evrakHref = taseronTalep
+                      ? taseronEvrakUrlOf(item) || item.girisEvrakPdfUrl
+                      : sgkEvrakUrlOf(item) || item.girisEvrakPdfUrl;
                     return (
                       <div key={item.id} className="bg-white border border-slate-200 rounded-3xl p-4.5 flex flex-col justify-between space-y-3.5 relative overflow-hidden">
                         
@@ -4577,7 +4722,9 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                             item.durum === 'REDDEDİLDİ' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
                             'bg-amber-500/10 text-amber-700 border border-amber-500/20'
                           }`}>
-                            {sgkDurumEtiketi(item.durum, { sgkTalep, kind: 'giris' })}
+                            {taseronTalep
+                              ? taseronGrupDurumEtiketi(item.durum, 'giris')
+                              : sgkDurumEtiketi(item.durum, { sgkTalep, kind: 'giris' })}
                           </span>
                           <span className="text-[8px] font-mono text-slate-500">{new Date(item.tarih).toLocaleString('tr-TR')}</span>
                         </div>
@@ -4640,6 +4787,22 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                           </div>
                         )}
 
+                        {taseronTalep && (
+                          <div className="bg-teal-50 border border-teal-200 rounded-xl p-2.5 space-y-1">
+                            <p className="text-[8px] font-black uppercase tracking-wider text-teal-900">Taşeron grup — mesaj başı</p>
+                            <p className="text-[10px] font-bold text-teal-900">
+                              Firma: {item.firmaAdi || '—'} · İş: {taseronIsGorevOf(item) || '—'}
+                            </p>
+                            <p className="text-[10px] text-slate-600">
+                              Yoklama görevi TAŞERON PERSONEL kalır. Onaylayınca kadro yazılır; Grup Köprüsü yazmaz. Ana Firma’ya dokunulmaz.
+                            </p>
+                            {item.tcNo ? <p className="text-[10px] text-slate-600 font-mono">TC {item.tcNo}</p> : null}
+                            {item.iseGirisTarihi ? (
+                              <p className="text-[10px] text-slate-600">Giriş tarihi: {String(item.iseGirisTarihi).slice(0, 10)}</p>
+                            ) : null}
+                          </div>
+                        )}
+
                         {/* Documents & Download link */}
                         {(item.girisEvrakPdfUrl || evrakHref) && (
                           <div className="bg-slate-50/60 p-2 rounded-xl border border-slate-200 flex items-center justify-between text-[10px]">
@@ -4660,7 +4823,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                         <div className="border-t border-slate-100 pt-3 flex flex-wrap gap-2">
                           
                           {/* 1. WHATSAPP NOTIFICATION SEND — formen/kapı yolu. SGK Ana Firma zaten gruba gitti; bu tuş BEKLEMEDE'yi WP'ye geri çekmesin. */}
-                          {isPending && !sgkTalep && (
+                          {isPending && !sgkTalep && !taseronTalep && (
                             <button
                               onClick={async () => {
                                 const publicUrl = `${window.location.protocol}//${window.location.host}/?view_giris=${item.id}`;
@@ -4757,7 +4920,44 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                             </div>
                           )}
 
-                          {isPending && !sgkTalep && (
+                          {isPending && taseronTalep && (
+                            <div className="w-full space-y-2 mt-1.5 bg-teal-50 p-2.5 rounded-2xl border border-teal-200">
+                              <span className="text-[8px] font-bold text-teal-900 block uppercase tracking-wider">Taşeron grup — tek kontrol</span>
+                              <div className="flex gap-2 w-full">
+                                <button
+                                  type="button"
+                                  disabled={!taseronHazir}
+                                  onClick={() => void handleApproveGirisTalep(item)}
+                                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-[9px] py-1.5 px-3 rounded-xl flex items-center justify-center space-x-1 border-b-2 border-emerald-800 transition cursor-pointer"
+                                >
+                                  <Check size={11} />
+                                  <span>{taseronHazir ? 'ONAYLA — TAŞERON KAYDINI YAZ' : 'EVRAK EKSİK'}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (window.confirm('Bu taşeron giriş talebini reddetmek istediğinize emin misiniz?')) {
+                                      try {
+                                        await updateDoc(doc(db, 'personelGirisTalepleri', item.id), {
+                                          durum: 'REDDEDİLDİ',
+                                        });
+                                        alert('Taşeron grup giriş talebi reddedildi.');
+                                      } catch (err) {
+                                        console.error(err);
+                                      }
+                                    }
+                                  }}
+                                  className="bg-rose-950 hover:bg-rose-900 border border-rose-850 text-rose-400 font-extrabold text-[9px] py-1.5 px-3 rounded-xl flex items-center justify-center space-x-1 transition cursor-pointer"
+                                >
+                                  <X size={11} />
+                                  <span>REDDET</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {isPending && !sgkTalep && !taseronTalep && (
                             <div className="w-full space-y-2 mt-1.5 bg-rose-50 p-2.5 rounded-2xl border border-slate-200">
                               <span className="text-[8px] font-bold text-slate-400 block uppercase tracking-wider">🔒 Formen / saha yolu — grup bildirimi şart değil</span>
                               
@@ -4883,8 +5083,10 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                     cikisTalepleriForTab.map((item) => {
                       const isPending = isPendingPersonelOnayDurum(item.durum);
                       const sgkTalep = isSgkGrupTalep(item);
+                      const taseronTalep = isTaseronGrupTalep(item);
                       const sgkHazir = isSgkOnayHazir(item);
-                      const evrakHref = sgkEvrakUrlOf(item);
+                      const taseronHazir = isTaseronGrupOnayHazir(item);
+                      const evrakHref = taseronTalep ? taseronEvrakUrlOf(item) : sgkEvrakUrlOf(item);
                       return (
                         <div key={item.id} className="bg-white border border-slate-200 rounded-3xl p-4.5 flex flex-col justify-between space-y-3.5 relative overflow-hidden">
                           
@@ -4896,7 +5098,9 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                               item.durum === 'REDDEDİLDİ' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
                               'bg-amber-500/10 text-amber-700 border border-amber-500/20'
                             }`}>
-                              {sgkDurumEtiketi(item.durum, { sgkTalep, kind: 'cikis' })}
+                              {taseronTalep
+                                ? taseronGrupDurumEtiketi(item.durum, 'cikis')
+                                : sgkDurumEtiketi(item.durum, { sgkTalep, kind: 'cikis' })}
                             </span>
                             <span className="text-[8px] font-mono text-slate-500">{new Date(item.tarih).toLocaleString('tr-TR')}</span>
                           </div>
@@ -4946,6 +5150,23 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                                 ) : null}
                               </div>
                             )}
+                            {taseronTalep && (
+                              <div className="bg-teal-50 border border-teal-200 rounded-xl p-2.5 space-y-1">
+                                <p className="text-[8px] font-black uppercase tracking-wider text-teal-900">Taşeron grup — mesaj başı</p>
+                                <p className="text-[10px] font-bold text-teal-900">
+                                  Firma: {item.firmaAdi || '—'} · İş: {taseronIsGorevOf(item) || '—'}
+                                </p>
+                                <p className="text-[10px] text-slate-600">
+                                  Kart Grup Köprüsü’nden pasife alınmaz. Onaylayınca taşeron kartı kapanır; Ana Firma’ya dokunulmaz.
+                                </p>
+                                {item.tcNo ? <p className="text-[10px] text-slate-600 font-mono">TC {item.tcNo}</p> : null}
+                                {evrakHref ? (
+                                  <a href={evrakHref} target="_blank" rel="noreferrer" className="text-teal-800 hover:underline font-black uppercase text-[8px] inline-flex items-center gap-0.5">
+                                    Evrakı aç <ExternalLink size={9} />
+                                  </a>
+                                ) : null}
+                              </div>
+                            )}
                           </div>
 
                           {/* Action Bar */}
@@ -4953,12 +5174,20 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
                             {isPending ? (
                               <div className="grid grid-cols-2 gap-2">
                                 <button
-                                  disabled={sgkTalep && !sgkHazir}
+                                  disabled={(sgkTalep && !sgkHazir) || (taseronTalep && !taseronHazir)}
                                   onClick={() => handleApproveCikis(item)}
                                   className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-[10px] py-1.5 px-3 rounded-xl flex items-center justify-center space-x-1 transition cursor-pointer"
                                 >
                                   <Check size={11} />
-                                  <span>{sgkTalep && !sgkHazir ? 'EVRAK / GRUP EKSİK' : 'ÇIKIŞI ONAYLA'}</span>
+                                  <span>
+                                    {sgkTalep && !sgkHazir
+                                      ? 'EVRAK / GRUP EKSİK'
+                                      : taseronTalep && !taseronHazir
+                                        ? 'EVRAK EKSİK'
+                                        : taseronTalep
+                                          ? 'TAŞERON ÇIKIŞI ONAYLA'
+                                          : 'ÇIKIŞI ONAYLA'}
+                                  </span>
                                 </button>
                                 <button
                                   onClick={() => handleRejectCikis(item)}

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { collection, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
-import { Copy, Check, MessageCircle, Upload, UserPlus, UserMinus, FileText, Link2 } from 'lucide-react';
+import { Copy, Check, MessageCircle, Upload, UserPlus, UserMinus, FileText, Link2, Users } from 'lucide-react';
+import { TaseronGrupKopruTab } from './TaseronGrupKopruTab';
 import type { CariKart, EvrakEtiketGrubu, Fatura, FaturaItem, Irsaliye, Personel, StokKart } from '../types/erp';
 import { db, cleanUndefined } from '../lib/firebase';
 import { fetchApiJson } from '../lib/apiClient';
@@ -26,7 +27,7 @@ import { assignDocsToEtiketGrubu } from '../lib/evrakEtiketUtils';
 import { EvrakPageShell, EvrakSectionHeader } from './evrakUi/EvrakScreenChrome';
 import { muhasebeInputClass } from './evrakUi/MuhasebeBelgeForm';
 
-type SubTab = 'giris' | 'cikis' | 'fatura';
+type SubTab = 'giris' | 'cikis' | 'fatura' | 'taseron';
 
 type Talep = Record<string, any>;
 
@@ -481,21 +482,24 @@ export const GrupKopruScreen: React.FC<GrupKopruScreenProps> = ({
         accent="sa"
         eyebrow="WhatsApp köprüsü"
         title="Grup Köprüsü"
-        subtitle={`${SGK_GRUP_ADI} ve Arnavutköy muhasebe grubu. Gruba gitmeyen Ana Firma giriş/çıkış onaya bile düşmez.`}
+        subtitle={`${SGK_GRUP_ADI}, Taşeron grup ve Arnavutköy muhasebe. WhatsApp dinlenmez; evrak buraya bırakılır.`}
       />
 
+      {subTab !== 'taseron' ? (
       <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-[12px] text-amber-950 leading-relaxed">
         <strong>Kural:</strong> Ana Firma işçi ancak SGK grubuna <em>kimlik + görev + giriş tarihi</em> atıldıktan
         ve SGK evrakı geldikten sonra Onay → Personel oluşturma kuyruğuna düşer. Kadro buradan yazılmaz;
         tek insan kontrolü Onay sekmesindedir. Çıkış da aynı: önce gruba personel + tarih, evrak gelince onaya düşer.
         WhatsApp grubunu program dinleyemez; sabit metni siz atarsınız, dönen evrakı buraya bırakırsınız.
       </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         {(
           [
             ['giris', 'SGK işe giriş', UserPlus],
             ['cikis', 'SGK işten çıkış', UserMinus],
+            ['taseron', 'Taşeron grup', Users],
             ['fatura', 'Arnavutköy fatura', FileText],
           ] as const
         ).map(([id, label, Icon]) => (
@@ -519,6 +523,15 @@ export const GrupKopruScreen: React.FC<GrupKopruScreenProps> = ({
 
       {err ? <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{err}</p> : null}
       {ok ? <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">{ok}</p> : null}
+
+      {subTab === 'taseron' && (
+        <TaseronGrupKopruTab
+          personeller={personeller}
+          cariKartlar={cariKartlar}
+          currentUser={currentUser}
+          addNotification={addNotification}
+        />
+      )}
 
       {subTab === 'giris' && (
         <div className="grid lg:grid-cols-2 gap-4">
