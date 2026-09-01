@@ -16,6 +16,14 @@ import {
   syncClaimsForEmail,
   verifyIdToken,
 } from './authClaimsService';
+import { extractPdfTextLayout } from '../lib/pdfTextLayout';
+import {
+  mergeTaseronGrupParse,
+  parseSgkEBildirgeText,
+  parseTaseronGrupMessageMeta,
+  taseronGrupParseHasIdentity,
+  type TaseronGrupParse,
+} from '../lib/taseronGrupSablon';
 
 export function registerApiRoutes(app: Express): void {
 
@@ -945,12 +953,30 @@ Provide the output strictly conforming to the response schema.
   }
 });
 
-// Taşeron WhatsApp grubu — standart işe giriş / işten çıkış PDF (firma + yapılan iş)
+// Taşeron WhatsApp grubu — SGK e-Bildirge PDF (metin önce; Gemini boş alanları doldurur)
 app.post("/api/parse-taseron-grup", async (req, res) => {
   try {
     const { fileBase64, mimeType, fileName } = req.body;
     if (!fileBase64 || !mimeType) {
       return res.status(400).json({ error: "Missing fileBase64 or mimeType in request body" });
+    }
+
+    const fromFile = parseTaseronGrupMessageMeta({ fileName: String(fileName || '') });
+    let fromPdf: Partial<TaseronGrupParse> = {};
+    if (/pdf/i.test(String(mimeType)) || /\.pdf$/i.test(String(fileName || ''))) {
+      try {
+        const buf = Buffer.from(String(fileBase64), 'base64');
+        fromPdf = parseSgkEBildirgeText(extractPdfTextLayout(buf));
+      } catch (pdfErr) {
+        console.warn('taşeron grup PDF metin çıkarma atlandı:', pdfErr);
+      }
+    }
+    const fromText = mergeTaseronGrupParse(fromPdf, fromFile);
+    const textComplete =
+      taseronGrupParseHasIdentity(fromText) &&
+      Boolean(fromText.firmaAdi && (fromText.tcNo || fromText.tarih));
+    if (textComplete) {
+      return res.json({ success: true, data: fromText, source: 'pdf-text' });
     }
 
     const imagePart = {
@@ -961,22 +987,26 @@ app.post("/api/parse-taseron-grup", async (req, res) => {
     };
 
     const promptText = `
-You are an expert Turkish construction HR clerk.
-This is ONE message from a Taşeron (subcontractor) WhatsApp group: a standard employment PDF or photo.
-Each document is exactly one hire (işe giriş) OR one exit (işten çıkış) — never a weekly roster.
+This is ONE official Turkish SGK e-Bildirge PDF (JasperReports / iText) from the Arnavutköy İşe Giriş WhatsApp group.
+Titles are exactly:
+- "SİGORTALI İŞE GİRİŞ BİLDİRGESİ" → yon=giris. Date = field 16 "Sigortalının işe başladığı tarih" (DD.MM.YYYY).
+- "SİGORTALI İŞTEN AYRILIŞ BİLDİRGESİ" → yon=cikis. Date = field 15 "Sigortalının İşten Ayrılış Tarihi" (DD.MM.YYYY).
+Never a weekly roster. Prefer the TITLE if both dates appear.
 
 Extract:
-- "yon": "giris" if the title/body is işe giriş / sigortalı işe giriş bildirgesi / işe başlama.
-  "cikis" if işten çıkış / işten ayrılış / çıkış bildirgesi.
-  If both appear, prefer the document TITLE.
-- "firmaAdi": the subcontractor COMPANY name (işveren / taşeron firma / unvan). Not Kibritçi unless Kibritçi is clearly the employer on this form.
-- "isGorev": the work/job description (meslek adı, yapılan iş, görev tanımı, nitelik). Free text of what they do on site.
-- "ad": employee first name.
-- "soyad": employee surname.
-- "tcNo": 11-digit T.C. if present, else empty.
-- "tarih": employment start date for giris, exit date for cikis, YYYY-MM-DD.
+- "yon": giris | cikis from the title as above.
+- "firmaAdi": "İşverenin/İşyerinin/İlgili Kuruluşun Adı-Soyadı/Ünv." — the subcontractor unvan (field 22 on ayrılış, field 24 on giriş). NOT the address line. NOT Kibritçi unless Kibritçi is that unvan.
+- "isGorev": "Meslek Adı ve Kodu" — the job name without the numeric code. Ayrılış field 14 is often "Diğer Elektrik Tesisatçıları-7411.02". Giriş field 17 is often "8189.13 -Kablo İzolasyon Elemanı" (code may be a prefix).
+- "ad": field 1 Adı (not the Nüfusa kayıtlı / il value to the right).
+- "soyad": field 2 Soyadı (not the İl / İlçe to the right or below).
+- "tcNo": 11-digit T.C. (boxes may be spaced; ignore a trailing X checkbox).
+- "tarih": YYYY-MM-DD as specified by yon.
 
 File name hint (may be empty): ${String(fileName || '')}
+WhatsApp caption is applied on the client (e.g. "Yurt mekanik giriş" → firma + yon).
+Filename patterns from the live group:
+- "AD SOYAD İŞE GİRİŞ BİLDİRGESİ.pdf" → hire
+- "11-digit-TC_ayrilis.pdf" → exit / ayrılış
 
 Output strictly as JSON per schema. Do not invent a weekly list.
 `;
@@ -995,19 +1025,29 @@ Output strictly as JSON per schema. Do not invent a weekly list.
       required: ["yon", "firmaAdi", "isGorev", "ad", "soyad", "tarih"],
     };
 
-    const { text } = await generateGeminiWithFallback({
-      contents: [imagePart, promptText],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: taseronGrupSchema,
-      },
-      label: 'Taşeron grup evrak analizi',
-    });
-
-    const parsedData = JSON.parse(text);
-    res.json({ success: true, data: parsedData });
+    try {
+      const { text } = await generateGeminiWithFallback({
+        contents: [imagePart, promptText],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: taseronGrupSchema,
+        },
+        label: 'Taşeron grup evrak analizi',
+      });
+      const parsedData = JSON.parse(text);
+      res.json({
+        success: true,
+        data: mergeTaseronGrupParse(fromText, parsedData),
+        source: 'pdf-text+gemini',
+      });
+    } catch (geminiErr: any) {
+      if (taseronGrupParseHasIdentity(fromText) || fromText.tcNo) {
+        return res.json({ success: true, data: fromText, source: 'pdf-text' });
+      }
+      throw geminiErr;
+    }
   } catch (error: any) {
-    console.error("Error parsing taşeron grup PDF/Image via Gemini:", error);
+    console.error("Error parsing taşeron grup PDF/Image:", error);
     const msg = error.message || "Failed to parse taşeron group document";
     const status = /zaman aşımı|timeout|504/i.test(msg) ? 504 : 500;
     res.status(status).json({ error: msg });
