@@ -200,7 +200,6 @@ var init_yetkiUtils = __esm({
     PORTAL_PAGES = [
       { key: "ana_sayfa", label: "Ana Sayfa Dashboard", group: "BA\u015ELANGI\xC7" },
       { key: "personel", label: "Personel Y\xF6netimi", group: "PERSONEL" },
-      { key: "personel_kartlari", label: "Personel Kart\u0131", group: "PERSONEL" },
       { key: "yoklama", label: "Yoklama ve Puantaj", group: "PERSONEL" },
       { key: "faaliyet_personel", label: "Faaliyeti Olan Personeller", group: "PERSONEL" },
       { key: "maas", label: "Maa\u015F Hesaplama & \xD6deme", group: "PERSONEL" },
@@ -866,6 +865,295 @@ async function deletePortalAuthUser(email) {
     },
     { merge: true }
   );
+}
+
+// src/lib/pdfTextLayout.ts
+var import_node_zlib = require("node:zlib");
+function inflatePdfStream(body) {
+  try {
+    return (0, import_node_zlib.inflateSync)(body);
+  } catch {
+  }
+  try {
+    return (0, import_node_zlib.inflateRawSync)(body);
+  } catch {
+    return null;
+  }
+}
+function unescapePdfLiteral(latin1) {
+  const unescaped = latin1.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, "	").replace(/\\([0-7]{1,3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8))).replace(/\\([()\\])/g, "$1");
+  try {
+    return new TextDecoder("windows-1254").decode(Buffer.from(unescaped, "latin1"));
+  } catch {
+    return unescaped;
+  }
+}
+function layoutTextFromContentStream(latin1) {
+  const src = String(latin1 || "");
+  const items = [];
+  const re = /1 0 0 1\s+(-?[\d.]+)\s+(-?[\d.]+)\s+Tm[\s\S]{0,220}?\(((?:\\.|[^\\)])*)\)\s*Tj/g;
+  let m;
+  while (m = re.exec(src)) {
+    const t = unescapePdfLiteral(m[3] || "").replace(/\s+/g, " ").trim();
+    if (!t) continue;
+    items.push({ x: Number(m[1]), y: Number(m[2]), t });
+  }
+  if (items.length === 0) return "";
+  const buckets = /* @__PURE__ */ new Map();
+  for (const it of items) {
+    const yKey = Math.round(it.y / 2) * 2;
+    const list = buckets.get(yKey) || [];
+    list.push(it);
+    buckets.set(yKey, list);
+  }
+  const lines = [];
+  for (const yKey of [...buckets.keys()].sort((a, b) => b - a)) {
+    const row = (buckets.get(yKey) || []).sort((a, b) => a.x - b.x);
+    let line = "";
+    let prevX = -Infinity;
+    for (const it of row) {
+      if (!line) {
+        line = it.t;
+      } else if (it.x - prevX > 12) {
+        line += `    ${it.t}`;
+      } else {
+        line += ` ${it.t}`;
+      }
+      prevX = it.x;
+    }
+    if (line.trim()) lines.push(line);
+  }
+  return lines.join("\n");
+}
+function extractPdfTextLayout(bytes) {
+  const latin1 = Buffer.from(bytes).toString("latin1");
+  const chunks = [];
+  const re = /stream\r?\n([\s\S]*?)endstream/g;
+  let m;
+  while (m = re.exec(latin1)) {
+    let body = Buffer.from(m[1], "latin1");
+    if (body.length >= 2 && body[0] === 13 && body[1] === 10) body = body.subarray(2);
+    else if (body[0] === 10 || body[0] === 13) body = body.subarray(1);
+    if (body.length > 2e6) continue;
+    const dec = inflatePdfStream(body);
+    if (!dec) continue;
+    const streamLatin1 = dec.toString("latin1");
+    if (!/\(.*\)\s*Tj/.test(streamLatin1)) continue;
+    const laid = layoutTextFromContentStream(streamLatin1);
+    if (laid.trim()) chunks.push(laid);
+  }
+  return chunks.join("\n");
+}
+
+// src/lib/sgkGrupSablon.ts
+function digitsTc(raw) {
+  return String(raw || "").replace(/\D/g, "");
+}
+
+// src/lib/firmaCanonicalUtils.ts
+init_guvenlikHelpers();
+init_yoklamaUtils();
+
+// src/lib/taseronUtils.ts
+init_guvenlikHelpers();
+init_yoklamaUtils();
+
+// src/lib/taseronGrupSablon.ts
+function inferTaseronYonFromText(raw) {
+  const t = String(raw || "").toLocaleLowerCase("tr-TR").replace(/ı/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ö/g, "o").replace(/ç/g, "c");
+  if (!t.trim()) return null;
+  const cikisHit = /isten\s*cikis|isten\s*ayril|cikis\s*bildir|isten\s*cikarma|isten\s*cikaril|isden\s*cikis|isten\s*cikis|_?ayrilis|\bayrilis\b|sigortali\s*isten\s*ayril/.test(
+    t
+  ) || /\bcikis\b/.test(t) && !/ise\s*giris|giris\s*bildir/.test(t);
+  const girisHit = /ise\s*giris|ise\s*baslama|giris\s*bildir|sigortali\s*ise\s*giris|bildirgesi|\bgiris\b/.test(t);
+  if (cikisHit && !girisHit) return "cikis";
+  if (girisHit && !cikisHit) return "giris";
+  if (cikisHit) return "cikis";
+  if (girisHit) return "giris";
+  return null;
+}
+function parseIsoOrTrDate(raw) {
+  const s = String(raw || "").trim();
+  const iso = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const tr = s.match(/(\d{1,2})[./](\d{1,2})[./](\d{4})/);
+  if (tr) return `${tr[3]}-${tr[2].padStart(2, "0")}-${tr[1].padStart(2, "0")}`;
+  return "";
+}
+function splitAdSoyad(full) {
+  const parts = String(full || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { ad: "", soyad: "" };
+  if (parts.length === 1) return { ad: parts[0].toLocaleUpperCase("tr-TR"), soyad: "" };
+  return {
+    ad: parts[0].toLocaleUpperCase("tr-TR"),
+    soyad: parts.slice(1).join(" ").toLocaleUpperCase("tr-TR")
+  };
+}
+function stripExt(name) {
+  return String(name || "").replace(/\.(pdf|jpe?g|png|webp|heic)$/i, "").trim();
+}
+function parseTaseronGrupMessageMeta(opts) {
+  const fileName = stripExt(opts.fileName || "");
+  const caption = String(opts.caption || "").trim();
+  const yon = inferTaseronYonFromText(`${fileName} ${caption}`) || void 0;
+  const tcNo = digitsTc(fileName.match(/\d{11}/)?.[0] || caption.match(/\d{11}/)?.[0]);
+  const fold = (s) => String(s || "").toLocaleLowerCase("tr-TR").replace(/ı/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ö/g, "o").replace(/ç/g, "c");
+  let ad = "";
+  let soyad = "";
+  const girisAd = fold(fileName).replace(/sigortali\s*/g, "").replace(/ise\s*giris\s*bildirgesi/g, "").replace(/ise\s*giris/g, "").replace(/bildirge(si)?/g, "").replace(/_?ayrilis.*/g, "").replace(/_+/g, " ").replace(/\s+/g, " ").trim();
+  if (girisAd && !/^\d+$/.test(girisAd) && girisAd.split(/\s+/).length >= 2 && yon !== "cikis") {
+    const split = splitAdSoyad(girisAd);
+    ad = split.ad;
+    soyad = split.soyad;
+  }
+  let firmaAdi = "";
+  if (caption) {
+    const firmaRaw = caption.replace(/\b(i[sş]e\s*giri[sş]|i[sş]ten\s*[cç][ıi]k[ıi][sş]|giri[sş]|[cç][ıi]k[ıi][sş]|ayr[ıi]l[ıi][sş])\b/gi, "").replace(/\s+/g, " ").trim();
+    if (firmaRaw && !/^\d{11}$/.test(digitsTc(firmaRaw))) {
+      firmaAdi = firmaRaw.toLocaleUpperCase("tr-TR");
+    }
+  }
+  return {
+    yon,
+    ad: ad || void 0,
+    soyad: soyad || void 0,
+    firmaAdi: firmaAdi || void 0,
+    tcNo: tcNo || void 0
+  };
+}
+function firstChunk(raw) {
+  return String(raw || "").replace(/\s{2,}.*$/, "").replace(/\s+/g, " ").trim();
+}
+function escapeRe(label) {
+  return label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function fieldAfterLabel(text, label) {
+  const escaped = escapeRe(label);
+  const numbered = new RegExp(`(?:^|\\n)\\s*\\d{1,2}[ \\t]+${escaped}[ \\t]+([^\\n]+)`, "i");
+  const standalone = new RegExp(`(?:^|\\n)\\s*${escaped}[ \\t]+([^\\n]+)`, "i");
+  const m = String(text || "").match(numbered) || String(text || "").match(standalone);
+  if (!m?.[1]) return "";
+  return firstChunk(m[1]);
+}
+function valueAboveLabel(text, label) {
+  const escaped = escapeRe(label);
+  const numbered = new RegExp(`^\\s*\\d{1,2}[ \\t]+${escaped}(?:[ \\t]|$)`, "i");
+  const standalone = new RegExp(`^\\s*${escaped}\\s*$`, "i");
+  const lines = String(text || "").split(/\n/);
+  for (let i = 0; i < lines.length; i++) {
+    if (!numbered.test(lines[i]) && !standalone.test(lines[i])) continue;
+    for (let j = i - 1; j >= 0 && j >= i - 3; j--) {
+      const prev = firstChunk(lines[j].replace(/^\s*\d{1,2}\s*$/, "").trim());
+      if (!prev || /^\d+$/.test(prev)) continue;
+      if (/bildirge|sosyal g[uü]venlik|kimlik\/adres|hizmet bilgileri/i.test(prev)) continue;
+      if (/^\d{1,2}[ \t]+\S/.test(prev)) continue;
+      return prev;
+    }
+  }
+  return "";
+}
+function dateAfterLabels(text, labels) {
+  const lines = String(text || "").split(/\n/);
+  const fold = (s) => s.toLocaleLowerCase("tr-TR").replace(/ı/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ö/g, "o").replace(/ç/g, "c");
+  for (let i = 0; i < lines.length; i++) {
+    const folded = fold(lines[i]);
+    if (!labels.some((lb) => folded.includes(fold(lb)))) continue;
+    const here = parseIsoOrTrDate(lines[i]);
+    if (here) return here;
+    for (const j of [i - 1, i + 1, i - 2]) {
+      if (j < 0 || j >= lines.length) continue;
+      const d = parseIsoOrTrDate(lines[j]);
+      if (d) return d;
+    }
+  }
+  return "";
+}
+function extractEBildirgeTc(text) {
+  const src = String(text || "");
+  const afterKimlik = src.split(/K[İI]ML[İI]K NUMARASI/i)[1]?.slice(0, 500) || "";
+  const spacedLine = (chunk) => chunk.match(/(?:^|\n)[ \t]*(\d(?:[ \t]+\d){10})[ \t]*(?:\n|$)/) || chunk.match(/(\d(?:[ \t]{2,}\d){10})/);
+  const boxed = spacedLine(afterKimlik) || spacedLine(src);
+  const packed = afterKimlik.match(/\b\d{11}\b/) || src.match(/\b\d{11}\b/);
+  const tcNo = digitsTc((boxed?.[1] || packed?.[0] || "").replace(/\s+/g, ""));
+  return tcNo.length === 11 ? tcNo : "";
+}
+function extractEBildirgeFirma(text) {
+  const label = /Ad[ıi]-Soyad[ıi]\/[ÜU]nv\.?[^\n]*/i.exec(String(text || ""));
+  if (label && label.index != null) {
+    const following = String(text || "").slice(label.index + label[0].length).split(/\n/).map((ln) => ln.trim()).filter(Boolean);
+    for (const ln of following.slice(0, 5)) {
+      if (/^\d{1,2}$/.test(ln)) continue;
+      const cleaned = ln.replace(/^\s*\d{1,2}\s+/, "").split(/\s{2,}/)[0].replace(/\s+(MAHALLE|MAHALLES[İI]|CADDE|SOKAK|BULVAR|[İI]STANBUL|ANKARA).*$/i, "").trim();
+      if (cleaned.length >= 6 && !/^\d+$/.test(cleaned) && !/adresi/i.test(cleaned)) return cleaned;
+    }
+  }
+  const caps = String(text || "").match(
+    /\n\s*\d{0,2}\s*([A-ZÇĞİÖŞÜÂÎÛ][A-ZÇĞİÖŞÜÂÎÛ0-9 /.'-]{10,}(?:İNŞAAT|INSAAT|ELEKTR[İI]K|TAAHH[ÜU]T|M[ÜU]HEND[İI]SL[İI]K|LTD|T[İI]CARET)[A-ZÇĞİÖŞÜÂÎÛ0-9 /.'-]*)/
+  );
+  return caps?.[1]?.split(/\s{2,}/)[0]?.trim() || "";
+}
+function parseSgkEBildirgeText(raw) {
+  const text = String(raw || "");
+  if (!/SİGORTALI İŞ|SIGORTALI IS|SOSYAL GÜVENLİK KURUMU|SOSYAL GUVENLIK KURUMU/i.test(text)) {
+    return {};
+  }
+  const yon = /İŞTEN AYRILIŞ|ISTEN AYRILIS|İŞTEN ÇIKIŞ|ISTEN CIKIS/i.test(text) ? "cikis" : /İŞE GİRİŞ BİLDİRGESİ|ISE GIRIS BILDIRGESI/i.test(text) ? "giris" : inferTaseronYonFromText(text) || void 0;
+  const tcNo = extractEBildirgeTc(text);
+  const nameOk = (s) => /^[A-ZÇĞİÖŞÜÂÎÛa-zçğıöşü'-]{2,}$/.test(s);
+  const pickName = (...cands) => cands.map((s) => s.trim()).find(nameOk) || "";
+  const ad = pickName(
+    fieldAfterLabel(text, "Ad\u0131"),
+    fieldAfterLabel(text, "Adi"),
+    valueAboveLabel(text, "Ad\u0131"),
+    valueAboveLabel(text, "Adi")
+  );
+  const soyad = pickName(
+    fieldAfterLabel(text, "Soyad\u0131"),
+    fieldAfterLabel(text, "Soyadi"),
+    valueAboveLabel(text, "Soyad\u0131"),
+    valueAboveLabel(text, "Soyadi")
+  );
+  const meslekJunk = /bildirge|hizmet bilgileri|kimlik\/adres|n[uü]fusa kay[ıi]tl[ıi]/i;
+  const pickMeslek = (...cands) => {
+    for (const raw2 of cands) {
+      const t = String(raw2 || "").replace(/\s*-\d{4}\.\d{2}\s*$/, "").trim();
+      if (t.length >= 4 && !meslekJunk.test(t)) return t;
+    }
+    return "";
+  };
+  const isGorev = pickMeslek(
+    fieldAfterLabel(text, "Meslek Ad\u0131 ve Kodu"),
+    fieldAfterLabel(text, "Meslek Adi ve Kodu"),
+    valueAboveLabel(text, "Meslek Ad\u0131 ve Kodu"),
+    valueAboveLabel(text, "Meslek Adi ve Kodu")
+  );
+  const tarih = yon === "cikis" ? dateAfterLabels(text, ["\u0130\u015Ften Ayr\u0131l\u0131\u015F Tarihi", "Isten Ayrilis Tarihi", "Sigortal\u0131n\u0131n \u0130\u015Ften Ayr\u0131l\u0131\u015F Tarihi"]) || dateAfterLabels(text, ["\u0130\u015Fe Giri\u015F Tarihi", "Ise Giris Tarihi"]) : dateAfterLabels(text, ["\u0130\u015Fe Giri\u015F Tarihi", "Ise Giris Tarihi", "Sigortal\u0131n\u0131n \u0130\u015Fe Giri\u015F Tarihi"]) || dateAfterLabels(text, ["\u0130\u015Ften Ayr\u0131l\u0131\u015F Tarihi", "Isten Ayrilis Tarihi"]);
+  const firmaAdi = extractEBildirgeFirma(text);
+  return {
+    yon,
+    ad: nameOk(ad) ? ad.toLocaleUpperCase("tr-TR") : void 0,
+    soyad: nameOk(soyad) ? soyad.toLocaleUpperCase("tr-TR") : void 0,
+    tcNo: tcNo || void 0,
+    isGorev: isGorev ? isGorev.toLocaleUpperCase("tr-TR") : void 0,
+    firmaAdi: firmaAdi ? firmaAdi.toLocaleUpperCase("tr-TR") : void 0,
+    tarih: tarih || void 0
+  };
+}
+function mergeTaseronGrupParse(...parts) {
+  const out = {};
+  for (const part of parts) {
+    if (!part) continue;
+    ["yon", "firmaAdi", "isGorev", "ad", "soyad", "tcNo", "tarih"].forEach((k) => {
+      const v = part[k];
+      if (v != null && String(v).trim() && (out[k] == null || String(out[k]).trim() === "")) {
+        out[k] = v;
+      }
+    });
+  }
+  return out;
+}
+function taseronGrupParseHasIdentity(p) {
+  return Boolean(String(p?.ad || "").trim() && String(p?.soyad || "").trim() && p?.yon);
 }
 
 // src/server/registerApiRoutes.ts
@@ -1666,6 +1954,98 @@ Provide the output strictly conforming to the response schema.
     } catch (error) {
       console.error("Error parsing SGK PDF/Image via Gemini:", error);
       const msg = error.message || "Failed to parse SGK document";
+      const status = /zaman aşımı|timeout|504/i.test(msg) ? 504 : 500;
+      res.status(status).json({ error: msg });
+    }
+  });
+  app2.post("/api/parse-taseron-grup", async (req, res) => {
+    try {
+      const { fileBase64, mimeType, fileName } = req.body;
+      if (!fileBase64 || !mimeType) {
+        return res.status(400).json({ error: "Missing fileBase64 or mimeType in request body" });
+      }
+      const fromFile = parseTaseronGrupMessageMeta({ fileName: String(fileName || "") });
+      let fromPdf = {};
+      if (/pdf/i.test(String(mimeType)) || /\.pdf$/i.test(String(fileName || ""))) {
+        try {
+          const buf = Buffer.from(String(fileBase64), "base64");
+          fromPdf = parseSgkEBildirgeText(extractPdfTextLayout(buf));
+        } catch (pdfErr) {
+          console.warn("ta\u015Feron grup PDF metin \xE7\u0131karma atland\u0131:", pdfErr);
+        }
+      }
+      const fromText = mergeTaseronGrupParse(fromPdf, fromFile);
+      const textComplete = taseronGrupParseHasIdentity(fromText) && Boolean(fromText.firmaAdi && (fromText.tcNo || fromText.tarih));
+      if (textComplete) {
+        return res.json({ success: true, data: fromText, source: "pdf-text" });
+      }
+      const imagePart = {
+        inlineData: {
+          mimeType,
+          data: fileBase64
+        }
+      };
+      const promptText = `
+This is ONE official Turkish SGK e-Bildirge PDF (JasperReports / iText) from the Arnavutk\xF6y \u0130\u015Fe Giri\u015F WhatsApp group.
+Titles are exactly:
+- "S\u0130GORTALI \u0130\u015EE G\u0130R\u0130\u015E B\u0130LD\u0130RGES\u0130" \u2192 yon=giris. Date = \u0130\u015Fe Giri\u015F Tarihi.
+- "S\u0130GORTALI \u0130\u015ETEN AYRILI\u015E B\u0130LD\u0130RGES\u0130" \u2192 yon=cikis. Date = Sigortal\u0131n\u0131n \u0130\u015Ften Ayr\u0131l\u0131\u015F Tarihi (DD.MM.YYYY).
+Never a weekly roster. Prefer the TITLE if both dates appear.
+
+Extract:
+- "yon": giris | cikis from the title as above.
+- "firmaAdi": field 22 "\u0130\u015Fverenin/\u0130\u015Fyerinin/\u0130lgili Kurulu\u015Fun Ad\u0131-Soyad\u0131/\xDCnv." \u2014 the subcontractor unvan (e.g. KUTER ELEKTR\u0130K TAAHH\xDCT...). NOT the address line. NOT Kibrit\xE7i unless Kibrit\xE7i is that unvan.
+- "isGorev": field 14 "Meslek Ad\u0131 ve Kodu" \u2014 the job name without the numeric code (e.g. "Di\u011Fer Elektrik Tesisat\xE7\u0131lar\u0131" from "Di\u011Fer Elektrik Tesisat\xE7\u0131lar\u0131-7411.02").
+- "ad": field 1 Ad\u0131.
+- "soyad": field 2 Soyad\u0131.
+- "tcNo": 11-digit T.C. (boxes may be spaced: 2 6 5 4 \u2026 \u2192 concatenate).
+- "tarih": YYYY-MM-DD as specified by yon.
+
+File name hint (may be empty): ${String(fileName || "")}
+WhatsApp caption is applied on the client (e.g. "Yurt mekanik giri\u015F" \u2192 firma + yon).
+Filename patterns from the live group:
+- "AD SOYAD \u0130\u015EE G\u0130R\u0130\u015E B\u0130LD\u0130RGES\u0130.pdf" \u2192 hire
+- "11-digit-TC_ayrilis.pdf" \u2192 exit / ayr\u0131l\u0131\u015F
+
+Output strictly as JSON per schema. Do not invent a weekly list.
+`;
+      const taseronGrupSchema = {
+        type: import_genai3.Type.OBJECT,
+        properties: {
+          yon: { type: import_genai3.Type.STRING, description: "giris or cikis" },
+          firmaAdi: { type: import_genai3.Type.STRING, description: "Subcontractor company title" },
+          isGorev: { type: import_genai3.Type.STRING, description: "Job / work description (nitelik), not yoklama role" },
+          ad: { type: import_genai3.Type.STRING },
+          soyad: { type: import_genai3.Type.STRING },
+          tcNo: { type: import_genai3.Type.STRING },
+          tarih: { type: import_genai3.Type.STRING, description: "YYYY-MM-DD" }
+        },
+        required: ["yon", "firmaAdi", "isGorev", "ad", "soyad", "tarih"]
+      };
+      try {
+        const { text } = await generateGeminiWithFallback({
+          contents: [imagePart, promptText],
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: taseronGrupSchema
+          },
+          label: "Ta\u015Feron grup evrak analizi"
+        });
+        const parsedData = JSON.parse(text);
+        res.json({
+          success: true,
+          data: mergeTaseronGrupParse(fromText, parsedData),
+          source: "pdf-text+gemini"
+        });
+      } catch (geminiErr) {
+        if (taseronGrupParseHasIdentity(fromText) || fromText.tcNo) {
+          return res.json({ success: true, data: fromText, source: "pdf-text" });
+        }
+        throw geminiErr;
+      }
+    } catch (error) {
+      console.error("Error parsing ta\u015Feron grup PDF/Image:", error);
+      const msg = error.message || "Failed to parse ta\u015Feron group document";
       const status = /zaman aşımı|timeout|504/i.test(msg) ? 504 : 500;
       res.status(status).json({ error: msg });
     }

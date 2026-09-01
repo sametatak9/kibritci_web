@@ -147,10 +147,11 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
         ...fromMsg,
         ...partial,
         yon: fromMsg.yon || partial.yon,
-        firmaAdi: fromMsg.firmaAdi || partial.firmaAdi,
+        firmaAdi: partial.firmaAdi || fromMsg.firmaAdi,
         ad: partial.ad || fromMsg.ad,
         soyad: partial.soyad || fromMsg.soyad,
         tcNo: partial.tcNo || fromMsg.tcNo,
+        isGorev: partial.isGorev || fromMsg.isGorev,
       },
       { fileName: usedName, fallbackYon: fromMsg.yon || fallbackYon }
     );
@@ -299,9 +300,10 @@ export const TaseronGrupKopruTab: React.FC<TaseronGrupKopruTabProps> = ({
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-teal-200 bg-teal-50/80 px-4 py-3 text-[12px] text-teal-950 leading-relaxed">
-        <strong>Taşeron grup:</strong> WhatsApp grubu ({TASERON_GRUP_ADI}) dinlenmez. Gruba düşen her PDF
-        (işe giriş bildirgesi veya ayrılış) buraya bırakılır; alt yazıdaki firma (ör. Yurt mekanik giriş)
-        okunur. <em>Tek mesaj = tek kuyruk kaydı</em>. Kadro bu ekrandan yazılmaz.
+        <strong>Taşeron grup:</strong> WhatsApp grubu ({TASERON_GRUP_ADI}) dinlenmez. Gruba düşen her SGK
+        e-Bildirge PDF’i (SİGORTALI İŞE GİRİŞ / İŞTEN AYRILIŞ BİLDİRGESİ) buraya bırakılır; formdaki ad,
+        TC, meslek ve işveren ünvanı okunur. Alt yazı (ör. Yurt mekanik giriş) firmayı tamamlar.{' '}
+        <em>Tek mesaj = tek kuyruk kaydı</em>. Kadro bu ekrandan yazılmaz.
       </div>
 
       {err ? <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{err}</p> : null}

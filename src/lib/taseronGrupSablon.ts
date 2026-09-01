@@ -80,7 +80,7 @@ export function inferTaseronYonFromText(raw?: string): TaseronGrupYon | null {
     .replace(/ç/g, 'c');
   if (!t.trim()) return null;
   const cikisHit =
-    /isten\s*cikis|isten\s*ayril|cikis\s*bildir|isten\s*cikarma|isten\s*cikaril|isden\s*cikis|isten\s*cikis|_?ayrilis|\bayrilis\b/.test(
+    /isten\s*cikis|isten\s*ayril|cikis\s*bildir|isten\s*cikarma|isten\s*cikaril|isden\s*cikis|isten\s*cikis|_?ayrilis|\bayrilis\b|sigortali\s*isten\s*ayril/.test(
       t
     ) || (/\bcikis\b/.test(t) && !/ise\s*giris|giris\s*bildir/.test(t));
   const girisHit = /ise\s*giris|ise\s*baslama|giris\s*bildir|sigortali\s*ise\s*giris|bildirgesi|\bgiris\b/.test(t);
@@ -192,6 +192,195 @@ export function parseTaseronGrupMessageMeta(opts: {
   };
 }
 
+function firstChunk(raw: string): string {
+  return String(raw || '')
+    .replace(/\s{2,}.*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function escapeRe(label: string): string {
+  return label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function fieldAfterLabel(text: string, label: string): string {
+  const escaped = escapeRe(label);
+  const numbered = new RegExp(`(?:^|\\n)\\s*\\d{1,2}[ \\t]+${escaped}[ \\t]+([^\\n]+)`, 'i');
+  const standalone = new RegExp(`(?:^|\\n)\\s*${escaped}[ \\t]+([^\\n]+)`, 'i');
+  const m = String(text || '').match(numbered) || String(text || '').match(standalone);
+  if (!m?.[1]) return '';
+  return firstChunk(m[1]);
+}
+
+/** JasperReports: değer çoğu kez etiket satırının bir üstünde. */
+function valueAboveLabel(text: string, label: string): string {
+  const escaped = escapeRe(label);
+  const numbered = new RegExp(`^\\s*\\d{1,2}[ \\t]+${escaped}(?:[ \\t]|$)`, 'i');
+  const standalone = new RegExp(`^\\s*${escaped}\\s*$`, 'i');
+  const lines = String(text || '').split(/\n/);
+  for (let i = 0; i < lines.length; i++) {
+    if (!numbered.test(lines[i]) && !standalone.test(lines[i])) continue;
+    for (let j = i - 1; j >= 0 && j >= i - 3; j--) {
+      const prev = firstChunk(lines[j].replace(/^\s*\d{1,2}\s*$/, '').trim());
+      if (!prev || /^\d+$/.test(prev)) continue;
+      if (/bildirge|sosyal g[uü]venlik|kimlik\/adres|hizmet bilgileri/i.test(prev)) continue;
+      if (/^\d{1,2}[ \t]+\S/.test(prev)) continue;
+      return prev;
+    }
+  }
+  return '';
+}
+
+function dateAfterLabels(text: string, labels: string[]): string {
+  const lines = String(text || '').split(/\n/);
+  const fold = (s: string) =>
+    s
+      .toLocaleLowerCase('tr-TR')
+      .replace(/ı/g, 'i')
+      .replace(/ş/g, 's')
+      .replace(/ğ/g, 'g')
+      .replace(/ü/g, 'u')
+      .replace(/ö/g, 'o')
+      .replace(/ç/g, 'c');
+  for (let i = 0; i < lines.length; i++) {
+    const folded = fold(lines[i]);
+    if (!labels.some((lb) => folded.includes(fold(lb)))) continue;
+    const here = parseIsoOrTrDate(lines[i]);
+    if (here) return here;
+    for (const j of [i - 1, i + 1, i - 2]) {
+      if (j < 0 || j >= lines.length) continue;
+      const d = parseIsoOrTrDate(lines[j]);
+      if (d) return d;
+    }
+  }
+  return '';
+}
+
+function extractEBildirgeTc(text: string): string {
+  const src = String(text || '');
+  const afterKimlik = src.split(/K[İI]ML[İI]K NUMARASI/i)[1]?.slice(0, 500) || '';
+  const spacedLine = (chunk: string) =>
+    chunk.match(/(?:^|\n)[ \t]*(\d(?:[ \t]+\d){10})[ \t]*(?:\n|$)/) ||
+    chunk.match(/(\d(?:[ \t]{2,}\d){10})/);
+  const boxed = spacedLine(afterKimlik) || spacedLine(src);
+  const packed = afterKimlik.match(/\b\d{11}\b/) || src.match(/\b\d{11}\b/);
+  const tcNo = digitsTc((boxed?.[1] || packed?.[0] || '').replace(/\s+/g, ''));
+  return tcNo.length === 11 ? tcNo : '';
+}
+
+function extractEBildirgeFirma(text: string): string {
+  const label = /Ad[ıi]-Soyad[ıi]\/[ÜU]nv\.?[^\n]*/i.exec(String(text || ''));
+  if (label && label.index != null) {
+    const following = String(text || '')
+      .slice(label.index + label[0].length)
+      .split(/\n/)
+      .map((ln) => ln.trim())
+      .filter(Boolean);
+    for (const ln of following.slice(0, 5)) {
+      if (/^\d{1,2}$/.test(ln)) continue;
+      const cleaned = ln
+        .replace(/^\s*\d{1,2}\s+/, '')
+        .split(/\s{2,}/)[0]
+        .replace(/\s+(MAHALLE|MAHALLES[İI]|CADDE|SOKAK|BULVAR|[İI]STANBUL|ANKARA).*$/i, '')
+        .trim();
+      if (cleaned.length >= 6 && !/^\d+$/.test(cleaned) && !/adresi/i.test(cleaned)) return cleaned;
+    }
+  }
+  const caps = String(text || '').match(
+    /\n\s*\d{0,2}\s*([A-ZÇĞİÖŞÜÂÎÛ][A-ZÇĞİÖŞÜÂÎÛ0-9 /.'-]{10,}(?:İNŞAAT|INSAAT|ELEKTR[İI]K|TAAHH[ÜU]T|M[ÜU]HEND[İI]SL[İI]K|LTD|T[İI]CARET)[A-ZÇĞİÖŞÜÂÎÛ0-9 /.'-]*)/
+  );
+  return caps?.[1]?.split(/\s{2,}/)[0]?.trim() || '';
+}
+
+/**
+ * SGK e-Bildirge (JasperReports) metni — işe giriş veya işten ayrılış.
+ * WhatsApp grubundaki PDF’lerin gövdesi bu formattadır.
+ */
+export function parseSgkEBildirgeText(raw: string): Partial<TaseronGrupParse> {
+  const text = String(raw || '');
+  if (!/SİGORTALI İŞ|SIGORTALI IS|SOSYAL GÜVENLİK KURUMU|SOSYAL GUVENLIK KURUMU/i.test(text)) {
+    return {};
+  }
+  const yon: TaseronGrupYon | undefined = /İŞTEN AYRILIŞ|ISTEN AYRILIS|İŞTEN ÇIKIŞ|ISTEN CIKIS/i.test(text)
+    ? 'cikis'
+    : /İŞE GİRİŞ BİLDİRGESİ|ISE GIRIS BILDIRGESI/i.test(text)
+      ? 'giris'
+      : inferTaseronYonFromText(text) || undefined;
+
+  const tcNo = extractEBildirgeTc(text);
+  const nameOk = (s: string) => /^[A-ZÇĞİÖŞÜÂÎÛa-zçğıöşü'-]{2,}$/.test(s);
+  const pickName = (...cands: string[]) => cands.map((s) => s.trim()).find(nameOk) || '';
+  const ad = pickName(
+    fieldAfterLabel(text, 'Adı'),
+    fieldAfterLabel(text, 'Adi'),
+    valueAboveLabel(text, 'Adı'),
+    valueAboveLabel(text, 'Adi')
+  );
+  const soyad = pickName(
+    fieldAfterLabel(text, 'Soyadı'),
+    fieldAfterLabel(text, 'Soyadi'),
+    valueAboveLabel(text, 'Soyadı'),
+    valueAboveLabel(text, 'Soyadi')
+  );
+
+  const meslekJunk = /bildirge|hizmet bilgileri|kimlik\/adres|n[uü]fusa kay[ıi]tl[ıi]/i;
+  const pickMeslek = (...cands: string[]) => {
+    for (const raw of cands) {
+      const t = String(raw || '')
+        .replace(/\s*-\d{4}\.\d{2}\s*$/, '')
+        .trim();
+      if (t.length >= 4 && !meslekJunk.test(t)) return t;
+    }
+    return '';
+  };
+  const isGorev = pickMeslek(
+    fieldAfterLabel(text, 'Meslek Adı ve Kodu'),
+    fieldAfterLabel(text, 'Meslek Adi ve Kodu'),
+    valueAboveLabel(text, 'Meslek Adı ve Kodu'),
+    valueAboveLabel(text, 'Meslek Adi ve Kodu')
+  );
+
+  const tarih =
+    yon === 'cikis'
+      ? dateAfterLabels(text, ['İşten Ayrılış Tarihi', 'Isten Ayrilis Tarihi', 'Sigortalının İşten Ayrılış Tarihi']) ||
+        dateAfterLabels(text, ['İşe Giriş Tarihi', 'Ise Giris Tarihi'])
+      : dateAfterLabels(text, ['İşe Giriş Tarihi', 'Ise Giris Tarihi', 'Sigortalının İşe Giriş Tarihi']) ||
+        dateAfterLabels(text, ['İşten Ayrılış Tarihi', 'Isten Ayrilis Tarihi']);
+
+  const firmaAdi = extractEBildirgeFirma(text);
+
+  return {
+    yon,
+    ad: nameOk(ad) ? ad.toLocaleUpperCase('tr-TR') : undefined,
+    soyad: nameOk(soyad) ? soyad.toLocaleUpperCase('tr-TR') : undefined,
+    tcNo: tcNo || undefined,
+    isGorev: isGorev ? isGorev.toLocaleUpperCase('tr-TR') : undefined,
+    firmaAdi: firmaAdi ? firmaAdi.toLocaleUpperCase('tr-TR') : undefined,
+    tarih: tarih || undefined,
+  };
+}
+
+/** Dolu alanlar korunur; boşluklar sonraki kaynaktan doldurulur. */
+export function mergeTaseronGrupParse(
+  ...parts: Array<Partial<TaseronGrupParse> | null | undefined>
+): Partial<TaseronGrupParse> {
+  const out: Partial<TaseronGrupParse> = {};
+  for (const part of parts) {
+    if (!part) continue;
+    (['yon', 'firmaAdi', 'isGorev', 'ad', 'soyad', 'tcNo', 'tarih'] as const).forEach((k) => {
+      const v = part[k];
+      if (v != null && String(v).trim() && (out[k] == null || String(out[k]).trim() === '')) {
+        (out as Record<string, unknown>)[k] = v;
+      }
+    });
+  }
+  return out;
+}
+
+export function taseronGrupParseHasIdentity(p?: Partial<TaseronGrupParse> | null): boolean {
+  return Boolean(String(p?.ad || '').trim() && String(p?.soyad || '').trim() && p?.yon);
+}
+
 /**
  * Gruptan kopyalanan sabit metni veya etiketli satırları okur.
  * Haftalık isim listesi beklenmez — tek kişi.
@@ -199,16 +388,25 @@ export function parseTaseronGrupMessageMeta(opts: {
 export function parseTaseronGrupWhatsAppText(raw: string): Partial<TaseronGrupParse> {
   const text = String(raw || '').trim();
   if (!text) return {};
+  const eBildirge = parseSgkEBildirgeText(text);
   const fromMsg = parseTaseronGrupMessageMeta({ caption: text });
   const adSoyad = labeledValue(text, ['Ad Soyad', 'Adı Soyadı', 'Personel', 'Isim', 'İsim']);
   const split = splitAdSoyad(adSoyad);
-  const ad = labeledValue(text, ['Ad', 'Adı']) || split.ad || fromMsg.ad || '';
-  const soyad = labeledValue(text, ['Soyad', 'Soyadı']) || split.soyad || fromMsg.soyad || '';
-  const firmaAdi = labeledValue(text, ['Firma', 'Taşeron', 'Taseron', 'İşveren', 'Unvan', 'Ünvan', 'Şirket']) || fromMsg.firmaAdi || '';
-  const isGorev = labeledValue(text, ['Yapılan iş', 'Yapilan is', 'İş', 'Is', 'Nitelik', 'Meslek', 'Görev tanımı']);
-  const tcNo = digitsTc(labeledValue(text, ['TC Kimlik', 'TC', 'T.C.', 'Kimlik No']) || text.match(/\b\d{11}\b/)?.[0] || fromMsg.tcNo);
-  const yon = inferTaseronYonFromText(text) || fromMsg.yon || undefined;
+  const ad = eBildirge.ad || labeledValue(text, ['Ad', 'Adı']) || split.ad || fromMsg.ad || '';
+  const soyad = eBildirge.soyad || labeledValue(text, ['Soyad', 'Soyadı']) || split.soyad || fromMsg.soyad || '';
+  const firmaAdi =
+    eBildirge.firmaAdi ||
+    labeledValue(text, ['Firma', 'Taşeron', 'Taseron', 'İşveren', 'Unvan', 'Ünvan', 'Şirket']) ||
+    fromMsg.firmaAdi ||
+    '';
+  const isGorev =
+    eBildirge.isGorev || labeledValue(text, ['Yapılan iş', 'Yapilan is', 'İş', 'Is', 'Nitelik', 'Meslek', 'Görev tanımı']);
+  const tcNo = digitsTc(
+    eBildirge.tcNo || labeledValue(text, ['TC Kimlik', 'TC', 'T.C.', 'Kimlik No']) || text.match(/\b\d{11}\b/)?.[0] || fromMsg.tcNo
+  );
+  const yon = eBildirge.yon || inferTaseronYonFromText(text) || fromMsg.yon || undefined;
   const tarih =
+    eBildirge.tarih ||
     parseIsoOrTrDate(labeledValue(text, ['Giriş tarihi', 'Giris tarihi', 'Çıkış tarihi', 'Cikis tarihi', 'Tarih'])) ||
     parseIsoOrTrDate(text);
   return {
