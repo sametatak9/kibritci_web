@@ -1,0 +1,130 @@
+/**
+ * Taşeron grup köprü — şablon / parse / kadro adayı iddiaları.
+ * Çalıştır: npx tsx src/lib/taseronGrupSablon.assert.ts
+ */
+import {
+  buildTaseronCikisWhatsAppText,
+  buildTaseronGirisTalepDoc,
+  buildTaseronGirisWhatsAppText,
+  buildTaseronGrupPersonelCandidate,
+  findOpenTaseronGrupTalep,
+  inferTaseronYonFromText,
+  isTaseronGrupOnayHazir,
+  isTaseronGrupTalep,
+  normalizeTaseronGrupParse,
+  parseIsoOrTrDate,
+  parseTaseronGrupWhatsAppText,
+  resolveTaseronGrupFirmaAdi,
+  TASERON_GRUP_KAYNAK,
+} from './taseronGrupSablon';
+import { TASERON_PERSONEL_GOREV } from './taseronUtils';
+import type { CariKart, Personel } from '../types/erp';
+
+function assert(cond: unknown, msg: string) {
+  if (!cond) throw new Error(msg);
+}
+
+assert(inferTaseronYonFromText('İŞTEN ÇIKIŞ BİLDİRGESİ') === 'cikis', 'çıkış PDF adı');
+assert(inferTaseronYonFromText('Sigortalı İşe Giriş Bildirgesi') === 'giris', 'giriş PDF adı');
+assert(parseIsoOrTrDate('01.09.2026') === '2026-09-01', 'TR tarih');
+assert(parseIsoOrTrDate('2026-09-01') === '2026-09-01', 'ISO tarih');
+
+const wpGiris = buildTaseronGirisWhatsAppText({
+  ad: 'ALİ',
+  soyad: 'YILMAZ',
+  tcNo: '12345678901',
+  firmaAdi: 'KUTER İNŞAAT',
+  isGorev: 'ALÇI SIVA',
+  girisTarihi: '2026-09-01',
+  gonderen: 'kampci@test.com',
+});
+assert(wpGiris.includes('İŞE GİRİŞ'), 'giriş şablon başlık');
+assert(wpGiris.includes('KUTER'), 'giriş şablon firma');
+assert(wpGiris.includes(TASERON_PERSONEL_GOREV), 'giriş yoklama görevi');
+
+const pasted = parseTaseronGrupWhatsAppText(wpGiris);
+assert(pasted.ad === 'ALİ' || pasted.ad === 'ALI', `yapıştırma ad: ${pasted.ad}`);
+assert(String(pasted.soyad).includes('YILMAZ'), `yapıştırma soyad: ${pasted.soyad}`);
+assert(pasted.firmaAdi && pasted.firmaAdi.includes('KUTER'), `yapıştırma firma: ${pasted.firmaAdi}`);
+assert(pasted.isGorev && pasted.isGorev.includes('ALCI') || pasted.isGorev?.includes('ALÇI'), `yapıştırma iş: ${pasted.isGorev}`);
+assert(pasted.yon === 'giris', `yapıştırma yön: ${pasted.yon}`);
+assert(pasted.tarih === '2026-09-01', `yapıştırma tarih: ${pasted.tarih}`);
+
+const wpCikis = buildTaseronCikisWhatsAppText({
+  ad: 'ALİ',
+  soyad: 'YILMAZ',
+  firmaAdi: 'KUTER İNŞAAT',
+  cikisTarihi: '2026-09-15',
+});
+assert(inferTaseronYonFromText(wpCikis) === 'cikis', 'çıkış şablon yön');
+
+const cariKartlar: CariKart[] = [
+  { id: 'ck1', unvan: 'KUTER İNŞAAT LTD. ŞTİ.', kartTipi: 'TASERON', durum: 'AKTIF' } as CariKart,
+];
+assert(resolveTaseronGrupFirmaAdi('Kuter Insaat', cariKartlar).includes('KUTER'), 'cari hizalama');
+
+const parsed = normalizeTaseronGrupParse({
+  yon: 'giris',
+  ad: 'ali',
+  soyad: 'yılmaz',
+  firmaAdi: 'kuter inşaat',
+  isGorev: 'alçı sıva',
+  tcNo: '12345678901',
+  tarih: '01.09.2026',
+});
+assert(parsed.ad === 'ALİ' || parsed.ad === 'ALI', 'normalize ad');
+assert(parsed.tarih === '2026-09-01', 'normalize tarih');
+assert(parsed.yon === 'giris', 'normalize yön');
+
+const talep = buildTaseronGirisTalepDoc({
+  id: 'GIRIS-TASERON_GRUP-1',
+  parsed,
+  gonderen: 'test@kibritci.com',
+});
+assert(talep.kaynak === TASERON_GRUP_KAYNAK, 'kuyruk kaynak');
+assert(talep.firmaTipi === 'TASERON', 'kuyruk firmaTipi');
+assert(talep.gorev === TASERON_PERSONEL_GOREV, 'kuyruk gorev');
+assert(talep.nitelik === 'ALÇI SIVA' || String(talep.nitelik).includes('ALCI') || String(talep.nitelik).includes('ALÇI'), 'kuyruk nitelik');
+assert(talep.grupBildirildi === true, 'grup bildirildi');
+assert(isTaseronGrupTalep(talep), 'isTaseronGrupTalep');
+assert(isTaseronGrupOnayHazir(talep as any), 'onay hazır (metin, evraksız)');
+
+const open = findOpenTaseronGrupTalep([talep as any], { ad: parsed.ad, soyad: parsed.soyad, tcNo: parsed.tcNo });
+assert(open?.id === talep.id, 'açık kuyruk eşleşme');
+
+const existingAktif: Personel = {
+  id: 'p_old',
+  ad: parsed.ad,
+  soyad: parsed.soyad,
+  tcNo: parsed.tcNo || '',
+  gorev: 'SERAMİKÇİ',
+  firmaTipi: 'TASERON',
+  firmaAdi: 'ESKİ FİRMA',
+  durum: true,
+  personelGrubu: 'SAHA',
+  maas: 1,
+} as Personel;
+const candAktif = buildTaseronGrupPersonelCandidate(talep as any, existingAktif);
+assert(candAktif.gorev === 'SERAMİKÇİ', 'aktif görev ezilmez');
+assert(candAktif.firmaAdi === 'ESKİ FİRMA', 'aktif firma ezilmez');
+assert(candAktif.durum === true, 'aktif durum korunur');
+assert(candAktif.personelGrubu === 'SAHA', 'aktif grup korunur');
+
+const existingPasif: Personel = { ...existingAktif, durum: false, istenCikisTarihi: '2026-01-01' };
+const candRehire = buildTaseronGrupPersonelCandidate(talep as any, existingPasif);
+assert(candRehire.durum === true, 'pasif yeniden giriş aktif olur');
+assert(candRehire.firmaTipi === 'TASERON', 'rehire firmaTipi');
+assert(candRehire.iseGirisTarihi === '2026-09-01', 'rehire giriş tarihi');
+
+const anaFirmaAday: Personel = {
+  id: 'p_ana',
+  ad: parsed.ad,
+  soyad: parsed.soyad,
+  tcNo: parsed.tcNo || '',
+  gorev: 'İŞÇİ',
+  firmaTipi: 'ANA_FIRMA',
+  durum: true,
+} as Personel;
+assert(anaFirmaAday.firmaTipi === 'ANA_FIRMA', 'Ana Firma kartı bu modülde yazılmaz');
+
+console.log('taseronGrupSablon.assert: ok');

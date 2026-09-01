@@ -2980,7 +2980,7 @@ function App() {
     if (has('t cetvel', 't-cetvel', 'cetveli')) return 't_cetveli';
     if (has('bağla', 'bagla', 'karşılaştır', 'karsilastir', 'zincir')) return 'evrak_baglama';
     if (has('etiket', 'nitelik grubu', 'ince grubu')) return 'evrak_etiketleri';
-    if (has('köprü', 'kopru', 'sgk grup', 'arnavutköy', 'arnavutkoy')) return 'grup_kopru';
+    if (has('köprü', 'kopru', 'sgk grup', 'arnavutköy', 'arnavutkoy', 'taşeron grup', 'taseron grup')) return 'grup_kopru';
     if (has('fatura')) return 'fatura_giris';
     if (has('sipariş', 'siparis')) return 'siparis_formu';
     if (has('satın alma', 'satin alma', 'talep', 'po ')) return 'satin_alma';

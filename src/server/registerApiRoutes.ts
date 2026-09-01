@@ -945,6 +945,75 @@ Provide the output strictly conforming to the response schema.
   }
 });
 
+// Taşeron WhatsApp grubu — standart işe giriş / işten çıkış PDF (firma + yapılan iş)
+app.post("/api/parse-taseron-grup", async (req, res) => {
+  try {
+    const { fileBase64, mimeType, fileName } = req.body;
+    if (!fileBase64 || !mimeType) {
+      return res.status(400).json({ error: "Missing fileBase64 or mimeType in request body" });
+    }
+
+    const imagePart = {
+      inlineData: {
+        mimeType: mimeType,
+        data: fileBase64,
+      },
+    };
+
+    const promptText = `
+You are an expert Turkish construction HR clerk.
+This is ONE message from a Taşeron (subcontractor) WhatsApp group: a standard employment PDF or photo.
+Each document is exactly one hire (işe giriş) OR one exit (işten çıkış) — never a weekly roster.
+
+Extract:
+- "yon": "giris" if the title/body is işe giriş / sigortalı işe giriş bildirgesi / işe başlama.
+  "cikis" if işten çıkış / işten ayrılış / çıkış bildirgesi.
+  If both appear, prefer the document TITLE.
+- "firmaAdi": the subcontractor COMPANY name (işveren / taşeron firma / unvan). Not Kibritçi unless Kibritçi is clearly the employer on this form.
+- "isGorev": the work/job description (meslek adı, yapılan iş, görev tanımı, nitelik). Free text of what they do on site.
+- "ad": employee first name.
+- "soyad": employee surname.
+- "tcNo": 11-digit T.C. if present, else empty.
+- "tarih": employment start date for giris, exit date for cikis, YYYY-MM-DD.
+
+File name hint (may be empty): ${String(fileName || '')}
+
+Output strictly as JSON per schema. Do not invent a weekly list.
+`;
+
+    const taseronGrupSchema = {
+      type: Type.OBJECT,
+      properties: {
+        yon: { type: Type.STRING, description: "giris or cikis" },
+        firmaAdi: { type: Type.STRING, description: "Subcontractor company title" },
+        isGorev: { type: Type.STRING, description: "Job / work description (nitelik), not yoklama role" },
+        ad: { type: Type.STRING },
+        soyad: { type: Type.STRING },
+        tcNo: { type: Type.STRING },
+        tarih: { type: Type.STRING, description: "YYYY-MM-DD" },
+      },
+      required: ["yon", "firmaAdi", "isGorev", "ad", "soyad", "tarih"],
+    };
+
+    const { text } = await generateGeminiWithFallback({
+      contents: [imagePart, promptText],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: taseronGrupSchema,
+      },
+      label: 'Taşeron grup evrak analizi',
+    });
+
+    const parsedData = JSON.parse(text);
+    res.json({ success: true, data: parsedData });
+  } catch (error: any) {
+    console.error("Error parsing taşeron grup PDF/Image via Gemini:", error);
+    const msg = error.message || "Failed to parse taşeron group document";
+    const status = /zaman aşımı|timeout|504/i.test(msg) ? 504 : 500;
+    res.status(status).json({ error: msg });
+  }
+});
+
 // API endpoint to parse Turkish ID card (Kimlik) — front/back
 app.post("/api/parse-kimlik", async (req, res) => {
   try {
