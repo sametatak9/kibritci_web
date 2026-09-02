@@ -51,6 +51,22 @@ async function readBearerToken(req: { headers: { authorization?: string } }): Pr
   return header.slice(7).trim() || null;
 }
 
+function withDeadline<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} zaman aşımı (${Math.round(ms / 1000)} sn)`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
 app.get('/api/auth/claims-status', (_req, res) => {
   res.json({ adminConfigured: isFirebaseAdminConfigured() });
 });
@@ -491,7 +507,7 @@ app.post('/api/auth/admin/update-user', async (req, res) => {
   try {
     const idToken = await readBearerToken(req);
     if (!idToken) return res.status(401).json({ error: 'Authorization Bearer token gerekli' });
-    const decoded = await verifyIdToken(idToken);
+    const decoded = await withDeadline(verifyIdToken(idToken), 12000, 'Oturum doğrulama');
     if (!callerIsYonetici(decoded)) {
       return res.status(403).json({ error: 'Yalnızca kurucu veya yönetici üyelik şifresi güncelleyebilir' });
     }
@@ -515,40 +531,60 @@ app.post('/api/auth/admin/update-user', async (req, res) => {
     let created = false;
 
     try {
-      const existing = await admin.auth().getUserByEmail(emailKey);
-      await admin.auth().updateUser(existing.uid, {
-        password: newPassword,
-        emailVerified: true,
-      });
+      const existing = await withDeadline(admin.auth().getUserByEmail(emailKey), 15000, 'Auth kullanıcı okuma');
+      await withDeadline(
+        admin.auth().updateUser(existing.uid, {
+          password: newPassword,
+          emailVerified: true,
+        }),
+        15000,
+        'Auth şifre yazma'
+      );
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code;
       if (code !== 'auth/user-not-found') throw err;
 
-      const kullaniciSnap = await admin.firestore().collection('kullanicilar').doc(emailKey).get();
+      const kullaniciSnap = await withDeadline(
+        admin.firestore().collection('kullanicilar').doc(emailKey).get(),
+        12000,
+        'ERP kullanıcı okuma'
+      );
       if (!kullaniciSnap.exists) {
         return res.status(404).json({
           error: `${emailKey} için ERP kullanıcı kaydı bulunamadı. Önce Admin panelden kullanıcı oluşturun.`,
         });
       }
 
-      await admin.auth().createUser({
-        email: emailKey,
-        password: newPassword,
-        emailVerified: true,
-      });
+      await withDeadline(
+        admin.auth().createUser({
+          email: emailKey,
+          password: newPassword,
+          emailVerified: true,
+        }),
+        15000,
+        'Auth hesap oluşturma'
+      );
       created = true;
     }
 
-    await syncClaimsForEmail(emailKey);
+    await withDeadline(syncClaimsForEmail(emailKey), 15000, 'Rol senkronu').catch((e) => {
+      console.warn('şifre sonrası claim senkronu atlandı:', e);
+    });
 
-    await admin.firestore().collection('portalKullanicilar').doc(emailKey).set(
-      {
-        email: emailKey,
-        password: newPassword,
-        updatedAt: new Date().toISOString(),
-      },
-      { merge: true }
-    );
+    await withDeadline(
+      admin.firestore().collection('portalKullanicilar').doc(emailKey).set(
+        {
+          email: emailKey,
+          password: newPassword,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      ),
+      12000,
+      'portal şifre kaydı'
+    ).catch((e) => {
+      console.warn('portalKullanicilar şifre yazılamadı:', e);
+    });
 
     return res.json({
       success: true,

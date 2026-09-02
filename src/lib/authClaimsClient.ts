@@ -68,17 +68,31 @@ export async function provisionAuthUser(
   return data.claims;
 }
 
-const AUTH_ADMIN_TIMEOUT_MS = 25000;
+const AUTH_ADMIN_TIMEOUT_MS = 45000;
+
+async function withClientTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 async function fetchWithTimeout(url: string, init: RequestInit, ms = AUTH_ADMIN_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await fetch(url, { ...init, signal: controller.signal, cache: 'no-store', credentials: 'same-origin' });
   } catch (err) {
     if ((err as { name?: string })?.name === 'AbortError') {
       throw new Error(
-        'İşlem zaman aşımına uğradı (25 sn). Sunucu yanıt vermedi — birkaç saniye sonra tekrar deneyin.'
+        'İşlem zaman aşımına uğradı. Sunucu yanıt vermedi — sayfayı yenileyip tekrar deneyin.'
       );
     }
     throw err;
@@ -97,7 +111,11 @@ export async function adminUpdateUserPassword(
     throw new Error('Oturum yok. Kurucu hesabıyla yeniden giriş yapıp tekrar deneyin.');
   }
 
-  const idToken = await user.getIdToken();
+  const idToken = await withClientTimeout(
+    user.getIdToken(),
+    12000,
+    'Oturum jetonu alınamadı. Sayfayı yenileyip kurucu hesabıyla tekrar giriş yapın.'
+  );
   const res = await fetchWithTimeout('/api/auth/admin/update-user', {
     method: 'POST',
     headers: {

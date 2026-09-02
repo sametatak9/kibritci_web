@@ -181,6 +181,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
   const [editDurum, setEditDurum] = useState<'AKTİF' | 'KISITLI' | 'ONAY BEKLİYOR'>('ONAY BEKLİYOR');
   const [editPassword, setEditPassword] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editSaveHint, setEditSaveHint] = useState<string | null>(null);
 
   const mergedPending = mergePendingLists(
     firestorePending,
@@ -412,6 +413,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
     setEditYetki(user.yetki || 'MİSAFİR');
     setEditDurum(user.durum || 'ONAY BEKLİYOR');
     setEditPassword('');
+    setEditSaveHint(null);
   };
 
   const handleSaveEditedUser = async (e: React.FormEvent) => {
@@ -424,24 +426,35 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
     }
 
     setIsSavingEdit(true);
+    setEditSaveHint(editPassword ? 'Şifre Auth üzerinde güncelleniyor…' : 'Üyelik bilgileri kaydediliyor…');
+    let passwordChanged = false;
     try {
+      let authCreated = false;
+      if (editPassword) {
+        const authResult = await adminUpdateUserPassword(editingUser.email, editPassword);
+        authCreated = authResult.created;
+        passwordChanged = true;
+        setEditSaveHint('Şifre yazıldı, üyelik kartı kaydediliyor…');
+      }
+
       const tcTrim = editTcNo.trim();
       const matchedByTc = tcTrim
         ? personeller.find((p) => String(p.tcNo || '').trim() === tcTrim)
         : undefined;
 
-      const updatedUser: Kullanici = {
-        ...editingUser,
+      const saved = await saveKullanici({
+        id: editingUser.id,
+        email: editingUser.email,
+        _docId: (editingUser as Kullanici & { _docId?: string })._docId,
         ad: editAd.trim() || matchedByTc?.ad || editingUser.ad,
         soyad: editSoyad.trim() || matchedByTc?.soyad || editingUser.soyad,
         tcNo: tcTrim,
         matchedPersonelId: matchedByTc?.id || editingUser.matchedPersonelId,
-        yetki: editYetki as any,
+        yetki: editYetki as Kullanici['yetki'],
         durum: editDurum,
         sifreSifirlamaTalebi: false,
-      };
-
-      const saved = await saveKullanici(updatedUser);
+        kayitTarihi: editingUser.kayitTarihi,
+      });
 
       setKullanicilar(prev =>
         dedupeKullanicilarByEmail(
@@ -449,19 +462,15 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
         )
       );
 
-      let authCreated = false;
-      if (editPassword) {
-        const authResult = await adminUpdateUserPassword(editingUser.email, editPassword);
-        authCreated = authResult.created;
-      }
+      void syncAuthClaimsFromServer(editingUser.email).catch(() => undefined);
 
-      await syncAuthClaimsFromServer(editingUser.email).catch(() => undefined);
-
-      alert(
-        authCreated
-          ? `✅ ${editingUser.email} için Firebase giriş hesabı oluşturuldu ve şifre atandı. Artık bu şifreyle giriş yapabilir.`
-          : `✅ ${editingUser.email} kullanıcısının bilgileri başarıyla güncellendi!`
-      );
+      const okMsg = authCreated
+        ? `✅ ${editingUser.email} için Firebase giriş hesabı oluşturuldu ve şifre atandı.`
+        : editPassword
+          ? `✅ ${editingUser.email} şifresi güncellendi.`
+          : `✅ ${editingUser.email} bilgileri güncellendi.`;
+      setEditSaveHint(okMsg);
+      alert(okMsg);
       if (addNotification) {
         addNotification(`${editingUser.email} kullanıcısının kişisel bilgileri kurucu tarafından güncellendi.`);
       }
@@ -469,11 +478,13 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
     } catch (err: any) {
       console.error('Kullanıcı düzenleme hatası:', err);
       const msg = String(err?.message || err || '');
-      alert(
-        msg.includes('FIRESTORE_TIMEOUT') || msg.includes('zaman aşımı')
-          ? 'Kayıt zaman aşımına uğradı. Şifre veya bilgiler yazılmış olabilir — listeyi yenileyip tekrar kontrol edin.'
-          : `Hata: ${msg || 'Kullanıcı bilgileri güncellenemedi.'}`
-      );
+      const shown = passwordChanged
+        ? `Şifre Auth tarafında yazıldı ama kart kaydı tamamlanamadı: ${msg}`
+        : msg.includes('FIRESTORE_TIMEOUT') || msg.includes('zaman aşımı')
+          ? 'Kayıt zaman aşımına uğradı. Şifre yazılmış olabilir — listeyi yenileyip tekrar deneyin.'
+          : `Hata: ${msg || 'Kullanıcı bilgileri güncellenemedi.'}`;
+      setEditSaveHint(shown);
+      alert(shown);
     } finally {
       setIsSavingEdit(false);
     }
@@ -1617,10 +1628,18 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                   type="text"
                   value={editPassword}
                   onChange={(e) => setEditPassword(e.target.value)}
+                  autoComplete="new-password"
                   className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 outline-none focus:border-amber-400 transition"
                   placeholder="Yeni şifre (Değiştirmek istemiyorsanız boş bırakın)"
                 />
+                <p className="text-[10px] text-slate-500">Giriş şifresi Firebase Auth’ta değişir. En az 6 karakter.</p>
               </div>
+
+              {editSaveHint && (
+                <p className={`text-[11px] font-semibold ${editSaveHint.startsWith('Hata') || editSaveHint.includes('tamamlanamadı') ? 'text-rose-400' : 'text-amber-300'}`}>
+                  {editSaveHint}
+                </p>
+              )}
 
               <div className="flex gap-2.5 pt-3.5">
                 <button
@@ -1640,7 +1659,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                   ) : (
                     <CheckSquare size={13} />
                   )}
-                  <span>KAYDET</span>
+                  <span>{isSavingEdit ? 'KAYDEDİLİYOR' : 'KAYDET'}</span>
                 </button>
               </div>
             </form>
