@@ -37,6 +37,14 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+app.get('/api/vercel-ping', (_req, res) => {
+  res.status(200).json({
+    ok: true,
+    via: 'express-catchall',
+    timestamp: new Date().toISOString(),
+  });
+});
+
 app.get('/api/public/siparis-health', (_req, res) => {
   res.json({
     ok: true,
