@@ -1,7 +1,7 @@
-// v2026-09-01-phone-cache-bust — eski PWA sekmelerinin yeni paketi alması için
-const SW_VERSION = '2026-09-01-c';
+// v2026-09-02-uyelik-sifre — /api ve POST isteklerini yakalama (şifre güncelleme takılıyordu)
+const SW_VERSION = '2026-09-02-a';
 
-self.addEventListener('install', (e) => {
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
@@ -19,8 +19,13 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
-  if (url.pathname === '/siparis' || url.pathname === '/siparis.html') {
+  const method = String(e.request.method || 'GET').toUpperCase();
+  // API (üyelik şifresi dahil) ve POST gövdeli istekler tarayıcıya bırakılır.
+  // POST gövdesini cache seçeneğiyle yeniden göndermek PWA'da isteği asılı bırakabiliyor.
+  if (url.pathname.startsWith('/api/')) return;
+  if (method !== 'GET' && method !== 'HEAD') return;
+  if (url.pathname === '/siparis' || url.pathname === '/siparis.html' || url.pathname === '/sw.js') {
     return;
   }
-  e.respondWith(fetch(e.request, { cache: 'no-store' }));
+  e.respondWith(fetch(e.request));
 });

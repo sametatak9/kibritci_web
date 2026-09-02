@@ -10,6 +10,9 @@ import {
   normalizeClaimRole,
 } from './roleClaims';
 import { canAccessUyelikAdminPanel } from './yetkiUtils';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 function assert(cond: unknown, msg: string) {
   if (!cond) throw new Error(msg);
@@ -59,5 +62,10 @@ assert(canAccessUyelikAdminPanel('YÖNETİCİ'), 'YÖNETİCİ üyelik paneli');
 assert(canAccessUyelikAdminPanel('FORMEN') === false, 'formen üyelik paneli yok');
 assert(canAccessUyelikAdminPanel('FORMEN', { isPrivilegedAdmin: true }), 'ayrıcalıklı admin override');
 assert(canAccessUyelikAdminPanel('İDARİ_İŞLER'), 'idari işler üyelik paneli');
+
+const sw = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../public/sw.js'), 'utf8');
+assert(sw.includes("url.pathname.startsWith('/api/')"), 'SW /api isteklerini yakalamaz');
+assert(sw.includes("method !== 'GET'"), 'SW POST yakalamaz');
+assert(!/cache:\s*['"]no-store['"]/.test(sw), 'SW POST+no-store yok');
 
 console.log('roleClaims.assert.ts OK');

@@ -1932,6 +1932,21 @@ function registerApiRoutes(app2) {
     if (!header.startsWith("Bearer ")) return null;
     return header.slice(7).trim() || null;
   }
+  function withDeadline(promise, ms, label) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`${label} zaman a\u015F\u0131m\u0131 (${Math.round(ms / 1e3)} sn)`)), ms);
+      promise.then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (err) => {
+          clearTimeout(timer);
+          reject(err);
+        }
+      );
+    });
+  }
   app2.get("/api/auth/claims-status", (_req, res) => {
     res.json({ adminConfigured: isFirebaseAdminConfigured() });
   });
@@ -2302,7 +2317,7 @@ function registerApiRoutes(app2) {
     try {
       const idToken = await readBearerToken(req);
       if (!idToken) return res.status(401).json({ error: "Authorization Bearer token gerekli" });
-      const decoded = await verifyIdToken(idToken);
+      const decoded = await withDeadline(verifyIdToken(idToken), 12e3, "Oturum do\u011Frulama");
       if (!callerIsYonetici(decoded)) {
         return res.status(403).json({ error: "Yaln\u0131zca kurucu veya y\xF6netici \xFCyelik \u015Fifresi g\xFCncelleyebilir" });
       }
@@ -2321,36 +2336,56 @@ function registerApiRoutes(app2) {
       const emailKey = targetEmail;
       let created = false;
       try {
-        const existing = await admin2.auth().getUserByEmail(emailKey);
-        await admin2.auth().updateUser(existing.uid, {
-          password: newPassword,
-          emailVerified: true
-        });
+        const existing = await withDeadline(admin2.auth().getUserByEmail(emailKey), 15e3, "Auth kullan\u0131c\u0131 okuma");
+        await withDeadline(
+          admin2.auth().updateUser(existing.uid, {
+            password: newPassword,
+            emailVerified: true
+          }),
+          15e3,
+          "Auth \u015Fifre yazma"
+        );
       } catch (err) {
         const code = err?.code;
         if (code !== "auth/user-not-found") throw err;
-        const kullaniciSnap = await admin2.firestore().collection("kullanicilar").doc(emailKey).get();
+        const kullaniciSnap = await withDeadline(
+          admin2.firestore().collection("kullanicilar").doc(emailKey).get(),
+          12e3,
+          "ERP kullan\u0131c\u0131 okuma"
+        );
         if (!kullaniciSnap.exists) {
           return res.status(404).json({
             error: `${emailKey} i\xE7in ERP kullan\u0131c\u0131 kayd\u0131 bulunamad\u0131. \xD6nce Admin panelden kullan\u0131c\u0131 olu\u015Fturun.`
           });
         }
-        await admin2.auth().createUser({
-          email: emailKey,
-          password: newPassword,
-          emailVerified: true
-        });
+        await withDeadline(
+          admin2.auth().createUser({
+            email: emailKey,
+            password: newPassword,
+            emailVerified: true
+          }),
+          15e3,
+          "Auth hesap olu\u015Fturma"
+        );
         created = true;
       }
-      await syncClaimsForEmail(emailKey);
-      await admin2.firestore().collection("portalKullanicilar").doc(emailKey).set(
-        {
-          email: emailKey,
-          password: newPassword,
-          updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-        },
-        { merge: true }
-      );
+      await withDeadline(syncClaimsForEmail(emailKey), 15e3, "Rol senkronu").catch((e) => {
+        console.warn("\u015Fifre sonras\u0131 claim senkronu atland\u0131:", e);
+      });
+      await withDeadline(
+        admin2.firestore().collection("portalKullanicilar").doc(emailKey).set(
+          {
+            email: emailKey,
+            password: newPassword,
+            updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+          },
+          { merge: true }
+        ),
+        12e3,
+        "portal \u015Fifre kayd\u0131"
+      ).catch((e) => {
+        console.warn("portalKullanicilar \u015Fifre yaz\u0131lamad\u0131:", e);
+      });
       return res.json({
         success: true,
         created,
