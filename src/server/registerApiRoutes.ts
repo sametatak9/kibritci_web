@@ -18,13 +18,13 @@ import {
 } from './authClaimsService';
 import {
   enqueueTaseronGrupParse,
-  handleWhatsAppTaseronMessages,
   intakeSecretOk,
   isTaseronGrupIntakeConfigured,
-  isWhatsAppTaseronWebhookConfigured,
   parseTaseronGrupUpload,
   taseronGrupOtomasyonSozlesme,
 } from './taseronGrupIntake';
+import whatsappTaseronWebhookHandler from './whatsappTaseronWebhookHttp';
+import whatsappKayitBildirHandler from './whatsappKayitBildirHttp';
 
 export function registerApiRoutes(app: Express): void {
 
@@ -1059,39 +1059,12 @@ app.post("/api/taseron-grup-intake", async (req, res) => {
   }
 });
 
-app.get("/api/webhooks/whatsapp-taseron-grup", (req, res) => {
-  const mode = String(req.query['hub.mode'] || '');
-  const token = String(req.query['hub.verify_token'] || '');
-  const challenge = String(req.query['hub.challenge'] || '');
-  const expected = String(process.env.WHATSAPP_VERIFY_TOKEN || '').trim();
-  if (mode === 'subscribe' && expected && token === expected) {
-    return res.status(200).send(challenge);
-  }
-  res.status(403).json({ error: 'WhatsApp verify token uyuşmadı veya tanımlı değil.' });
+app.all('/api/webhooks/whatsapp-taseron-grup', (req, res) => {
+  void whatsappTaseronWebhookHandler(req, res);
 });
 
-app.post("/api/webhooks/whatsapp-taseron-grup", async (req, res) => {
-  if (!isWhatsAppTaseronWebhookConfigured()) {
-    return res.status(503).json({
-      error: 'WhatsApp otomasyonu yapılandırılmamış. Mevcut grup dinlenemez; WHATSAPP_ACCESS_TOKEN + WHATSAPP_VERIFY_TOKEN gerekir.',
-    });
-  }
-  try {
-    const messages: Array<{ type?: string; document?: { id?: string } }> = [];
-    const entries = Array.isArray(req.body?.entry) ? req.body.entry : [];
-    for (const entry of entries) {
-      const changes = Array.isArray(entry?.changes) ? entry.changes : [];
-      for (const change of changes) {
-        const batch = change?.value?.messages;
-        if (Array.isArray(batch)) messages.push(...batch);
-      }
-    }
-    const result = await handleWhatsAppTaseronMessages(messages);
-    res.status(200).json({ success: true, ...result });
-  } catch (error: any) {
-    console.error('WhatsApp taşeron webhook:', error);
-    res.status(200).json({ success: false, error: error.message || 'webhook hata' });
-  }
+app.all('/api/whatsapp-kayit-bildir', (req, res) => {
+  void whatsappKayitBildirHandler(req, res);
 });
 
 // API endpoint to parse Turkish ID card (Kimlik) — front/back

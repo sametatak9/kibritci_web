@@ -1,20 +1,16 @@
 /**
  * Vercel Node function — üyelik şifresi (Express / serverless-http YOK).
- * api/health.js ile aynı kalıp: küçük, hızlı. api/ CJS.
+ * Hobby plan maxDuration 10 (20 geçersiz sayılıp tüm deploy'u düşürebilir).
+ * Yetki: JWT claim + kurucu e-posta; Firestore rolüne güvenilmez.
  */
 'use strict';
-
-const admin = require('firebase-admin');
 
 const FOUNDER_EMAILS = new Set(['santiye@kibritci.com', 'sametatak9@gmail.com']);
 const SECONDARY_ADMINS = new Set(['mudur@gmail.com']);
 const ADMIN_ROLES = new Set(['KURUCU', 'YÖNETİCİ', 'YONETICI']);
 
 function json(res, status, body) {
-  res.statusCode = status;
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store');
-  res.end(JSON.stringify(body));
+  res.status(status).json(body);
 }
 
 function normalizeEmail(value) {
@@ -29,12 +25,11 @@ function getBearerToken(req) {
   return (m && m[1] && m[1].trim()) || '';
 }
 
-function initAdmin() {
-  if (admin.apps.length) return admin.app();
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!raw) return null;
-  const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  return admin.initializeApp({ credential: admin.credential.cert(parsed) });
+function callerMayManage(decoded) {
+  const email = normalizeEmail(decoded && decoded.email);
+  if (FOUNDER_EMAILS.has(email) || SECONDARY_ADMINS.has(email)) return true;
+  const role = String((decoded && (decoded.role || decoded.rol)) || '').toLocaleUpperCase('tr-TR');
+  return ADMIN_ROLES.has(role);
 }
 
 function readJsonBody(req, timeoutMs) {
@@ -82,15 +77,6 @@ function readJsonBody(req, timeoutMs) {
   });
 }
 
-function callerMayManage(decoded, firestoreRole) {
-  const email = normalizeEmail(decoded.email);
-  if (FOUNDER_EMAILS.has(email) || SECONDARY_ADMINS.has(email)) return true;
-  const claimRole = String(decoded.role || decoded.rol || '')
-    .toLocaleUpperCase('tr-TR');
-  const role = String(firestoreRole || claimRole || '').toLocaleUpperCase('tr-TR');
-  return ADMIN_ROLES.has(role);
-}
-
 async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
@@ -113,9 +99,31 @@ async function handler(req, res) {
       return;
     }
 
-    let app;
+    let admin;
     try {
-      app = initAdmin();
+      admin = require('firebase-admin');
+    } catch (err) {
+      json(res, 503, {
+        success: false,
+        error: 'firebase-admin yüklenemedi.',
+        detail: err instanceof Error ? err.message : String(err),
+      });
+      return;
+    }
+
+    try {
+      if (!admin.apps.length) {
+        const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+        if (!raw) {
+          json(res, 503, {
+            success: false,
+            error: 'Sunucu yapılandırması eksik (FIREBASE_SERVICE_ACCOUNT_JSON).',
+          });
+          return;
+        }
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        admin.initializeApp({ credential: admin.credential.cert(parsed) });
+      }
     } catch (err) {
       json(res, 503, {
         success: false,
@@ -124,39 +132,16 @@ async function handler(req, res) {
       });
       return;
     }
-    if (!app) {
-      json(res, 503, {
-        success: false,
-        error: 'Sunucu yapılandırması eksik (FIREBASE_SERVICE_ACCOUNT_JSON).',
-      });
-      return;
-    }
 
     const decoded = await admin.auth().verifyIdToken(token);
-    const callerEmail = normalizeEmail(decoded.email);
-    if (!callerEmail) {
-      json(res, 401, { success: false, error: 'Oturum e-postası yok.' });
-      return;
-    }
-
-    let firestoreRole = '';
-    if (!callerMayManage(decoded, '')) {
-      try {
-        const snap = await admin.firestore().collection('kullanicilar').doc(callerEmail).get();
-        firestoreRole = String(snap.exists ? snap.data().rol || snap.data().yetki || '' : '');
-      } catch {
-        firestoreRole = '';
-      }
-    }
-
-    if (!callerMayManage(decoded, firestoreRole)) {
+    if (!callerMayManage(decoded)) {
       json(res, 403, { success: false, error: 'Bu işlem için kurucu / yönetici yetkisi gerekir.' });
       return;
     }
 
     const body = await readJsonBody(req);
     const targetEmail = normalizeEmail(body.email);
-    const newPassword = String(body.password || body.newPassword || '');
+    const newPassword = String(body.password || body.newPassword || '').trim();
     const displayName = typeof body.displayName === 'string' ? body.displayName.trim() : '';
 
     if (!targetEmail || !targetEmail.includes('@')) {
@@ -179,6 +164,14 @@ async function handler(req, res) {
       await admin.auth().updateUser(uid, payload);
     } catch (err) {
       if (!err || err.code !== 'auth/user-not-found') throw err;
+      const snap = await admin.firestore().collection('kullanicilar').doc(targetEmail).get();
+      if (!snap.exists) {
+        json(res, 404, {
+          success: false,
+          error: `${targetEmail} için ERP kullanıcı kaydı bulunamadı. Önce Admin panelden kullanıcı oluşturun.`,
+        });
+        return;
+      }
       const createdUser = await admin.auth().createUser({
         email: targetEmail,
         password: newPassword,
@@ -198,4 +191,4 @@ async function handler(req, res) {
 }
 
 module.exports = handler;
-module.exports.config = { maxDuration: 20 };
+module.exports.config = { maxDuration: 10 };

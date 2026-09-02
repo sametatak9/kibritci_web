@@ -1,5 +1,6 @@
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import express from 'express';
-import { registerApiRoutes } from '../src/server/registerApiRoutes';
+import { registerApiRoutes } from './registerApiRoutes';
 
 const app = express();
 
@@ -24,12 +25,12 @@ app.use('/api', (_req, res) => {
 });
 
 /**
- * Vercel Node zaten Node req/res verir. serverless-http Lambda event bekler;
- * gövde akışını tüketmeden bekleyince FUNCTION_INVOCATION_TIMEOUT (504) oluşuyordu.
+ * Vercel Node zaten Node req/res verir. Express uygulamasını doğrudan çağır.
+ * serverless-http Lambda event bekleyince FUNCTION_INVOCATION_TIMEOUT oluşuyordu.
+ * Bu dosya api/ altında DEĞİL — Vercel onu ayrı fonksiyon sanmasın.
  */
-export const config = {
-  api: { bodyParser: false as const },
-  maxDuration: 60,
-};
+export function vercelExpressHandler(req: IncomingMessage, res: ServerResponse): void {
+  app(req as express.Request, res as express.Response);
+}
 
-export default app;
+export default vercelExpressHandler;
