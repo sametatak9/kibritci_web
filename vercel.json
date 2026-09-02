@@ -3,11 +3,17 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/((?!health$).*)", "destination": "/api/[...path]" },
+    { "source": "/api/((?!health$|update-user$|vercel-ping$).*)", "destination": "/api/[...path]" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "functions": {
     "api/health.js": {
+      "maxDuration": 10
+    },
+    "api/update-user.js": {
+      "maxDuration": 20
+    },
+    "api/vercel-ping.js": {
       "maxDuration": 10
     },
     "api/[...path].js": {

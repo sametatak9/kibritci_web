@@ -27,6 +27,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // src/lib/roleClaims.ts
 function isFounderEmail(email) {
@@ -398,6 +399,12 @@ var init_akvizyonNobetAutoArchive = __esm({
 });
 
 // api/handler.ts
+var handler_exports = {};
+__export(handler_exports, {
+  config: () => config,
+  default: () => handler_default
+});
+module.exports = __toCommonJS(handler_exports);
 var import_express = __toESM(require("express"));
 
 // src/server/registerApiRoutes.ts
@@ -689,7 +696,10 @@ function isFirebaseAdminConfigured() {
   return Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_APPLICATION_CREDENTIALS);
 }
 function getFirebaseAdmin() {
-  if (initialized) return import_firebase_admin.default;
+  if (initialized || import_firebase_admin.default.apps.length) {
+    initialized = true;
+    return import_firebase_admin.default;
+  }
   const json = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
   if (json) {
     const cred = JSON.parse(json);
@@ -1920,6 +1930,13 @@ function registerApiRoutes(app2) {
       firebase: "kibritci-erp"
     });
   });
+  app2.get("/api/vercel-ping", (_req, res) => {
+    res.status(200).json({
+      ok: true,
+      via: "express-catchall",
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  });
   app2.get("/api/public/siparis-health", (_req, res) => {
     res.json({
       ok: true,
@@ -2310,7 +2327,7 @@ function registerApiRoutes(app2) {
       return res.status(500).json({ error: message });
     }
   });
-  app2.post("/api/auth/admin/update-user", async (req, res) => {
+  async function handleAdminUpdateUser(req, res) {
     if (!isFirebaseAdminConfigured()) {
       return res.status(503).json({ error: "Firebase Admin yap\u0131land\u0131r\u0131lmam\u0131\u015F" });
     }
@@ -2322,7 +2339,7 @@ function registerApiRoutes(app2) {
         return res.status(403).json({ error: "Yaln\u0131zca kurucu veya y\xF6netici \xFCyelik \u015Fifresi g\xFCncelleyebilir" });
       }
       const targetEmail = String(req.body?.email || "").trim().toLowerCase();
-      const newPassword = String(req.body?.password || "").trim();
+      const newPassword = String(req.body?.password || req.body?.newPassword || "").trim();
       if (!targetEmail) {
         return res.status(400).json({ error: "hedef e-posta (email) zorunludur" });
       }
@@ -2395,7 +2412,12 @@ function registerApiRoutes(app2) {
       const message = err instanceof Error ? err.message : "Kullan\u0131c\u0131 g\xFCncelleme ba\u015Far\u0131s\u0131z";
       return res.status(500).json({ error: message });
     }
+  }
+  app2.get("/api/update-user", (_req, res) => {
+    res.status(200).json({ ok: true, route: "update-user", via: "express" });
   });
+  app2.post("/api/update-user", handleAdminUpdateUser);
+  app2.post("/api/auth/admin/update-user", handleAdminUpdateUser);
   app2.post("/api/auth/sync-claims", async (req, res) => {
     if (!isFirebaseAdminConfigured()) {
       return res.status(503).json({
@@ -3541,30 +3563,40 @@ L\xFCtfen en uygun kategoriyi 'detectedType' alan\u0131na atay\u0131p d\xF6k\xFC
 
 // api/handler.ts
 var app = (0, import_express.default)();
-app.use(import_express.default.json({ limit: "50mb" }));
-app.use(import_express.default.urlencoded({ limit: "50mb", extended: true }));
-registerApiRoutes(app);
-var serverlessHttp = require("serverless-http");
-var slsHandler = typeof serverlessHttp === "function" ? serverlessHttp(app, {
-  binary: ["image/*", "application/pdf", "application/octet-stream"]
-}) : serverlessHttp.default(app, {
-  binary: ["image/*", "application/pdf", "application/octet-stream"]
-});
-async function vercelHandler(req, res) {
-  try {
-    return await slsHandler(req, res);
-  } catch (err) {
-    console.error("Vercel API crash:", err);
-    const message = err instanceof Error ? err.message : "Internal server error";
-    if (!res.headersSent) {
-      res.status(500).json({ success: false, error: message });
-    }
+app.use((req, res, next) => {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
+    next();
+    return;
   }
-}
-var vercelConfig = {
+  import_express.default.json({ limit: "50mb" })(req, res, next);
+});
+app.use((req, res, next) => {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
+    next();
+    return;
+  }
+  import_express.default.urlencoded({ limit: "50mb", extended: true })(req, res, next);
+});
+registerApiRoutes(app);
+app.use("/api", (_req, res) => {
+  res.status(404).json({ success: false, error: "API yolu bulunamad\u0131" });
+});
+var config = {
   api: { bodyParser: false },
   maxDuration: 60
 };
-module.exports = vercelHandler;
-module.exports.config = vercelConfig;
+var handler_default = app;
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  config
+});
+(() => {
+  const exp = module.exports;
+  const fn = exp && typeof exp.default === "function" ? exp.default : exp;
+  const cfg = exp && exp.config;
+  if (typeof fn === "function") {
+    module.exports = fn;
+    if (cfg) module.exports.config = cfg;
+  }
+})();
 //# sourceMappingURL=%5B...path%5D.js.map

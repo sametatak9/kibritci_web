@@ -7,7 +7,10 @@ export function isFirebaseAdminConfigured(): boolean {
 }
 
 export function getFirebaseAdmin(): typeof admin {
-  if (initialized) return admin;
+  if (initialized || admin.apps.length) {
+    initialized = true;
+    return admin;
+  }
 
   const json = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
   if (json) {

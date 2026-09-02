@@ -87,8 +87,15 @@ async function withClientTimeout<T>(promise: Promise<T>, ms: number, message: st
 async function fetchWithTimeout(url: string, init: RequestInit, ms = AUTH_ADMIN_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
+  const method = String(init.method || 'GET').toUpperCase();
+  const cacheMode = method === 'GET' || method === 'HEAD' ? 'no-store' : 'default';
   try {
-    return await fetch(url, { ...init, signal: controller.signal, cache: 'no-store', credentials: 'same-origin' });
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      cache: cacheMode,
+      credentials: 'same-origin',
+    });
   } catch (err) {
     if ((err as { name?: string })?.name === 'AbortError') {
       throw new Error(
@@ -116,17 +123,22 @@ export async function adminUpdateUserPassword(
     12000,
     'Oturum jetonu alınamadı. Sayfayı yenileyip kurucu hesabıyla tekrar giriş yapın.'
   );
-  const res = await fetchWithTimeout('/api/auth/admin/update-user', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      'Content-Type': 'application/json',
+  /** Catch-all Express Vercel'de 504 veriyordu; ayrı hafif fonksiyon. */
+  const res = await fetchWithTimeout(
+    '/api/update-user',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: email.trim().toLowerCase(),
+        password,
+      }),
     },
-    body: JSON.stringify({
-      email: email.trim().toLowerCase(),
-      password,
-    }),
-  });
+    20_000,
+  );
 
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
