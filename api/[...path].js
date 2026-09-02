@@ -2327,7 +2327,7 @@ function registerApiRoutes(app2) {
       return res.status(500).json({ error: message });
     }
   });
-  app2.post("/api/auth/admin/update-user", async (req, res) => {
+  async function handleAdminUpdateUser(req, res) {
     if (!isFirebaseAdminConfigured()) {
       return res.status(503).json({ error: "Firebase Admin yap\u0131land\u0131r\u0131lmam\u0131\u015F" });
     }
@@ -2339,7 +2339,7 @@ function registerApiRoutes(app2) {
         return res.status(403).json({ error: "Yaln\u0131zca kurucu veya y\xF6netici \xFCyelik \u015Fifresi g\xFCncelleyebilir" });
       }
       const targetEmail = String(req.body?.email || "").trim().toLowerCase();
-      const newPassword = String(req.body?.password || "").trim();
+      const newPassword = String(req.body?.password || req.body?.newPassword || "").trim();
       if (!targetEmail) {
         return res.status(400).json({ error: "hedef e-posta (email) zorunludur" });
       }
@@ -2412,7 +2412,12 @@ function registerApiRoutes(app2) {
       const message = err instanceof Error ? err.message : "Kullan\u0131c\u0131 g\xFCncelleme ba\u015Far\u0131s\u0131z";
       return res.status(500).json({ error: message });
     }
+  }
+  app2.get("/api/update-user", (_req, res) => {
+    res.status(200).json({ ok: true, route: "update-user", via: "express" });
   });
+  app2.post("/api/update-user", handleAdminUpdateUser);
+  app2.post("/api/auth/admin/update-user", handleAdminUpdateUser);
   app2.post("/api/auth/sync-claims", async (req, res) => {
     if (!isFirebaseAdminConfigured()) {
       return res.status(503).json({

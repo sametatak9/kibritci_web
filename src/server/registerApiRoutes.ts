@@ -508,7 +508,7 @@ app.post('/api/auth/provision-user', async (req, res) => {
   }
 });
 
-app.post('/api/auth/admin/update-user', async (req, res) => {
+async function handleAdminUpdateUser(req: { headers: { authorization?: string }; body?: Record<string, unknown> }, res: import('express').Response) {
   if (!isFirebaseAdminConfigured()) {
     return res.status(503).json({ error: 'Firebase Admin yapılandırılmamış' });
   }
@@ -521,7 +521,7 @@ app.post('/api/auth/admin/update-user', async (req, res) => {
     }
 
     const targetEmail = String(req.body?.email || '').trim().toLowerCase();
-    const newPassword = String(req.body?.password || '').trim();
+    const newPassword = String(req.body?.password || req.body?.newPassword || '').trim();
 
     if (!targetEmail) {
       return res.status(400).json({ error: 'hedef e-posta (email) zorunludur' });
@@ -605,7 +605,13 @@ app.post('/api/auth/admin/update-user', async (req, res) => {
     const message = err instanceof Error ? err.message : 'Kullanıcı güncelleme başarısız';
     return res.status(500).json({ error: message });
   }
+}
+
+app.get('/api/update-user', (_req, res) => {
+  res.status(200).json({ ok: true, route: 'update-user', via: 'express' });
 });
+app.post('/api/update-user', handleAdminUpdateUser);
+app.post('/api/auth/admin/update-user', handleAdminUpdateUser);
 
 app.post('/api/auth/sync-claims', async (req, res) => {
   if (!isFirebaseAdminConfigured()) {
