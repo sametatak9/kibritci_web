@@ -46,6 +46,37 @@ export function isFounderEmail(email?: string | null): boolean {
   return (FOUNDER_EMAILS as readonly string[]).includes(key);
 }
 
+/** Kurucu / müdür e-postaları — üyelik paneli süper-admin */
+export const PRIVILEGED_ADMIN_EMAILS = [
+  ...FOUNDER_EMAILS,
+  'mudur@gmail.com',
+] as const;
+
+export function isPrivilegedAdminEmail(email?: string | null): boolean {
+  const key = email?.trim().toLowerCase() || '';
+  return (PRIVILEGED_ADMIN_EMAILS as readonly string[]).includes(key);
+}
+
+/** Auth custom claim veya Firestore yetki: üyelik kaydı yönetebilir */
+export function isPortalAdminRole(yetki?: string | null): boolean {
+  const role = normalizeClaimRole(yetki);
+  return role === 'YÖNETİCİ' || role === 'KURUCU';
+}
+
+/**
+ * Üyelik şifresi / hesap güncelleme: kurucu e-posta veya KURUCU / YÖNETİCİ claim.
+ * E-posta karşılaştırması küçük harfe indirilir (Google Auth karışık büyük/küçük harf dönebilir).
+ */
+export function callerCanManageAuthUsers(decoded: {
+  role?: string;
+  email?: string;
+  [key: string]: unknown;
+}): boolean {
+  const email = String(decoded.email || '');
+  if (isFounderEmail(email) || isPrivilegedAdminEmail(email)) return true;
+  return isPortalAdminRole(String(decoded.role || ''));
+}
+
 export function getFounderCanonicalPassword(email: string): string | undefined {
   return FOUNDER_PASSWORDS[email.trim().toLowerCase()];
 }

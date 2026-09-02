@@ -169,7 +169,7 @@ export function hasDuplicateKullaniciEmails(users: KullaniciLike[]): boolean {
   return false;
 }
 
-/** E-posta anahtarlı belgeye yazar; eski UID belgelerini atomik siler */
+/** E-posta anahtarlı belgeye yazar; bilinen eski UID belgesini siler (koleksiyon taramaz) */
 export async function saveKullanici(user: KullaniciLike): Promise<KullaniciLike> {
   const emailKey = kullaniciDocId(user.email);
   if (!emailKey) throw new Error('Geçersiz e-posta');
@@ -181,24 +181,25 @@ export async function saveKullanici(user: KullaniciLike): Promise<KullaniciLike>
     yetkiUpdatedAt: user.yetkiUpdatedAt || new Date().toISOString(),
   };
 
-  const all = await fetchCollection<KullaniciLike & { id: string }>('kullanicilar');
-  const orphanIds = all
-    .filter((u) => {
-      const uEmail = u.email?.trim().toLowerCase();
-      return (uEmail === emailKey || u.id === emailKey) && u.id !== emailKey;
-    })
-    .map((u) => u.id);
+  const payload = stripInternalFields(canonical);
+  const orphanId =
+    user._docId && user._docId !== emailKey
+      ? user._docId
+      : user.id && user.id !== emailKey
+        ? user.id
+        : null;
 
-  const batch = writeBatch(db);
-  batch.set(
-    doc(db, 'kullanicilar', emailKey),
-    stripInternalFields(canonical),
-    { merge: false }
-  );
-  for (const orphanId of orphanIds) {
+  if (orphanId) {
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'kullanicilar', emailKey), payload, { merge: true });
     batch.delete(doc(db, 'kullanicilar', orphanId));
+    await withTimeout(batch.commit(), 25000);
+  } else {
+    await withTimeout(
+      setDoc(doc(db, 'kullanicilar', emailKey), payload, { merge: true }),
+      25000
+    );
   }
-  await withTimeout(batch.commit(), 25000);
 
   return canonical;
 }

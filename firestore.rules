@@ -22,7 +22,8 @@ service cloud.firestore {
     function isFounderEmail() {
       return isSignedIn()
         && !isAnonymous()
-        && request.auth.token.email in ['sametatak9@gmail.com', 'santiye@kibritci.com'];
+        && request.auth.token.email != null
+        && request.auth.token.email.matches('(?i)^(sametatak9@gmail\\.com|santiye@kibritci\\.com)$');
     }
 
     // Custom Claims: role + durum=AKTİF (veya ASCII AKTIF) + e-posta oturumu (anonim değil)
@@ -39,7 +40,7 @@ service cloud.firestore {
     }
 
     function isYonetici() {
-      return hasPortalAccess() && role() == 'YÖNETİCİ';
+      return hasPortalAccess() && (role() == 'YÖNETİCİ' || role() == 'KURUCU');
     }
 
     function isFinanceDesk() {

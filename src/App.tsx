@@ -173,7 +173,7 @@ import { installReportEmailGlobalBridge } from './lib/reportEmail';
 import { CANONICAL_ANA_FIRMA_ADI, isKibritciCompany, normalizeTurkishName } from './lib/yoklamaUtils';
 import { findPersonelMatches, pickBestPersonelMatch } from './lib/personelMatchUtils';
 import { suppressPersonelTcsFromDeleted } from './lib/personelSeedSuppress';
-import { isActivePortalDurum, isFounderEmail } from './lib/roleClaims';
+import { isActivePortalDurum, isFounderEmail, isPrivilegedAdminEmail } from './lib/roleClaims';
 import {
   buildSaIrsaliyeFormPrefill,
   type SaIrsaliyeFormPrefill,
@@ -384,9 +384,8 @@ function App() {
       yetki === 'YÖNETİCİ' ||
       yetki === 'KURUCU' ||
       yetki === 'PROJE_MÜDÜRÜ' ||
-      email === 'sametatak9@gmail.com' ||
-      email === SECONDARY_ADMIN_EMAIL ||
-      email === 'santiye@kibritci.com';
+      isFounderEmail(email) ||
+      email === SECONDARY_ADMIN_EMAIL;
     if (!(yonetici || isIdariIslerRole(yetki) || yetki === 'FORMEN')) return;
     setIsMobileDirect(true);
     localStorage.setItem('kibritci_mobile_direct', 'true');
@@ -3249,7 +3248,7 @@ function App() {
     : currentUser;
   const userYetki = normalizeYetki(matchedU?.yetki);
   const emailLower = currentUser?.email?.toLowerCase();
-  const isFounderAccount = emailLower === 'sametatak9@gmail.com';
+  const isFounderAccount = isFounderEmail(emailLower);
   const isSecondaryAdmin = emailLower === SECONDARY_ADMIN_EMAIL;
   const isPrivilegedAdmin = isFounderAccount || isSecondaryAdmin;
   const canSeeUyelikAdmin = canAccessUyelikAdminPanel(userYetki, { isPrivilegedAdmin });
@@ -3783,7 +3782,7 @@ function App() {
             const matchedUser = findKullaniciByEmail(kullanicilar, currentUser?.email);
             const matchedYetki = normalizeYetki(matchedUser?.yetki);
             const currentEmail = currentUser?.email?.toLowerCase();
-            const privileged = currentEmail === 'sametatak9@gmail.com' || currentEmail === SECONDARY_ADMIN_EMAIL;
+            const privileged = isPrivilegedAdminEmail(currentEmail) || isFounderEmail(currentEmail);
             const hasActiveMobileRole = isMobileRole(matchedYetki) && isActivePortalDurum(matchedUser?.durum);
             const missingAccount = !matchedUser && !isFounderEmail(currentEmail);
             const isBlocked =

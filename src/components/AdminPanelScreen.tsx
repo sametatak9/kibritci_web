@@ -21,6 +21,7 @@ import { isFirestoreWriteFailure } from '../lib/bekleyenUyelik';
 import { fetchCollection, removeDocument, saveDocument } from '../lib/firebase';
 import { getMobileRoleDisplayName, isMobileRole } from '../lib/yetkiUtils';
 import { provisionAuthUser, syncAuthClaimsFromServer, adminUpdateUserPassword } from '../lib/authClaimsClient';
+import { isFounderEmail, isPortalAdminRole, isPrivilegedAdminEmail } from '../lib/roleClaims';
 import {
   createProgramVeriYedegi,
   fetchVeriKorumaOzeti,
@@ -111,6 +112,13 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
   uyelikOnly = false,
 }) => {
   const visibleKullanicilar = dedupeKullanicilarByEmail(kullanicilar);
+  const currentEmailLower = String(currentUser?.email || '').trim().toLowerCase();
+  const selfRecord = findKullaniciByEmail(visibleKullanicilar, currentEmailLower);
+  const canEditUyelikKaydi =
+    isFounderEmail(currentEmailLower) ||
+    isPrivilegedAdminEmail(currentEmailLower) ||
+    isPortalAdminRole(selfRecord?.yetki) ||
+    isPortalAdminRole(currentUser?.yetki);
   const [activeTab, setActiveTab] = useState<'users' | 'permissions' | 'pending' | 'create' | 'errors' | 'backup'>(
     'users'
   );
@@ -417,12 +425,6 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
 
     setIsSavingEdit(true);
     try {
-      let authCreated = false;
-      if (editPassword) {
-        const authResult = await adminUpdateUserPassword(editingUser.email, editPassword);
-        authCreated = authResult.created;
-      }
-
       const tcTrim = editTcNo.trim();
       const matchedByTc = tcTrim
         ? personeller.find((p) => String(p.tcNo || '').trim() === tcTrim)
@@ -440,12 +442,18 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
       };
 
       const saved = await saveKullanici(updatedUser);
-      
+
       setKullanicilar(prev =>
         dedupeKullanicilarByEmail(
           prev.map(u => u.email.toLowerCase() === editingUser.email.toLowerCase() ? { ...u, ...saved } : u)
         )
       );
+
+      let authCreated = false;
+      if (editPassword) {
+        const authResult = await adminUpdateUserPassword(editingUser.email, editPassword);
+        authCreated = authResult.created;
+      }
 
       await syncAuthClaimsFromServer(editingUser.email).catch(() => undefined);
 
@@ -460,7 +468,12 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
       setEditingUser(null);
     } catch (err: any) {
       console.error('Kullanıcı düzenleme hatası:', err);
-      alert(`Hata: ${err.message || 'Kullanıcı bilgileri güncellenemedi.'}`);
+      const msg = String(err?.message || err || '');
+      alert(
+        msg.includes('FIRESTORE_TIMEOUT') || msg.includes('zaman aşımı')
+          ? 'Kayıt zaman aşımına uğradı. Şifre veya bilgiler yazılmış olabilir — listeyi yenileyip tekrar kontrol edin.'
+          : `Hata: ${msg || 'Kullanıcı bilgileri güncellenemedi.'}`
+      );
     } finally {
       setIsSavingEdit(false);
     }
@@ -930,7 +943,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                             <td className="p-3">
                               <div className="flex flex-col gap-1.5">
                                 <select 
-                                  disabled={user.yetki === 'KURUCU' && currentUser?.email !== 'sametatak9@gmail.com'}
+                                  disabled={user.yetki === 'KURUCU' && !canEditUyelikKaydi}
                                   className={`p-1.5 text-[11px] font-bold rounded-lg border bg-slate-50 outline-none cursor-pointer text-slate-855  ${
                                     pendingRoles[user.email] && pendingRoles[user.email] !== user.yetki
                                       ? 'border-amber-400 ring-1 ring-amber-300'
@@ -1003,7 +1016,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
                               </button>
                             </td>
                             <td className="p-3 text-right flex items-center justify-end gap-1.5">
-                              {currentUser?.email === 'sametatak9@gmail.com' && (
+                              {canEditUyelikKaydi && (
                                 <button
                                   onClick={() => handleStartEditUser(user as any)}
                                   className="p-2 rounded-lg border shadow-xs transition active:scale-95 bg-amber-50 border-amber-200 text-amber-600 hover:bg-amber-100 cursor-pointer"
@@ -1492,7 +1505,7 @@ export const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({
       </div>
 
       {/* 🔐 USER PROFILE & CREDENTIALS EDIT MODAL (FOUNDER ONLY) */}
-      {editingUser && currentUser?.email === 'sametatak9@gmail.com' && (
+      {editingUser && canEditUyelikKaydi && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full shadow-2xl text-white p-6 animate-fade-in">
             <div className="flex justify-between items-center mb-5 pb-3 border-b border-slate-800">

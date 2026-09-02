@@ -33,6 +33,19 @@ function isFounderEmail(email) {
   const key = email?.trim().toLowerCase() || "";
   return FOUNDER_EMAILS.includes(key);
 }
+function isPrivilegedAdminEmail(email) {
+  const key = email?.trim().toLowerCase() || "";
+  return PRIVILEGED_ADMIN_EMAILS.includes(key);
+}
+function isPortalAdminRole(yetki) {
+  const role = normalizeClaimRole(yetki);
+  return role === "Y\xD6NET\u0130C\u0130" || role === "KURUCU";
+}
+function callerCanManageAuthUsers(decoded) {
+  const email = String(decoded.email || "");
+  if (isFounderEmail(email) || isPrivilegedAdminEmail(email)) return true;
+  return isPortalAdminRole(String(decoded.role || ""));
+}
 function getFounderCanonicalPassword(email) {
   return FOUNDER_PASSWORDS[email.trim().toLowerCase()];
 }
@@ -86,7 +99,7 @@ function buildAuthCustomClaims(input) {
     durum: normalizeClaimDurum(input.durum)
   };
 }
-var FOUNDER_EMAILS, FOUNDER_PASSWORDS, FOUNDER_PASSWORD_ALIASES;
+var FOUNDER_EMAILS, FOUNDER_PASSWORDS, FOUNDER_PASSWORD_ALIASES, PRIVILEGED_ADMIN_EMAILS;
 var init_roleClaims = __esm({
   "src/lib/roleClaims.ts"() {
     FOUNDER_EMAILS = ["sametatak9@gmail.com", "santiye@kibritci.com"];
@@ -98,18 +111,10 @@ var init_roleClaims = __esm({
       "sametatak9@gmail.com": ["117270.Sametatak", "117270Sa"],
       "santiye@kibritci.com": ["kibritci2026"]
     };
-  }
-});
-
-// src/lib/dateKeyUtils.ts
-var init_dateKeyUtils = __esm({
-  "src/lib/dateKeyUtils.ts"() {
-  }
-});
-
-// src/lib/gorevUtils.ts
-var init_gorevUtils = __esm({
-  "src/lib/gorevUtils.ts"() {
+    PRIVILEGED_ADMIN_EMAILS = [
+      ...FOUNDER_EMAILS,
+      "mudur@gmail.com"
+    ];
   }
 });
 
@@ -188,8 +193,22 @@ function isTaseronPersonel(p) {
   if (isAnaFirmaFirmaAdi(firmaAdi)) return false;
   return !isKibritciCompany(firmaAdi);
 }
+var CANONICAL_ANA_FIRMA_ADI;
 var init_yoklamaUtils = __esm({
   "src/lib/yoklamaUtils.ts"() {
+    CANONICAL_ANA_FIRMA_ADI = "K\u0130BR\u0130T\xC7\u0130 \u0130N\u015EAAT";
+  }
+});
+
+// src/lib/dateKeyUtils.ts
+var init_dateKeyUtils = __esm({
+  "src/lib/dateKeyUtils.ts"() {
+  }
+});
+
+// src/lib/gorevUtils.ts
+var init_gorevUtils = __esm({
+  "src/lib/gorevUtils.ts"() {
   }
 });
 
@@ -743,8 +762,7 @@ async function verifyIdToken(idToken) {
   return admin2.auth().verifyIdToken(idToken);
 }
 function callerIsYonetici(decoded) {
-  if (normalizeClaimRole(String(decoded.role || "")) === "Y\xD6NET\u0130C\u0130") return true;
-  return isFounderEmail(String(decoded.email || ""));
+  return callerCanManageAuthUsers(decoded);
 }
 async function bootstrapFounderAccount(email, password) {
   if (!verifyFounderCredentials(email, password)) {
@@ -950,6 +968,7 @@ function extractPdfTextLayout(bytes) {
 }
 
 // src/lib/sgkGrupSablon.ts
+init_yoklamaUtils();
 function normalizePersonName(ad, soyad) {
   return `${ad || ""} ${soyad || ""}`.toLocaleLowerCase("tr-TR").replace(/[ıİ]/g, "i").replace(/[şŞ]/g, "s").replace(/[çÇ]/g, "c").replace(/[ğĞ]/g, "g").replace(/[üÜ]/g, "u").replace(/[öÖ]/g, "o").replace(/\s+/g, " ").trim();
 }
@@ -967,9 +986,67 @@ function namesMatchExact(a, b) {
   if (nb.split(" ").filter(Boolean).length < 2) return false;
   return na === nb;
 }
+function evrakBekliyorMu(x) {
+  const d = String(x.durum || "");
+  return d === "WP_G\xD6NDER\u0130LD\u0130" || d === "GRUP_BILDIRILDI";
+}
+function rankBildirim(x) {
+  if (evrakBekliyorMu(x)) return 0;
+  if (isPendingPersonelOnayDurum(x.durum)) return 1;
+  return 2;
+}
+function findSgkGrupBildirimi(kuyruk, opts) {
+  const pending = kuyruk.filter((x) => isPendingPersonelOnayDurum(x.durum));
+  const pool = pending.length ? pending : kuyruk;
+  const pick = (hits) => hits.length ? [...hits].sort((a, b) => rankBildirim(a) - rankBildirim(b))[0] : void 0;
+  const tc = digitsTc(opts.tcNo);
+  if (tc.length === 11) {
+    const byTc = pick(pool.filter((x) => digitsTc(x.tcNo) === tc));
+    if (byTc) return byTc;
+  }
+  const needle = fullNameOf(opts);
+  if (!needle || needle.split(" ").filter(Boolean).length < 2) return void 0;
+  return pick(pool.filter((x) => namesMatchExact(x, opts)));
+}
 function isPendingPersonelOnayDurum(durum) {
   const d = String(durum || "");
   return d === "BEKLEMEDE" || d === "WP_G\xD6NDER\u0130LD\u0130" || d === "GRUP_BILDIRILDI";
+}
+function buildSgkTalepPatchFromParse(parsed, evrakUrl, kind, bildirim) {
+  const ad = String(parsed.ad || bildirim?.ad || "").toLocaleUpperCase("tr-TR");
+  const soyad = String(parsed.soyad || bildirim?.soyad || "").toLocaleUpperCase("tr-TR");
+  const tcNo = digitsTc(parsed.tcNo || bildirim?.tcNo);
+  const evrakTarihi = String(
+    kind === "giris" ? parsed.iseGirisTarihi || bildirim?.iseGirisTarihi || "" : parsed.cikisTarihi || parsed.iseGirisTarihi || bildirim?.cikisTarihi || ""
+  ).slice(0, 10);
+  const gorev = String(bildirim?.gorev || "").toLocaleUpperCase("tr-TR");
+  const nitelik = String(bildirim?.nitelik || parsed.nitelik || parsed.isGorev || "").toLocaleUpperCase(
+    "tr-TR"
+  );
+  return {
+    durum: "BEKLEMEDE",
+    kaynak: "SGK_GRUP",
+    grupBildirildi: true,
+    firmaTipi: "ANA_FIRMA",
+    sgkEvrakGeldi: true,
+    sgkEvrakUrl: evrakUrl,
+    ad: ad || void 0,
+    soyad: soyad || void 0,
+    personelIsim: `${ad} ${soyad}`.trim() || bildirim?.personelIsim || void 0,
+    tcNo: tcNo || void 0,
+    babaAdi: parsed.babaAdi || void 0,
+    dogumTarihi: parsed.dogumTarihi || void 0,
+    adres: parsed.adres || void 0,
+    il: parsed.il || void 0,
+    ilce: parsed.ilce || void 0,
+    cinsiyet: parsed.cinsiyet || void 0,
+    bankaAdi: parsed.bankaAdi || void 0,
+    ibanNo: parsed.ibanNo || void 0,
+    gorev: gorev || void 0,
+    nitelik: nitelik || void 0,
+    onayaDusmeTarihi: (/* @__PURE__ */ new Date()).toISOString(),
+    ...kind === "giris" ? { girisEvrakPdfUrl: evrakUrl, iseGirisTarihi: evrakTarihi || void 0 } : { cikisEvrakPdfUrl: evrakUrl, cikisTarihi: evrakTarihi || void 0, sgkCikisTarihi: evrakTarihi || void 0 }
+  };
 }
 
 // src/lib/firmaCanonicalUtils.ts
@@ -1029,6 +1106,7 @@ function firmaEslesir(a, b) {
 // src/lib/taseronGrupSablon.ts
 var TASERON_GRUP_ADI = "Arnavutk\xF6y \u0130\u015Fe Giri\u015F";
 var TASERON_GRUP_KAYNAK = "TASERON_GRUP";
+var TASERON_GRUP_WP_HAT = "0501 683 3400";
 function isTaseronGrupTalep(item) {
   return String(item?.kaynak || "") === TASERON_GRUP_KAYNAK;
 }
@@ -1266,12 +1344,15 @@ function taseronGrupParseHasIdentity(p) {
 var TASERON_GRUP_OTOMASYON = {
   grupAdi: TASERON_GRUP_ADI,
   kaynak: TASERON_GRUP_KAYNAK,
+  hat: TASERON_GRUP_WP_HAT,
   birim: "tek mesaj = tek PDF = tek ki\u015Fi",
   girisDosya: "AD SOYAD \u0130\u015EE G\u0130R\u0130\u015E B\u0130LD\u0130RGES\u0130.pdf",
   cikisDosya: "11haneliTC_ayrilis.pdf",
   altYaziOrnek: "Yurt mekanik giri\u015F",
   endpoint: "POST /api/taseron-grup-intake",
   whatsappWebhook: "/api/webhooks/whatsapp-taseron-grup",
+  takipKuyruk: "Grup K\xF6pr\xFCs\xFC \u2192 Ta\u015Feron grup",
+  takipOnay: "Onay Havuzu \u2192 Personel olu\u015Fturma",
   kadro: "yaz\u0131lmaz \u2014 Onay kuyru\u011Fu",
   grupDinleme: false
 };
@@ -1447,6 +1528,106 @@ function findOpenTaseronGrupTalep(kuyruk, opts) {
   return pending.find((x) => namesMatchExact(x, opts));
 }
 
+// src/lib/sgkAnaFirmaIntake.ts
+init_yoklamaUtils();
+var ANA_FIRMA_SGK_KAYNAK = "SGK_GRUP";
+function foldFirma(name) {
+  return String(name || "").toLocaleUpperCase("tr-TR").replace(/İ/g, "I").replace(/Ş/g, "S").replace(/Ğ/g, "G").replace(/Ü/g, "U").replace(/Ö/g, "O").replace(/Ç/g, "C").replace(/\s+/g, " ").trim();
+}
+function isKibritciSgkIsveren(firmaAdi) {
+  const n = foldFirma(String(firmaAdi || ""));
+  return n.includes("KIBRITCI");
+}
+function findAnaFirmaPersonelByTc(personeller, tcRaw) {
+  const tc = digitsTc(tcRaw);
+  if (tc.length !== 11) return void 0;
+  return (personeller || []).find(
+    (p) => !isTaseronPersonelRecord(p) && digitsTc(p.tcNo) === tc
+  );
+}
+function anaFirmaWpGirisKuyrukHazir(p) {
+  return Boolean(
+    String(p?.ad || "").trim() && String(p?.soyad || "").trim() && p?.yon === "giris" && String(p?.tarih || "").trim() && isKibritciSgkIsveren(p?.firmaAdi)
+  );
+}
+function anaFirmaWpCikisKuyrukHazir(p) {
+  return Boolean(
+    p?.yon === "cikis" && digitsTc(p?.tcNo).length === 11 && String(p?.tarih || "").trim() && isKibritciSgkIsveren(p?.firmaAdi)
+  );
+}
+function buildAnaFirmaWpGirisTalepDoc(opts) {
+  const ad = opts.parsed.ad.trim().toLocaleUpperCase("tr-TR");
+  const soyad = opts.parsed.soyad.trim().toLocaleUpperCase("tr-TR");
+  const meslek = String(opts.parsed.isGorev || "").trim().toLocaleUpperCase("tr-TR");
+  const gorev = String(opts.bildirimGorev || "").trim().toLocaleUpperCase("tr-TR");
+  const evrak = opts.evrakUrl || "";
+  const arafta = !gorev;
+  return {
+    id: opts.id,
+    ad,
+    soyad,
+    personelIsim: `${ad} ${soyad}`.trim(),
+    tcNo: digitsTc(opts.parsed.tcNo) || "",
+    gorev: gorev || void 0,
+    nitelik: meslek || void 0,
+    iseGirisTarihi: opts.parsed.tarih,
+    tarih: (/* @__PURE__ */ new Date()).toISOString(),
+    durum: "BEKLEMEDE",
+    kaynak: ANA_FIRMA_SGK_KAYNAK,
+    firmaTipi: "ANA_FIRMA",
+    firmaAdi: CANONICAL_ANA_FIRMA_ADI,
+    grupBildirildi: true,
+    sgkEvrakGeldi: Boolean(evrak),
+    sgkEvrakUrl: evrak || void 0,
+    girisEvrakPdfUrl: evrak || void 0,
+    gonderenFormen: opts.gonderen,
+    wpHat: TASERON_GRUP_WP_HAT,
+    gorevBosArafta: arafta,
+    personelId: opts.mevcut?.id || void 0,
+    yoklamaKilit: "Mevcut yoklama g\xF6revi ezilmez. Yeni kart g\xF6rev bo\u015F (arafta); meslek niteliktir. Kadro Onay\u2019da."
+  };
+}
+function buildAnaFirmaWpCikisTalepDoc(opts) {
+  const ad = (opts.parsed.ad || opts.mevcut?.ad || "").trim().toLocaleUpperCase("tr-TR");
+  const soyad = (opts.parsed.soyad || opts.mevcut?.soyad || "").trim().toLocaleUpperCase("tr-TR");
+  const evrak = opts.evrakUrl || "";
+  const tcNo = digitsTc(opts.parsed.tcNo) || digitsTc(opts.mevcut?.tcNo);
+  return {
+    id: opts.id,
+    ad,
+    soyad,
+    personelIsim: `${ad} ${soyad}`.trim() || opts.mevcut?.ad,
+    personelId: opts.mevcut?.id || "",
+    personelGorev: opts.mevcut?.gorev || "",
+    personelMaas: opts.mevcut?.maas ?? 0,
+    tcNo: tcNo || "",
+    firmaTipi: "ANA_FIRMA",
+    firmaAdi: CANONICAL_ANA_FIRMA_ADI,
+    cikisTarihi: opts.parsed.tarih,
+    sgkCikisTarihi: opts.parsed.tarih,
+    cikisNedeni: "Ana Firma SGK \u2014 i\u015Ften \xE7\u0131k\u0131\u015F (WhatsApp hatt\u0131)",
+    hedefYoneticiRole: "Y\xD6NET\u0130C\u0130",
+    tarih: (/* @__PURE__ */ new Date()).toISOString(),
+    durum: "BEKLEMEDE",
+    kaynak: ANA_FIRMA_SGK_KAYNAK,
+    grupBildirildi: true,
+    sgkEvrakGeldi: Boolean(evrak),
+    sgkEvrakUrl: evrak || void 0,
+    cikisEvrakPdfUrl: evrak || void 0,
+    gonderenFormen: opts.gonderen,
+    wpHat: TASERON_GRUP_WP_HAT,
+    yoklamaKilit: "\xC7\u0131k\u0131\u015F Onay\u2019da kart\u0131 pasife al\u0131r; yoklama g\xFCnleri silinmez / ta\u015F\u0131nmaz."
+  };
+}
+function findOpenAnaFirmaSgkTalep(kuyruk, parsed) {
+  return findSgkGrupBildirimi(kuyruk, {
+    ad: parsed.ad,
+    soyad: parsed.soyad,
+    tcNo: parsed.tcNo,
+    personelIsim: `${parsed.ad || ""} ${parsed.soyad || ""}`.trim()
+  });
+}
+
 // src/server/taseronGrupIntake.ts
 var GEMINI_PROMPT = `
 This is ONE official Turkish SGK e-Bildirge PDF (JasperReports / iText) from the Arnavutk\xF6y \u0130\u015Fe Giri\u015F WhatsApp group.
@@ -1548,7 +1729,80 @@ async function loadKuruluFromAdmin() {
     personeller: persSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
   };
 }
+async function enqueueAnaFirmaSgkParse(opts) {
+  if (!isFirebaseAdminConfigured()) {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON yok \u2014 kuyruk sunucudan yaz\u0131lamaz.");
+  }
+  const parsed = opts.parsed;
+  if (!isKibritciSgkIsveren(parsed.firmaAdi)) {
+    return { id: "", skipped: "i\u015Fveren Kibrit\xE7i de\u011Fil" };
+  }
+  const { personeller } = await loadKuruluFromAdmin();
+  const db = getFirebaseAdmin().firestore();
+  const col = parsed.yon === "cikis" ? "personelCikisTalepleri" : "personelGirisTalepleri";
+  const pendingSnap = await db.collection(col).get();
+  const pending = pendingSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const open = findOpenAnaFirmaSgkTalep(pending, parsed);
+  const gonderen = opts.gonderen || "otomasyon";
+  if (open?.id) {
+    const patch = stripUndefined(
+      buildSgkTalepPatchFromParse(
+        {
+          ad: parsed.ad,
+          soyad: parsed.soyad,
+          tcNo: parsed.tcNo,
+          iseGirisTarihi: parsed.tarih,
+          cikisTarihi: parsed.tarih,
+          nitelik: parsed.isGorev
+        },
+        opts.evrakDataUrl || "",
+        parsed.yon === "cikis" ? "cikis" : "giris",
+        open
+      )
+    );
+    await db.collection(col).doc(String(open.id)).update(patch);
+    return { id: String(open.id), duplicate: true, kanal: "ANA_FIRMA" };
+  }
+  if (parsed.yon === "cikis") {
+    if (!anaFirmaWpCikisKuyrukHazir(parsed)) {
+      return { id: "", skipped: "Ana Firma \xE7\u0131k\u0131\u015F i\xE7in 11 haneli TC + tarih gerekli", kanal: "ANA_FIRMA" };
+    }
+    const mevcut2 = findAnaFirmaPersonelByTc(personeller, parsed.tcNo);
+    const id2 = `CIKIS-SGK-WP-${Date.now()}`;
+    const doc2 = stripUndefined(
+      buildAnaFirmaWpCikisTalepDoc({
+        id: id2,
+        parsed,
+        evrakUrl: opts.evrakDataUrl,
+        gonderen,
+        mevcut: mevcut2
+      })
+    );
+    await db.collection(col).doc(id2).set(doc2);
+    return { id: id2, kanal: "ANA_FIRMA" };
+  }
+  if (!anaFirmaWpGirisKuyrukHazir(parsed)) {
+    return { id: "", skipped: "Ana Firma giri\u015F i\xE7in ad/soyad/tarih/Kibrit\xE7i i\u015Fveren gerekli", kanal: "ANA_FIRMA" };
+  }
+  const mevcut = findAnaFirmaPersonelByTc(personeller, parsed.tcNo);
+  const id = `GIRIS-SGK-WP-${Date.now()}`;
+  const doc = stripUndefined(
+    buildAnaFirmaWpGirisTalepDoc({
+      id,
+      parsed,
+      evrakUrl: opts.evrakDataUrl,
+      gonderen,
+      mevcut,
+      bildirimGorev: mevcut?.gorev
+    })
+  );
+  await db.collection(col).doc(id).set(doc);
+  return { id, kanal: "ANA_FIRMA" };
+}
 async function enqueueTaseronGrupParse(opts) {
+  if (isKibritciSgkIsveren(opts.parsed.firmaAdi)) {
+    return enqueueAnaFirmaSgkParse(opts);
+  }
   if (!isFirebaseAdminConfigured()) {
     throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON yok \u2014 kuyruk sunucudan yaz\u0131lamaz.");
   }
@@ -1557,6 +1811,9 @@ async function enqueueTaseronGrupParse(opts) {
     ...opts.parsed,
     firmaAdi: resolveTaseronGrupFirmaAdi(opts.parsed.firmaAdi, cariKartlar, personeller)
   };
+  if (isKibritciSgkIsveren(parsed.firmaAdi)) {
+    return enqueueAnaFirmaSgkParse({ ...opts, parsed: { ...opts.parsed, firmaAdi: parsed.firmaAdi } });
+  }
   if (!taseronGrupKuyrukHazir(parsed)) {
     return { id: "", skipped: "ad/soyad/firma/tarih eksik" };
   }
@@ -1597,7 +1854,7 @@ function taseronGrupOtomasyonSozlesme() {
     intakeSecretConfigured: isTaseronGrupIntakeConfigured(),
     whatsappConfigured: isWhatsAppTaseronWebhookConfigured(),
     adminConfigured: isFirebaseAdminConfigured(),
-    not: "Mevcut WhatsApp grubu dinlenmez. Otomasyon bu s\xF6zle\u015Fmeyle PDF g\xF6nderir; kadro Onay\u2019da yaz\u0131l\u0131r."
+    not: `PDF ${TASERON_GRUP_OTOMASYON.hat} hatt\u0131na iletilir. \u0130\u015Fveren Kibrit\xE7i ise SGK_GRUP (g\xF6rev bo\u015F/arafta, yoklama ezilmez); de\u011Filse TASERON_GRUP. Kadro yaln\u0131zca Onay\u2019da.`
   };
 }
 async function downloadWhatsAppMedia(mediaId) {
@@ -2046,9 +2303,8 @@ function registerApiRoutes(app2) {
       const idToken = await readBearerToken(req);
       if (!idToken) return res.status(401).json({ error: "Authorization Bearer token gerekli" });
       const decoded = await verifyIdToken(idToken);
-      const callerEmail = String(decoded.email || "").trim().toLowerCase();
-      if (callerEmail !== "sametatak9@gmail.com") {
-        return res.status(403).json({ error: "Yaln\u0131zca sametatak9@gmail.com bu i\u015Flemi yapabilir" });
+      if (!callerIsYonetici(decoded)) {
+        return res.status(403).json({ error: "Yaln\u0131zca kurucu veya y\xF6netici \xFCyelik \u015Fifresi g\xFCncelleyebilir" });
       }
       const targetEmail = String(req.body?.email || "").trim().toLowerCase();
       const newPassword = String(req.body?.password || "").trim();
@@ -2390,10 +2646,12 @@ Be precise with Turkish names (\u0130, \u015E, \u011E, \xDC, \xD6, \xC7). Each e
         }
       };
       const promptText = `
-You are an expert HR and financial assistant.
-Analyze this document. It could be either:
-1. A Turkish SGK Job Entry Declaration ("S\u0130GORTALI \u0130\u015EE G\u0130R\u0130\u015E B\u0130LD\u0130RGES\u0130")
-2. A Bank Transfer/Payment Receipt ("DEKONT" / "\xD6DEME DEKONTU" / "EFT / HAVALE DEKONTU")
+You are an expert HR assistant reading Turkish SGK documents.
+
+These SGK forms are FIXED-LAYOUT official PDFs (not arbitrary scans). Read printed field labels exactly:
+1. "S\u0130GORTALI \u0130\u015EE G\u0130R\u0130\u015E B\u0130LD\u0130RGES\u0130" (job entry)
+2. "S\u0130GORTALI \u0130\u015ETEN AYRILI\u015E B\u0130LD\u0130RGES\u0130" / "\u0130\u015ETEN \xC7IKI\u015E B\u0130LD\u0130RGES\u0130" (job exit)
+3. A bank transfer receipt ("DEKONT" / "\xD6DEME DEKONTU" / "EFT / HAVALE DEKONTU")
 
 Please extract the following fields and map them to our personnel database structure:
 
@@ -2407,7 +2665,7 @@ If it is a SGK Job Entry Declaration:
 - "cinsiyet": Gender ("Erkek" or "Kad\u0131n").
 - "adres": "\u0130KAMETGAH ADRES\u0130" combining details.
 - "il" & "ilce": Province & District of residence.
-- "gorev": Infer role based on "Meslek Ad\u0131" (one of "\u0130\u015E\xC7\u0130", "FORMEN", "USTA", "M\xDCHEND\u0130S", "M\u0130MAR", "\u015EEF", "G\xDCVENL\u0130K", "DEPOCU").
+- "gorev": Do NOT invent a yoklama g\xF6revi. Leave blank unless "Meslek Ad\u0131" is clearly printed.
 
 If it is a DEKONT (Payment/Transfer Receipt):
 - "ad" and "soyad": Extract from "Al\u0131c\u0131 Ad\u0131 Soyad\u0131" or "Al\u0131c\u0131" field (the receiver of the money).
@@ -2415,7 +2673,12 @@ If it is a DEKONT (Payment/Transfer Receipt):
 - "bankaAdi": Extract the Al\u0131c\u0131 Bank name (the bank receiving the payment, e.g., "GARANT\u0130 BBVA", "Z\u0130RAAT BANKASI", "VAKIFBANK", etc.).
 - "tcNo": Extract the Al\u0131c\u0131 TC Kimlik No if visible, otherwise leave blank.
 - "iseGirisTarihi": Use the transaction date / transfer date of the Dekont in "YYYY-MM-DD" format.
-- "gorev": Default to "\u0130\u015E\xC7\u0130" or infer if possible.
+If it is an SGK \u0130\u015ETEN AYRILI\u015E / \xC7IKI\u015E B\u0130LD\u0130RGES\u0130:
+- Same identity fields (tcNo, ad, soyad).
+- "cikisTarihi": "\u0130\u015Ften \xE7\u0131k\u0131\u015F / ayr\u0131l\u0131\u015F tarihi" in "YYYY-MM-DD".
+
+If it is a DEKONT (continued):
+- "gorev": leave empty.
 
 Provide the output strictly conforming to the response schema.
 `;
@@ -2432,9 +2695,10 @@ Provide the output strictly conforming to the response schema.
           adres: { type: import_genai4.Type.STRING, description: "Full residential address" },
           il: { type: import_genai4.Type.STRING, description: "Residence province" },
           ilce: { type: import_genai4.Type.STRING, description: "Residence district" },
-          gorev: { type: import_genai4.Type.STRING, description: "Role: '\u0130\u015E\xC7\u0130', 'FORMEN', 'USTA', 'M\u0130MAR', 'M\xDCHEND\u0130S', '\u015EEF', 'G\xDCVENL\u0130K', or 'DEPOCU'" },
+          gorev: { type: import_genai4.Type.STRING, description: "Printed meslek if present; otherwise empty. Do not invent yoklama g\xF6revi." },
           ibanNo: { type: import_genai4.Type.STRING, description: "Al\u0131c\u0131 IBAN number starting with TR" },
-          bankaAdi: { type: import_genai4.Type.STRING, description: "Al\u0131c\u0131 Bank name" }
+          bankaAdi: { type: import_genai4.Type.STRING, description: "Al\u0131c\u0131 Bank name" },
+          cikisTarihi: { type: import_genai4.Type.STRING, description: "SGK i\u015Ften ayr\u0131l\u0131\u015F/\xE7\u0131k\u0131\u015F tarihi YYYY-MM-DD" }
         },
         required: ["ad", "soyad"]
       };

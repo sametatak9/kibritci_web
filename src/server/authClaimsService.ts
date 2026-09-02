@@ -1,6 +1,6 @@
 import { randomBytes } from 'crypto';
 import { getFirebaseAdmin } from './firebaseAdmin';
-import { AuthCustomClaims, buildAuthCustomClaims, getFounderCanonicalPassword, isFounderEmail, normalizeClaimRole, verifyFounderCredentials } from '../lib/roleClaims';
+import { AuthCustomClaims, buildAuthCustomClaims, callerCanManageAuthUsers, getFounderCanonicalPassword, isFounderEmail, verifyFounderCredentials } from '../lib/roleClaims';
 
 export async function readKullaniciClaimsSource(email: string): Promise<AuthCustomClaims | null> {
   const admin = getFirebaseAdmin();
@@ -61,8 +61,7 @@ export async function verifyIdToken(idToken: string) {
 }
 
 export function callerIsYonetici(decoded: { role?: string; email?: string; [key: string]: unknown }): boolean {
-  if (normalizeClaimRole(String(decoded.role || '')) === 'YÖNETİCİ') return true;
-  return isFounderEmail(String(decoded.email || ''));
+  return callerCanManageAuthUsers(decoded);
 }
 
 /** Kurucu hesap: Auth şifresini senkronize eder, Firestore kaydı ve YÖNETİCİ claim yazar */
