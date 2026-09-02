@@ -10,6 +10,7 @@ import {
 import { readFavoriteTabs, writeFavoriteTabs } from '../lib/navPreferences';
 import { isRetiredPortalTab } from '../lib/yetkiUtils';
 import { isIrsaliyeFaturaRestricted } from '../lib/irsaliyeFaturaNav';
+import { isFounderEmail } from '../lib/roleClaims';
 
 interface SidebarProps {
   activeTab: string;
@@ -122,7 +123,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const emailLower = currentUser?.email?.toLowerCase();
-  const isFounderAdmin = emailLower === 'sametatak9@gmail.com';
+  const isFounderAdmin = isFounderEmail(emailLower);
   const isSecondaryAdmin = emailLower === 'mudur@gmail.com';
   const isPrivilegedAdmin = isFounderAdmin || isSecondaryAdmin;
   const canSeeUyelikAdmin = canAccessUyelikAdminPanel(normalizedYetki, { isPrivilegedAdmin });

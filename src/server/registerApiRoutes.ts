@@ -492,11 +492,8 @@ app.post('/api/auth/admin/update-user', async (req, res) => {
     const idToken = await readBearerToken(req);
     if (!idToken) return res.status(401).json({ error: 'Authorization Bearer token gerekli' });
     const decoded = await verifyIdToken(idToken);
-    const callerEmail = String(decoded.email || '').trim().toLowerCase();
-    
-    // Only "sametatak9@gmail.com" is allowed to update user passwords
-    if (callerEmail !== 'sametatak9@gmail.com') {
-      return res.status(403).json({ error: 'Yalnızca sametatak9@gmail.com bu işlemi yapabilir' });
+    if (!callerIsYonetici(decoded)) {
+      return res.status(403).json({ error: 'Yalnızca kurucu veya yönetici üyelik şifresi güncelleyebilir' });
     }
 
     const targetEmail = String(req.body?.email || '').trim().toLowerCase();

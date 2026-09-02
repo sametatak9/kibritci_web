@@ -142,12 +142,14 @@ export function isIdariIslerRole(yetki?: string | null): boolean {
   return normalizeYetki(yetki) === 'İDARİ_İŞLER';
 }
 
-/** Üyelik & Admin paneli — kurucu/müdür veya İdari İşler */
+/** Üyelik & Admin paneli — kurucu/müdür, KURUCU/YÖNETİCİ veya İdari İşler */
 export function canAccessUyelikAdminPanel(
   yetki?: string | null,
   options?: { isPrivilegedAdmin?: boolean }
 ): boolean {
   if (options?.isPrivilegedAdmin) return true;
+  const n = normalizeYetki(yetki);
+  if (n === 'KURUCU' || n === 'YÖNETİCİ') return true;
   return isIdariIslerRole(yetki);
 }
 

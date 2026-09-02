@@ -6,6 +6,7 @@ import {
 import { Kullanici } from './AdminPanelScreen';
 import { RESTRICTABLE_PORTAL_PAGES, sanitizeKisitliSayfalar } from '../lib/yetkiUtils';
 import { saveKullanici } from '../lib/kullaniciUtils';
+import { isPrivilegedAdminEmail } from '../lib/roleClaims';
 
 interface YetkiVermeScreenProps {
   kullanicilar: Kullanici[];
@@ -16,10 +17,8 @@ interface YetkiVermeScreenProps {
 
 const ALL_PAGES = RESTRICTABLE_PORTAL_PAGES;
 
-const PRIVILEGED_EMAILS = new Set(['sametatak9@gmail.com', 'mudur@gmail.com']);
-
 function isPrivilegedEmail(email?: string): boolean {
-  return PRIVILEGED_EMAILS.has((email || '').toLowerCase());
+  return isPrivilegedAdminEmail(email);
 }
 
 export const YetkiVermeScreen: React.FC<YetkiVermeScreenProps> = ({
