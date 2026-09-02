@@ -31,6 +31,7 @@ import {
   isKibritciSgkIsveren,
 } from '../lib/sgkAnaFirmaIntake';
 import { buildSgkTalepPatchFromParse, type SgkTalepKayit } from '../lib/sgkGrupSablon';
+import { isWhatsAppCloudSendConfigured } from '../lib/whatsappKayitBildirim';
 
 const GEMINI_PROMPT = `
 This is ONE official Turkish SGK e-Bildirge PDF (JasperReports / iText) from the Arnavutköy İşe Giriş WhatsApp group.
@@ -283,8 +284,9 @@ export function taseronGrupOtomasyonSozlesme() {
     ...TASERON_GRUP_OTOMASYON,
     intakeSecretConfigured: isTaseronGrupIntakeConfigured(),
     whatsappConfigured: isWhatsAppTaseronWebhookConfigured(),
+    whatsappSendConfigured: isWhatsAppCloudSendConfigured(),
     adminConfigured: isFirebaseAdminConfigured(),
-    not: `PDF ${TASERON_GRUP_OTOMASYON.hat} hattına iletilir. İşveren Kibritçi ise SGK_GRUP (görev boş/arafta, yoklama ezilmez); değilse TASERON_GRUP. Kadro yalnızca Onay’da.`,
+    not: `PDF ${TASERON_GRUP_OTOMASYON.hat} hattına iletilir. İşveren Kibritçi ise SGK_GRUP (görev boş/arafta, yoklama ezilmez); değilse TASERON_GRUP. Kadro yalnızca Onay’da. Onay sonrası wa: gönderene “kayıt açıldı” metni (WHATSAPP_PHONE_NUMBER_ID).`,
   };
 }
 

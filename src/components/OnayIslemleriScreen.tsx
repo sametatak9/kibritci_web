@@ -123,6 +123,7 @@ import {
   sgkDurumEtiketi,
   sgkEvrakUrlOf,
 } from '../lib/sgkGrupSablon';
+import { notifyWhatsAppPersonelKayit } from '../lib/whatsappKayitBildirimClient';
 
 interface OnayIslemleriScreenProps {
   satinAlmaTalepleri: SatinAlmaTalebi[];
@@ -1483,6 +1484,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
         });
         setActivePdfUploadId(null);
         setUploadedPdfBase64(null);
+        void notifyWhatsAppPersonelKayit(item, 'giris');
         alert(
           merged
             ? 'Taşeron grup girişi onaylandı. Mevcut taşeron kartı güncellendi (yoklama görevi ezilmedi, mükerrer kart açılmadı).'
@@ -1524,6 +1526,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
           });
           setActivePdfUploadId(null);
           setUploadedPdfBase64(null);
+          void notifyWhatsAppPersonelKayit(item, 'giris');
           alert(
             'Ana Firma SGK evrakı işlendi. Mevcut kartın görevi, durumu, firması ve yoklaması değişmedi (yalnızca evrak bağlandı).'
           );
@@ -1543,6 +1546,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
         });
         setActivePdfUploadId(null);
         setUploadedPdfBase64(null);
+        void notifyWhatsAppPersonelKayit(item, 'giris');
         alert(
           candidate.gorev
             ? 'Ana Firma kaydı yazıldı (grup bildirimindeki yoklama görevi).'
@@ -1710,6 +1714,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
             console.warn('Kamp tahliye atlandı:', kampErr);
           }
         }
+        void notifyWhatsAppPersonelKayit(item, 'cikis');
         alert(
           personelId
             ? `Taşeron grup çıkışı onaylandı; TC programda vardı, kart pasife alındı.${kampNot}`
@@ -1799,6 +1804,7 @@ export const OnayIslemleriScreen: React.FC<OnayIslemleriScreenProps> = ({
         }
       }
 
+      if (isSgkGrupTalep(item)) void notifyWhatsAppPersonelKayit(item, 'cikis');
       alert(`🎉 ${item.personelIsim} için işten çıkış onaylandı ve personel pasife alındı.${kampNot}`);
     } catch (err) {
       console.error(err);

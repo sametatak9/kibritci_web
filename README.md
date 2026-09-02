@@ -36,6 +36,16 @@ Zorunlu değil (istemci `firebase-applet-config.json` ile `kibritci-erp`'ye bağ
 - `GEMINI_API_KEY`
 - `FIREBASE_SERVICE_ACCOUNT_JSON`
 - `CRON_SECRET`
+- `WHATSAPP_VERIFY_TOKEN` / `WHATSAPP_ACCESS_TOKEN` — hattın webhook doğrulaması + medya indirme
+- `WHATSAPP_PHONE_NUMBER_ID` — Onay sonrası gönderene “kayıt açıldı” metni (yoksa yalnızca kuyruk çalışır)
+- `WHATSAPP_NOTIFY_TO` — isteğe bağlı ek E.164 alıcı (Cloud API klasik WhatsApp grubuna yazamaz)
+- `TASERON_GRUP_INTAKE_SECRET` — manuel intake POST
+
+Meta Developer Console’da webhook callback URL:
+
+`https://kibritci-web.vercel.app/api/webhooks/whatsapp-taseron-grup`
+
+Verify token = `WHATSAPP_VERIFY_TOKEN`. Abonelik alanı: `messages`.
 
 Akvizyon nöbet kapanışı: her gün 18:00 UTC (21:00 İstanbul) → `GET /api/cron/akvizyon-nobet-kapat`.
 

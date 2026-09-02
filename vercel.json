@@ -3,7 +3,10 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/((?!health$|update-user$|vercel-ping$).*)", "destination": "/api/[...path]" },
+    {
+      "source": "/api/((?!health$|update-user$|vercel-ping$|taseron-grup-intake$|whatsapp-kayit-bildir$|webhooks/whatsapp-taseron-grup$).*)",
+      "destination": "/api/[...path]"
+    },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "functions": {
@@ -11,10 +14,19 @@
       "maxDuration": 10
     },
     "api/update-user.js": {
-      "maxDuration": 20
+      "maxDuration": 10
     },
     "api/vercel-ping.js": {
       "maxDuration": 10
+    },
+    "api/taseron-grup-intake.js": {
+      "maxDuration": 10
+    },
+    "api/whatsapp-kayit-bildir.js": {
+      "maxDuration": 10
+    },
+    "api/webhooks/whatsapp-taseron-grup.js": {
+      "maxDuration": 60
     },
     "api/[...path].js": {
       "maxDuration": 60,

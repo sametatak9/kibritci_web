@@ -398,14 +398,14 @@ var init_akvizyonNobetAutoArchive = __esm({
   }
 });
 
-// api/handler.ts
-var handler_exports = {};
-__export(handler_exports, {
-  config: () => config,
-  default: () => handler_default
+// src/server/vercelHandler.ts
+var vercelHandler_exports = {};
+__export(vercelHandler_exports, {
+  default: () => vercelHandler_default,
+  vercelExpressHandler: () => vercelExpressHandler
 });
-module.exports = __toCommonJS(handler_exports);
-var import_express = __toESM(require("express"));
+module.exports = __toCommonJS(vercelHandler_exports);
+var import_express = __toESM(require("express"), 1);
 
 // src/server/registerApiRoutes.ts
 var import_genai4 = require("@google/genai");
@@ -1117,6 +1117,11 @@ function firmaEslesir(a, b) {
 var TASERON_GRUP_ADI = "Arnavutk\xF6y \u0130\u015Fe Giri\u015F";
 var TASERON_GRUP_KAYNAK = "TASERON_GRUP";
 var TASERON_GRUP_WP_HAT = "0501 683 3400";
+function taseronGrupWpHatE164() {
+  const digits = TASERON_GRUP_WP_HAT.replace(/\D/g, "");
+  if (digits.startsWith("90")) return digits;
+  return `90${digits.replace(/^0/, "")}`;
+}
 function isTaseronGrupTalep(item) {
   return String(item?.kaynak || "") === TASERON_GRUP_KAYNAK;
 }
@@ -1638,6 +1643,77 @@ function findOpenAnaFirmaSgkTalep(kuyruk, parsed) {
   });
 }
 
+// src/lib/whatsappKayitBildirim.ts
+function isWhatsAppCloudSendConfigured() {
+  return Boolean(
+    String(process.env.WHATSAPP_ACCESS_TOKEN || "").trim() && String(process.env.WHATSAPP_PHONE_NUMBER_ID || "").trim()
+  );
+}
+function waSenderToE164(gonderen) {
+  const raw = String(gonderen || "").trim();
+  if (!raw) return null;
+  const wa = raw.match(/wa:(\+?\d{8,20})/i);
+  const digits = (wa ? wa[1] : raw).replace(/\D/g, "");
+  if (digits.length < 10 || digits.length > 15) return null;
+  if (digits.startsWith("90")) return digits;
+  if (digits.startsWith("0") && digits.length === 11) return `90${digits.slice(1)}`;
+  if (digits.length === 10) return `90${digits}`;
+  return digits;
+}
+function buildPersonelKayitAcildiText(opts) {
+  const name = String(opts.personelIsim || `${opts.ad || ""} ${opts.soyad || ""}`).replace(/\s+/g, " ").trim().toLocaleUpperCase("tr-TR");
+  const firma = String(opts.firmaAdi || "").replace(/\s+/g, " ").trim().toLocaleUpperCase("tr-TR") || "\u2014";
+  const kim = name || "PERSONEL";
+  if (opts.yon === "cikis") {
+    return `${kim} personeli ${firma} firmas\u0131nda kayd\u0131 kapat\u0131ld\u0131.`;
+  }
+  return `${kim} personeli ${firma} firmas\u0131nda kayd\u0131 a\xE7\u0131ld\u0131.`;
+}
+function uniqueWhatsAppNotifyTargets(opts) {
+  const own = String(opts.ownHatE164 || "").replace(/\D/g, "");
+  const extraEnv = String(process.env.WHATSAPP_NOTIFY_TO || opts.extraTo || "");
+  const candidates = [waSenderToE164(opts.gonderen), waSenderToE164(extraEnv)].filter(
+    (n) => Boolean(n)
+  );
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const n of candidates) {
+    if (own && n === own) continue;
+    if (seen.has(n)) continue;
+    seen.add(n);
+    out.push(n);
+  }
+  return out;
+}
+async function sendWhatsAppCloudText(opts) {
+  const token = String(opts.accessToken || process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+  const phoneId = String(opts.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || "").trim();
+  const to = String(opts.to || "").replace(/\D/g, "");
+  if (!token || !phoneId) {
+    return { ok: false, status: 503, detail: "WHATSAPP_ACCESS_TOKEN veya WHATSAPP_PHONE_NUMBER_ID yok" };
+  }
+  if (!to) return { ok: false, status: 400, detail: "al\u0131c\u0131 yok" };
+  const res = await fetch(`https://graph.facebook.com/v21.0/${encodeURIComponent(phoneId)}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "text",
+      text: { preview_url: false, body: String(opts.body || "").slice(0, 4096) }
+    })
+  });
+  const raw = await res.text().catch(() => "");
+  if (!res.ok) {
+    return { ok: false, status: res.status, detail: raw.slice(0, 300) };
+  }
+  return { ok: true, status: res.status };
+}
+
 // src/server/taseronGrupIntake.ts
 var GEMINI_PROMPT = `
 This is ONE official Turkish SGK e-Bildirge PDF (JasperReports / iText) from the Arnavutk\xF6y \u0130\u015Fe Giri\u015F WhatsApp group.
@@ -1863,8 +1939,9 @@ function taseronGrupOtomasyonSozlesme() {
     ...TASERON_GRUP_OTOMASYON,
     intakeSecretConfigured: isTaseronGrupIntakeConfigured(),
     whatsappConfigured: isWhatsAppTaseronWebhookConfigured(),
+    whatsappSendConfigured: isWhatsAppCloudSendConfigured(),
     adminConfigured: isFirebaseAdminConfigured(),
-    not: `PDF ${TASERON_GRUP_OTOMASYON.hat} hatt\u0131na iletilir. \u0130\u015Fveren Kibrit\xE7i ise SGK_GRUP (g\xF6rev bo\u015F/arafta, yoklama ezilmez); de\u011Filse TASERON_GRUP. Kadro yaln\u0131zca Onay\u2019da.`
+    not: `PDF ${TASERON_GRUP_OTOMASYON.hat} hatt\u0131na iletilir. \u0130\u015Fveren Kibrit\xE7i ise SGK_GRUP (g\xF6rev bo\u015F/arafta, yoklama ezilmez); de\u011Filse TASERON_GRUP. Kadro yaln\u0131zca Onay\u2019da. Onay sonras\u0131 wa: g\xF6nderene \u201Ckay\u0131t a\xE7\u0131ld\u0131\u201D metni (WHATSAPP_PHONE_NUMBER_ID).`
   };
 }
 async function downloadWhatsAppMedia(mediaId) {
@@ -1918,6 +1995,227 @@ async function handleWhatsAppTaseronMessages(messages) {
     }
   }
   return { processed, queued, skipped };
+}
+
+// src/server/nodeHttpUtil.ts
+function sendJson(res, status, body) {
+  if (res.headersSent) return;
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.end(JSON.stringify(body));
+}
+function sendText(res, status, text) {
+  if (res.headersSent) return;
+  res.statusCode = status;
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.end(text);
+}
+function getBearerToken(req) {
+  const header = String(req.headers.authorization || "").trim();
+  const m = header.match(/^Bearer\s+(.+)$/i);
+  return m && m[1] && m[1].trim() || "";
+}
+async function readJsonBody(req, timeoutMs = 8e3) {
+  if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
+    return req.body;
+  }
+  if (typeof req.body === "string" && req.body.trim()) {
+    return JSON.parse(req.body);
+  }
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error("\u0130stek g\xF6vdesi zaman a\u015F\u0131m\u0131na u\u011Frad\u0131"));
+    }, timeoutMs);
+    req.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+    req.on("end", () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const raw = Buffer.concat(chunks).toString("utf8").trim();
+      if (!raw) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(raw));
+      } catch {
+        reject(new Error("JSON g\xF6vde okunamad\u0131"));
+      }
+    });
+    req.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
+}
+function collectWhatsAppMessages(body) {
+  const messages = [];
+  const entries = Array.isArray(body.entry) ? body.entry : [];
+  for (const entry of entries) {
+    const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+    for (const change of changes) {
+      const batch = change?.value?.messages;
+      if (Array.isArray(batch)) messages.push(...batch);
+    }
+  }
+  return messages;
+}
+
+// src/server/whatsappTaseronWebhookHttp.ts
+async function whatsappTaseronWebhookHandler(req, res) {
+  const method = String(req.method || "GET").toUpperCase();
+  if (method === "OPTIONS") {
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+  if (method === "GET" || method === "HEAD") {
+    const host = String(req.headers.host || "localhost");
+    const url = new URL(req.url || "/", `http://${host}`);
+    const mode = String(url.searchParams.get("hub.mode") || "");
+    const token = String(url.searchParams.get("hub.verify_token") || "");
+    const challenge = String(url.searchParams.get("hub.challenge") || "");
+    const expected = String(process.env.WHATSAPP_VERIFY_TOKEN || "").trim();
+    if (mode === "subscribe" && expected && token === expected) {
+      sendText(res, 200, challenge);
+      return;
+    }
+    sendJson(res, 403, { error: "WhatsApp verify token uyu\u015Fmad\u0131 veya tan\u0131ml\u0131 de\u011Fil." });
+    return;
+  }
+  if (method !== "POST") {
+    sendJson(res, 405, { error: "Yaln\u0131zca GET/POST" });
+    return;
+  }
+  if (!isWhatsAppTaseronWebhookConfigured()) {
+    sendJson(res, 503, {
+      error: "WhatsApp otomasyonu yap\u0131land\u0131r\u0131lmam\u0131\u015F. WHATSAPP_ACCESS_TOKEN + WHATSAPP_VERIFY_TOKEN gerekir."
+    });
+    return;
+  }
+  try {
+    const body = await readJsonBody(req, 8e3);
+    const messages = collectWhatsAppMessages(body);
+    const result = await handleWhatsAppTaseronMessages(messages);
+    sendJson(res, 200, { success: true, ...result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "webhook hata";
+    console.error("WhatsApp ta\u015Feron webhook:", error);
+    sendJson(res, 200, { success: false, error: message });
+  }
+}
+
+// src/server/whatsappKayitBildirHttp.ts
+var FIREBASE_WEB_API_KEY = "AIzaSyC7DIWBLXrkdDMIufYK_jEnSOjQ7XZQ6VI";
+var FOUNDER_EMAILS2 = /* @__PURE__ */ new Set(["santiye@kibritci.com", "sametatak9@gmail.com", "mudur@gmail.com"]);
+var ADMIN_ROLES = /* @__PURE__ */ new Set(["KURUCU", "Y\xD6NET\u0130C\u0130", "YONETICI"]);
+function callerMayNotify(decoded) {
+  const email = String(decoded.email || "").trim().toLowerCase();
+  if (FOUNDER_EMAILS2.has(email)) return true;
+  const role = String(decoded.role || decoded.rol || "").toLocaleUpperCase("tr-TR");
+  return ADMIN_ROLES.has(role);
+}
+function decodeJwtPayload(token) {
+  const part = token.split(".")[1];
+  if (!part) return {};
+  const json = Buffer.from(part.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+  return JSON.parse(json);
+}
+async function verifyFirebaseIdToken(idToken) {
+  const res = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(FIREBASE_WEB_API_KEY)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken })
+    }
+  );
+  if (!res.ok) {
+    throw new Error("Oturum do\u011Frulanamad\u0131.");
+  }
+  const data = await res.json();
+  const email = String(data.users?.[0]?.email || "").trim().toLowerCase();
+  if (!email) throw new Error("Oturum e-postas\u0131 yok.");
+  const payload = decodeJwtPayload(idToken);
+  return { ...payload, email };
+}
+async function whatsappKayitBildirHandler(req, res) {
+  const method = String(req.method || "GET").toUpperCase();
+  if (method === "OPTIONS") {
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+  if (method === "GET" || method === "HEAD") {
+    sendJson(res, 200, {
+      ok: true,
+      route: "whatsapp-kayit-bildir",
+      sendConfigured: isWhatsAppCloudSendConfigured()
+    });
+    return;
+  }
+  if (method !== "POST") {
+    sendJson(res, 405, { error: "Yaln\u0131zca POST" });
+    return;
+  }
+  try {
+    const token = getBearerToken(req);
+    if (!token) {
+      sendJson(res, 401, { success: false, error: "Oturum do\u011Frulanamad\u0131." });
+      return;
+    }
+    const decoded = await verifyFirebaseIdToken(token);
+    if (!callerMayNotify(decoded)) {
+      sendJson(res, 403, { success: false, error: "Bu i\u015Flem i\xE7in kurucu / y\xF6netici yetkisi gerekir." });
+      return;
+    }
+    if (!isWhatsAppCloudSendConfigured()) {
+      sendJson(res, 503, {
+        success: false,
+        error: "WhatsApp g\xF6nderimi yap\u0131land\u0131r\u0131lmam\u0131\u015F. Vercel\u2019de WHATSAPP_ACCESS_TOKEN + WHATSAPP_PHONE_NUMBER_ID gerekir.",
+        skipped: true
+      });
+      return;
+    }
+    const body = await readJsonBody(req, 4e3);
+    const yon = String(body.yon || "giris") === "cikis" ? "cikis" : "giris";
+    const text = buildPersonelKayitAcildiText({
+      ad: String(body.ad || ""),
+      soyad: String(body.soyad || ""),
+      personelIsim: String(body.personelIsim || ""),
+      firmaAdi: String(body.firmaAdi || ""),
+      yon
+    });
+    const targets = uniqueWhatsAppNotifyTargets({
+      gonderen: String(body.gonderen || ""),
+      ownHatE164: taseronGrupWpHatE164()
+    });
+    if (!targets.length) {
+      sendJson(res, 200, {
+        success: true,
+        skipped: true,
+        reason: "wa: g\xF6nderen yok (Cloud API WhatsApp grubuna yazamaz)",
+        text
+      });
+      return;
+    }
+    const results = [];
+    for (const to of targets) {
+      results.push({ to, ...await sendWhatsAppCloudText({ to, body: text }) });
+    }
+    sendJson(res, 200, { success: true, text, results });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Bildirim g\xF6nderilemedi";
+    sendJson(res, 500, { success: false, error: message });
+  }
 }
 
 // src/server/registerApiRoutes.ts
@@ -2328,12 +2626,15 @@ function registerApiRoutes(app2) {
     }
   });
   async function handleAdminUpdateUser(req, res) {
-    if (!isFirebaseAdminConfigured()) {
-      return res.status(503).json({ error: "Firebase Admin yap\u0131land\u0131r\u0131lmam\u0131\u015F" });
-    }
     try {
       const idToken = await readBearerToken(req);
-      if (!idToken) return res.status(401).json({ error: "Authorization Bearer token gerekli" });
+      if (!idToken) return res.status(401).json({ success: false, error: "Oturum do\u011Frulanamad\u0131." });
+      if (!isFirebaseAdminConfigured()) {
+        return res.status(503).json({
+          success: false,
+          error: "Sunucu yap\u0131land\u0131rmas\u0131 eksik (FIREBASE_SERVICE_ACCOUNT_JSON)."
+        });
+      }
       const decoded = await withDeadline(verifyIdToken(idToken), 12e3, "Oturum do\u011Frulama");
       if (!callerIsYonetici(decoded)) {
         return res.status(403).json({ error: "Yaln\u0131zca kurucu veya y\xF6netici \xFCyelik \u015Fifresi g\xFCncelleyebilir" });
@@ -2830,38 +3131,11 @@ Provide the output strictly conforming to the response schema.
       res.status(status).json({ error: msg });
     }
   });
-  app2.get("/api/webhooks/whatsapp-taseron-grup", (req, res) => {
-    const mode = String(req.query["hub.mode"] || "");
-    const token = String(req.query["hub.verify_token"] || "");
-    const challenge = String(req.query["hub.challenge"] || "");
-    const expected = String(process.env.WHATSAPP_VERIFY_TOKEN || "").trim();
-    if (mode === "subscribe" && expected && token === expected) {
-      return res.status(200).send(challenge);
-    }
-    res.status(403).json({ error: "WhatsApp verify token uyu\u015Fmad\u0131 veya tan\u0131ml\u0131 de\u011Fil." });
+  app2.all("/api/webhooks/whatsapp-taseron-grup", (req, res) => {
+    void whatsappTaseronWebhookHandler(req, res);
   });
-  app2.post("/api/webhooks/whatsapp-taseron-grup", async (req, res) => {
-    if (!isWhatsAppTaseronWebhookConfigured()) {
-      return res.status(503).json({
-        error: "WhatsApp otomasyonu yap\u0131land\u0131r\u0131lmam\u0131\u015F. Mevcut grup dinlenemez; WHATSAPP_ACCESS_TOKEN + WHATSAPP_VERIFY_TOKEN gerekir."
-      });
-    }
-    try {
-      const messages = [];
-      const entries = Array.isArray(req.body?.entry) ? req.body.entry : [];
-      for (const entry of entries) {
-        const changes = Array.isArray(entry?.changes) ? entry.changes : [];
-        for (const change of changes) {
-          const batch = change?.value?.messages;
-          if (Array.isArray(batch)) messages.push(...batch);
-        }
-      }
-      const result = await handleWhatsAppTaseronMessages(messages);
-      res.status(200).json({ success: true, ...result });
-    } catch (error) {
-      console.error("WhatsApp ta\u015Feron webhook:", error);
-      res.status(200).json({ success: false, error: error.message || "webhook hata" });
-    }
+  app2.all("/api/whatsapp-kayit-bildir", (req, res) => {
+    void whatsappKayitBildirHandler(req, res);
   });
   app2.post("/api/parse-kimlik", async (req, res) => {
     try {
@@ -3561,7 +3835,7 @@ L\xFCtfen en uygun kategoriyi 'detectedType' alan\u0131na atay\u0131p d\xF6k\xFC
   app2.post("/api/cron/akvizyon-nobet-kapat", handleAkvizyonNobetCron);
 }
 
-// api/handler.ts
+// src/server/vercelHandler.ts
 var app = (0, import_express.default)();
 app.use((req, res, next) => {
   if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
@@ -3581,22 +3855,22 @@ registerApiRoutes(app);
 app.use("/api", (_req, res) => {
   res.status(404).json({ success: false, error: "API yolu bulunamad\u0131" });
 });
-var config = {
-  api: { bodyParser: false },
-  maxDuration: 60
-};
-var handler_default = app;
+function vercelExpressHandler(req, res) {
+  app(req, res);
+}
+var vercelHandler_default = vercelExpressHandler;
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  config
+  vercelExpressHandler
 });
 (() => {
   const exp = module.exports;
-  const fn = exp && typeof exp.default === "function" ? exp.default : exp;
-  const cfg = exp && exp.config;
+  const fn =
+    exp && typeof exp.default === "function" ? exp.default
+    : exp && typeof exp.vercelExpressHandler === "function" ? exp.vercelExpressHandler
+    : exp;
   if (typeof fn === "function") {
-    module.exports = fn;
-    if (cfg) module.exports.config = cfg;
+    module.exports = function vercelNodeHandler(req, res) { return fn(req, res); };
   }
 })();
 //# sourceMappingURL=%5B...path%5D.js.map
