@@ -509,12 +509,15 @@ app.post('/api/auth/provision-user', async (req, res) => {
 });
 
 async function handleAdminUpdateUser(req: { headers: { authorization?: string }; body?: Record<string, unknown> }, res: import('express').Response) {
-  if (!isFirebaseAdminConfigured()) {
-    return res.status(503).json({ error: 'Firebase Admin yapılandırılmamış' });
-  }
   try {
     const idToken = await readBearerToken(req);
-    if (!idToken) return res.status(401).json({ error: 'Authorization Bearer token gerekli' });
+    if (!idToken) return res.status(401).json({ success: false, error: 'Oturum doğrulanamadı.' });
+    if (!isFirebaseAdminConfigured()) {
+      return res.status(503).json({
+        success: false,
+        error: 'Sunucu yapılandırması eksik (FIREBASE_SERVICE_ACCOUNT_JSON).',
+      });
+    }
     const decoded = await withDeadline(verifyIdToken(idToken), 12000, 'Oturum doğrulama');
     if (!callerIsYonetici(decoded)) {
       return res.status(403).json({ error: 'Yalnızca kurucu veya yönetici üyelik şifresi güncelleyebilir' });

@@ -2626,12 +2626,15 @@ function registerApiRoutes(app2) {
     }
   });
   async function handleAdminUpdateUser(req, res) {
-    if (!isFirebaseAdminConfigured()) {
-      return res.status(503).json({ error: "Firebase Admin yap\u0131land\u0131r\u0131lmam\u0131\u015F" });
-    }
     try {
       const idToken = await readBearerToken(req);
-      if (!idToken) return res.status(401).json({ error: "Authorization Bearer token gerekli" });
+      if (!idToken) return res.status(401).json({ success: false, error: "Oturum do\u011Frulanamad\u0131." });
+      if (!isFirebaseAdminConfigured()) {
+        return res.status(503).json({
+          success: false,
+          error: "Sunucu yap\u0131land\u0131rmas\u0131 eksik (FIREBASE_SERVICE_ACCOUNT_JSON)."
+        });
+      }
       const decoded = await withDeadline(verifyIdToken(idToken), 12e3, "Oturum do\u011Frulama");
       if (!callerIsYonetici(decoded)) {
         return res.status(403).json({ error: "Yaln\u0131zca kurucu veya y\xF6netici \xFCyelik \u015Fifresi g\xFCncelleyebilir" });
