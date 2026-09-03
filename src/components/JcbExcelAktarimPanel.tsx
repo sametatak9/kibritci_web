@@ -274,7 +274,7 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
         const match = resolveFirma(value, taseronCariler);
         return {
           ...row,
-          firmaAdi: value,
+          firmaAdi: match.firmaAdi,
           firmaId: match.firmaId,
           eslesmeNotu: match.eslesmeNotu,
         };
@@ -408,6 +408,15 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
 
   const reportPeriod = lastReports[0] ? Number(lastReports[0].donemAy) : 0;
   const reportYear = lastReports[0] ? Number(lastReports[0].donemYil) : 0;
+  const summaryStats = parseResult
+    ? {
+        rowCount: parseResult.rows.length,
+        totalHours: parseResult.rows.reduce((sum, row) => sum + row.calismaSuresi, 0),
+        firmCount: new Set(parseResult.rows.map((row) => row.firmaAdi)).size,
+        matchedCount: parseResult.rows.filter((row) => row.firmaId).length,
+        zeroHourCount: parseResult.rows.filter((row) => row.calismaSuresi <= 0).length,
+      }
+    : null;
 
   return (
     <div className="space-y-5">
@@ -454,6 +463,28 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
         )}
         {parseResult && (
           <>
+            {summaryStats && (
+              <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-[10px] font-black uppercase tracking-wider text-slate-800">Aktarım özeti</div>
+                  <div className="text-[9px] font-semibold text-slate-500">Firma adları programdaki taşeron carileriyle kontrol edildi</div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  {[
+                    ['Kayıt', summaryStats.rowCount.toString(), 'text-slate-800'],
+                    ['Toplam saat', `${summaryStats.totalHours.toFixed(1)} sa`, 'text-violet-700'],
+                    ['Firma', summaryStats.firmCount.toString(), 'text-slate-800'],
+                    ['Cari eşleşti', `${summaryStats.matchedCount}/${summaryStats.rowCount}`, 'text-emerald-700'],
+                    ['Boş / sıfır saat', summaryStats.zeroHourCount.toString(), summaryStats.zeroHourCount ? 'text-amber-700' : 'text-emerald-700'],
+                  ].map(([label, value, color]) => (
+                    <div key={label} className="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
+                      <div className="text-[9px] font-bold uppercase tracking-wide text-slate-400">{label}</div>
+                      <div className={`mt-0.5 text-sm font-black ${color}`}>{value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
               <table className="w-full min-w-[620px] text-left text-[10px]">
                 <thead className="bg-slate-900 text-white">
@@ -501,6 +532,9 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
               </div>
               {editRowsOpen && (
                 <div className="mt-3 max-h-[520px] overflow-auto rounded-lg border border-violet-200 bg-white">
+                  <datalist id="jcb-taseron-cari-listesi">
+                    {taseronCariler.map((cari) => <option key={cari.id} value={cari.unvan} />)}
+                  </datalist>
                   <table className="w-full min-w-[900px] text-left text-[10px]">
                     <thead className="sticky top-0 z-10 bg-violet-950 text-white">
                       <tr>
@@ -521,6 +555,7 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
                             <input
                               value={row.firmaAdi}
                               onChange={(event) => updateParsedRow(index, 'firmaAdi', event.target.value)}
+                              list="jcb-taseron-cari-listesi"
                               className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-semibold text-slate-800 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-200"
                               title={`Excel’deki firma: ${row.kaynakFirma}`}
                             />
