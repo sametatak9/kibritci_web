@@ -8,11 +8,13 @@ import {
   isFormenGorev,
   isMermerciGorev,
   isOperatorGorev,
+  isSenorGorev,
   isTesisatciGorev,
 } from './yoklamaUtils';
 
 export type PuantajPersonelGrup =
   | 'FORMEN'
+  | 'SENOR'
   | 'DUZ_ISCI'
   | 'TESISATCI'
   | 'MERMERCI'
@@ -21,6 +23,7 @@ export type PuantajPersonelGrup =
 
 export const PUANTAJ_GRUP_ORDER: PuantajPersonelGrup[] = [
   'FORMEN',
+  'SENOR',
   'DUZ_ISCI',
   'TESISATCI',
   'MERMERCI',
@@ -30,7 +33,7 @@ export const PUANTAJ_GRUP_ORDER: PuantajPersonelGrup[] = [
 
 export function resolvePuantajPersonelGrup(p: Personel): PuantajPersonelGrup {
   if (isFormenGorev(p.gorev)) return 'FORMEN';
-  // Kampçı / Şenör / Şoför ayrı grup değil — ana (Düz İşçi) listede
+  if (isSenorGorev(p.gorev)) return 'SENOR';
   if (isTesisatciGorev(p.gorev)) return 'TESISATCI';
   if (isMermerciGorev(p.gorev)) return 'MERMERCI';
   if (isOperatorGorev(p.gorev)) return 'OPERATOR';
@@ -41,6 +44,8 @@ export function puantajGrupLabel(grup: PuantajPersonelGrup): string {
   switch (grup) {
     case 'FORMEN':
       return 'FORMEN GRUBU';
+    case 'SENOR':
+      return 'ŞENÖR GRUBU';
     case 'DUZ_ISCI':
       return 'DÜZ İŞÇİ GRUBU';
     case 'TESISATCI':
@@ -58,6 +63,8 @@ function sheetNameForGrup(grup: PuantajPersonelGrup): string {
   switch (grup) {
     case 'FORMEN':
       return 'Formen';
+    case 'SENOR':
+      return 'Senor';
     case 'DUZ_ISCI':
       return 'Duz Isci';
     case 'TESISATCI':
@@ -75,6 +82,8 @@ function groupColor(grup: PuantajPersonelGrup): string {
   switch (grup) {
     case 'FORMEN':
       return 'FF7C3AED';
+    case 'SENOR':
+      return 'FF0F766E';
     case 'DUZ_ISCI':
       return 'FF1D4ED8';
     case 'TESISATCI':
@@ -577,7 +586,7 @@ function fillTumuSheet(
     ws,
     ctx,
     'TÜM GRUPLAR',
-    `Formen · Düz İşçi (Kampçı/Şoför dahil) · Tesisatçı  |  ${totalPeople} kişi`
+    `Formen · Şenör · Düz İşçi (Kampçı/Şoför dahil) · Tesisatçı  |  ${totalPeople} kişi`
   );
   let row = 6;
   let globalIndex = 0;
@@ -595,7 +604,7 @@ function fillTumuSheet(
 
 /**
  * A3 yatay maaş/puantaj.
- * Sayfalar: Tumu + Formen / Duz Isci (Kampçı+Şoför dahil) / Tesisatci (+ Mermerci) + Ozet
+ * Sayfalar: Tumu + görev grupları (Şenör ayrı) + Ozet
  */
 export async function exportModernPuantajExcel(opts: ModernPuantajExportOpts): Promise<void> {
   const {
