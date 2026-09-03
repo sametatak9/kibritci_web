@@ -16,7 +16,7 @@ import {
   TaseronYemekKaydi,
 } from '../types/erp';
 import {
-  getTaseronCariKartlar,
+  getKesintiFirmaKartlar,
   faaliyetlerForTaseron,
   ilkOkumaFromOncekiAy,
   enerjiToplamTutar,
@@ -116,7 +116,7 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
   /** Tip TASERON + malzeme teslim/ceza tutanağı bağlı cariler (Demirkaan vb.) */
   const taseronlar = useMemo(() => {
     const byId = new Map(
-      getTaseronCariKartlar(cariKartlar).map((c) => [c.id, c] as const)
+      getKesintiFirmaKartlar(cariKartlar).map((c) => [c.id, c] as const)
     );
     for (const t of hazirTutanaklar || []) {
       if (t.tutanakTipi !== 'TESLİM' && t.tutanakTipi !== 'CEZA') continue;

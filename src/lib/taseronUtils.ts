@@ -1,4 +1,50 @@
 import { CariKart, CariKartIslem, KampKaydi, KampOdasi, OperatorFaaliyet, Personel, TaseronEnerjiKaydi, TaseronKesintiRaporu, TaseronSayacOlcum, TaseronYemekKaydi } from '../types/erp';
+import { CANONICAL_ANA_FIRMA_ADI } from './yoklamaUtils';
+
+export const ANA_FIRMA_KESINTI_ID = '__ANA_FIRMA__';
+export const KIRALIK_MAKINE_KESINTI_ID = '__KIRALIK__';
+export const KIRALIK_JCB_CAFER_LABEL = 'KİRALIK JCB CAFER';
+export const ANA_FIRMA_JCB_FERAMUZ_LABEL = 'ANA FİRMA JCB FERAMUZ ÇANAKÇI';
+
+export function normalizeKesintiFirmaAdi(value: string): string {
+  return String(value || '')
+    .trim()
+    .toLocaleUpperCase('tr-TR')
+    .replace(/İ/g, 'I')
+    .replace(/Ş/g, 'S')
+    .replace(/Ğ/g, 'G')
+    .replace(/Ü/g, 'U')
+    .replace(/Ö/g, 'O')
+    .replace(/Ç/g, 'C')
+    .replace(/\s+/g, ' ');
+}
+
+export function resolveKesintiFirmaLabel(f: Partial<OperatorFaaliyet>): string {
+  const firmaAdi = String(f.firmaAdi || '').trim();
+  const operatorAdi = String(f.operatorIsim || '').trim();
+  const firmaNorm = normalizeKesintiFirmaAdi(firmaAdi);
+  const operatorNorm = normalizeKesintiFirmaAdi(operatorAdi);
+
+  if (
+    f.kesintiGrup === 'ANA_FIRMA' ||
+    /FERAMUZ|CANAKCI|KIBRITCI|ANA FIRMA|ANA FIRM/.test(operatorNorm) ||
+    /FERAMUZ|CANAKCI|KIBRITCI|ANA FIRMA|ANA FIRM/.test(firmaNorm)
+  ) {
+    return ANA_FIRMA_JCB_FERAMUZ_LABEL;
+  }
+
+  if (
+    f.kesintiGrup === 'KIRALIK' ||
+    f.makineKaynak === 'KIRALIK' ||
+    f.operatorTipi === 'KİRALIK' ||
+    /CAFER|KIRALIK|JCB/.test(firmaNorm) ||
+    /CAFER|KIRALIK|JCB/.test(operatorNorm)
+  ) {
+    return KIRALIK_JCB_CAFER_LABEL;
+  }
+
+  return firmaAdi || 'BELİRSİZ FİRMA';
+}
 
 export function getTaseronCariKartlar(cariKartlar: CariKart[]): CariKart[] {
   return cariKartlar.filter(
@@ -6,6 +52,42 @@ export function getTaseronCariKartlar(cariKartlar: CariKart[]): CariKart[] {
       (c.kartTipi === 'TASERON' || String((c as { tur?: string }).tur || '').toUpperCase() === 'TASERON') &&
       c.durum !== 'PASIF'
   );
+}
+
+export function getKesintiFirmaKartlar(cariKartlar: CariKart[]): CariKart[] {
+  const anaFirma: CariKart = {
+    id: ANA_FIRMA_KESINTI_ID,
+    kartTipi: 'CARI',
+    kod: 'ANA',
+    unvan: CANONICAL_ANA_FIRMA_ADI,
+    yetkili: 'Yönetim',
+    telefon: '',
+    eposta: '',
+    vergiNo: '',
+    vergiDairesi: '',
+    adres: '',
+    iban: '',
+    durum: 'AKTIF',
+    notlar: 'Ana firma kesinti kaydı',
+  };
+
+  const kiralik: CariKart = {
+    id: KIRALIK_MAKINE_KESINTI_ID,
+    kartTipi: 'CARI',
+    kod: 'KIRALIK',
+    unvan: KIRALIK_JCB_CAFER_LABEL,
+    yetkili: 'Yönetim',
+    telefon: '',
+    eposta: '',
+    vergiNo: '',
+    vergiDairesi: '',
+    adres: '',
+    iban: '',
+    durum: 'AKTIF',
+    notlar: 'Kiralık iş makinesi kesinti grubu',
+  };
+
+  return [anaFirma, kiralik, ...getTaseronCariKartlar(cariKartlar)];
 }
 
 export function normFirma(s: string): string {

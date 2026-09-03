@@ -1,8 +1,18 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { HardHat, Clock, Calendar, Building2, Camera, Save, Search, FileText, Trash2, CreditCard as Edit3, CircleCheck as CheckCircle, X, ChevronDown, ChevronUp, Truck, TriangleAlert as AlertTriangle, Download, Mail, ListFilter as Filter, Plus, Printer } from 'lucide-react';
 import { AracBakim, AylikYoklamaMap, CariKart, CariKartIslem, OperatorFaaliyet, TaseronKesintiRaporu, Personel } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
-import { getTaseronCariKartlar, buildOperatorIsKaydiEtiketi, makineEtiketi, cariIslemIdForOperatorFaaliyet, resolveMakineKaynakGrup, makineKaynakGrupLabel, isIsMakinesiArac } from '../lib/taseronUtils';
+import {
+  getKesintiFirmaKartlar,
+  getTaseronCariKartlar,
+  buildOperatorIsKaydiEtiketi,
+  makineEtiketi,
+  cariIslemIdForOperatorFaaliyet,
+  resolveMakineKaynakGrup,
+  makineKaynakGrupLabel,
+  isIsMakinesiArac,
+  resolveKesintiFirmaLabel,
+} from '../lib/taseronUtils';
 import { indirIsMakinesiRaporu } from '../lib/taseronReportUtils';
 import { kibritciLogoHtml } from '../lib/kibritciBrand';
 import { isOperatorGorev } from '../lib/yoklamaUtils';
@@ -74,7 +84,13 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
   const [raporFiltreAy, setRaporFiltreAy] = useState(new Date().getMonth() + 1);
   const [raporFiltreYil, setRaporFiltreYil] = useState(new Date().getFullYear());
 
-  const taseronCariler = useMemo(() => getTaseronCariKartlar(cariKartlar), [cariKartlar]);
+  const kesintiFirmalari = useMemo(() => getKesintiFirmaKartlar(cariKartlar), [cariKartlar]);
+
+  useEffect(() => {
+    if (firmaSecim === 'cari' && !selectedCariId && kesintiFirmalari.length > 0) {
+      setSelectedCariId(kesintiFirmalari[0].id);
+    }
+  }, [firmaSecim, selectedCariId, kesintiFirmalari]);
 
   const operatorPersoneller = useMemo(
     () =>
@@ -183,8 +199,8 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
       return;
     }
 
-    const firmaAdi = firmaSecim === 'cari' 
-      ? (cariKartlar.find(c => c.id === selectedCariId)?.unvan || 'Bilinmeyen Firma')
+    const firmaAdi = firmaSecim === 'cari'
+      ? (kesintiFirmalari.find(c => c.id === selectedCariId)?.unvan || 'Bilinmeyen Firma')
       : manuelFirma.trim();
 
     const firmaId = firmaSecim === 'cari' ? selectedCariId : undefined;
@@ -417,7 +433,7 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
         | 'ANA_FIRMA'
         | 'KIRALIK';
       const toplamSaat = faaliyetler.reduce((s, f) => s + f.calismaSuresi, 0);
-      const cari = taseronCariler.find((c) => c.unvan === firmaAdi) || cariKartlar.find((c) => c.unvan === firmaAdi);
+      const cari = kesintiFirmalari.find((c) => c.unvan === firmaAdi) || cariKartlar.find((c) => c.unvan === firmaAdi);
       const rapor: TaseronKesintiRaporu = {
         id: `tkr_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
         kesintiTipi: 'IS_MAKINESI',
@@ -720,11 +736,11 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
                 {firmaSecim === 'cari' ? (
                   <select value={selectedCariId} onChange={e => setSelectedCariId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-amber-500">
                     <option value="">Taşeron Firma Seçin</option>
-                    {taseronCariler.length === 0 ? (
-                      <option value="" disabled>Cari kartlarda TASERON tipi kayıt yok</option>
+                    {kesintiFirmalari.length === 0 ? (
+                      <option value="" disabled>Firma seçimi yok</option>
                     ) : (
-                      taseronCariler.map(c => (
-                        <option key={c.id} value={c.id}>{c.unvan} ({c.kod})</option>
+                      kesintiFirmalari.map(c => (
+                        <option key={c.id} value={c.id}>{c.unvan} ({c.kod || (c.unvan === 'KİBRİTÇİ İNŞAAT' ? 'ANA' : 'FİRMA')})</option>
                       ))
                     )}
                   </select>
