@@ -1055,6 +1055,9 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
               <button onClick={handleAyRaporla} className="bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1">
                 <Download size={12} /> Ay Raporu İndir
               </button>
+              <button onClick={() => setActiveSubTab('excel_aktarim')} className="bg-violet-600 hover:bg-violet-700 text-white text-[10px] font-black px-3 py-1.5 rounded-xl transition flex items-center gap-1">
+                <FileText size={12} /> Cafer Excel Aktar
+              </button>
             </div>
           </div>
 
