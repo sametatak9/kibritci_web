@@ -132,6 +132,19 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
     return list.sort((a, b) => new Date(b.tarih).getTime() - new Date(a.tarih).getTime());
   }, [operatorFaaliyetleri, searchQuery]);
 
+  const formatSaat = (value: string): string => {
+    const digits = value.replace(/\D/g, '').slice(0, 4);
+    if (!digits) return '';
+    if (digits.length <= 2) return digits.padStart(2, '0');
+    const saat = Math.min(23, Number(digits.slice(0, 2)) || 0);
+    const dakika = Math.min(59, Number(digits.slice(2, 4)) || 0);
+    return `${String(saat).padStart(2, '0')}:${String(dakika).padStart(2, '0')}`;
+  };
+
+  const handleSaatDegistir = (setter: React.Dispatch<React.SetStateAction<string>>) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setter(formatSaat(e.target.value));
+  };
+
   const hesaplaCalismaSuresi = (bas: string, bit: string): number => {
     const [basSaat, basDakika] = bas.split(':').map(Number);
     const [bitSaat, bitDakika] = bit.split(':').map(Number);
@@ -426,13 +439,8 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
     const gruplar: { [key: string]: OperatorFaaliyet[] } = {};
     aylikFaaliyetler.forEach((f) => {
       const kaynak = resolveMakineKaynakGrup(f);
-      const firmaKey =
-        f.kesintiGrup === 'ANA_FIRMA' || f.firmaAdi === 'KİBRİTÇİ İNŞAAT'
-          ? 'KİBRİTÇİ İNŞAAT'
-          : f.kesintiGrup === 'KIRALIK' || f.makineKaynak === 'KIRALIK' || f.operatorTipi === 'KİRALIK'
-            ? 'KİRALIK MAKİNE'
-            : (f.firmaAdi || 'BELİRSİZ FİRMA');
-      const key = `${firmaKey}||${kaynak}`;
+      const firmaAdiForGrup = resolveKesintiFirmaLabel(f);
+      const key = `${firmaAdiForGrup}||${kaynak}`;
       if (!gruplar[key]) gruplar[key] = [];
       gruplar[key].push(f);
     });
@@ -719,11 +727,25 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
                 </div>
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Başlangıç</label>
-                  <input type="time" value={baslangicSaat} onChange={e => setBaslangicSaat(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-amber-500" />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={baslangicSaat}
+                    onChange={handleSaatDegistir(setBaslangicSaat)}
+                    placeholder="08:00"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-amber-500"
+                  />
                 </div>
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Bitiş</label>
-                  <input type="time" value={bitisSaat} onChange={e => setBitisSaat(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-amber-500" />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={bitisSaat}
+                    onChange={handleSaatDegistir(setBitisSaat)}
+                    placeholder="17:00"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-amber-500"
+                  />
                 </div>
               </div>
 
