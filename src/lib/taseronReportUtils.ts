@@ -165,7 +165,79 @@ export function buildTopluIsMakinesiKesintiReportHtml(
   };
 
   const genelSaat = sorted.reduce((s, r) => s + (Number(r.toplamSaat) || 0), 0);
+  const firmaOzetMap = new Map<
+    string,
+    { firmaAdi: string; rapor: number; saat: number; eslesti: boolean }
+  >();
+  for (const report of sorted) {
+    const key = report.taseronFirmaId || `raw:${report.taseronFirmaAdi}`;
+    const current = firmaOzetMap.get(key) || {
+      firmaAdi: report.taseronFirmaAdi,
+      rapor: 0,
+      saat: 0,
+      eslesti: Boolean(report.taseronFirmaId),
+    };
+    current.rapor += 1;
+    current.saat += Number(report.toplamSaat) || 0;
+    current.eslesti ||= Boolean(report.taseronFirmaId);
+    firmaOzetMap.set(key, current);
+  }
+  const firmaOzet = [...firmaOzetMap.values()].sort((a, b) =>
+    a.firmaAdi.localeCompare(b.firmaAdi, 'tr')
+  );
+  const eslesmeyenFirmaSayisi = firmaOzet.filter((firma) => !firma.eslesti).length;
+  const ozetHtml = `
+    <div style="border:2px solid #1e293b;border-radius:10px;padding:12px 14px;margin-bottom:16px;background:#f8fafc">
+      <p style="margin:0;font-size:12px;font-weight:900;letter-spacing:.04em;color:#0f172a">GENEL ÖZET</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 12px">
+        <div style="flex:1;min-width:125px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:8px">
+          <p style="margin:0;font-size:10px;color:#64748b;text-transform:uppercase;font-weight:800">Toplam kayıt</p>
+          <p style="margin:3px 0 0;font-size:18px;font-weight:900;color:#0f172a">${sorted.length}</p>
+        </div>
+        <div style="flex:1;min-width:125px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:8px">
+          <p style="margin:0;font-size:10px;color:#64748b;text-transform:uppercase;font-weight:800">Toplam çalışma</p>
+          <p style="margin:3px 0 0;font-size:18px;font-weight:900;color:#5b21b6">${genelSaat.toFixed(1)} sa</p>
+        </div>
+        <div style="flex:1;min-width:125px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:8px">
+          <p style="margin:0;font-size:10px;color:#64748b;text-transform:uppercase;font-weight:800">Firma</p>
+          <p style="margin:3px 0 0;font-size:18px;font-weight:900;color:#0f172a">${firmaOzet.length}</p>
+        </div>
+        <div style="flex:1;min-width:125px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:8px">
+          <p style="margin:0;font-size:10px;color:#64748b;text-transform:uppercase;font-weight:800">Makine dağılımı</p>
+          <p style="margin:3px 0 0;font-size:13px;font-weight:900;color:#0f766e">Ana ${ana.length} · Kiralık ${kiralik.length}</p>
+        </div>
+      </div>
+      <p style="margin:0 0 6px;font-size:11px;font-weight:800;color:#334155">Firma bazında çalışma özeti</p>
+      <table style="width:100%;border-collapse:collapse;font-size:10px;background:#fff">
+        <thead>
+          <tr style="background:#334155;color:#fff">
+            <th style="padding:7px;text-align:left">Programdaki taşeron cari adı</th>
+            <th style="padding:7px;text-align:right">Rapor</th>
+            <th style="padding:7px;text-align:right">Toplam saat</th>
+            <th style="padding:7px;text-align:center">Eşleşme</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${firmaOzet
+            .map(
+              (firma) => `<tr>
+                <td style="padding:7px;border:1px solid #e2e8f0;font-weight:800">${esc(firma.firmaAdi)}</td>
+                <td style="padding:7px;border:1px solid #e2e8f0;text-align:right">${firma.rapor}</td>
+                <td style="padding:7px;border:1px solid #e2e8f0;text-align:right;font-weight:800">${firma.saat.toFixed(1)} sa</td>
+                <td style="padding:7px;border:1px solid #e2e8f0;text-align:center;color:${firma.eslesti ? '#047857' : '#b45309'};font-weight:800">${firma.eslesti ? 'Cari eşleşti' : 'Kontrol gerekli'}</td>
+              </tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>
+      ${
+        eslesmeyenFirmaSayisi
+          ? `<p style="margin:8px 0 0;color:#92400e;font-size:10px;font-weight:700">Uyarı: ${eslesmeyenFirmaSayisi} firma programdaki taşeron cari kartlarıyla eşleşmedi. Bu kayıtlar rapordan silinmedi; kontrol edilmelidir.</p>`
+          : `<p style="margin:8px 0 0;color:#047857;font-size:10px;font-weight:700">Tüm firma adları programdaki taşeron cari kartlarıyla eşleşti.</p>`
+      }
+    </div>`;
   const bodyHtml = `
+    ${ozetHtml}
     <div style="border:2px solid #0f172a;padding:12px 14px;border-radius:10px;margin-bottom:16px">
       <p style="margin:0;font-size:12px;font-weight:800">TOPLU İŞ MAKİNESİ KESİNTİ RAPORU</p>
       <p style="margin:6px 0 0;font-size:13px"><strong>Dönem:</strong> ${esc(ayLabel)} ${yil}</p>
