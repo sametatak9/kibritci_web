@@ -11,6 +11,7 @@ import { isOperatorGorev } from '../lib/yoklamaUtils';
 import { RolMobilFaaliyetYoklamaPanel } from './RolMobilFaaliyetYoklamaPanel';
 import { KampGunlukYoklamaTab } from './KampGunlukYoklamaTab';
 import { OperatorKesintiTopluPanel } from './OperatorKesintiTopluPanel';
+import { JcbExcelAktarimPanel } from './JcbExcelAktarimPanel';
 
 /** Ağustos 2026 ve sonrası: kanıt foto zorunlu. Temmuz ve öncesi geçmiş doldurma için opsiyonel. */
 const KANIT_FOTO_ZORUNLU_BASLANGIC = '2026-08-01';
@@ -51,7 +52,7 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
   isStandalone = false,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    'faaliyet' | 'saha_faaliyet' | 'yoklama' | 'rapor' | 'arsiv' | 'toplu'
+    'faaliyet' | 'saha_faaliyet' | 'yoklama' | 'rapor' | 'arsiv' | 'toplu' | 'excel_aktarim'
   >('saha_faaliyet');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAracId, setSelectedAracId] = useState('');
@@ -558,6 +559,7 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
           <button onClick={() => setActiveSubTab('yoklama')} className={`px-4 py-2 rounded-xl text-xs font-bold transition ${activeSubTab === 'yoklama' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Operatör Yoklama</button>
           <button onClick={() => setActiveSubTab('faaliyet')} className={`px-4 py-2 rounded-xl text-xs font-bold transition ${activeSubTab === 'faaliyet' ? 'bg-rose-500 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Taşeron Kesinti</button>
           <button onClick={() => setActiveSubTab('rapor')} className={`px-4 py-2 rounded-xl text-xs font-bold transition ${activeSubTab === 'rapor' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>İş Makinesi Kesinti Raporu</button>
+          <button onClick={() => setActiveSubTab('excel_aktarim')} className={`px-4 py-2 rounded-xl text-xs font-bold transition ${activeSubTab === 'excel_aktarim' ? 'bg-violet-500 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>JCB Excel Aktarım</button>
           <button onClick={() => setActiveSubTab('arsiv')} className={`px-4 py-2 rounded-xl text-xs font-bold transition ${activeSubTab === 'arsiv' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Arşiv</button>
         </div>
       </div>
@@ -613,6 +615,18 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
           operatorFaaliyetleri={operatorFaaliyetleri}
           setOperatorFaaliyetleri={setOperatorFaaliyetleri}
           currentUser={currentUser}
+        />
+      )}
+
+      {activeSubTab === 'excel_aktarim' && (
+        <JcbExcelAktarimPanel
+          cariKartlar={cariKartlar}
+          operatorFaaliyetleri={operatorFaaliyetleri}
+          setOperatorFaaliyetleri={setOperatorFaaliyetleri}
+          setTaseronKesintiRaporlari={setTaseronKesintiRaporlari}
+          setCariIslemGecmisi={setCariIslemGecmisi}
+          currentUser={currentUser}
+          addNotification={addNotification}
         />
       )}
 
