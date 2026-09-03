@@ -582,7 +582,6 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
     [monthlyKampFaaliyetleri]
   );
 
- fix/personel-saha-faaliyetleri-match
   const roleGroups = useMemo(() => groupPersonelByRole(personeller), [personeller]);
 
   const inactiveStaffRows = useMemo(() => {
@@ -662,7 +661,6 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
         blok: k.faaliyetTipi || 'Lojman',
       })) as SahaKolajFoto[];
   }, [birlesikKolajFotolari, kampFaaliyetSatirlari, donemKey, selectedYear, selectedMonth]);
- main
 
   const totalPersonDays = activeStaffRows.reduce((s, r) => s + r.geldiGun, 0);
   const totalMesaiSaat = activeStaffRows.reduce((s, r) => s + r.mesaiSaat, 0);
@@ -2634,181 +2632,6 @@ export const KibarHakedisScreen: React.FC<KibarHakedisScreenProps> = ({
         </div>
       </div>
 
- fix/personel-saha-faaliyetleri-match
-      {showRoleReport && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-6xl max-h-[90vh] overflow-y-auto bg-white rounded-3xl shadow-2xl border border-slate-200">
-            <div className="flex items-center justify-between p-5 border-b border-slate-200">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Ana Firma Görev Bazlı Personel Listesi</h3>
-                <p className="text-xs text-slate-500">Personel görevlerine göre gruplandı.</p>
-              </div>
-              <button
-                onClick={() => setShowRoleReport(false)}
-                className="text-slate-600 hover:text-slate-900 text-sm font-semibold"
-              >
-                Kapat
-              </button>
-            </div>
-            <div className="p-5 space-y-6">
-              {roleGroups.length === 0 ? (
-                <p className="text-slate-500 text-sm">Rol grubu henüz hazırlanmadı.</p>
-              ) : (
-                roleGroups.map((group) => (
-                  <div key={group.role}>
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-xs font-bold uppercase tracking-wide text-slate-800">{group.role} ({group.items.length})</h4>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full text-[11px] border border-slate-200">
-                        <thead className="bg-slate-50">
-                          <tr>
-                            <th className="px-3 py-2 text-left text-slate-500">Ad Soyad</th>
-                            <th className="px-3 py-2 text-left text-slate-500">TC</th>
-                            <th className="px-3 py-2 text-left text-slate-500">İşe Giriş</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {group.items.map((personel) => (
-                            <tr key={personel.id} className="border-t border-slate-100">
-                              <td className="px-3 py-2">{personel.ad} {personel.soyad}</td>
-                              <td className="px-3 py-2">{(personel as any).tcKimlikNo || (personel as any).tcNo || ''}</td>
-                              <td className="px-3 py-2">
-                                {(personel as any).iseGirisTarihi
-                                  ? new Date((personel as any).iseGirisTarihi).toISOString().slice(0, 10)
-                                  : ((personel as any).girisTarihi ? new Date((personel as any).girisTarihi).toISOString().slice(0, 10) : '')}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-            <div className="flex items-center justify-between p-5 border-t border-slate-200">
-              <button
-                onClick={handleExportRoleReport}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase px-4 py-2 rounded-xl"
-              >
-                Excel Raporu İndir
-              </button>
-              <button
-                onClick={() => setShowRoleReport(false)}
-                className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold uppercase px-4 py-2 rounded-xl"
- 
-      {showUstaListeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">
-                  Ustalı / Ustasız Personel — {donemLabel}
-                </h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Aktif hakediş listesi (çıkarılanlar hariç) · Ustalı {ustaliRows.length} · Ustasız{' '}
-                  {ustasizRows.length} · HTML: ustasız hakediş + ustalı + kar analizi
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowUstaListeModal(false)}
-                className="p-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-slate-100 overflow-y-auto flex-1">
-              <div className="p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-[11px] font-black uppercase text-amber-800 tracking-wider">
-                    Ustalı ({ustaliRows.length})
-                  </h4>
-                  <span className="text-[10px] font-mono font-bold text-emerald-700">
-                    ZER {formatMoney(summarizeRows(ustaliRows).zer, 0)}
-                  </span>
-                </div>
-                {ustaliRows.length === 0 ? (
-                  <p className="text-[11px] text-slate-400 italic">Usta görevli personel yok.</p>
-                ) : (
-                  ustaliRows.map((r) => (
-                    <div
-                      key={r.personel.id}
-                      className="flex justify-between gap-2 p-2 rounded-xl bg-amber-50/80 border border-amber-100"
-                    >
-                      <div>
-                        <p className="text-xs font-bold text-slate-800">
-                          {r.personel.ad} {r.personel.soyad}
-                        </p>
-                        <p className="text-[9px] text-slate-500 uppercase font-semibold">
-                          {normalizeGorev(r.personel.gorev)} · {r.geldiGun} gün
-                          {r.mesaiSaat > 0 ? ` · ${r.mesaiSaat} sa` : ''}
-                        </p>
-                      </div>
-                      <span className="text-[10px] font-bold text-emerald-700 whitespace-nowrap">
-                        {formatMoney(r.zerYapiHakedis, 0)}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-              <div className="p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-[11px] font-black uppercase text-slate-700 tracking-wider">
-                    Ustasız Hakediş ({ustasizRows.length})
-                  </h4>
-                  <span className="text-[10px] font-mono font-bold text-emerald-700">
-                    ZER {formatMoney(summarizeRows(ustasizRows).zer, 0)}
-                  </span>
-                </div>
-                {ustasizRows.length === 0 ? (
-                  <p className="text-[11px] text-slate-400 italic">Ustasız personel yok.</p>
-                ) : (
-                  ustasizRows.map((r) => (
-                    <div
-                      key={r.personel.id}
-                      className="flex justify-between gap-2 p-2 rounded-xl bg-slate-50 border border-slate-100"
-                    >
-                      <div>
-                        <p className="text-xs font-bold text-slate-800">
-                          {r.personel.ad} {r.personel.soyad}
-                        </p>
-                        <p className="text-[9px] text-slate-500 uppercase font-semibold">
-                          {normalizeGorev(r.personel.gorev)} · {r.geldiGun} gün
-                          {r.mesaiSaat > 0 ? ` · ${r.mesaiSaat} sa` : ''}
-                        </p>
-                      </div>
-                      <span className="text-[10px] font-bold text-emerald-700 whitespace-nowrap">
-                        {formatMoney(r.zerYapiHakedis, 0)}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-            <div className="px-5 py-3 border-t border-slate-100 flex flex-wrap gap-2 justify-end">
-              <button
-                type="button"
-                onClick={() => void handleUstaUstasizRaporlar()}
-                disabled={downloadingReport}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-bold bg-amber-500 text-slate-950 cursor-pointer disabled:opacity-60"
-                title="Ustasız hakediş + Ustalı + +6.000 kar analizi (HTML)"
-              >
-                <FileText size={12} /> 3 HTML Rapor Üret
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowUstaListeModal(false)}
-                className="px-4 py-2 rounded-xl text-[11px] font-bold bg-slate-900 text-white cursor-pointer"
- main
-              >
-                Kapat
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

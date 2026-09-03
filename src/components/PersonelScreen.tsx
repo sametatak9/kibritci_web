@@ -1920,34 +1920,34 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
                         </span>
                       )}
                     </div>
-                        {(() => {
-                          const eksikler = getPersonelMissingDocs(p);
-                          if (eksikler.length === 0) return null;
-                          return (
-                            <span
-                              className="text-[10px] bg-rose-50 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-full font-bold"
-                              title={eksikler.join(', ')}
-                            >
-                              Eksik: {eksikler.length}
-                            </span>
-                          );
-                        })()}
-                      </h4>
-                      <p className="text-[10px] text-slate-400 font-medium">
-                        TC: {p.tcNo} · Görev: <span className="text-slate-600 font-bold">{displayPersonelGorev(p)}</span>
-                      </p>
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        <span className="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded font-bold font-mono text-[9px]">
-                          <span>📅 İşe Giriş:</span>
-                          <span>{p.iseGirisTarihi || '-'}</span>
-                        </span>
-                        {p.istenCikisTarihi && (
-                          <span className="inline-flex items-center gap-1 bg-rose-50 border border-rose-200 text-rose-700 px-2 py-0.5 rounded font-black font-mono text-[9px]">
-                            <span>🚫 İşten Çıkış:</span>
-                            <span>{p.istenCikisTarihi}</span>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {(() => {
+                        const eksikler = getPersonelMissingDocs(p);
+                        if (eksikler.length === 0) return null;
+                        return (
+                          <span
+                            className="text-[10px] bg-rose-50 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-full font-bold"
+                            title={eksikler.join(', ')}
+                          >
+                            Eksik: {eksikler.length}
                           </span>
-                        )}
-                      </div>
+                        );
+                      })()}
+                    </div>
+                    <p className="text-[10px] text-slate-400 font-medium mt-2">
+                      TC: {p.tcNo} · Görev: <span className="text-slate-600 font-bold">{displayPersonelGorev(p)}</span>
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      <span className="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded font-bold font-mono text-[9px]">
+                        <span>📅 İşe Giriş:</span>
+                        <span>{p.iseGirisTarihi || '-'}</span>
+                      </span>
+                      {p.istenCikisTarihi && (
+                        <span className="inline-flex items-center gap-1 bg-rose-50 border border-rose-200 text-rose-700 px-2 py-0.5 rounded font-black font-mono text-[9px]">
+                          <span>🚫 İşten Çıkış:</span>
+                          <span>{p.istenCikisTarihi}</span>
+                        </span>
+                      )}
                     </div>
                   </div>
 
