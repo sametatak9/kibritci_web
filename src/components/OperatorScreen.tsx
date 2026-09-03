@@ -451,10 +451,21 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
     const aylikCafer = operatorFaaliyetleri
       .filter((f) => {
         const d = new Date(f.tarih);
+        const caferSearchText = [
+          f.operatorIsim,
+          f.makineManuelAd,
+          f.aracPlaka,
+          f.isKaydiEtiketi,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLocaleUpperCase('tr-TR');
+        const isCaferRental = f.makineKaynak === 'KIRALIK' &&
+          (caferSearchText.includes('CAFER') || caferSearchText.includes('JCB'));
         return d.getMonth() + 1 === raporFiltreAy &&
           d.getFullYear() === raporFiltreYil &&
           (resolveKesintiFirmaLabel(f) === KIRALIK_JCB_CAFER_LABEL ||
-            (f.makineKaynak === 'KIRALIK' && String(f.operatorIsim || '').toLocaleUpperCase('tr-TR').includes('CAFER')));
+            isCaferRental);
       });
 
     if (aylikCafer.length === 0) {
