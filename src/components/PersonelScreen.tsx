@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Users, UserPlus, Trash2, CreditCard as Edit3, Camera, Search, ShieldCheck, Mail, Phone, MapPin, Tent, DollarSign, UserX, FileText, CloudUpload as UploadCloud, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, Loader as Loader2, Building2, History, Download } from 'lucide-react';
+import { Users, UserPlus, Trash2, CreditCard as Edit3, Camera, Search, ShieldCheck, Mail, Phone, MapPin, Tent, DollarSign, UserX, FileText, CloudUpload as UploadCloud, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, Loader as Loader2, Building2, History, Download, RefreshCw, ListPlus } from 'lucide-react';
 import { CariKart, CariKartIslem, KampKaydi, KampOdasi, Personel, SahaFaaliyeti } from '../types/erp';
 import { fetchApiJson } from '../lib/apiClient';
 import { compressImage } from '../lib/imageCompress';
@@ -958,7 +958,6 @@ export const PersonelScreen: React.FC<PersonelScreenProps> = ({
     // Kampçının eklediği, yönetici onayı bekleyen personeller listede görünmez (Onay Havuzu'nda onaylanır)
     if (p.onayDurumu === 'ONAY BEKLİYOR' && p.kaynak === 'KAMPCI') return false;
     if (showOnlyActive && !is_aktif_status(p.durum)) return false;
-    if (showOnlyMissingTcIban && !missingTcIbanIds.has(p.id)) return false;
     if (!matchesFirmaFilter(p, firmaFilters)) return false;
     if (odemeFilter === 'TC' && validateTC(p.tcNo || '')) return false;
     if (odemeFilter === 'IBAN' && validateIBAN(p.ibanNo || '')) return false;

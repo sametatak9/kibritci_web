@@ -45,7 +45,6 @@ const ProfilScreen = lazy(() => import('./components/ProfilScreen').then(m => ({
 const DepocuScreen = lazy(() => import('./components/DepocuScreen').then(m => ({ default: m.DepocuScreen })));
 const ImalatTerminaliScreen = lazy(() => import('./components/ImalatTerminaliScreen').then(m => ({ default: m.ImalatTerminaliScreen })));
 const MobileManagerScreen = lazy(() => import('./components/MobileManagerScreen').then(m => ({ default: m.MobileManagerScreen })));
-const KibarHakedisScreen = lazy(() => import('./components/KibarHakedisScreen').then(m => ({ default: m.KibarHakedisScreen })));
 
 import { KibritciLogo } from './components/KibritciLogo';
 
@@ -4010,16 +4009,6 @@ export default function App() {
                     addNotification={addNotification}
                   />
                 ) : renderAccessDenied()
-              )}
-
-              {activeTab === "kibar_hakedis" && (
-                  <KibarHakedisScreen
-                    personeller={personeller}
-                    yoklamalar={yoklamalar}
-                    sahaFaaliyetleri={sahaFaaliyetleri}
-                    programliFaaliyetler={programliFaaliyetler}
-                    currentUser={currentUser}
-                  />
               )}
 
               {activeTab === "operator" && (

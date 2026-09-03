@@ -14,7 +14,6 @@ export const PORTAL_PAGES = [
   { key: "fatura_giris", label: "Fatura Girişi", group: "FİNANS & ENVANTER" },
   { key: "taseron_kesinti", label: "Taşeron Yönetimi", group: "FİNANS & ENVANTER" },
   { key: "cari_stok", label: "Cari ve Stok Kartları", group: "FİNANS & ENVANTER" },
-  { key: "kibar_hakedis", label: "ZER YAPI Hakediş", group: "FİNANS & ENVANTER" },
   { key: "operator", label: "Operatör Faaliyetleri", group: "İŞ MAKİNESİ & OPERATÖR" },
   { key: "arac", label: "Araç ve Demirbaş", group: "İDARİ İŞLER & SAHA" },
   { key: "kamp", label: "Kamp Yönetimi", group: "İDARİ İŞLER & SAHA" },
