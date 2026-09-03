@@ -2,10 +2,8 @@ import React, { useMemo, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
-  Download,
   Pencil,
   FileSpreadsheet,
-  Printer,
   Upload,
 } from 'lucide-react';
 import type {
@@ -16,10 +14,6 @@ import type {
 } from '../types/erp';
 import { createExcelWorkbook } from '../lib/exceljsLoader';
 import { firmaEslesir, getTaseronCariKartlar } from '../lib/taseronUtils';
-import {
-  indirTopluIsMakinesiRaporu,
-  yazdirTopluIsMakinesiRaporu,
-} from '../lib/taseronReportUtils';
 
 type ExcelRow = {
   sourceFile: string;
@@ -51,6 +45,7 @@ type Props = {
 
 const ALIAS_MAP: Record<string, string> = {
   altyapi: 'ÜÇGENAY',
+  arguvan: 'Erguvan Peyzaj',
 };
 
 const normalize = (value: unknown): string =>
@@ -186,6 +181,17 @@ async function parseFiles(files: File[], cariler: CariKart[]): Promise<ParseResu
         const yapilanIs = columns.yapilanIs ? cellText(ws, rowNo, columns.yapilanIs) : '';
         const rawSaat = columns.saat ? ws.getRow(rowNo).getCell(columns.saat).value : '';
         const not = columns.not ? cellText(ws, rowNo, columns.not) : '';
+        const summaryMarker = normalize(yapilanIs);
+        if (
+          !rawDate &&
+          !rawFirma &&
+          !rawSaat &&
+          (summaryMarker.includes('genel toplam') ||
+            summaryMarker.includes('firma / taseron bazli ozet') ||
+            summaryMarker === 'toplam saat')
+        ) {
+          break;
+        }
         if (!rawFirma && !yapilanIs && !rawSaat && !rawDate) {
           emptyStreak += 1;
           if (emptyStreak >= 8) break;
@@ -231,8 +237,6 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
   cariKartlar,
   operatorFaaliyetleri,
   setOperatorFaaliyetleri,
-  setTaseronKesintiRaporlari,
-  setCariIslemGecmisi,
   currentUser,
   addNotification,
 }) => {
@@ -240,12 +244,11 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
   const [fileNames, setFileNames] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const [lastReports, setLastReports] = useState<TaseronKesintiRaporu[]>([]);
   const [editRowsOpen, setEditRowsOpen] = useState(false);
 
   const taseronCariler = useMemo(() => getTaseronCariKartlar(cariKartlar), [cariKartlar]);
   const groupedRows = useMemo(() => {
-    const groups = new Map<string, { firmaAdi: string; firmaId?: string; period: string; count: number; hours: number; unresolved: boolean }>();
+    const groups = new Map<string, { firmaAdi: string; firmaId?: string; period: string; periodKey: string; count: number; hours: number; unresolved: boolean }>();
     for (const row of parseResult?.rows || []) {
       const period = periodOf(row.tarih);
       const key = `${period.key}||${row.firmaAdi}`;
@@ -253,6 +256,7 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
         firmaAdi: row.firmaAdi,
         firmaId: row.firmaId,
         period: `${String(period.ay).padStart(2, '0')}/${period.yil}`,
+        periodKey: period.key,
         count: 0,
         hours: 0,
         unresolved: false,
@@ -283,12 +287,31 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
     });
   };
 
+  const updateParsedGroupFirma = (periodKey: string, oldFirmaAdi: string, firmaId: string) => {
+    const cari = taseronCariler.find((item) => item.id === firmaId);
+    if (!cari) return;
+    setParseResult((previous) => {
+      if (!previous) return previous;
+      return {
+        ...previous,
+        rows: previous.rows.map((row) => {
+          if (periodOf(row.tarih).key !== periodKey || row.firmaAdi !== oldFirmaAdi) return row;
+          return {
+            ...row,
+            firmaAdi: cari.unvan,
+            firmaId: cari.id,
+            eslesmeNotu: `${row.kaynakFirma} → ${cari.unvan}`,
+          };
+        }),
+      };
+    });
+  };
+
   const handleFiles = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = [...(event.target.files || [])];
     if (!files.length) return;
     setBusy(true);
     setMessage('');
-    setLastReports([]);
     try {
       const result = await parseFiles(files, taseronCariler);
       setParseResult(result);
@@ -319,7 +342,6 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
       return;
     }
 
-    const now = new Date().toISOString();
     const faaliyetler: OperatorFaaliyet[] = newRows.map((row) => {
       const id = `of_excel_jcb_cafer_${slug(row.sourceFile)}_${row.rowNo}`;
       const period = periodOf(row.tarih);
@@ -341,73 +363,22 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
         makineKaynak: 'KIRALIK',
         makineManuelAd: 'JCB Cafer',
         isKaydiEtiketi: `Kiralık JCB · Cafer · Excel ${period.key}`,
-        onayDurumu: 'ONAYLANDI',
-        durum: 'ONAYLANDI',
-        kesintiYansitildi: true,
+        onayDurumu: 'BEKLEMEDE',
+        durum: 'ONAY BEKLİYOR',
+        kesintiYansitildi: false,
         kaydedenKullanici: currentUser?.email || 'Excel aktarımı',
-        kayitTarihi: now,
-      };
-    });
-
-    const reportGroups = new Map<string, OperatorFaaliyet[]>();
-    for (const faaliyet of faaliyetler) {
-      const period = periodOf(faaliyet.tarih);
-      const key = `${period.key}||${faaliyet.firmaAdi}`;
-      const list = reportGroups.get(key) || [];
-      list.push(faaliyet);
-      reportGroups.set(key, list);
-    }
-
-    const reports: TaseronKesintiRaporu[] = [...reportGroups.entries()].map(([key, activities], index) => {
-      const [periodKey, firmaAdi] = key.split('||');
-      const [yil, ay] = periodKey.split('-').map(Number);
-      const cari = cariKartlar.find((item) => item.id === activities[0].firmaId);
-      return {
-        id: `tkr_excel_jcb_cafer_${periodKey}_${slug(firmaAdi)}_${Date.now()}_${index}`,
-        kesintiTipi: 'IS_MAKINESI',
-        taseronFirmaAdi: firmaAdi,
-        taseronFirmaId: cari?.id,
-        donemAy: String(ay).padStart(2, '0'),
-        donemYil: String(yil),
-        toplamSaat: Math.round(activities.reduce((sum, item) => sum + item.calismaSuresi, 0) * 100) / 100,
-        kesintiTutari: 0,
-        saatlikUcret: 0,
-        ucretOnayBekliyor: true,
-        faaliyetler: activities,
-        makineKaynakGrup: 'KIRALIK',
-        onayDurumu: 'TASLAK',
-        olusturanKullanici: currentUser?.email || 'Excel aktarımı',
-        olusturmaTarihi: now,
+        kayitTarihi: new Date().toISOString(),
       };
     });
 
     setOperatorFaaliyetleri((previous) => [...previous, ...faaliyetler]);
-    setTaseronKesintiRaporlari((previous) => [...previous, ...reports]);
-    if (setCariIslemGecmisi) {
-      const cariIslemleri = reports
-        .filter((report) => report.taseronFirmaId)
-        .map((report) => ({
-          id: `cari_islem_tkr_${report.id}`,
-          cariKartId: report.taseronFirmaId!,
-          islemTipi: 'OPERATOR_KESINTI' as const,
-          islemId: report.id,
-          islemBaslik: `İş Makinesi Kesinti · Kiralık JCB Cafer · ${report.donemAy}/${report.donemYil}`,
-          islemDetay: `${report.taseronFirmaAdi} · ${report.toplamSaat.toFixed(1)} sa · Excel aktarımı · ücret onayı bekliyor`,
-          tarih: `${report.donemYil}-${report.donemAy}-01`,
-          belgeNo: report.id,
-        }));
-      setCariIslemGecmisi((previous) => [...cariIslemleri, ...(previous || [])]);
-    }
-
-    setLastReports(reports);
     const totalHours = faaliyetler.reduce((sum, item) => sum + item.calismaSuresi, 0);
-    const summary = `${faaliyetler.length} kayıt ve ${totalHours.toFixed(1)} saat aktarıldı; ${reports.length} firma raporu taslak olarak oluşturuldu.`;
+    const matchedCount = faaliyetler.filter((item) => item.firmaId).length;
+    const summary = `${faaliyetler.length} faaliyet (${totalHours.toFixed(1)} saat) Kesinti kayıtlarına eklendi. ${matchedCount}/${faaliyetler.length} satır cariyle eşleşti; kesinti raporu henüz oluşturulmadı.`;
     setMessage(summary);
     addNotification?.(`JCB Cafer Excel aktarımı: ${summary}`);
   };
 
-  const reportPeriod = lastReports[0] ? Number(lastReports[0].donemAy) : 0;
-  const reportYear = lastReports[0] ? Number(lastReports[0].donemYil) : 0;
   const summaryStats = parseResult
     ? {
         rowCount: parseResult.rows.length,
@@ -426,10 +397,10 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
             <div className="mb-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-violet-300">
               <FileSpreadsheet size={15} /> Kiralık iş makinesi aktarımı
             </div>
-            <h3 className="text-base font-black tracking-wide">JCB CAFER · EXCELDEN TOPLU KESİNTİ RAPORU</h3>
+            <h3 className="text-base font-black tracking-wide">JCB CAFER · EXCELDEN SAHA FAALİYET AKTARIMI</h3>
             <p className="mt-2 max-w-3xl text-[11px] leading-relaxed text-slate-300">
-              Excel satırları programdaki operatör faaliyetlerine eklenir, taşeron carileriyle eşleştirilir ve
-              firmaların altında saatleri listelenen kiralık makine kesinti raporlarına dönüştürülür.
+              Excel satırları önce programın kesinti kayıtlarına eklenir. Firma ve makine ayrımı kontrol edildikten
+              sonra mevcut toplu işlem akışıyla taşeron kesinti raporuna dönüştürülür.
             </p>
           </div>
           <div className="rounded-xl border border-violet-400/30 bg-white/10 px-3 py-2 text-[10px] text-violet-100">
@@ -443,7 +414,8 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
           <div>
             <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">Excel dosyası</h4>
             <p className="mt-1 text-[10px] text-slate-500">
-              Bir veya birden fazla .xlsx dosyası seçebilirsiniz. Önce okunur ve eşleşmeler gösterilir; kayıt ancak aktarım butonuyla yazılır.
+              Bir veya birden fazla .xlsx dosyası seçebilirsiniz. Önce okunur ve eşleşmeler gösterilir; kayıtlar
+              yalnızca <strong>Faaliyetlere Aktar</strong> butonuyla yazılır, kesinti raporu otomatik oluşturulmaz.
             </p>
           </div>
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-xs font-black text-white transition hover:bg-violet-800">
@@ -486,7 +458,7 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
               </div>
             )}
             <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full min-w-[620px] text-left text-[10px]">
+              <table className="w-full min-w-[860px] text-left text-[10px]">
                 <thead className="bg-slate-900 text-white">
                   <tr>
                     <th className="px-3 py-2">Programdaki firma</th>
@@ -494,6 +466,7 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
                     <th className="px-3 py-2 text-right">Kayıt</th>
                     <th className="px-3 py-2 text-right">Saat</th>
                     <th className="px-3 py-2">Eşleşme</th>
+                    <th className="px-3 py-2">Toplu cari düzeltme</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -505,6 +478,19 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
                       <td className="px-3 py-2 text-right font-black text-violet-700">{group.hours.toFixed(1)}</td>
                       <td className={`px-3 py-2 font-bold ${group.unresolved ? 'text-amber-700' : 'text-emerald-700'}`}>
                         {group.unresolved ? 'Cari bulunamadı — kontrol gerekli' : 'Eşleşti'}
+                      </td>
+                      <td className="px-3 py-2">
+                        <select
+                          value={group.firmaId || ''}
+                          onChange={(event) => updateParsedGroupFirma(group.periodKey, group.firmaAdi, event.target.value)}
+                          className="w-full min-w-[220px] rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] font-semibold text-slate-700 outline-none focus:border-violet-500"
+                        >
+                          <option value="">Program taşeronunu seç…</option>
+                          {taseronCariler.map((cari) => (
+                            <option key={cari.id} value={cari.id}>{cari.unvan}</option>
+                          ))}
+                        </select>
+                        <div className="mt-1 text-[9px] text-slate-400">{group.count} kayda uygulanır</div>
                       </td>
                     </tr>
                   ))}
@@ -591,18 +577,8 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
             )}
             <div className="mt-5 flex flex-wrap gap-2">
               <button onClick={handleImport} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700">
-                <Upload size={14} /> Sisteme Aktar ve Rapor Oluştur
+                <Upload size={14} /> Faaliyetlere Aktar
               </button>
-              {lastReports.length > 0 && (
-                <>
-                  <button onClick={() => yazdirTopluIsMakinesiRaporu(lastReports, reportPeriod, reportYear)} className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2.5 text-xs font-black text-white transition hover:bg-slate-900">
-                    <Printer size={14} /> Antetli Raporu Aç
-                  </button>
-                  <button onClick={() => indirTopluIsMakinesiRaporu(lastReports, reportPeriod, reportYear)} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50">
-                    <Download size={14} /> HTML İndir
-                  </button>
-                </>
-              )}
             </div>
           </>
         )}
