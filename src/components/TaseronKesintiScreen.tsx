@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Building2, HardHat, Zap, UtensilsCrossed, Archive, Mail, Printer,
-  Download, CheckCircle2, Plus, Users, LogIn, MessageCircle, Trash2, Table2,
+  Download, CheckCircle2, Plus, Users, LogIn, MessageCircle, Trash2, Table2, X,
 } from 'lucide-react';
 import {
   CariKart,
@@ -198,6 +198,19 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
       ),
     [taseronKesintiRaporlari, selectedTaseron]
   );
+
+  const handleKesintiGeriAl = (raporId: string) => {
+    if (!window.confirm('Bu kesinti raporunu geri alıp faaliyetleri tekrar açmak istediğinize emin misiniz?')) return;
+
+    setTaseronKesintiRaporlari((prev) => prev.filter((r) => r.id !== raporId));
+    setOperatorFaaliyetleri?.((prev) =>
+      prev.map((f) => {
+        const target = taseronKesintiRaporlari.find((r) => r.id === raporId)?.faaliyetler.some((fa) => fa.id === f.id);
+        return target ? { ...f, kesintiYansitildi: false } : f;
+      })
+    );
+    addNotification?.('Kesinti raporu geri alındı. Faaliyetler tekrar işlenebilir hale geldi.');
+  };
 
   const aylikFaaliyetler = useMemo(() => {
     if (!selectedTaseron) return [];
@@ -1083,7 +1096,6 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
                     </button>
                   </div>
                 </div>
-
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {[
                     [
@@ -1103,6 +1115,27 @@ export const TaseronKesintiScreen: React.FC<TaseronKesintiScreenProps> = ({
                     </div>
                   ))}
                 </div>
+                <p className="text-[10px] text-slate-500">
+                  Formül: <strong>Kesinti = Toplam Saat × Saatlik Ücret</strong>. Operatör sekmesinden gelen raporlar ücret girilene kadar bekler.
+                </p>
+                {bekleyenMakineRaporlari.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">Onay bekleyen iş makinesi raporu yok.</p>
+                ) : (
+                  bekleyenMakineRaporlari.map((r) => (
+                    <div key={r.id} className="border rounded-xl p-3 bg-amber-50/50 space-y-2">
+                      <p className="text-xs font-bold">{r.taseronFirmaAdi} · {r.donemAy}/{r.donemYil}</p>
+                      <p className="text-[10px]">Toplam: {r.toplamSaat.toFixed(1)} sa · {r.faaliyetler.length} faaliyet</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button type="button" onClick={() => handleUcretOnayla(r.id)} className="w-full py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl cursor-pointer flex items-center justify-center gap-1">
+                          <CheckCircle2 size={14} /> Onayla
+                        </button>
+                        <button type="button" onClick={() => handleKesintiGeriAl(r.id)} className="w-full py-2 bg-rose-600 text-white text-xs font-bold rounded-xl cursor-pointer flex items-center justify-center gap-1">
+                          <X size={14} /> Geri Al
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
 
               {([makineIcmal.anaFirma, makineIcmal.kiralik] as const).map((blok) => (

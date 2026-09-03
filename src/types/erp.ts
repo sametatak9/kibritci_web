@@ -809,6 +809,7 @@ export interface OperatorFaaliyet {
   temsilciTc?: string;
   operatorTc?: string;
   kesintiYansitildi?: boolean;
+  kesintiGrup?: 'ANA_FIRMA' | 'KIRALIK' | 'TASERON';
   makineKaynak?: 'DEMIRBAS' | 'KIRALIK' | 'MANUEL';
   makineManuelAd?: string;
   /** Örn. "Demirbaş JCB makinesi iş kaydı" — arşiv/liste etiketı */

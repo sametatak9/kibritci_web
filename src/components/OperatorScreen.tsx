@@ -222,6 +222,11 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
       aracPlaka,
     });
 
+    const firmaTipiForKesinti: OperatorFaaliyet['kesintiGrup'] =
+      firmaSecim === 'cari' && String(selectedCariId || '').startsWith('__')
+        ? (selectedCariId === '__ANA_FIRMA__' ? 'ANA_FIRMA' : 'KIRALIK')
+        : 'TASERON';
+
     const yeniFaaliyet: OperatorFaaliyet = {
       id: editingId || `of_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
       aracId:
@@ -249,6 +254,7 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
       temsilciAdSoyad: temsilciAdSoyad || undefined,
       temsilciTc: temsilciTc || undefined,
       operatorTc: personel?.tcNo,
+      kesintiGrup: firmaTipiForKesinti,
       makineKaynak: kaynak,
       makineManuelAd:
         makineKaynak === 'MANUEL' || (makineKaynak === 'KIRALIK' && makineManuelAd.trim())
@@ -417,11 +423,16 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
       return;
     }
 
-    // Firma + makine kaynağı (Ana Firma / Kiralık) — karışmasın
     const gruplar: { [key: string]: OperatorFaaliyet[] } = {};
     aylikFaaliyetler.forEach((f) => {
       const kaynak = resolveMakineKaynakGrup(f);
-      const key = `${f.firmaAdi}||${kaynak}`;
+      const firmaKey =
+        f.kesintiGrup === 'ANA_FIRMA' || f.firmaAdi === 'KİBRİTÇİ İNŞAAT'
+          ? 'KİBRİTÇİ İNŞAAT'
+          : f.kesintiGrup === 'KIRALIK' || f.makineKaynak === 'KIRALIK' || f.operatorTipi === 'KİRALIK'
+            ? 'KİRALIK MAKİNE'
+            : (f.firmaAdi || 'BELİRSİZ FİRMA');
+      const key = `${firmaKey}||${kaynak}`;
       if (!gruplar[key]) gruplar[key] = [];
       gruplar[key].push(f);
     });
@@ -433,7 +444,9 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
         | 'ANA_FIRMA'
         | 'KIRALIK';
       const toplamSaat = faaliyetler.reduce((s, f) => s + f.calismaSuresi, 0);
-      const cari = kesintiFirmalari.find((c) => c.unvan === firmaAdi) || cariKartlar.find((c) => c.unvan === firmaAdi);
+      const cari =
+        kesintiFirmalari.find((c) => c.unvan === firmaAdi) ||
+        cariKartlar.find((c) => c.unvan === firmaAdi);
       const rapor: TaseronKesintiRaporu = {
         id: `tkr_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
         kesintiTipi: 'IS_MAKINESI',
@@ -455,8 +468,7 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
     });
 
     setTaseronKesintiRaporlari(prev => [...prev, ...yeniRaporlar]);
-    
-    // Mark activities as reflected
+
     setOperatorFaaliyetleri(prev => prev.map(f => {
       if (aylikFaaliyetler.some(af => af.id === f.id)) {
         return { ...f, kesintiYansitildi: true };
@@ -464,7 +476,6 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
       return f;
     }));
 
-    // Aylık özet satırını cari geçmişe de yaz (firma kartı eşleşenler)
     if (setCariIslemGecmisi) {
       const ozetIslemler: CariKartIslem[] = yeniRaporlar
         .filter((r) => r.taseronFirmaId)
