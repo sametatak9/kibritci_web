@@ -12,6 +12,7 @@ import {
   makineKaynakGrupLabel,
   isIsMakinesiArac,
   resolveKesintiFirmaLabel,
+  KIRALIK_JCB_CAFER_LABEL,
 } from '../lib/taseronUtils';
 import { indirIsMakinesiRaporu } from '../lib/taseronReportUtils';
 import { kibritciLogoHtml } from '../lib/kibritciBrand';
@@ -365,6 +366,27 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
       return;
     }
     generatePDFReport(aylik, `Aylik_Operator_Raporu_${raporFiltreAy}_${raporFiltreYil}`);
+  };
+
+  const handleKiralikJcbCaferRaporla = () => {
+    const aylikCafer = operatorFaaliyetleri
+      .filter((f) => {
+        const d = new Date(f.tarih);
+        return d.getMonth() + 1 === raporFiltreAy &&
+          d.getFullYear() === raporFiltreYil &&
+          resolveKesintiFirmaLabel(f) === KIRALIK_JCB_CAFER_LABEL;
+      })
+      .map((f) => ({ ...f, firmaAdi: KIRALIK_JCB_CAFER_LABEL }));
+
+    if (aylikCafer.length === 0) {
+      alert(`${raporFiltreAy}/${raporFiltreYil} döneminde Kiralık JCB Cafer kaydı bulunamadı.`);
+      return;
+    }
+
+    generatePDFReport(
+      aylikCafer,
+      `Kiralik_JCB_Cafer_Raporu_${raporFiltreAy}_${raporFiltreYil}`
+    );
   };
 
   const generatePDFReport = (faaliyetler: OperatorFaaliyet[], dosyaAdi: string) => {
@@ -1033,6 +1055,9 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
               </select>
               <button onClick={handleAyRaporla} className="bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1">
                 <Download size={12} /> Ay Raporu İndir
+              </button>
+              <button onClick={handleKiralikJcbCaferRaporla} className="bg-teal-700 hover:bg-teal-800 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1">
+                <FileText size={12} /> Kiralık JCB Cafer Raporu
               </button>
             </div>
           </div>
