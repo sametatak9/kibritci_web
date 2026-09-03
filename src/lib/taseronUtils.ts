@@ -24,6 +24,7 @@ export function resolveKesintiFirmaLabel(f: Partial<OperatorFaaliyet>): string {
   const operatorAdi = String(f.operatorIsim || '').trim();
   const firmaNorm = normalizeKesintiFirmaAdi(firmaAdi);
   const operatorNorm = normalizeKesintiFirmaAdi(operatorAdi);
+  const sentetikKiralikFirma = !firmaNorm || /^(KIRALIK|KIRALIK MAKINE|KIRALIK JCB CAFER)$/.test(firmaNorm);
 
   if (
     f.kesintiGrup === 'ANA_FIRMA' ||
@@ -35,12 +36,11 @@ export function resolveKesintiFirmaLabel(f: Partial<OperatorFaaliyet>): string {
 
   if (
     f.kesintiGrup === 'KIRALIK' ||
-    f.makineKaynak === 'KIRALIK' ||
     f.operatorTipi === 'KİRALIK' ||
-    /CAFER|KIRALIK|JCB/.test(firmaNorm) ||
-    /CAFER|KIRALIK|JCB/.test(operatorNorm)
+    (sentetikKiralikFirma && /CAFER|KIRALIK|JCB/.test(operatorNorm)) ||
+    (sentetikKiralikFirma && /CAFER|KIRALIK|JCB/.test(firmaNorm))
   ) {
-    return KIRALIK_JCB_CAFER_LABEL;
+    return sentetikKiralikFirma ? KIRALIK_JCB_CAFER_LABEL : firmaAdi;
   }
 
   return firmaAdi || 'BELİRSİZ FİRMA';

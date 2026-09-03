@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { HardHat, Clock, Calendar, Building2, Camera, Save, Search, FileText, Trash2, CreditCard as Edit3, CircleCheck as CheckCircle, X, ChevronDown, ChevronUp, Truck, TriangleAlert as AlertTriangle, Download, Mail, ListFilter as Filter, Plus, Printer } from 'lucide-react';
+import { HardHat, Clock, Calendar, Building2, Camera, Save, Search, FileText, Trash2, CreditCard as Edit3, CircleCheck as CheckCircle, X, ChevronDown, ChevronUp, Truck, TriangleAlert as AlertTriangle, Download, Mail, ListFilter as Filter, Plus, Printer, Upload } from 'lucide-react';
 import { AracBakim, AylikYoklamaMap, CariKart, CariKartIslem, OperatorFaaliyet, TaseronKesintiRaporu, Personel } from '../types/erp';
 import { compressImage } from '../lib/imageCompress';
 import {
@@ -368,15 +368,94 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
     generatePDFReport(aylik, `Aylik_Operator_Raporu_${raporFiltreAy}_${raporFiltreYil}`);
   };
 
+  const handleCaferExcelImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    try {
+      const ExcelJS = await import('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(await file.arrayBuffer());
+      const sheet = workbook.worksheets[0];
+      const imported: OperatorFaaliyet[] = [];
+      const existingIds = new Set(operatorFaaliyetleri.map((f) => f.id));
+      const normalize = (value: unknown) => String(value || '').trim().toLocaleUpperCase('tr-TR');
+      const firmaEslesmeleri: Record<string, string> = {
+        ALTYAPI: 'ÜÇGENAY',
+        KIBRITÇI: 'KİBRİTÇİ İNŞAAT',
+        KIBRITCI: 'KİBRİTÇİ İNŞAAT',
+      };
+      const parseDate = (value: unknown) => {
+        if (value instanceof Date) return value.toISOString().slice(0, 10);
+        const raw = String(value || '').trim();
+        const match = raw.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+        return match ? `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}` : raw;
+      };
+      const parseHours = (value: unknown) => {
+        const hours = Number(String(value || '').replace(',', '.'));
+        return Number.isFinite(hours) && hours > 0 ? Math.round(hours * 100) / 100 : 0;
+      };
+
+      sheet.eachRow((row, rowNumber) => {
+        if (rowNumber < 5 || typeof row.getCell(1).value !== 'number') return;
+        const sequence = Number(row.getCell(1).value);
+        const tarih = parseDate(row.getCell(2).value);
+        const yapilanIs = String(row.getCell(3).value || '').trim();
+        const sourceFirma = normalize(row.getCell(4).value);
+        const firmaAdi = firmaEslesmeleri[sourceFirma] || String(row.getCell(4).value || '').trim();
+        const calismaSuresi = parseHours(row.getCell(5).value);
+        const mesai = normalize(row.getCell(6).value).includes('MESAİ');
+        const id = `xlsx_jcb_cafer_202608_${String(sequence).padStart(3, '0')}`;
+        if (!tarih || !yapilanIs || !firmaAdi || existingIds.has(id)) return;
+
+        const firmaId = cariKartlar.find((c) => normalize(c.unvan) === normalize(firmaAdi))?.id;
+        imported.push({
+          id,
+          aracId: 'kiralik_jcb_cafer',
+          aracPlaka: 'JCB CAFER',
+          operatorIsim: 'Cafer',
+          operatorTipi: 'JCB',
+          tarih,
+          baslangicSaat: '08:00',
+          bitisSaat: '08:00',
+          calismaSuresi,
+          yapilanIs,
+          firmaAdi,
+          firmaId,
+          isManualFirma: !firmaId,
+          kesintiGrup: firmaAdi === 'KİBRİTÇİ İNŞAAT' ? 'ANA_FIRMA' : 'TASERON',
+          makineKaynak: 'KIRALIK',
+          makineManuelAd: 'JCB CAFER',
+          isKaydiEtiketi: `Kiralık JCB Cafer${mesai ? ' · Mesai' : ''}`,
+          onayDurumu: 'ONAYLANDI',
+          durum: 'ONAYLANDI',
+          kaydedenKullanici: currentUser?.email || 'Excel aktarımı',
+          kayitTarihi: new Date().toISOString(),
+        });
+      });
+
+      if (imported.length === 0) {
+        alert('Yeni aktarılacak JCB Cafer kaydı bulunamadı. Aynı dosya daha önce aktarılmış olabilir.');
+        return;
+      }
+
+      setOperatorFaaliyetleri((prev) => [...prev, ...imported]);
+      alert(`${imported.length} JCB Cafer saha kaydı içe aktarıldı. Altyapı kayıtları ÜÇGENAY olarak eşlendi.`);
+    } catch (error) {
+      alert(`Excel aktarımı başarısız: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
   const handleKiralikJcbCaferRaporla = () => {
     const aylikCafer = operatorFaaliyetleri
       .filter((f) => {
         const d = new Date(f.tarih);
         return d.getMonth() + 1 === raporFiltreAy &&
           d.getFullYear() === raporFiltreYil &&
-          resolveKesintiFirmaLabel(f) === KIRALIK_JCB_CAFER_LABEL;
-      })
-      .map((f) => ({ ...f, firmaAdi: KIRALIK_JCB_CAFER_LABEL }));
+          (resolveKesintiFirmaLabel(f) === KIRALIK_JCB_CAFER_LABEL ||
+            (f.makineKaynak === 'KIRALIK' && String(f.operatorIsim || '').toLocaleUpperCase('tr-TR').includes('CAFER')));
+      });
 
     if (aylikCafer.length === 0) {
       alert(`${raporFiltreAy}/${raporFiltreYil} döneminde Kiralık JCB Cafer kaydı bulunamadı.`);
@@ -1056,6 +1135,10 @@ export const OperatorScreen: React.FC<OperatorScreenProps> = ({
               <button onClick={handleAyRaporla} className="bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1">
                 <Download size={12} /> Ay Raporu İndir
               </button>
+              <label className="bg-amber-500 hover:bg-amber-600 text-slate-950 text-[10px] font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1 cursor-pointer">
+                <Upload size={12} /> Cafer Excel Aktar
+                <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleCaferExcelImport} />
+              </label>
               <button onClick={handleKiralikJcbCaferRaporla} className="bg-teal-700 hover:bg-teal-800 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1">
                 <FileText size={12} /> Kiralık JCB Cafer Raporu
               </button>
