@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Download,
+  Pencil,
   FileSpreadsheet,
   Printer,
   Upload,
@@ -240,6 +241,7 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [lastReports, setLastReports] = useState<TaseronKesintiRaporu[]>([]);
+  const [editRowsOpen, setEditRowsOpen] = useState(false);
 
   const taseronCariler = useMemo(() => getTaseronCariKartlar(cariKartlar), [cariKartlar]);
   const groupedRows = useMemo(() => {
@@ -263,6 +265,24 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
     return [...groups.values()].sort((a, b) => a.firmaAdi.localeCompare(b.firmaAdi, 'tr'));
   }, [parseResult]);
 
+  const updateParsedRow = (rowIndex: number, field: 'firmaAdi' | 'yapilanIs', value: string) => {
+    setParseResult((previous) => {
+      if (!previous) return previous;
+      const rows = previous.rows.map((row, index) => {
+        if (index !== rowIndex) return row;
+        if (field === 'yapilanIs') return { ...row, yapilanIs: value };
+        const match = resolveFirma(value, taseronCariler);
+        return {
+          ...row,
+          firmaAdi: value,
+          firmaId: match.firmaId,
+          eslesmeNotu: match.eslesmeNotu,
+        };
+      });
+      return { ...previous, rows };
+    });
+  };
+
   const handleFiles = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = [...(event.target.files || [])];
     if (!files.length) return;
@@ -273,6 +293,7 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
       const result = await parseFiles(files, taseronCariler);
       setParseResult(result);
       setFileNames(files.map((file) => file.name));
+      setEditRowsOpen(false);
       setMessage(`${result.rows.length} satır okundu. Aktarım öncesi aşağıdaki eşleşmeleri kontrol edin.`);
     } catch (error) {
       setParseResult(null);
@@ -458,6 +479,73 @@ export const JcbExcelAktarimPanel: React.FC<Props> = ({
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50/60 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-violet-900">
+                    <Pencil size={13} /> Firma ve açıklama düzeltme
+                  </div>
+                  <p className="mt-1 text-[10px] leading-relaxed text-violet-800">
+                    Excel’de hatalı yazılmış firma veya iş açıklamalarını aktarım öncesi satır satır düzeltebilirsiniz.
+                    Firma alanı programdaki cari kartla yeniden eşleştirilir.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditRowsOpen((open) => !open)}
+                  className="rounded-lg border border-violet-300 bg-white px-3 py-2 text-[10px] font-black text-violet-800 transition hover:bg-violet-100"
+                >
+                  {editRowsOpen ? 'Düzenlemeyi Kapat' : `${parseResult.rows.length} Satırı Düzenle`}
+                </button>
+              </div>
+              {editRowsOpen && (
+                <div className="mt-3 max-h-[520px] overflow-auto rounded-lg border border-violet-200 bg-white">
+                  <table className="w-full min-w-[900px] text-left text-[10px]">
+                    <thead className="sticky top-0 z-10 bg-violet-950 text-white">
+                      <tr>
+                        <th className="w-16 px-2 py-2">Satır</th>
+                        <th className="w-28 px-2 py-2">Tarih</th>
+                        <th className="w-56 px-2 py-2">Firma / Cari adı</th>
+                        <th className="px-2 py-2">Yapılan iş / açıklama</th>
+                        <th className="w-20 px-2 py-2 text-right">Saat</th>
+                        <th className="w-32 px-2 py-2">Eşleşme</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parseResult.rows.map((row, index) => (
+                        <tr key={`${row.sourceFile}-${row.rowNo}-${index}`} className="border-t border-slate-100 align-top">
+                          <td className="px-2 py-2 font-mono text-slate-400">{row.rowNo}</td>
+                          <td className="px-2 py-2 whitespace-nowrap text-slate-600">{row.tarih}</td>
+                          <td className="px-2 py-2">
+                            <input
+                              value={row.firmaAdi}
+                              onChange={(event) => updateParsedRow(index, 'firmaAdi', event.target.value)}
+                              className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-semibold text-slate-800 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-200"
+                              title={`Excel’deki firma: ${row.kaynakFirma}`}
+                            />
+                            {row.kaynakFirma !== row.firmaAdi && (
+                              <div className="mt-1 text-[9px] text-slate-400">Excel: {row.kaynakFirma}</div>
+                            )}
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              value={row.yapilanIs}
+                              onChange={(event) => updateParsedRow(index, 'yapilanIs', event.target.value)}
+                              className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-semibold text-slate-800 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-200"
+                            />
+                            {row.not && <div className="mt-1 text-[9px] text-amber-700">Not: {row.not}</div>}
+                          </td>
+                          <td className="px-2 py-2 text-right font-black text-violet-700">{row.calismaSuresi.toFixed(1)}</td>
+                          <td className={`px-2 py-2 font-bold ${row.firmaId ? 'text-emerald-700' : 'text-amber-700'}`}>
+                            {row.firmaId ? 'Eşleşti' : 'Cari bulunamadı'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
             {parseResult.warnings.length > 0 && (
               <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[10px] text-amber-900">
