@@ -7,7 +7,7 @@ import type { AylikYoklamaMap, Personel, YoklamaDurum } from '../types/erp';
 import type { Workbook, Worksheet } from 'exceljs';
 import { createExcelWorkbook } from './exceljsLoader';
 import { KIBRITCI_COMPANY, loadKibritciLogoDataUrl } from './kibritciBrand';
-import { displayPersonelGorev } from './guvenlikHelpers';
+import { displayPersonelGorev, kadroPersonelGorev } from './guvenlikHelpers';
 import {
   CANONICAL_ANA_FIRMA_ADI,
   getYoklamaDay,
@@ -441,6 +441,215 @@ function downloadBuffer(buffer: ArrayBuffer, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
+
+
+const MAAS_MESAI_HEADERS = [
+  'Sıra',
+  'Ad Soyad',
+  'TC',
+  'IBAN',
+  'Görev',
+  'Firma',
+  'Kart Maaş',
+  'Günlük Ücret (Maaş/30)',
+  'Çalıştığı Gün',
+  'Hesap Günü (max 30)',
+  'Mesai Saat',
+  'Gün Ücreti Hakediş',
+  'Mesai Hakediş',
+  'Alacak Maaş',
+];
+
+function maasMesaiDetailValues(row: MaasMesaiRow, index: number): (string | number)[] {
+  const p = row.personel;
+  const iban = normalizeIbanLocal(p.ibanNo || (p as { iban?: string }).iban || '');
+  const firma = isTaseronPersonel(p)
+    ? p.firmaAdi || 'Taşeron'
+    : p.firmaAdi || CANONICAL_ANA_FIRMA_ADI;
+  return [
+    index + 1,
+    (String(p.ad || '') + ' ' + String(p.soyad || '')).trim(),
+    p.tcNo || '—',
+    iban && iban !== 'TR' ? iban : '—',
+    displayPersonelGorev(p) || p.gorev || '—',
+    firma,
+    row.aylikMaasKart,
+    row.gunlukUcret,
+    row.geldiGun,
+    row.calismaGunHesap,
+    row.mesaiSaat,
+    row.gunHakedis,
+    row.mesaiHakedis,
+    row.toplam,
+  ];
+}
+
+function meslekGrubuKey(p: Personel): string {
+  return kadroPersonelGorev(p) || displayPersonelGorev(p) || p.gorev || p.nitelik || 'Mesleği Belirtilmemiş';
+}
+
+function uniqueWorksheetName(raw: string, used: Set<string>): string {
+  const cleaned = String(raw || 'Meslek')
+    .replace(/[\\\/*?:\[\]]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim() || 'Meslek';
+  const base = cleaned.slice(0, 31);
+  let name = base;
+  let suffixNumber = 2;
+  while (used.has(name.toLocaleUpperCase('tr-TR'))) {
+    const suffix = ' (' + suffixNumber + ')';
+    name = base.slice(0, 31 - suffix.length) + suffix;
+    suffixNumber += 1;
+  }
+  used.add(name.toLocaleUpperCase('tr-TR'));
+  return name;
+}
+
+function maasTotals(rows: MaasMesaiRow[]) {
+  return {
+    geldiGun: rows.reduce((sum, row) => sum + row.geldiGun, 0),
+    hesapGun: rows.reduce((sum, row) => sum + row.calismaGunHesap, 0),
+    mesaiSaat: rows.reduce((sum, row) => sum + row.mesaiSaat, 0),
+    gunHakedis: rows.reduce((sum, row) => sum + row.gunHakedis, 0),
+    mesaiHakedis: rows.reduce((sum, row) => sum + row.mesaiHakedis, 0),
+    toplam: rows.reduce((sum, row) => sum + row.toplam, 0),
+  };
+}
+
+async function writeMeslekGrubuSheet(
+  wb: Workbook,
+  sheetName: string,
+  meslek: string,
+  rows: MaasMesaiRow[],
+  subtitle: string,
+  metaLine: string
+): Promise<void> {
+  const ws = wb.addWorksheet(sheetName);
+  const headRow = await applyWorkbookAntet(wb, ws, {
+    title: 'ALACAK MAAŞ — ' + meslek,
+    subtitle,
+    metaLine: metaLine + ' · ' + rows.length + ' kişi · Meslek grubu: ' + meslek,
+    colCount: MAAS_MESAI_HEADERS.length,
+  });
+  MAAS_MESAI_HEADERS.forEach((header, index) => {
+    const cell = ws.getCell(headRow, index + 1);
+    cell.value = header;
+    cell.font = { bold: true, size: 9, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    cell.border = thinBorder();
+  });
+  ws.getRow(headRow).height = 32;
+
+  let rowNumber = headRow + 1;
+  rows.forEach((row, index) => {
+    maasMesaiDetailValues(row, index).forEach((value, column) => {
+      const cell = ws.getCell(rowNumber, column + 1);
+      cell.value = value;
+      cell.border = thinBorder();
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: column === 0 || column >= 6 ? 'center' : 'left',
+        wrapText: true,
+      };
+      cell.font = { size: 9 };
+      if (index % 2 === 1) {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+      }
+    });
+    for (const moneyColumn of [7, 8, 12, 13, 14]) {
+      ws.getCell(rowNumber, moneyColumn).numFmt = '#,##0.00';
+    }
+    ws.getCell(rowNumber, 14).font = { bold: true, size: 9, color: { argb: 'FF065F46' } };
+    rowNumber += 1;
+  });
+
+  const totals = maasTotals(rows);
+  const totalValues: (string | number)[] = [
+    '', 'TOPLAM', '', '', '', '', '', '', totals.geldiGun, totals.hesapGun,
+    Number(totals.mesaiSaat.toFixed(2)), Number(totals.gunHakedis.toFixed(2)),
+    Number(totals.mesaiHakedis.toFixed(2)), Number(totals.toplam.toFixed(2)),
+  ];
+  totalValues.forEach((value, column) => {
+    const cell = ws.getCell(rowNumber, column + 1);
+    cell.value = value;
+    cell.font = { bold: true, size: 9 };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFCCFBF1' } };
+    cell.border = thinBorder();
+  });
+  for (const moneyColumn of [12, 13, 14]) ws.getCell(rowNumber, moneyColumn).numFmt = '#,##0.00';
+
+  const widths = [5, 20, 13, 26, 24, 14, 11, 14, 10, 12, 10, 13, 12, 12];
+  widths.forEach((width, index) => { ws.getColumn(index + 1).width = width; });
+  ws.autoFilter = { from: { row: headRow, column: 1 }, to: { row: rowNumber - 1, column: MAAS_MESAI_HEADERS.length } };
+  ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 };
+  ws.views = [{ state: 'frozen', ySplit: headRow }];
+}
+
+async function writeMeslekOzetiSheet(
+  wb: Workbook,
+  entries: Array<[string, MaasMesaiRow[]]>,
+  subtitle: string,
+  metaLine: string
+): Promise<void> {
+  const ws = wb.addWorksheet('Meslek Özeti');
+  const headers = ['Meslek Grubu', 'Kişi Sayısı', 'Geldi Gün', 'Hesap Günü', 'Mesai Saat', 'Gün Ücreti Hakediş', 'Mesai Hakediş', 'Toplam Alacak'];
+  const headRow = await applyWorkbookAntet(wb, ws, {
+    title: 'MESAİ VE MAAŞ — MESLEK GRUBU ÖZETİ',
+    subtitle,
+    metaLine: metaLine + ' · ' + entries.length + ' meslek grubu',
+    colCount: headers.length,
+  });
+  headers.forEach((header, index) => {
+    const cell = ws.getCell(headRow, index + 1);
+    cell.value = header;
+    cell.font = { bold: true, size: 9, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    cell.border = thinBorder();
+  });
+  ws.getRow(headRow).height = 32;
+
+  let rowNumber = headRow + 1;
+  entries.forEach(([meslek, groupRows], index) => {
+    const totals = maasTotals(groupRows);
+    const values: (string | number)[] = [
+      meslek, groupRows.length, totals.geldiGun, totals.hesapGun, Number(totals.mesaiSaat.toFixed(2)),
+      Number(totals.gunHakedis.toFixed(2)), Number(totals.mesaiHakedis.toFixed(2)), Number(totals.toplam.toFixed(2)),
+    ];
+    values.forEach((value, column) => {
+      const cell = ws.getCell(rowNumber, column + 1);
+      cell.value = value;
+      cell.border = thinBorder();
+      cell.alignment = { vertical: 'middle', horizontal: column === 0 ? 'left' : 'center', wrapText: true };
+      cell.font = { size: 9 };
+      if (index % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+    });
+    for (const moneyColumn of [6, 7, 8]) ws.getCell(rowNumber, moneyColumn).numFmt = '#,##0.00';
+    ws.getCell(rowNumber, 8).font = { bold: true, size: 9, color: { argb: 'FF065F46' } };
+    rowNumber += 1;
+  });
+
+  const allRows = entries.flatMap(([, groupRows]) => groupRows);
+  const totals = maasTotals(allRows);
+  const totalValues: (string | number)[] = [
+    'TOPLAM', allRows.length, totals.geldiGun, totals.hesapGun, Number(totals.mesaiSaat.toFixed(2)),
+    Number(totals.gunHakedis.toFixed(2)), Number(totals.mesaiHakedis.toFixed(2)), Number(totals.toplam.toFixed(2)),
+  ];
+  totalValues.forEach((value, column) => {
+    const cell = ws.getCell(rowNumber, column + 1);
+    cell.value = value;
+    cell.font = { bold: true, size: 9 };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFCCFBF1' } };
+    cell.border = thinBorder();
+  });
+  for (const moneyColumn of [6, 7, 8]) ws.getCell(rowNumber, moneyColumn).numFmt = '#,##0.00';
+  [24, 12, 12, 12, 12, 17, 15, 15].forEach((width, index) => { ws.getColumn(index + 1).width = width; });
+  ws.autoFilter = { from: { row: headRow, column: 1 }, to: { row: rowNumber - 1, column: headers.length } };
+  ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 };
+  ws.views = [{ state: 'frozen', ySplit: headRow }];
+}
+
 export async function exportAktifPersonelMaasMesaiExcel(opts: {
   personeller: Personel[];
   yoklamalar: AylikYoklamaMap;
@@ -594,6 +803,23 @@ export async function exportAktifPersonelMaasMesaiExcel(opts: {
     fitToHeight: 0,
     paperSize: 9,
   };
+
+
+  // ── Sayfa 2+: Meslek özeti ve her meslek için ayrı maaş listesi ──
+  const meslekGruplari = new Map<string, MaasMesaiRow[]>();
+  rows.forEach((row) => {
+    const meslek = meslekGrubuKey(row.personel);
+    const groupRows = meslekGruplari.get(meslek) || [];
+    groupRows.push(row);
+    meslekGruplari.set(meslek, groupRows);
+  });
+  const meslekEntries = [...meslekGruplari.entries()].sort(([a], [b]) => a.localeCompare(b, 'tr'));
+  await writeMeslekOzetiSheet(wb, meslekEntries, scopeLabel + ' · ' + monthLabel, metaLine);
+  const usedSheetNames = new Set<string>(['ALACAK MAAS', 'MESLEK ÖZETİ', 'TARİH CETVELİ']);
+  for (const [meslek, meslekRows] of meslekEntries) {
+    const sheetName = uniqueWorksheetName(meslek, usedSheetNames);
+    await writeMeslekGrubuSheet(wb, sheetName, meslek, meslekRows, scopeLabel + ' · ' + monthLabel, metaLine);
+  }
 
   // ── Sayfa 2: Tarih cetveli (geldi/gelmedi + mesai) ──
   const cetvelWs = wb.addWorksheet('Tarih Cetveli');
